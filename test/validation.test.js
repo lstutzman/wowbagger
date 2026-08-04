@@ -183,3 +183,36 @@ decisions:
     });
   });
 });
+
+test('validate rejects a related item outside the configured ledger', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Dangling context"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+related: [wb_01KGHNZCG0Q4R81FQK9A85BN8E]
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/item.md',
+        field: 'related',
+        code: 'unresolved-related',
+        message: 'Related item wb_01KGHNZCG0Q4R81FQK9A85BN8E does not resolve to an item in the configured ledger.',
+      }],
+    });
+  });
+});

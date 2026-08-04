@@ -477,6 +477,7 @@ function validateDuplicateReferences(fact, field, references, context) {
 
 function validateRelations(fact, index, context) {
   validateDependencies(fact, index, context);
+  validateRelated(fact, index, context);
   validateParent(fact, index, context);
 }
 
@@ -530,6 +531,40 @@ function validateDependencies(fact, index, context) {
         'depends_on',
         'terminal-dependency-invalid',
         `Dependency ${dependency} is terminal (${target.status}) and cannot remain live; replace it with a valid live blocker, waive it with a durable decision, or terminalize the dependent.`,
+        context,
+      );
+    }
+  }
+}
+
+function validateRelated(fact, index, context) {
+  for (const related of new Set(fact.related)) {
+    if (fact.id && related === fact.id) {
+      addError(
+        fact,
+        'related',
+        'self-related',
+        `Related item ${related} must not reference the item itself.`,
+        context,
+      );
+      continue;
+    }
+
+    const target = resolveReference(related, index);
+    if (target === null) {
+      addError(
+        fact,
+        'related',
+        'unresolved-related',
+        `Related item ${related} does not resolve to an item in the configured ledger.`,
+        context,
+      );
+    } else if (target === 'ambiguous') {
+      addError(
+        fact,
+        'related',
+        'ambiguous-related',
+        `Related item ${related} resolves to more than one ledger item.`,
         context,
       );
     }
