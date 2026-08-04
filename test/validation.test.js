@@ -34,3 +34,37 @@ depends_on: []
     });
   });
 });
+
+test('validate rejects duplicate YAML mapping keys', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "First title"
+title: "Overwritten title"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/item.md',
+        field: 'frontmatter',
+        code: 'duplicate-yaml-key',
+        message: 'YAML mapping keys must be unique.',
+      }],
+    });
+  });
+});

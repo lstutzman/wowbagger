@@ -83,11 +83,14 @@ function parseItem(source) {
   });
 
   if (document.errors.length > 0) {
+    const error = document.errors[0];
     return {
       error: {
         field: 'frontmatter',
-        code: 'invalid-yaml',
-        message: document.errors[0].message,
+        code: error.code === 'DUPLICATE_KEY' ? 'duplicate-yaml-key' : 'invalid-yaml',
+        message: error.code === 'DUPLICATE_KEY'
+          ? 'YAML mapping keys must be unique.'
+          : error.message,
       },
     };
   }
