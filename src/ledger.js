@@ -158,6 +158,9 @@ async function collectMarkdownFiles(root, directory, fileSystem) {
     }
 
     if (entryType.isDirectory()) {
+      if (directory === root && entry.name === '.wowbagger-locks') {
+        continue;
+      }
       const nested = await collectMarkdownFiles(root, entryPath, fileSystem);
       files.push(...nested.files);
       errors.push(...nested.errors);

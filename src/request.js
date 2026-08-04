@@ -205,5 +205,18 @@ function escapePointerPart(part) {
 }
 
 function compareText(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
+  const leftIterator = left[Symbol.iterator]();
+  const rightIterator = right[Symbol.iterator]();
+  while (true) {
+    const leftValue = leftIterator.next();
+    const rightValue = rightIterator.next();
+    if (leftValue.done || rightValue.done) {
+      return leftValue.done === rightValue.done ? 0 : leftValue.done ? -1 : 1;
+    }
+    const leftPoint = leftValue.value.codePointAt(0);
+    const rightPoint = rightValue.value.codePointAt(0);
+    if (leftPoint !== rightPoint) {
+      return leftPoint < rightPoint ? -1 : 1;
+    }
+  }
 }

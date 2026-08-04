@@ -118,3 +118,70 @@ test('mutation argument validation consumes the value of a repeated option once'
     message: 'Argument --ledger must not be repeated.',
   }]);
 });
+
+test('contract JSON commands return deterministic invalid-request envelopes for argument failures', () => {
+  const id = 'wb_01Q4837BM01W70T30B184GG1R6';
+  const cases = [
+    ['capabilities', [], [{ path: '/arguments', code: 'missing-argument', message: 'Argument --json is required.' }]],
+    ['capabilities', ['--mystery', '--json'], [{ path: '/arguments/1', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
+    ['capabilities', ['--json', '--json'], [{ path: '/arguments/2', code: 'repeated-argument', message: 'Argument --json must not be repeated.' }]],
+    ['capabilities', ['--json', 'stray'], [{ path: '/arguments/2', code: 'unknown-argument', message: 'Argument stray is not recognized.' }]],
+    ['inspect', ['--ledger', 'ledger', '--json'], [{ path: '/arguments', code: 'missing-argument', message: 'Argument --id is required.' }]],
+    ['inspect', ['--ledger', 'ledger', '--id', id, '--json', '--mystery'], [{ path: '/arguments/6', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
+    ['inspect', ['--ledger', 'ledger', '--id', id, '--id', id, '--json'], [{ path: '/arguments/5', code: 'repeated-argument', message: 'Argument --id must not be repeated.' }]],
+    ['inspect', ['--ledger', 'ledger', '--id', '--json'], [{ path: '/arguments/3', code: 'missing-argument', message: 'Argument --id requires a value.' }]],
+    ['create', ['--ledger', 'ledger', '--json'], [{ path: '/arguments', code: 'missing-argument', message: 'Argument --input is required.' }]],
+    ['create', ['--ledger', 'ledger', '--input', 'request.json', '--json', '--mystery'], [{ path: '/arguments/6', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
+    ['create', ['--ledger', 'ledger', '--input', 'one.json', '--input', 'two.json', '--json'], [{ path: '/arguments/5', code: 'repeated-argument', message: 'Argument --input must not be repeated.' }]],
+    ['create', ['--ledger', 'ledger', '--input', '--json'], [{ path: '/arguments/3', code: 'missing-argument', message: 'Argument --input requires a value.' }]],
+    ['transition', ['--ledger', 'ledger', '--json'], [{ path: '/arguments', code: 'missing-argument', message: 'Argument --input is required.' }]],
+    ['transition', ['--ledger', 'ledger', '--input', 'request.json', '--json', '--mystery'], [{ path: '/arguments/6', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
+    ['transition', ['--ledger', 'ledger', '--input', 'one.json', '--input', 'two.json', '--json'], [{ path: '/arguments/5', code: 'repeated-argument', message: 'Argument --input must not be repeated.' }]],
+    ['transition', ['--ledger', 'ledger', '--input', '--json'], [{ path: '/arguments/3', code: 'missing-argument', message: 'Argument --input requires a value.' }]],
+  ];
+
+  for (const [command, argumentsList, issues] of cases) {
+    const result = runCli(command, ...argumentsList);
+    const expected = {
+      ok: false,
+      command,
+      contract_version: 1,
+      ...(command === 'create' || command === 'transition' ? { state: 'unchanged' } : {}),
+      error: {
+        code: 'invalid-request',
+        message: `The ${command} request is invalid.`,
+        details: { issues },
+      },
+    };
+
+    assert.equal(result.status, 2, `${command} ${argumentsList.join(' ')}: ${result.stderr}`);
+    assert.equal(result.stderr, '', command);
+    assert.equal(result.stdout, `${JSON.stringify(expected)}\n`, command);
+  }
+});
+
+test('an unreadable mutation input is an invalid-request input issue before an ID is known', () => {
+  const missing = path.join(process.cwd(), 'test', 'does-not-exist-request.json');
+  const result = runCli('create', '--ledger', 'ledger', '--input', missing, '--json');
+  const expected = {
+    ok: false,
+    command: 'create',
+    contract_version: 1,
+    state: 'unchanged',
+    error: {
+      code: 'invalid-request',
+      message: 'The create request is invalid.',
+      details: {
+        issues: [{
+          path: '/input',
+          code: 'invalid-value',
+          message: 'Request input could not be read.',
+        }],
+      },
+    },
+  };
+
+  assert.equal(result.status, 2, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.equal(result.stdout, `${JSON.stringify(expected)}\n`);
+});

@@ -407,6 +407,11 @@ Create accepts exactly:
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
+If a file named by `--input` cannot be read before a request ID is known,
+create or transition returns `invalid-request` with one `invalid-value` issue at
+`/input`, the stable message `Request input could not be read.`, and mutation
+state `unchanged`.
+
 The caller generates id with the timestamp for the intended creation instant
 and at least 80 bits of collision-resistant entropy. Create validates its
 canonical form before acquiring its per-ID lock. id is not accepted inside

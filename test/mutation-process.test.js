@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { withLedger } from './support.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const cli = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
+const testCli = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
 const fixtures = new URL('../spec/fixtures/mutations/', import.meta.url);
 const CREATE_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
 
@@ -164,6 +165,49 @@ test('a terminal lifecycle change requiring dependent cleanup remains a no-write
   });
 });
 
+test('a completed writer never removes a successor writer lock during repeated handoff', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
+  for (let iteration = 0; iteration < 12; iteration += 1) {
+    await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
+      const inspected = await runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+      const revision = parseOutput(inspected).result.item.revision;
+      const requestPath = path.join(path.dirname(ledger), 'transition.json');
+      await writeFile(requestPath, JSON.stringify({
+        id,
+        expected_revision: revision,
+        to_status: 'backlog',
+        date: '2030-01-16',
+        decision: {
+          summary: 'Accept the handoff item.',
+          rationale: 'Exercise ownership-safe lock cleanup.',
+        },
+      }));
+
+      const suffix = `handoff-${iteration}`;
+      const released = path.join(ledger, `.wowbagger-test-${suffix}-released`);
+      const acquired = path.join(ledger, `.wowbagger-test-${suffix}-acquired`);
+      const allowSuccessor = path.join(ledger, `.wowbagger-test-${suffix}-allow-successor`);
+      const predecessor = runTestCli(`pause-after-success-release:${suffix}`,
+        'transition', '--ledger', ledger, '--input', requestPath, '--json');
+      await waitForFile(released);
+      const successor = runTestCli(`pause-after-lock-acquired:${suffix}`,
+        'transition', '--ledger', ledger, '--input', requestPath, '--json');
+      await waitForFile(acquired);
+      const predecessorResult = await predecessor;
+
+      assert.equal(predecessorResult.status, 0, predecessorResult.stderr);
+      const lockPath = path.join(ledger, '.wowbagger-locks', `${id}.lock`);
+      assert.equal((await lstat(lockPath)).isFile(), true);
+
+      await writeFile(allowSuccessor, 'continue\n');
+      const successorResult = await successor;
+      assert.equal(successorResult.status, 4, successorResult.stderr);
+      assert.equal(parseOutput(successorResult).error.code, 'revision-conflict');
+      await assertNoOwnArtifacts(ledger);
+    });
+  }
+});
+
 function createRequest(id, body) {
   return {
     id,
@@ -178,6 +222,24 @@ function createRequest(id, body) {
     },
     body,
   };
+}
+
+function triageSource(id) {
+  return `---
+schema_version: 1
+id: ${id}
+title: "Coordinate an ownership-safe lock handoff"
+kind: task
+status: triage
+created: 2030-01-14
+updated: 2030-01-14
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-14T12:00:00Z"
+depends_on: []
+related: []
+---
+`;
 }
 
 function runCli(...argumentsList) {
@@ -199,6 +261,47 @@ function runCli(...argumentsList) {
       });
     });
   });
+}
+
+function runTestCli(scenario, ...argumentsList) {
+  return runProcess(testCli, argumentsList, {
+    ...process.env,
+    WOWBAGGER_TEST_SCENARIO: scenario,
+  });
+}
+
+function runProcess(executable, argumentsList, env = process.env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [executable, ...argumentsList], {
+      cwd: projectRoot,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+    child.on('error', reject);
+    child.on('close', (status) => resolve({
+      status,
+      stdout: Buffer.concat(stdout).toString('utf8'),
+      stderr: Buffer.concat(stderr).toString('utf8'),
+    }));
+  });
+}
+
+async function waitForFile(file) {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      await lstat(file);
+      return;
+    } catch (error) {
+      assert.equal(error.code, 'ENOENT');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(`Timed out waiting for ${path.basename(file)}`);
 }
 
 function parseOutput(result) {

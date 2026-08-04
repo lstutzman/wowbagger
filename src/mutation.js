@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { link, lstat, mkdir, open, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar } from 'yaml';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
 import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
@@ -68,7 +70,7 @@ function inspectedItem(id, displayPath, bytes, data, body) {
 
 export function validateCreateRequest(request, parseIssues = []) {
   const issues = [...parseIssues];
-  if (issues.length > 0) {
+  if (issues.some((entry) => entry.code === 'invalid-json')) {
     return sortIssues(issues);
   }
   if (!isMapping(request)) {
@@ -116,12 +118,35 @@ export function validateCreateRequest(request, parseIssues = []) {
   }
   if (hasOwn(item, 'depends_on') && !Array.isArray(item.depends_on)) {
     issues.push(issue('/item/depends_on', 'invalid-type', 'Item member depends_on must be an array.'));
+  } else if (Array.isArray(item.depends_on)) {
+    validateRelationEntries(item.depends_on, 'depends_on', issues);
   }
   if (hasOwn(item, 'related') && !Array.isArray(item.related)) {
     issues.push(issue('/item/related', 'invalid-type', 'Item member related must be an array.'));
+  } else if (Array.isArray(item.related)) {
+    validateRelationEntries(item.related, 'related', issues);
   }
   if (hasOwn(item, 'provenance') && !isMapping(item.provenance)) {
     issues.push(issue('/item/provenance', 'invalid-type', 'Item member provenance must be an object.'));
+  } else if (isMapping(item.provenance)) {
+    for (const field of ['source', 'recorded_at']) {
+      if (!hasOwn(item.provenance, field)) {
+        issues.push(issue(`/item/provenance/${field}`, 'missing-member', `Provenance member ${field} is missing.`));
+      }
+    }
+    if (hasOwn(item.provenance, 'source')
+      && (typeof item.provenance.source !== 'string' || item.provenance.source.trim().length === 0)) {
+      issues.push(issue('/item/provenance/source', 'invalid-type', 'Provenance member source must be a non-empty string.'));
+    }
+    if (hasOwn(item.provenance, 'recorded_at') && !isRfc3339Utc(item.provenance.recorded_at)) {
+      issues.push(issue('/item/provenance/recorded_at', 'invalid-value', 'Provenance member recorded_at must be an RFC 3339 UTC instant.'));
+    }
+  }
+  if (hasOwn(item, 'parent') && (typeof item.parent !== 'string' || !ULID_PATTERN.test(item.parent))) {
+    issues.push(issue('/item/parent', 'invalid-value', 'Item member parent must be a canonical Wowbagger item ID.'));
+  }
+  if (hasOwn(item, 'snoozed_until') && !isCalendarDate(item.snoozed_until)) {
+    issues.push(issue('/item/snoozed_until', 'invalid-value', 'Item member snoozed_until must be an ISO calendar date.'));
   }
 
   return sortIssues(issues);
@@ -144,6 +169,9 @@ export async function createItem(ledgerDirectory, request, scenario) {
     try {
       locks = await acquireLocks(root, nextIds, 'create', scenario);
     } catch (error) {
+      if (error instanceof ResourceFailure) {
+        return operationFailed(id, error.operation, 'io-error', await artifactsForLocks(error.locks, root));
+      }
       if (error instanceof LockHeldError) {
         return lockHeld(id, error.file, await lockDetails(error.file));
       }
@@ -152,23 +180,45 @@ export async function createItem(ledgerDirectory, request, scenario) {
 
     let preserveLocks = false;
     let temporaryPath = null;
+    const finishUncommitted = async (outcome, artifacts = []) => {
+      const finished = await finishUncommittedResources(id, outcome, locks, root, scenario, artifacts);
+      locks = finished.locks;
+      preserveLocks = finished.preserveLocks;
+      return finished.outcome;
+    };
+    const finishUnknown = async (outcome) => {
+      const finished = await finishUnknownResources(outcome, locks, root, scenario);
+      locks = finished.locks;
+      preserveLocks = finished.preserveLocks;
+      return finished.outcome;
+    };
+    const finishCommittedRecovery = async (bytes, artifacts = []) => {
+      const finished = await finishCommittedResources(id, bytes, locks, root, scenario, artifacts);
+      locks = finished.locks;
+      preserveLocks = finished.preserveLocks;
+      return finished.outcome;
+    };
     try {
       const current = await loadedValidLedger(root);
       if (!current.valid) {
-        return ledgerInvalid(current.validation);
+        return await finishUncommitted(ledgerInvalid(current.validation));
       }
       const stableIds = lockIdsForCreate(request, current.ledger);
       if (!sameIds(nextIds, stableIds)) {
+        const cleanupFailure = await finishUncommitted(null);
+        if (cleanupFailure) {
+          return cleanupFailure;
+        }
         continue;
       }
 
       const existing = current.ledger.items.find((item) => item.data.id === id);
       if (existing) {
-        return mutationError('id-collision', 'The requested item ID already exists.', 'unchanged', 4, {
+        return await finishUncommitted(mutationError('id-collision', 'The requested item ID already exists.', 'unchanged', 4, {
           id,
           path: displayItemPath(existing.path),
           actual_revision: revisionFor(existing.bytes),
-        });
+        }));
       }
 
       const finalPath = path.join(root, `${id}.md`);
@@ -182,7 +232,7 @@ export async function createItem(ledgerDirectory, request, scenario) {
         if (occupant.id) {
           details.occupying_id = occupant.id;
         }
-        return mutationError('path-collision', 'The default item path is occupied by a different item.', 'unchanged', 4, details);
+        return await finishUncommitted(mutationError('path-collision', 'The default item path is occupied by a different item.', 'unchanged', 4, details));
       }
 
       const candidate = createData(request, dateFromId(id));
@@ -195,45 +245,67 @@ export async function createItem(ledgerDirectory, request, scenario) {
         finalPath,
       );
       if (!candidateValidation.valid) {
-        return mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
+        return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
           id,
           validation_errors: candidateValidation.errors,
-        });
+        }));
       }
 
       if (scenario === 'atomic-no-clobber-primitive-unavailable') {
-        return mutationError('capability-unavailable', 'Atomic no-clobber publication is unavailable for this ledger.', 'unchanged', 5, {
+        return await finishUncommitted(mutationError('capability-unavailable', 'Atomic no-clobber publication is unavailable for this ledger.', 'unchanged', 5, {
           capability: 'atomic-no-clobber-publication',
           reason: 'filesystem-primitive-unavailable',
           recovery_artifacts: [],
           recovery_artifacts_truncated: false,
-        });
+        }));
       }
 
       temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
       const temporaryFailure = await prepareTemporary(temporaryPath, bytes, scenario);
       if (temporaryFailure) {
-        return operationFailed(id, temporaryFailure, 'io-error');
+        const artifacts = await cleanupTemporary(temporaryPath, root, scenario);
+        temporaryPath = artifacts.length > 0 ? temporaryPath : null;
+        return await finishUncommitted(operationFailed(id, temporaryFailure, 'io-error', artifacts), artifacts);
       }
 
+      let publicationError = null;
       try {
         await link(temporaryPath, finalPath);
-      } catch (error) {
-        if (isUnavailableNoClobber(error)) {
-          return mutationError('capability-unavailable', 'Atomic no-clobber publication is unavailable for this ledger.', 'unchanged', 5, {
-            capability: 'atomic-no-clobber-publication',
-            reason: 'filesystem-primitive-unavailable',
-            recovery_artifacts: [],
-            recovery_artifacts_truncated: false,
-          });
+        if (scenarioName(scenario) === 'create-link-applied-then-error') {
+          await writeFile(path.join(root, '.wowbagger-test-publication-fault'), 'link applied before error\n');
+          throw new Error('fixture link applied then error');
         }
-        return operationFailed(id, 'publish', 'io-error');
+      } catch (error) {
+        publicationError = error;
       }
-      await unlink(temporaryPath).catch(() => {});
-      temporaryPath = null;
+      if (publicationError) {
+        const evidence = await observePublication(finalPath, bytes);
+        if (evidence.state !== 'expected') {
+          const artifacts = await cleanupTemporary(temporaryPath, root, scenario);
+          temporaryPath = artifacts.length > 0 ? temporaryPath : null;
+          if (evidence.state === 'absent') {
+            if (isUnavailableNoClobber(publicationError)) {
+              return await finishUncommitted(mutationError('capability-unavailable', 'Atomic no-clobber publication is unavailable for this ledger.', 'unchanged', 5, {
+                capability: 'atomic-no-clobber-publication',
+                reason: 'filesystem-primitive-unavailable',
+                recovery_artifacts: boundedArtifacts(artifacts).artifacts,
+                recovery_artifacts_truncated: boundedArtifacts(artifacts).truncated,
+              }), artifacts);
+            }
+            return await finishUncommitted(operationFailed(id, 'publish', 'io-error', artifacts), artifacts);
+          }
+          return await finishUnknown(unknownPublication('create', id, `${id}.md`, evidence.bytes, artifacts));
+        }
+      }
+
+      const temporaryArtifacts = await cleanupTemporary(temporaryPath, root, scenario);
+      temporaryPath = temporaryArtifacts.length > 0 ? temporaryPath : null;
+      if (temporaryArtifacts.length > 0) {
+        return await finishCommittedRecovery(bytes, temporaryArtifacts);
+      }
 
       if (scenario === 'final-verification-read-fails-after-publication') {
-        return mutationError('write-outcome-unknown', 'The create publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', 'The create publication outcome could not be verified.', 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: `${id}.md`,
@@ -242,14 +314,14 @@ export async function createItem(ledgerDirectory, request, scenario) {
             size_bytes: null,
           }],
           recovery_artifacts_truncated: false,
-        });
+        }));
       }
 
       let published;
       try {
         published = await readRegularFile(finalPath);
       } catch {
-        return mutationError('write-outcome-unknown', 'The create publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', 'The create publication outcome could not be verified.', 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: `${id}.md`,
@@ -258,10 +330,10 @@ export async function createItem(ledgerDirectory, request, scenario) {
             size_bytes: null,
           }],
           recovery_artifacts_truncated: false,
-        });
+        }));
       }
       if (!published.equals(bytes)) {
-        return mutationError('write-outcome-unknown', 'The create publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', 'The create publication outcome could not be verified.', 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: `${id}.md`,
@@ -270,36 +342,36 @@ export async function createItem(ledgerDirectory, request, scenario) {
             size_bytes: published.length,
           }],
           recovery_artifacts_truncated: false,
-        });
+        }));
       }
 
       try {
         await syncDirectoryIfSupported(root);
       } catch {
-        preserveLocks = true;
-        return postCommitRecovery(id, bytes, await artifactsForLocks(locks, root));
+        return await finishCommittedRecovery(bytes);
       }
 
       if (scenario === 'final-bytes-verified-directory-sync-and-lock-cleanup-fail') {
         const lock = locks.find((entry) => entry.id === id);
         await writeFixtureRecoveryLock(lock.file, id);
-        preserveLocks = true;
-        return postCommitRecovery(id, bytes, await artifactsForLocks(locks, root));
+        return await finishCommittedRecovery(bytes);
       }
 
       const result = inspectedPublishedItem(id, `${id}.md`, published);
-      const failedLocks = await releaseLocks(locks);
+      const failedLocks = await releaseLocks(locks, scenario);
+      locks = failedLocks;
       if (failedLocks.length > 0) {
         preserveLocks = true;
         return postCommitRecovery(id, bytes, await artifactsForLocks(failedLocks, root));
       }
+      await testCheckpoint(root, scenario, 'after-success-release');
       return mutationSuccess(result);
     } finally {
       if (temporaryPath) {
-        await unlink(temporaryPath).catch(() => {});
+        await cleanupTemporary(temporaryPath, root, scenario);
       }
       if (!preserveLocks) {
-        await releaseLocks(locks);
+        await releaseLocks(locks, scenario);
       }
     }
   }
@@ -309,7 +381,7 @@ export async function createItem(ledgerDirectory, request, scenario) {
 
 export function validateTransitionRequest(request, parseIssues = []) {
   const issues = [...parseIssues];
-  if (issues.length > 0) {
+  if (issues.some((entry) => entry.code === 'invalid-json')) {
     return sortIssues(issues);
   }
   if (!isMapping(request)) {
@@ -368,6 +440,9 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
     try {
       locks = await acquireLocks(root, nextIds, 'transition', scenario);
     } catch (error) {
+      if (error instanceof ResourceFailure) {
+        return operationFailed(id, error.operation, 'io-error', await artifactsForLocks(error.locks, root));
+      }
       if (error instanceof LockHeldError) {
         return lockHeld(id, error.file, await lockDetails(error.file));
       }
@@ -376,50 +451,72 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
 
     let preserveLocks = false;
     let temporaryPath = null;
+    const finishUncommitted = async (outcome, artifacts = []) => {
+      const finished = await finishUncommittedResources(id, outcome, locks, root, scenario, artifacts);
+      locks = finished.locks;
+      preserveLocks = finished.preserveLocks;
+      return finished.outcome;
+    };
+    const finishUnknown = async (outcome) => {
+      const finished = await finishUnknownResources(outcome, locks, root, scenario);
+      locks = finished.locks;
+      preserveLocks = finished.preserveLocks;
+      return finished.outcome;
+    };
+    const finishCommittedRecovery = async (bytes, artifacts = []) => {
+      const finished = await finishCommittedResources(id, bytes, locks, root, scenario, artifacts);
+      locks = finished.locks;
+      preserveLocks = finished.preserveLocks;
+      return finished.outcome;
+    };
     try {
       const current = await loadedValidLedger(root);
       if (!current.valid) {
-        return ledgerInvalid(current.validation);
+        return await finishUncommitted(ledgerInvalid(current.validation));
       }
       const lockedTarget = findItem(current.ledger, id);
       if (!lockedTarget) {
-        return mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id });
+        return await finishUncommitted(mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id }));
       }
       const stableIds = lockIdsForTransition(lockedTarget, current.ledger);
       if (!sameIds(nextIds, stableIds)) {
+        const cleanupFailure = await finishUncommitted(null);
+        if (cleanupFailure) {
+          return cleanupFailure;
+        }
         continue;
       }
 
       const actualRevision = revisionFor(lockedTarget.bytes);
       if (actualRevision !== request.expected_revision) {
-        return mutationError('revision-conflict', 'The item changed after it was inspected.', 'unchanged', 4, {
+        return await finishUncommitted(mutationError('revision-conflict', 'The item changed after it was inspected.', 'unchanged', 4, {
           id,
           expected_revision: request.expected_revision,
           actual_revision: actualRevision,
-        });
+        }));
       }
 
       const edge = transitionEdge(lockedTarget.data.kind, lockedTarget.data.status, request.to_status);
       const issues = transitionPreconditions(lockedTarget, current.ledger, request, edge);
       const blockers = transitionBlockers(lockedTarget, current.ledger, request.to_status);
       if (blockers.length > 0) {
-        return mutationError('atomic-scope-required', 'The requested transition requires multi-item atomicity.', 'unchanged', 5, {
+        return await finishUncommitted(mutationError('atomic-scope-required', 'The requested transition requires multi-item atomicity.', 'unchanged', 5, {
           id,
           blockers,
           precondition_issues: issues,
-        });
+        }));
       }
       if (issues.length > 0) {
-        return mutationError('transition-precondition-failed', 'The requested lifecycle transition failed its preconditions.', 'unchanged', 2, {
+        return await finishUncommitted(mutationError('transition-precondition-failed', 'The requested lifecycle transition failed its preconditions.', 'unchanged', 2, {
           id,
           issues,
-        });
+        }));
       }
       if (edge.requiresDecision && !isMapping(request.decision)) {
-        return invalidTransitionDecision();
+        return await finishUncommitted(invalidTransitionDecision());
       }
       if (!edge.requiresDecision && hasOwn(request, 'decision')) {
-        return invalidTransitionDecision();
+        return await finishUncommitted(invalidTransitionDecision());
       }
 
       const successor = transitionData(lockedTarget.data, request, edge, current.ledger);
@@ -430,32 +527,67 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
         bytes,
         lockedTarget.path,
         lockedTarget.file,
+        successor,
       );
       if (!candidateValidation.valid) {
-        return mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
+        return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
           id,
           validation_errors: candidateValidation.errors,
-        });
+        }));
       }
 
-      temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
+      const targetDirectory = path.dirname(lockedTarget.file);
+      temporaryPath = path.join(targetDirectory, `.wowbagger-tmp-${id}-${randomSuffix()}`);
+      if (scenarioName(scenario) === 'transition-rename-applied-then-error') {
+        await writeFile(path.join(root, '.wowbagger-test-transition-paths.json'), JSON.stringify({
+          temporary_directory: relativeDirectory(root, path.dirname(temporaryPath)),
+          final_directory: relativeDirectory(root, targetDirectory),
+          synced_directory: null,
+        }));
+      }
       const temporaryFailure = await prepareTemporary(temporaryPath, bytes, scenario);
       if (temporaryFailure) {
-        return operationFailed(id, temporaryFailure, 'io-error');
+        const artifacts = await cleanupTemporary(temporaryPath, root, scenario);
+        temporaryPath = artifacts.length > 0 ? temporaryPath : null;
+        return await finishUncommitted(operationFailed(id, temporaryFailure, 'io-error', artifacts), artifacts);
       }
 
+      let publicationError = null;
       try {
         await rename(temporaryPath, lockedTarget.file);
         temporaryPath = null;
-      } catch {
-        return operationFailed(id, 'publish', 'io-error');
+        if (scenarioName(scenario) === 'transition-rename-applied-then-error') {
+          await writeFile(path.join(root, '.wowbagger-test-publication-fault'), 'rename applied before error\n');
+          throw new Error('fixture rename applied then error');
+        }
+      } catch (error) {
+        publicationError = error;
+      }
+      if (publicationError) {
+        const evidence = await observePublication(lockedTarget.file, bytes, lockedTarget.bytes);
+        if (evidence.state === 'expected') {
+          temporaryPath = null;
+        } else {
+          const artifacts = temporaryPath ? await cleanupTemporary(temporaryPath, root, scenario) : [];
+          temporaryPath = artifacts.length > 0 ? temporaryPath : null;
+          if (evidence.state === 'original') {
+            return await finishUncommitted(operationFailed(id, 'publish', 'verification-failed', artifacts), artifacts);
+          }
+          return await finishUnknown(unknownPublication(
+            'transition',
+            id,
+            displayItemPath(lockedTarget.path),
+            evidence.bytes,
+            artifacts,
+          ));
+        }
       }
 
       let published;
       try {
         published = await readRegularFile(lockedTarget.file);
       } catch {
-        return mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: displayItemPath(lockedTarget.path),
@@ -464,10 +596,10 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
             size_bytes: null,
           }],
           recovery_artifacts_truncated: false,
-        });
+        }));
       }
       if (!published.equals(bytes)) {
-        return mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: displayItemPath(lockedTarget.path),
@@ -476,27 +608,35 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
             size_bytes: published.length,
           }],
           recovery_artifacts_truncated: false,
-        });
+        }));
       }
       try {
-        await syncDirectoryIfSupported(root);
+        await syncDirectoryIfSupported(targetDirectory);
+        if (scenarioName(scenario) === 'transition-rename-applied-then-error') {
+          await writeFile(path.join(root, '.wowbagger-test-transition-paths.json'), JSON.stringify({
+            temporary_directory: relativeDirectory(root, targetDirectory),
+            final_directory: relativeDirectory(root, targetDirectory),
+            synced_directory: relativeDirectory(root, targetDirectory),
+          }));
+        }
       } catch {
-        preserveLocks = true;
-        return postCommitRecovery(id, bytes, await artifactsForLocks(locks, root));
+        return await finishCommittedRecovery(bytes);
       }
       const result = inspectedPublishedItem(id, displayItemPath(lockedTarget.path), published);
-      const failedLocks = await releaseLocks(locks);
+      const failedLocks = await releaseLocks(locks, scenario);
+      locks = failedLocks;
       if (failedLocks.length > 0) {
         preserveLocks = true;
         return postCommitRecovery(id, bytes, await artifactsForLocks(failedLocks, root));
       }
+      await testCheckpoint(root, scenario, 'after-success-release');
       return mutationSuccess(result);
     } finally {
       if (temporaryPath) {
-        await unlink(temporaryPath).catch(() => {});
+        await cleanupTemporary(temporaryPath, root, scenario);
       }
       if (!preserveLocks) {
-        await releaseLocks(locks);
+        await releaseLocks(locks, scenario);
       }
     }
   }
@@ -656,23 +796,72 @@ function transitionData(data, request, edge, ledger) {
 
 function serializeTransition(source, successor, edge) {
   const bounds = frontmatterBounds(source);
-  const segment = source.slice(bounds.start, bounds.end);
-  const trailingNewline = segment.endsWith(bounds.newline) ? bounds.newline : '';
-  const frontmatter = trailingNewline ? segment.slice(0, -trailingNewline.length) : segment;
-  const lines = frontmatter.length === 0 ? [] : frontmatter.split(bounds.newline);
-  replaceScalar(lines, 'status', successor.status);
-  replaceScalar(lines, 'updated', successor.updated);
-  removeScalar(lines, 'completed');
-  removeScalar(lines, 'killed');
-  removeScalar(lines, 'archived');
+  const frontmatter = source.slice(bounds.start, bounds.end);
+  const document = parseDocument(frontmatter, {
+    intAsBigInt: true,
+    keepSourceTokens: true,
+    prettyErrors: false,
+    schema: 'core',
+    uniqueKeys: true,
+  });
+  if (document.errors.length > 0 || !isMap(document.contents)) {
+    throw new Error('Unable to mutate malformed frontmatter.');
+  }
+  setRootScalar(document, 'status', successor.status);
+  setRootScalar(document, 'updated', successor.updated);
+  document.delete('completed');
+  document.delete('killed');
+  document.delete('archived');
   const terminal = terminalField(successor.status);
   if (terminal) {
-    insertAfterScalar(lines, 'updated', `${terminal}: ${successor[terminal]}`);
+    insertRootAfter(document, 'updated', terminal, successor[terminal]);
   }
   if (edge.requiresDecision) {
-    appendDecision(lines, successor.decisions.at(-1));
+    appendDecisionNode(document, successor.decisions.at(-1));
   }
-  return `${source.slice(0, bounds.start)}${lines.join(bounds.newline)}${trailingNewline}${source.slice(bounds.end)}`;
+  let serialized = document.toString({ lineWidth: 0 });
+  if (bounds.newline === '\r\n') {
+    serialized = serialized.replaceAll('\n', '\r\n');
+  }
+  if (!frontmatter.endsWith(bounds.newline)) {
+    serialized = serialized.slice(0, -bounds.newline.length);
+  }
+  return `${source.slice(0, bounds.start)}${serialized}${source.slice(bounds.end)}`;
+}
+
+function setRootScalar(document, key, value) {
+  const node = document.get(key, true);
+  if (isScalar(node)) {
+    node.value = value;
+    return;
+  }
+  document.set(key, value);
+}
+
+function insertRootAfter(document, afterKey, key, value) {
+  const existing = document.contents.items.findIndex((pair) => pair.key?.value === key);
+  if (existing >= 0) {
+    document.contents.items.splice(existing, 1);
+  }
+  const index = document.contents.items.findIndex((pair) => pair.key?.value === afterKey);
+  document.contents.items.splice(index + 1, 0, document.createPair(key, value));
+}
+
+function appendDecisionNode(document, decision) {
+  const existing = document.get('decisions', true);
+  const decisions = isAlias(existing) ? existing.resolve(document) : existing;
+  const node = document.createNode(decision);
+  node.flow = false;
+  node.get('summary', true).type = Scalar.QUOTE_DOUBLE;
+  node.get('rationale', true).type = Scalar.QUOTE_DOUBLE;
+  if (isSeq(decisions)) {
+    decisions.add(node);
+    return;
+  }
+  const sequence = document.createNode([]);
+  sequence.flow = false;
+  sequence.add(node);
+  document.set('decisions', sequence);
 }
 
 function frontmatterBounds(source) {
@@ -708,55 +897,6 @@ function nextLine(source, start) {
   };
 }
 
-function replaceScalar(lines, key, value) {
-  const index = lines.findIndex((line) => line.startsWith(`${key}:`));
-  if (index !== -1) {
-    lines[index] = `${key}: ${value}`;
-  }
-}
-
-function removeScalar(lines, key) {
-  const index = lines.findIndex((line) => line.startsWith(`${key}:`));
-  if (index !== -1) {
-    lines.splice(index, 1);
-  }
-}
-
-function insertAfterScalar(lines, key, value) {
-  const index = lines.findIndex((line) => line.startsWith(`${key}:`));
-  lines.splice(index + 1, 0, value);
-}
-
-function appendDecision(lines, decision) {
-  const start = lines.findIndex((line) => line.startsWith('decisions:'));
-  const rendered = decisionLines(decision);
-  if (start === -1) {
-    lines.push('decisions:', ...rendered);
-    return;
-  }
-  let end = start + 1;
-  while (end < lines.length && (lines[end].startsWith(' ') || lines[end].startsWith('\t') || lines[end] === '')) {
-    end += 1;
-  }
-  lines.splice(end, 0, ...rendered);
-}
-
-function decisionLines(decision) {
-  const lines = [
-    `  - action: ${decision.action}`,
-    `    date: ${decision.date}`,
-    `    summary: ${quote(decision.summary)}`,
-    `    rationale: ${quote(decision.rationale)}`,
-  ];
-  if (decision.rollup) {
-    lines.push('    rollup:');
-    for (const entry of decision.rollup) {
-      lines.push(`      - id: ${entry.id}`, `        status: ${entry.status}`);
-    }
-  }
-  return lines;
-}
-
 function terminalField(status) {
   return { done: 'completed', killed: 'killed', archived: 'archived' }[status] ?? null;
 }
@@ -767,10 +907,18 @@ async function loadedValidLedger(root) {
   return { ledger, validation, valid: validation.valid };
 }
 
-function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file) {
+function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file, expectedData) {
   const source = bytes.toString('utf8');
   const parsed = parseLedgerItemSource(source);
   const errors = parsed.error ? [{ path: displayPath, ...parsed.error }] : [];
+  if (!parsed.error && expectedData && !isDeepStrictEqual(parsed.data, expectedData)) {
+    errors.push({
+      path: displayPath,
+      field: 'frontmatter',
+      code: 'mutation-successor-mismatch',
+      message: 'Serialized frontmatter does not exactly match the requested successor.',
+    });
+  }
   const candidate = parsed.error ? null : {
     path: displayPath,
     file,
@@ -808,33 +956,149 @@ async function acquireLocks(root, ids, operation, scenario) {
         }
         throw error;
       }
+      const lock = {
+        id,
+        file,
+        source: Buffer.from(lockSource(id, operation), 'utf8'),
+        device: null,
+        inode: null,
+        metadataComplete: false,
+        released: false,
+      };
+      locks.push(lock);
+      let failure = null;
       try {
-        await handle.writeFile(lockSource(id, operation, scenario));
+        const stat = await handle.stat();
+        lock.device = stat.dev;
+        lock.inode = stat.ino;
+        if (scenarioName(scenario) === 'lock-metadata-write-fails'
+          || scenarioName(scenario) === 'lock-metadata-write-and-unlink-fail') {
+          throw new Error('fixture lock metadata write failure');
+        }
+        await handle.writeFile(lock.source);
+        if (scenarioName(scenario) === 'lock-metadata-sync-fails') {
+          throw new Error('fixture lock metadata sync failure');
+        }
         await handle.sync();
-      } finally {
-        await handle.close();
+        lock.metadataComplete = true;
+      } catch (error) {
+        failure = error;
       }
-      locks.push({ id, file });
+      try {
+        await handle.close();
+        if (scenarioName(scenario) === 'lock-metadata-close-fails') {
+          throw new Error('fixture lock metadata close failure');
+        }
+      } catch (error) {
+        failure ??= error;
+      }
+      if (failure) {
+        const failedLocks = await releaseLocks(locks, scenario);
+        throw new ResourceFailure('lock-closure', failedLocks);
+      }
     }
+    await testCheckpoint(root, scenario, 'after-lock-acquired');
     return locks;
   } catch (error) {
-    await releaseLocks(locks);
+    if (error instanceof ResourceFailure) {
+      throw error;
+    }
+    const failedLocks = await releaseLocks(locks, scenario);
+    if (failedLocks.length > 0) {
+      throw new ResourceFailure('cleanup', failedLocks);
+    }
     throw error;
   }
 }
 
-async function releaseLocks(locks) {
+async function releaseLocks(locks, scenario) {
   const failed = [];
   await Promise.all(locks.map(async (lock) => {
+    if (lock.released) {
+      return;
+    }
     try {
-      await unlink(lock.file);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
+      if (scenarioName(scenario) === 'lock-unlink-fails-after-publication'
+        || scenarioName(scenario) === 'lock-metadata-write-and-unlink-fail') {
         failed.push(lock);
+        return;
       }
+      if (!await lockPathIsOwned(lock)) {
+        failed.push(lock);
+        return;
+      }
+      await unlink(lock.file);
+      lock.released = true;
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        lock.released = true;
+        return;
+      }
+      failed.push(lock);
     }
   }));
   return failed;
+}
+
+async function finishUncommittedResources(id, outcome, locks, root, scenario, artifacts) {
+  const failedLocks = await releaseLocks(locks, scenario);
+  if (failedLocks.length === 0) {
+    return { locks: [], preserveLocks: false, outcome };
+  }
+  return {
+    locks: failedLocks,
+    preserveLocks: true,
+    outcome: operationFailed(id, 'cleanup', 'io-error', [
+      ...artifacts,
+      ...await artifactsForLocks(failedLocks, root),
+    ]),
+  };
+}
+
+async function finishUnknownResources(outcome, locks, root, scenario) {
+  const failedLocks = await releaseLocks(locks, scenario);
+  if (failedLocks.length === 0) {
+    return { locks: [], preserveLocks: false, outcome };
+  }
+  const lockArtifacts = await artifactsForLocks(failedLocks, root);
+  const bounded = boundedArtifacts([...outcome.error.details.recovery_artifacts, ...lockArtifacts]);
+  outcome.error.details.recovery_artifacts = bounded.artifacts;
+  outcome.error.details.recovery_artifacts_truncated = bounded.truncated;
+  return { locks: failedLocks, preserveLocks: true, outcome };
+}
+
+async function finishCommittedResources(id, bytes, locks, root, scenario, artifacts) {
+  const failedLocks = await releaseLocks(locks, scenario);
+  return {
+    locks: failedLocks,
+    preserveLocks: failedLocks.length > 0,
+    outcome: postCommitRecovery(id, bytes, [
+      ...artifacts,
+      ...await artifactsForLocks(failedLocks, root),
+    ]),
+  };
+}
+
+async function lockPathIsOwned(lock) {
+  const stat = await lstat(lock.file);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    return false;
+  }
+  if (lock.device !== null && lock.inode !== null
+    && (stat.dev !== lock.device || stat.ino !== lock.inode)) {
+    return false;
+  }
+  if (lock.metadataComplete) {
+    if (lock.source.length !== stat.size) {
+      return false;
+    }
+    try {
+      return (await readRegularFile(lock.file, lock.source.length + 1)).equals(lock.source);
+    } catch {
+      return false;
+    }
+  }
+  return lock.device !== null && lock.inode !== null;
 }
 
 class LockHeldError extends Error {
@@ -844,8 +1108,29 @@ class LockHeldError extends Error {
   }
 }
 
+class ResourceFailure extends Error {
+  constructor(operation, locks) {
+    super(operation);
+    this.operation = operation;
+    this.locks = locks;
+  }
+}
+
 function issue(pathValue, code, message) {
   return { path: pathValue, code, message };
+}
+
+function validateRelationEntries(references, field, issues) {
+  for (let index = 0; index < references.length; index += 1) {
+    const reference = references[index];
+    if (typeof reference !== 'string' || !ULID_PATTERN.test(reference)) {
+      issues.push(issue(
+        `/item/${field}/${index}`,
+        'invalid-value',
+        `Item member ${field} entries must be canonical Wowbagger item IDs.`,
+      ));
+    }
+  }
 }
 
 function validateObjectMembers(value, location, allowed, issues, noun) {
@@ -882,13 +1167,14 @@ function ledgerInvalid(validation) {
   });
 }
 
-function operationFailed(id, operation, reason) {
+function operationFailed(id, operation, reason, recoveryArtifacts = []) {
+  const { artifacts, truncated } = boundedArtifacts(recoveryArtifacts);
   return mutationError('operation-failed', 'The mutation operation failed before a commit was established.', 'unchanged', 6, {
     id,
     operation,
     reason,
-    recovery_artifacts: [],
-    recovery_artifacts_truncated: false,
+    recovery_artifacts: artifacts,
+    recovery_artifacts_truncated: truncated,
   });
 }
 
@@ -904,7 +1190,15 @@ function lockHeld(id, file, details) {
 async function lockDetails(file) {
   let handle;
   try {
-    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const pathStat = await lstat(file);
+    if (!pathStat.isFile() || pathStat.isSymbolicLink()) {
+      return { owner: null, owner_diagnostic: 'invalid-shape' };
+    }
+    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const fileStat = await handle.stat();
+    if (!fileStat.isFile()) {
+      return { owner: null, owner_diagnostic: 'invalid-shape' };
+    }
     const bytes = Buffer.alloc(4097);
     const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
     if (bytesRead >= 4097) {
@@ -1002,13 +1296,23 @@ async function artifactsForLocks(locks, root) {
 }
 
 function postCommitRecovery(id, bytes, recoveryArtifacts) {
-  const artifacts = recoveryArtifacts.slice(0, 16);
+  const bounded = boundedArtifacts(recoveryArtifacts);
   return mutationError('post-commit-recovery-required', 'The item was committed, but cleanup requires recovery.', 'committed', 6, {
     id,
     revision: revisionFor(bytes),
-    recovery_artifacts: artifacts,
-    recovery_artifacts_truncated: recoveryArtifacts.length > artifacts.length,
+    recovery_artifacts: bounded.artifacts,
+    recovery_artifacts_truncated: bounded.truncated,
   });
+}
+
+function boundedArtifacts(recoveryArtifacts) {
+  const unique = new Map();
+  for (const artifact of recoveryArtifacts) {
+    unique.set(`${artifact.path}\0${artifact.kind}`, artifact);
+  }
+  const all = [...unique.values()].sort((left, right) => compareText(left.path, right.path)
+    || compareText(left.kind, right.kind));
+  return { artifacts: all.slice(0, 16), truncated: all.length > 16 };
 }
 
 async function syncDirectoryIfSupported(directory) {
@@ -1055,17 +1359,92 @@ function displayItemPath(displayPath) {
   return displayPath.slice(displayPath.indexOf('/') + 1);
 }
 
-async function readRegularFile(file) {
+function relativeDirectory(root, directory) {
+  const relative = path.relative(root, directory).split(path.sep).join('/');
+  return relative || '.';
+}
+
+async function observePublication(file, expectedBytes, originalBytes = null) {
+  try {
+    const bytes = await readRegularFile(file);
+    if (bytes.equals(expectedBytes)) {
+      return { state: 'expected', bytes };
+    }
+    if (originalBytes && bytes.equals(originalBytes)) {
+      return { state: 'original', bytes };
+    }
+    return { state: 'different', bytes };
+  } catch (error) {
+    return { state: error?.code === 'ENOENT' ? 'absent' : 'unknown', bytes: null };
+  }
+}
+
+function unknownPublication(command, id, displayPath, bytes, otherArtifacts = []) {
+  const finalArtifact = {
+    path: displayPath,
+    kind: 'final-item',
+    sha256: bytes ? revisionFor(bytes) : null,
+    size_bytes: bytes?.length ?? null,
+  };
+  const bounded = boundedArtifacts([finalArtifact, ...otherArtifacts]);
+  return mutationError(
+    'write-outcome-unknown',
+    `The ${command} publication outcome could not be verified.`,
+    'unknown',
+    6,
+    {
+      id,
+      recovery_artifacts: bounded.artifacts,
+      recovery_artifacts_truncated: bounded.truncated,
+    },
+  );
+}
+
+async function readRegularFile(file, maximumBytes = null) {
   const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await handle.stat();
     if (!stat.isFile()) {
       throw new Error('Published path is not a regular file.');
     }
+    if (maximumBytes !== null && stat.size >= maximumBytes) {
+      throw new Error('Published path exceeds its read bound.');
+    }
     return await handle.readFile();
   } finally {
     await handle.close();
   }
+}
+
+async function testCheckpoint(root, scenario, point) {
+  const [name, suffix] = typeof scenario === 'string' ? scenario.split(':', 2) : [];
+  if (!suffix) {
+    return;
+  }
+  if (name === 'pause-after-success-release' && point === 'after-success-release') {
+    await writeFile(path.join(root, `.wowbagger-test-${suffix}-released`), 'released\n');
+    await waitForTestMarker(path.join(root, `.wowbagger-test-${suffix}-acquired`));
+  }
+  if (name === 'pause-after-lock-acquired' && point === 'after-lock-acquired') {
+    await writeFile(path.join(root, `.wowbagger-test-${suffix}-acquired`), 'acquired\n');
+    await waitForTestMarker(path.join(root, `.wowbagger-test-${suffix}-allow-successor`));
+  }
+}
+
+async function waitForTestMarker(file) {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      await lstat(file);
+      return;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Timed out waiting for test marker ${path.basename(file)}.`);
 }
 
 function createData(request, date) {
@@ -1247,10 +1626,34 @@ async function prepareTemporary(file, bytes, scenario) {
   }
   try {
     await handle.close();
+    if (scenarioName(scenario) === 'temporary-close-fails'
+      || scenarioName(scenario) === 'temporary-close-and-unlink-fail') {
+      throw new Error('fixture temporary close failure');
+    }
   } catch {
     failure ??= 'sync-temporary';
   }
   return failure;
+}
+
+async function cleanupTemporary(file, root, scenario) {
+  if (scenarioName(scenario) === 'temporary-close-and-unlink-fail'
+    || scenarioName(scenario) === 'temporary-unlink-fails-after-publication') {
+    return [await artifactFor(file, root, 'temporary-file')];
+  }
+  try {
+    await unlink(file);
+    return [];
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return [];
+    }
+    return [await artifactFor(file, root, 'temporary-file')];
+  }
+}
+
+function scenarioName(scenario) {
+  return typeof scenario === 'string' ? scenario.split(':', 1)[0] : '';
 }
 
 function compareText(left, right) {
