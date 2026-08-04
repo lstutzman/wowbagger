@@ -1,7 +1,10 @@
 import { constants } from 'node:fs';
 import { lstat, open, readdir } from 'node:fs/promises';
 import path from 'node:path';
+import { TextDecoder } from 'node:util';
 import { parseDocument } from 'yaml';
+
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 
 export async function loadLedger(ledgerDirectory) {
   const root = path.resolve(ledgerDirectory);
@@ -27,7 +30,13 @@ export async function loadLedger(ledgerDirectory) {
           errors.push(ledgerReadError(displayPath));
           continue;
         }
-        source = await handle.readFile({ encoding: 'utf8' });
+        const bytes = await handle.readFile();
+        try {
+          source = UTF8_DECODER.decode(bytes);
+        } catch {
+          errors.push(invalidUtf8Error(displayPath));
+          continue;
+        }
       } finally {
         await handle.close();
       }
@@ -107,6 +116,15 @@ function ledgerReadError(displayPath) {
     field: 'path',
     code: 'ledger-read-error',
     message: 'Ledger item could not be read.',
+  };
+}
+
+function invalidUtf8Error(displayPath) {
+  return {
+    path: displayPath,
+    field: 'encoding',
+    code: 'invalid-utf8',
+    message: 'Ledger items must be valid UTF-8.',
   };
 }
 

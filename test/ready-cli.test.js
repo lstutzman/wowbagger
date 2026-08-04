@@ -114,3 +114,35 @@ depends_on: []
     });
   });
 });
+
+test('ready fails closed with validation JSON for invalid UTF-8', async () => {
+  const invalidUtf8 = Buffer.from([
+    0x2d, 0x2d, 0x2d, 0x0a,
+    0x74, 0x69, 0x74, 0x6c, 0x65, 0x3a, 0x20,
+    0xc3, 0x28, 0x0a,
+    0x2d, 0x2d, 0x2d, 0x0a,
+  ]);
+
+  await withLedger({ 'item.md': invalidUtf8 }, async (temporaryLedger) => {
+    const result = runCli(
+      'ready',
+      '--ledger',
+      temporaryLedger,
+      '--as-of',
+      '2030-01-15',
+      '--json',
+    );
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/item.md',
+        field: 'encoding',
+        code: 'invalid-utf8',
+        message: 'Ledger items must be valid UTF-8.',
+      }],
+    });
+  });
+});
