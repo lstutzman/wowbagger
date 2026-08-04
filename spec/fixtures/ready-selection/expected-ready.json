@@ -43,6 +43,18 @@
     {
       "id": "wb_01KEKWE4G0VPF8G4HGXFVE08V3",
       "reason": "status archived"
+    },
+    {
+      "id": "wb_01KEQR1700FCY7ZDC7JPDMQJAW",
+      "reason": "terminal status done"
+    },
+    {
+      "id": "wb_01KETADY00C3J6B8S5QVQ70BS3",
+      "reason": "terminal status done"
+    },
+    {
+      "id": "wb_01KEWWTN00N0D9BZV07A3TVENN",
+      "reason": "terminal status killed"
     }
   ]
 }

@@ -13,7 +13,8 @@ validate and ready interfaces.
   validation, stable error reporting, and one repair target per affected item.
 
 All fixture items include portable structured provenance and canonical IDs whose
-embedded UTC timestamp date matches created. The ready fixture proves core
-creation-order selection, including snooze equality. The invalid fixture covers
-duplicate identities, stale killed and archived prerequisites, cycles, invalid
-parents, and terminal-date invariants.
+embedded UTC timestamp date matches created. The ready fixture has 13 valid
+items and proves core creation-order selection, snooze equality, and a valid
+epic rollup. The invalid fixture has 17 items and 14 expected errors covering
+duplicate identities, stale killed and archived prerequisites, dependency and
+containment cycles, self-parents, invalid parents, and terminal-date invariants.

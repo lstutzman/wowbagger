@@ -66,6 +66,24 @@
       "field": "completed",
       "code": "terminal-date-not-allowed",
       "message": "Status backlog forbids completed, killed, and archived."
+    },
+    {
+      "path": "ledger/15-self-parent.md",
+      "field": "parent",
+      "code": "self-parent",
+      "message": "Parent wb_01KHHVYC00RMQ154YF5MSEP82Y must not reference the item itself."
+    },
+    {
+      "path": "ledger/16-containment-cycle-a.md",
+      "field": "parent",
+      "code": "containment-cycle",
+      "message": "Containment cycle detected: wb_01KHMEB3007DQWQ28B6A36W53S -> wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z -> wb_01KHMEB3007DQWQ28B6A36W53S."
+    },
+    {
+      "path": "ledger/17-containment-cycle-b.md",
+      "field": "parent",
+      "code": "containment-cycle",
+      "message": "Containment cycle detected: wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z -> wb_01KHMEB3007DQWQ28B6A36W53S -> wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z."
     }
   ]
 }
