@@ -52,6 +52,13 @@ through links or blocking on special item paths. It does not claim to prevent a
 privileged local process from racing or replacing ancestor directories while a
 read is in progress.
 
+The configured ledger root is part of validation's fail-closed boundary. A
+root that cannot be inspected produces `ledger-read-error`, a root symbolic
+link produces `symlink-not-allowed`, and an existing root that is not a real
+directory produces `ledger-root-not-directory`. These root errors use the
+root's final path component as their machine-readable path and MUST be returned
+as validation output rather than an operational stderr failure.
+
 ## 4. Schema version 1
 
 The following frontmatter fields are part of schema version 1.

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { selectReady } from '../src/ready.js';
 import { validateLedger } from '../src/validate.js';
 
 const CHAIN_LENGTH = 20_000;
 const RING_LENGTH = 10_000;
+const EPIC_DEPTH = 20_000;
 
 test('validate handles a 20,000-item dependency chain without overflowing the stack', {
   timeout: 15_000,
@@ -70,6 +72,53 @@ test('validate reports every member of a 10,000-item dependency ring', {
     code: 'dependency-cycle',
     message: `Dependency cycle detected in a component of ${RING_LENGTH} items; member ${itemId(RING_LENGTH - 1)}.`,
   });
+});
+
+test('ready selects candidates across a 20,000-epic hierarchy in deterministic order', {
+  timeout: 10_000,
+}, () => {
+  let parentReads = 0;
+  const epicIds = Array.from(
+    { length: EPIC_DEPTH },
+    (_, index) => `epic-${String(index).padStart(5, '0')}`,
+  );
+  const candidateIds = Array.from(
+    { length: EPIC_DEPTH },
+    (_, index) => `task-${String(index).padStart(5, '0')}`,
+  );
+  const epics = epicIds.map((id, index) => ({
+    path: `ledger/${id}.md`,
+    data: itemDataWithParent({
+      id,
+      kind: 'epic',
+      status: 'backlog',
+    }, index === 0 ? undefined : epicIds[index - 1]),
+  }));
+  const candidates = candidateIds.map((id, index) => ({
+    path: `ledger/${id}.md`,
+    data: itemDataWithParent({
+      id,
+      kind: 'task',
+      status: 'backlog',
+      created: '2026-01-01',
+      depends_on: [],
+    }, epicIds[index]),
+  }));
+
+  const result = selectReady([...epics, ...candidates], '2030-01-15');
+
+  assert.deepEqual(result, candidateIds);
+  assert.ok(parentReads <= EPIC_DEPTH * 3, `read parent ${parentReads} times`);
+
+  function itemDataWithParent(data, parent) {
+    return {
+      ...data,
+      get parent() {
+        parentReads += 1;
+        return parent;
+      },
+    };
+  }
 });
 
 function itemId(index) {

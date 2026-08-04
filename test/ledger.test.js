@@ -6,6 +6,30 @@ import test from 'node:test';
 import { loadLedger } from '../src/ledger.js';
 import { runCli, withLedger } from './support.js';
 
+test('loader contains a root lstat failure as a ledger error', async () => {
+  await withLedger({}, async (ledger) => {
+    const permissionDenied = new Error('simulated root permission failure');
+    permissionDenied.code = 'EACCES';
+    const fileSystem = {
+      lstat: async () => { throw permissionDenied; },
+      open,
+      readdir,
+    };
+
+    const result = await loadLedger(ledger, fileSystem);
+
+    assert.deepEqual(result, {
+      items: [],
+      errors: [{
+        path: 'ledger',
+        field: 'path',
+        code: 'ledger-read-error',
+        message: 'Ledger path could not be read.',
+      }],
+    });
+  });
+});
+
 test('loader traverses an indeterminate directory entry after lstat classification', async () => {
   await withLedger({
     'nested/item.md': validItemSource(),

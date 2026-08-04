@@ -9,10 +9,28 @@ const DEFAULT_FILE_SYSTEM = { lstat, open, readdir };
 
 export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYSTEM) {
   const root = path.resolve(ledgerDirectory);
-  const rootStat = await fileSystem.lstat(root);
+  let rootStat;
+  try {
+    rootStat = await fileSystem.lstat(root);
+  } catch {
+    return {
+      items: [],
+      errors: [ledgerReadError(ledgerPath(root, root))],
+    };
+  }
 
-  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-    throw new Error(`Ledger directory is not a real directory: ${ledgerDirectory}`);
+  if (rootStat.isSymbolicLink()) {
+    return {
+      items: [],
+      errors: [symlinkError(ledgerPath(root, root))],
+    };
+  }
+
+  if (!rootStat.isDirectory()) {
+    return {
+      items: [],
+      errors: [rootNotDirectoryError(ledgerPath(root, root))],
+    };
   }
 
   const collected = await collectMarkdownFiles(root, root, fileSystem);
@@ -152,6 +170,15 @@ function ledgerReadError(displayPath) {
   };
 }
 
+function rootNotDirectoryError(displayPath) {
+  return {
+    path: displayPath,
+    field: 'path',
+    code: 'ledger-root-not-directory',
+    message: 'Ledger root must be a real directory.',
+  };
+}
+
 function invalidUtf8Error(displayPath) {
   return {
     path: displayPath,
@@ -163,7 +190,7 @@ function invalidUtf8Error(displayPath) {
 
 function ledgerPath(root, file) {
   const relative = path.relative(root, file).split(path.sep).join('/');
-  return `${path.basename(root)}/${relative}`;
+  return relative ? `${path.basename(root)}/${relative}` : path.basename(root);
 }
 
 function parseItem(source) {

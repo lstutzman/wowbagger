@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runCli } from './support.js';
@@ -6,6 +9,87 @@ import { runCli } from './support.js';
 const validLedger = fileURLToPath(
   new URL('../spec/fixtures/ready-selection/ledger', import.meta.url),
 );
+
+test('JSON commands surface a missing ledger root as validation failure', async () => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-root-test-'));
+  const missingRoot = path.join(temporaryDirectory, 'missing-ledger');
+
+  try {
+    for (const argumentsList of rootFailureCommands(missingRoot)) {
+      const result = runCli(...argumentsList);
+
+      assert.equal(result.status, 1, argumentsList[0]);
+      assert.equal(result.stderr, '', argumentsList[0]);
+      assert.deepEqual(JSON.parse(result.stdout), {
+        valid: false,
+        errors: [{
+          path: 'missing-ledger',
+          field: 'path',
+          code: 'ledger-read-error',
+          message: 'Ledger path could not be read.',
+        }],
+      });
+    }
+  } finally {
+    await rm(temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('JSON commands reject a symbolic-link ledger root without following it', async () => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-root-test-'));
+  const target = path.join(temporaryDirectory, 'target');
+  const linkedRoot = path.join(temporaryDirectory, 'linked-ledger');
+
+  try {
+    await mkdir(target);
+    await symlink(target, linkedRoot);
+
+    for (const argumentsList of rootFailureCommands(linkedRoot)) {
+      const result = runCli(...argumentsList);
+
+      assert.equal(result.status, 1, argumentsList[0]);
+      assert.equal(result.stderr, '', argumentsList[0]);
+      assert.deepEqual(JSON.parse(result.stdout), {
+        valid: false,
+        errors: [{
+          path: 'linked-ledger',
+          field: 'path',
+          code: 'symlink-not-allowed',
+          message: 'Ledger entries must not be symbolic links.',
+        }],
+      });
+    }
+  } finally {
+    await rm(temporaryDirectory, { force: true, recursive: true });
+  }
+});
+
+test('JSON commands reject a regular file as the ledger root', async () => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-root-test-'));
+  const fileRoot = path.join(temporaryDirectory, 'ledger.md');
+
+  try {
+    await writeFile(fileRoot, 'not a ledger directory', 'utf8');
+
+    for (const argumentsList of rootFailureCommands(fileRoot)) {
+      const result = runCli(...argumentsList);
+
+      assert.equal(result.status, 1, argumentsList[0]);
+      assert.equal(result.stderr, '', argumentsList[0]);
+      assert.deepEqual(JSON.parse(result.stdout), {
+        valid: false,
+        errors: [{
+          path: 'ledger.md',
+          field: 'path',
+          code: 'ledger-root-not-directory',
+          message: 'Ledger root must be a real directory.',
+        }],
+      });
+    }
+  } finally {
+    await rm(temporaryDirectory, { force: true, recursive: true });
+  }
+});
 
 test('ready rejects a non-calendar as-of value', () => {
   const result = runCli(
@@ -37,3 +121,10 @@ test('commands reject missing, unknown, and repeated arguments', () => {
     assert.notEqual(result.stderr, '', argumentsList.join(' '));
   }
 });
+
+function rootFailureCommands(ledgerRoot) {
+  return [
+    ['validate', '--ledger', ledgerRoot, '--json'],
+    ['ready', '--ledger', ledgerRoot, '--as-of', '2030-01-15', '--json'],
+  ];
+}
