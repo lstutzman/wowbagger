@@ -13,7 +13,8 @@ provenance:
 depends_on: []
 related: []
 decisions:
-  - date: 2026-01-15
+  - action: complete
+    date: 2026-01-15
     summary: "Roll up the terminal child work."
     rationale: "Every direct child was checked before this epic completed."
     rollup:

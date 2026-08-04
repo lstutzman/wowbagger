@@ -58,7 +58,7 @@ The following frontmatter fields are part of schema version 1.
 | completed | Conditional | ISO calendar date required only when status is done. |
 | killed | Conditional | ISO calendar date required only when status is killed. |
 | archived | Conditional | ISO calendar date required only when status is archived. |
-| decisions | No | Sequence of durable decision records, each with date, summary, and rationale; an epic completion also requires its structured rollup evidence. |
+| decisions | Conditional | Sequence of durable decision records, each with action, date, summary, and rationale. A terminal item requires a matching terminal decision; an epic completion also requires structured rollup evidence. |
 
 ### 4.1 Canonical identity
 
@@ -119,11 +119,11 @@ The allowed version 1 transitions are kind-specific:
 
 | Item kind | From | Allowed targets | Required cleanup or evidence |
 |---|---|---|---|
-| task or epic | triage | backlog, killed | Accept decision for backlog; kill decision and killed date for killed. |
-| task | backlog | in-progress, archived, killed | Archive or kill preconditions in section 6; durable decision for terminal action. |
-| task | in-progress | backlog, done, killed | Done or kill date and durable decision for terminal action. |
-| epic | backlog | done, archived, killed | Epic done rollup preconditions below; archive or kill preconditions in section 6; durable decision for terminal action. |
-| task or epic | archived | backlog | Clear archived date and add a durable restore decision. |
+| task or epic | triage | backlog, killed | action: accept decision for backlog; action: kill decision and killed date for killed. |
+| task | backlog | in-progress, archived, killed | Archive or kill preconditions in section 6; matching terminal decision. |
+| task | in-progress | backlog, done, killed | depends_on MUST be empty before done; done or kill date and matching terminal decision. |
+| epic | backlog | done, archived, killed | Epic done rollup preconditions below; archive or kill child-disposition preconditions in section 6; matching terminal decision. |
+| task or epic | archived | backlog | Clear archived date and add an action: restore decision. |
 | task or epic | done or killed | none | Create a new item if work is reconsidered or discovered. |
 
 For every transition, updated MUST be set to the transition date and MUST NOT
@@ -136,6 +136,14 @@ status MUST clear every terminal date. Terminal-date invariants are strict:
 - archived requires archived and forbids completed and killed;
 - triage, backlog, and in-progress forbid completed, killed, and archived.
 
+An in-progress task MAY transition to done only when its depends_on list is
+already empty. A mutation MUST refuse completion while any dependency remains;
+it MUST NOT infer that a dependency was satisfied, replaced, or waived. Any
+replacement or waiver MUST be recorded explicitly before the completion
+attempt, and a replacement remains a blocker until it is separately resolved or
+waived. A validator MUST reject a persisted done task with a non-empty
+depends_on list.
+
 An epic is a container regardless of status. An epic MUST NEVER enter
 in-progress, be dispatched, or be returned by a ready query. A backlog epic MAY
 transition directly to done only when every item whose parent equals the epic
@@ -143,13 +151,14 @@ ID (every direct child in the complete ledger) has status done or killed.
 Archived, triage, backlog, and in-progress children do not silently satisfy an
 epic rollup. A validator MUST reject an epic whose status is in-progress.
 
-The epic completion MUST include a Decisions record dated completed with a
-rollup list. Each rollup entry is a mapping with id and status fields. The list
-MUST contain each direct child exactly once, ordered by immutable ID, and each
-entry status MUST equal that child's actual done or killed status. An epic done
-transition with a non-terminal child, missing rollup entry, extra rollup entry,
-or mismatched child status MUST be rejected without changing the ledger.
-A validator MUST reject the corresponding persisted done epic state.
+The epic completion MUST include the action: complete Decisions record required
+by section 7, dated completed and containing a rollup list. Each rollup entry is
+a mapping with id and status fields. The list MUST contain each direct child
+exactly once, ordered by immutable ID, and each entry status MUST equal that
+child's actual done or killed status. An epic done transition with a
+non-terminal child, missing rollup entry, extra rollup entry, or mismatched
+child status MUST be rejected without changing the ledger. A validator MUST
+reject the corresponding persisted done epic state.
 
 Killed and archived are intentionally different:
 
@@ -174,9 +183,15 @@ depends_on. It MUST refuse the transition unless, in the same backend operation,
 each dependent is explicitly dispositioned by one of these choices:
 
 1. replace the dependency with another valid live blocker;
-2. waive the dependency by moving it to related and adding a durable Decisions
-   record that explains the waiver; or
-3. transition the dependent to a terminal state with its own required evidence.
+2. waive the dependency by moving it to related; or
+3. remove the prerequisite from depends_on and transition the dependent to a
+   terminal state with its own required evidence.
+
+A replacement MUST add an action: replace-dependency Decisions record to the
+dependent, and a waiver MUST add an action: waive-dependency record. The record
+MUST identify the old dependency and, for replacement, the new dependency in
+its rationale. These dispositions are explicit ledger changes; neither may be
+inferred from a later completion transition.
 
 The backend MUST either apply the prerequisite transition and every required
 dependent disposition within its advertised atomic scope, or reject the whole
@@ -188,31 +203,62 @@ a dependent still lists an archived item in depends_on is invalid, just as a
 done or killed prerequisite left in depends_on is invalid. The validator MUST
 fail closed; it MUST NOT silently make dependents ready.
 
+Before an epic transitions to killed or archived, the implementation MUST find
+every direct child with status triage, backlog, or in-progress. It MUST refuse
+the transition unless the same backend operation explicitly handles each such
+child by either:
+
+1. reparenting it to another valid non-terminal epic and adding an action:
+   reparent Decisions record to the child; or
+2. transitioning it to a terminal state allowed by section 5, with the child's
+   own matching terminal decision and evidence.
+
+The backend MUST apply the epic transition and every child disposition within
+its advertised atomic scope or reject the whole operation unchanged. A
+validator MUST reject each non-terminal child whose direct parent is a killed
+or archived epic. A done epic remains subject to the stricter rollup rule in
+section 5. Because validation precedes readiness, an invalid terminal ancestor
+causes the whole ready query to fail closed rather than exposing a descendant.
+
 Validation MUST reject:
 
 - a dependency that does not resolve to an item in the complete ledger;
 - a self-dependency or dependency cycle;
 - a done or killed dependency left in depends_on;
 - an archived dependency left in depends_on;
+- a done task with a non-empty depends_on list;
 - a parent that does not resolve to an epic;
 - a parent equal to the item's own ID;
 - a containment cycle through parent references;
+- a non-terminal child whose parent is a killed or archived epic;
 - duplicate references within a relation list;
 - the same ID in depends_on and related.
 
 ## 7. Durable Decisions
 
-Decisions are optional generally, but when present each record MUST contain:
+Decisions are optional generally, but every record MUST contain:
 
+- action: one of accept, complete, kill, archive, restore,
+  replace-dependency, waive-dependency, reparent, or record;
 - date: ISO calendar date;
 - summary: the decision in one sentence;
 - rationale: the evidence or trade-off that explains it.
 
-Terminal transitions, dependency waivers, and archive restoration MUST include
-a durable Decisions record. Decisions MUST be retained across lifecycle
-transitions. The rollup field is required only for the Decisions record that
-completes an epic: it is a sequence of mappings with id and status, and is the
-durable evidence described in section 5.
+The action value makes lifecycle evidence mechanically identifiable. A terminal
+item MUST contain at least one decision with the action and date in this table:
+
+| Terminal status | Required action | Required decision date |
+|---|---|---|
+| done | complete | completed |
+| killed | kill | killed |
+| archived | archive | archived |
+
+An unrelated or differently dated decision does not satisfy this requirement.
+Archive restoration MUST add an action: restore decision. Decisions MUST be
+retained across lifecycle transitions. The rollup field is required on the
+matching complete decision for an epic and MUST NOT appear on any other
+decision. Its sequence of id and status mappings is the durable evidence
+described in section 5.
 
 ## 8. Deterministic ready semantics
 
@@ -225,14 +271,27 @@ An item is ready only when all are true:
 1. kind is task;
 2. status is backlog;
 3. snoozed_until is absent or is on or before the evaluation date;
-4. depends_on is empty.
+4. depends_on is empty;
+5. every epic ancestor reached through parent has status backlog.
 
 The ready result sorts by ascending created date, then ascending immutable ID.
 This is deterministic without a policy engine. A later consumer policy MAY rank
 or decorate the returned set, but it MUST NOT change lifecycle validity or core
 readiness selection.
 
-If a machine result includes excluded items, it MUST sort them by immutable ID.
+The normative successful public result is an exact JSON object with only these
+fields:
+
+    {
+      "as_of": "2030-01-15",
+      "valid": true,
+      "ready": ["wb_...", "wb_..."]
+    }
+
+ready is the ordered list of immutable item IDs. Exclusion reasons and other
+diagnostics are non-normative and MUST be emitted separately, not added to this
+public result. For an invalid ledger, ready MUST surface the validation failure
+and MUST NOT emit a successful result or a partial ready list.
 
 ## 9. Fail-closed validation
 
@@ -244,9 +303,10 @@ At minimum, validation rejects malformed or missing frontmatter, duplicate IDs,
 unknown kind or status values, invalid dates or timestamps, an ID whose
 timestamp date disagrees with created, invalid provenance, missing required
 fields, invalid field types, impossible status-date combinations, unresolved
-relations, invalid parent targets, terminal or archived live dependencies, and
-dependency cycles, parent self-references, containment cycles, and invalid
-epic rollup evidence.
+relations, invalid parent targets, terminal or archived live dependencies, a
+done task with live dependencies, terminal epics with non-terminal children,
+invalid or mismatched terminal decisions, dependency cycles, parent
+self-references, containment cycles, and invalid epic rollup evidence.
 
 Machine-readable validation errors MUST contain a stable code, file path, field
 when applicable, and a human-readable message. Output sorts by path, then
@@ -275,11 +335,12 @@ The synthetic fixtures under spec/fixtures are normative examples for later
 black-box tests:
 
 - ready-selection proves deterministic creation-order selection, snooze
-  equality, triage, non-dispatchable epics, a valid epic rollup, active
-  blockers, and archived exclusion;
+  equality, ancestor safety, non-dispatchable epics, a valid epic rollup, and
+  the exact minimal public ready result;
 - validation-errors proves duplicate IDs, bad status, unresolved dependencies,
   killed and archived prerequisite safety, dependency and containment cycles,
-  self-parent validation, invalid parent targets, and terminal-date invariants.
+  self-parent validation, invalid parent targets, done-task dependency safety,
+  terminal-epic child safety, terminal decisions, and terminal-date invariants.
 
 They contain no consumer product data and MUST remain suitable for any
 Wowbagger installation.

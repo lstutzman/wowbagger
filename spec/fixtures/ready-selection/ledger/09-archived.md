@@ -13,7 +13,8 @@ provenance:
 depends_on: []
 related: []
 decisions:
-  - date: 2026-01-11
+  - action: archive
+    date: 2026-01-11
     summary: "Archive without judging the task invalid."
     rationale: "The task is not appropriate for the current release."
 ---

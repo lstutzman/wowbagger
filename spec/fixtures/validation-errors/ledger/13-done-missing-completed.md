@@ -12,7 +12,8 @@ provenance:
 depends_on: []
 related: []
 decisions:
-  - date: 2026-02-14
+  - action: complete
+    date: 2026-02-14
     summary: "Record the attempted completion."
     rationale: "This fixture isolates the missing terminal date invariant."
 ---

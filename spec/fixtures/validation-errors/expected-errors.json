@@ -29,7 +29,7 @@
       "path": "ledger/06-dependent-on-killed.md",
       "field": "depends_on",
       "code": "terminal-dependency-must-be-related",
-      "message": "Dependency wb_01KGM8C3G0DZ8G2FSTB39WX0GQ is terminal (killed) and must be moved to related with a durable disposition decision."
+      "message": "Dependency wb_01KGM8C3G0DZ8G2FSTB39WX0GQ is terminal (killed) and cannot remain live; replace it with a valid live blocker, waive it with a durable decision, or terminalize the dependent."
     },
     {
       "path": "ledger/08-dependent-on-archived.md",
@@ -84,6 +84,30 @@
       "field": "parent",
       "code": "containment-cycle",
       "message": "Containment cycle detected: wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z -> wb_01KHMEB3007DQWQ28B6A36W53S -> wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z."
+    },
+    {
+      "path": "ledger/18-done-with-dependency.md",
+      "field": "depends_on",
+      "code": "done-task-has-dependencies",
+      "message": "Done task wb_01KHSK4H00VQG2VTW797VCH555 must have an empty depends_on list; resolve or explicitly disposition every dependency before completion."
+    },
+    {
+      "path": "ledger/20-child-under-killed-epic.md",
+      "field": "parent",
+      "code": "nonterminal-child-of-terminal-epic",
+      "message": "Backlog child wb_01KHYQXZ008HEMTJT7WFG7VSA7 cannot remain under killed epic wb_01KHW5H800K5RA06RT7T0XRXRW; terminalize or reparent the child before the epic transition."
+    },
+    {
+      "path": "ledger/22-child-under-archived-epic.md",
+      "field": "parent",
+      "code": "nonterminal-child-of-terminal-epic",
+      "message": "Backlog child wb_01KJ3WQD00C9PYV43PY5GTST4S cannot remain under archived epic wb_01KJ1AAP0002N40JTJ0PW1WK5N; terminalize or reparent the child before the epic transition."
+    },
+    {
+      "path": "ledger/23-mismatched-terminal-decision.md",
+      "field": "decisions",
+      "code": "missing-matching-terminal-decision",
+      "message": "Status killed requires an action kill decision dated 2026-02-26."
     }
   ]
 }

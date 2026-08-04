@@ -13,7 +13,8 @@ provenance:
 depends_on: []
 related: []
 decisions:
-  - date: 2026-01-02
+  - action: complete
+    date: 2026-01-02
     summary: "Foundation is complete."
     rationale: "The acceptance checks recorded in this item passed."
 ---

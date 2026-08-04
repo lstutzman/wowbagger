@@ -14,7 +14,8 @@ depends_on: []
 related: []
 parent: wb_01KEQR1700FCY7ZDC7JPDMQJAW
 decisions:
-  - date: 2026-01-14
+  - action: complete
+    date: 2026-01-14
     summary: "Complete the first child."
     rationale: "Its scoped acceptance work is complete."
 ---

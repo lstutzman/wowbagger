@@ -13,7 +13,8 @@ provenance:
 depends_on: []
 related: []
 decisions:
-  - date: 2026-02-05
+  - action: kill
+    date: 2026-02-05
     summary: "Terminate the obsolete prerequisite."
     rationale: "The original work is no longer wanted."
 ---

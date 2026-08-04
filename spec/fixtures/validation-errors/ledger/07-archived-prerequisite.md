@@ -13,7 +13,8 @@ provenance:
 depends_on: []
 related: []
 decisions:
-  - date: 2026-02-08
+  - action: archive
+    date: 2026-02-08
     summary: "Archive the deferred prerequisite."
     rationale: "The work remains valid but is not current."
 ---

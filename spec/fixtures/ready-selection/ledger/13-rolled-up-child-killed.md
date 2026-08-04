@@ -14,7 +14,8 @@ depends_on: []
 related: []
 parent: wb_01KEQR1700FCY7ZDC7JPDMQJAW
 decisions:
-  - date: 2026-01-15
+  - action: kill
+    date: 2026-01-15
     summary: "Kill the unnecessary child."
     rationale: "The remaining delivery makes this child redundant."
 ---
