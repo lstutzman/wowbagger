@@ -24,13 +24,23 @@ Define the portable claim envelope and fail-closed resolution behaviour before
 implementing claim storage. The protocol's acceptance criteria are:
 
 - each claim identifies its owner and carries a monotonically advancing epoch
-  that acts as its fencing token;
+  that acts as its fencing token; every new ownership generation advances the
+  epoch, including takeover after expiry and normal release followed by
+  reacquisition, and an epoch is never reset or reused;
 - acquire, renew, and release are compare-and-set operations;
 - expiry and takeover semantics are explicit, and takeover advances the epoch;
+- every claim-protected mutation carries its claimed owner and epoch, and the
+  backend atomically validates both at the publication or commit boundary;
+- a mutation with missing or stale fencing data is rejected with the ledger
+  unchanged;
 - a worker holding a stale epoch self-fences before attempting a protected
-  ledger write; and
+  ledger write as defense-in-depth, while backend validation remains the
+  enforcement boundary; and
 - claim writes are followed by read-back evidence that confirms the observed
   owner, epoch, and operation outcome.
 
 These are requirements for future implementation, not claims about the current
-read-only runtime. A work claim does not substitute for ledger mutation safety.
+read-only runtime. A backend that cannot enforce fencing at its write boundary
+must advertise claims as advisory and unfenced, and must not advertise safe
+exclusive dispatch. A work claim does not substitute for ledger mutation
+safety.

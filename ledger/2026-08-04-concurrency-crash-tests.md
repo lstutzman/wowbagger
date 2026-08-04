@@ -22,7 +22,17 @@ decisions:
 ---
 
 Add standalone black-box tests for concurrent writers, failures around durable
-publication, and recovery reporting. Claim coverage must include contention,
-expiry and takeover, renewal and release, and rejection of a stale-fenced
-writer after another owner advances the epoch. The tests must describe only
-guarantees the implemented backend can honestly provide.
+publication, and recovery reporting. Claim coverage must include:
+
+- contention, expiry and takeover, renewal, and release;
+- monotonically advancing epochs across release and reacquisition;
+- rejection of a claim-protected mutation with a missing owner or fencing-token
+  epoch, leaving the ledger unchanged; and
+- a paused-writer race at the mutation commit boundary: owner A with epoch N
+  pauses after ordinary item and revision validation, owner B obtains epoch
+  N+1, then A resumes and the backend's commit-boundary owner-and-epoch check
+  rejects A's mutation unchanged.
+
+The tests must exercise backend-enforced fencing rather than rely on worker
+self-fencing, and must describe only guarantees the implemented backend can
+honestly provide.
