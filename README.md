@@ -8,8 +8,10 @@ dependency-aware task selection, and auditable multi-worktree coordination witho
 putting a database or hosted service inside your repository.
 
 > **Status: pre-alpha.** The standalone read-only core can validate a Markdown
-> ledger and select its deterministic ready tasks. Mutation, claims, adapters,
-> a stable release, and consumer adoption remain separate future work.
+> ledger and select its deterministic ready tasks. A proposed local
+> single-item mutation contract and synthetic vectors are documented, but no
+> mutation command exists yet. Claims, adapters, a stable release, and consumer
+> adoption remain separate future work.
 
 ## Why the name?
 
@@ -147,10 +149,15 @@ It is the durable work ledger beneath those systems.
 - Provide read-only validation and deterministic ready selection by creation
   order before mutable coordination. **Implemented in this checkout; not yet a
   stable release.**
+- Define the proposed local-filesystem inspect, create, and single-item
+  lifecycle-transition contract, including exact-byte revisions and explicit
+  multi-item refusal. **Documented only; not yet executable.**
 - Separate optional reusable mechanisms from consumer-specific policy.
 - Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters.
 - Document the generic tool contract for other agent harnesses.
+- Define work claims only after a separate portable claim and resolution
+  contract exists; local mutation locks are not claims.
 - Treat any PropertyCompass adoption as a later, separately-scoped consumer
   project.
 

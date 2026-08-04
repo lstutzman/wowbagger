@@ -362,15 +362,26 @@ replacement, waiver, or terminalization rather than prescribe only one repair.
 A ready query MUST surface validation failure rather than silently omitting
 invalid work.
 
-## 10. Capability boundary
+## 10. Capability boundary and proposed mutation contract
 
-Version 1 defines a read-only ledger contract. It contains no work-claim or
-revision metadata, and ready does not resolve or exclude claims. Creation,
-claims, lifecycle mutation, compare-and-set transport, and claim storage are
-deferred to a later mutation contract described by ADR 0001.
+The currently implemented version 1 core is read-only. It contains no
+persisted work-claim or revision metadata, and ready does not resolve or
+exclude claims.
 
-A future backend MUST report a missing capability rather than pretending a
-local or Git write is globally atomic.
+[docs/mutation-contract.md](docs/mutation-contract.md) is the clearly marked
+**proposed** next-phase contract for separate capabilities, inspect/revision,
+create, and lifecycle transition commands. It uses a response revision of
+SHA-256 over the exact item-file bytes; it does not add that value to
+frontmatter or normalize YAML before hashing. Its first backend is explicitly
+limited to cooperative single-item CAS among Wowbagger writers in one working
+copy. [ADR 0003](docs/adr/0003-local-mutation-and-cas.md) records the local
+lock, publication, crash-recovery, and portability trade-offs.
+
+The proposed contract is not implemented by the current executable. A future
+backend MUST report a missing capability rather than pretending a local or Git
+write is globally atomic, must refuse a transition requiring multi-item
+dependent cleanup or child disposition when it lacks that atomic scope, and
+must report work claims unsupported until a separate claim contract exists.
 
 ## 11. Fixture contract
 
@@ -384,6 +395,9 @@ black-box tests:
   killed and archived prerequisite safety, dependency and containment cycles,
   self-parent validation, invalid parent targets, done-item dependency safety,
   terminal-epic child safety, terminal decisions, and terminal-date invariants.
+- mutations defines proposed, non-executable local mutation design vectors for
+  capabilities, exact-byte revision inspection, creation, a single-item
+  transition, stale revisions, held locks, and multi-item refusal.
 
 They contain no consumer product data and MUST remain suitable for any
 Wowbagger installation.

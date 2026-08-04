@@ -42,15 +42,24 @@ Exit criteria:
 
 ## Phase 2: mutations and compare-and-set
 
-Implement item creation, lifecycle transitions, dependent disposition, and
-capability reporting. Add compare-and-set behaviour only where a backend can
-honestly provide it.
+Status: contract design complete; runtime implementation planned.
+
+ADR 0003, the proposed mutation contract, and synthetic mutation vectors define
+the first backend as local-filesystem, cooperative, and single-item only. They
+do not add executable mutation commands to the current read-only core.
+
+Implement capability reporting, item creation, inspect/revision, and lifecycle
+transitions only where a backend can honestly provide them. The local backend
+must refuse rather than sequence a required dependent disposition, child
+disposition, or other multi-file write.
 
 Exit criteria:
 
 - creation uses collision-resistant immutable IDs and required provenance;
-- done, killed, and archived transitions enforce the relation cleanup in
-  SPEC.md;
+- inspection revisions hash exact item bytes and successful local transitions
+  use cooperative single-item CAS only;
+- done, killed, and archived transitions that require relation cleanup in
+  SPEC.md fail unchanged until a backend advertises a suitable atomic scope;
 - unsupported mutation or CAS requests fail without changing the ledger;
 - conflict and recovery cases are black-box tested;
 - no documentation promises global atomicity for a local or Git-only backend.
