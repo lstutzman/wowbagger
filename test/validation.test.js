@@ -409,3 +409,81 @@ decisions:
     });
   });
 });
+
+test('validate retains an independent rollup-placement error when terminal date is missing', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Wrong rollup evidence"
+kind: epic
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: archive
+    date: 2026-01-02
+    summary: "Archive evidence in the wrong state."
+    rationale: "This decision is not a completion record."
+    rollup: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/item.md',
+          field: 'completed',
+          code: 'missing-terminal-date',
+          message: 'Status done requires completed and forbids killed and archived.',
+        },
+        {
+          path: 'ledger/item.md',
+          field: 'decisions[0].rollup',
+          code: 'rollup-not-allowed',
+          message: 'rollup is allowed only on the matching complete decision of a done epic.',
+        },
+      ],
+    });
+  });
+});
+
+test('validate requires created to match the UTC date encoded by the ULID', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Mismatched provenance date"
+kind: task
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/item.md',
+        field: 'created',
+        code: 'id-created-date-mismatch',
+        message: 'Field created must equal the UTC calendar date encoded by ID wb_01KDWPVNG05FCBFC6R7R7CJANX.',
+      }],
+    });
+  });
+});

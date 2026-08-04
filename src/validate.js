@@ -874,12 +874,16 @@ function validateTerminalDecisions(fact, context) {
 }
 
 function validateRollupPlacement(fact, context) {
-  if (fact.kind === 'epic' && fact.status === 'done' && !fact.terminalDate) {
-    return;
-  }
-
   for (const decision of fact.decisions) {
     if (!decision.hasRollup) {
+      continue;
+    }
+
+    const completionDateIsUnavailable = fact.kind === 'epic'
+      && fact.status === 'done'
+      && !fact.terminalDate
+      && decision.action === 'complete';
+    if (completionDateIsUnavailable) {
       continue;
     }
 
@@ -1071,7 +1075,8 @@ function addError(fact, field, code, message, context) {
 function compareErrors(left, right) {
   return compareText(left.path, right.path)
     || compareText(left.field, right.field)
-    || compareText(left.code, right.code);
+    || compareText(left.code, right.code)
+    || compareText(left.message, right.message);
 }
 
 function compareText(left, right) {

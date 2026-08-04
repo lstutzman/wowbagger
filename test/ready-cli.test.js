@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { runCli, withLedger } from './support.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cli = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
@@ -60,4 +61,56 @@ test('ready surfaces validation failure without a partial ready list', () => {
   assert.equal(result.status, 1);
   assert.equal(result.stderr, '');
   assert.deepEqual(JSON.parse(result.stdout), expectedValidationFailure);
+});
+
+test('ready breaks equal creation dates by immutable ID', async () => {
+  await withLedger({
+    'later-id.md': `---
+schema_version: 1
+id: wb_01KDWPVNG0ZZZZZZZZZZZZZZZZ
+title: "Later ID"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+    'earlier-id.md': `---
+schema_version: 1
+id: wb_01KDWPVNG00000000000000000
+title: "Earlier ID"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (temporaryLedger) => {
+    const result = runCli(
+      'ready',
+      '--ledger',
+      temporaryLedger,
+      '--as-of',
+      '2030-01-15',
+      '--json',
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      as_of: '2030-01-15',
+      valid: true,
+      ready: [
+        'wb_01KDWPVNG00000000000000000',
+        'wb_01KDWPVNG0ZZZZZZZZZZZZZZZZ',
+      ],
+    });
+  });
 });

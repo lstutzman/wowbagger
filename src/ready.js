@@ -4,10 +4,14 @@ export function selectReady(items, asOf) {
   return items
     .filter((item) => isReady(item, byId, asOf))
     .sort((left, right) => {
-      const created = left.data.created.localeCompare(right.data.created);
-      return created === 0 ? left.data.id.localeCompare(right.data.id) : created;
+      const created = compareText(left.data.created, right.data.created);
+      return created === 0 ? compareText(left.data.id, right.data.id) : created;
     })
     .map((item) => item.data.id);
+}
+
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function isReady(item, byId, asOf) {

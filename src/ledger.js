@@ -1,4 +1,5 @@
-import { lstat, readdir, readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { parseDocument } from 'yaml';
 
@@ -19,19 +20,19 @@ export async function loadLedger(ledgerDirectory) {
     let source;
 
     try {
-      const fileStat = await lstat(file);
-      if (!fileStat.isFile() || fileStat.isSymbolicLink()) {
-        errors.push(symlinkError(displayPath));
-        continue;
+      const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const fileStat = await handle.stat();
+        if (!fileStat.isFile()) {
+          errors.push(ledgerReadError(displayPath));
+          continue;
+        }
+        source = await handle.readFile({ encoding: 'utf8' });
+      } finally {
+        await handle.close();
       }
-      source = await readFile(file, 'utf8');
-    } catch {
-      errors.push({
-        path: displayPath,
-        field: 'path',
-        code: 'ledger-read-error',
-        message: 'Ledger item could not be read.',
-      });
+    } catch (error) {
+      errors.push(error?.code === 'ELOOP' ? symlinkError(displayPath) : ledgerReadError(displayPath));
       continue;
     }
 
@@ -44,7 +45,6 @@ export async function loadLedger(ledgerDirectory) {
 
     items.push({
       path: displayPath,
-      sourcePath: file,
       data: parsed.data,
     });
   }
@@ -65,7 +65,7 @@ async function collectMarkdownFiles(root, directory) {
   const files = [];
   const errors = [];
 
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+  for (const entry of entries.sort((left, right) => compareText(left.name, right.name))) {
     const entryPath = path.join(directory, entry.name);
 
     if (entry.isSymbolicLink()) {
@@ -88,12 +88,25 @@ async function collectMarkdownFiles(root, directory) {
   return { files, errors };
 }
 
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function symlinkError(displayPath) {
   return {
     path: displayPath,
     field: 'path',
     code: 'symlink-not-allowed',
     message: 'Ledger entries must not be symbolic links.',
+  };
+}
+
+function ledgerReadError(displayPath) {
+  return {
+    path: displayPath,
+    field: 'path',
+    code: 'ledger-read-error',
+    message: 'Ledger item could not be read.',
   };
 }
 
