@@ -10,4 +10,10 @@ validate and ready interfaces.
 
 - ready-selection is a valid ledger evaluated at a fixed date.
 - validation-errors is an invalid ledger whose errors demonstrate fail-closed
-  validation and stable error reporting.
+  validation, stable error reporting, and one repair target per affected item.
+
+All fixture items include portable structured provenance and canonical IDs whose
+embedded UTC timestamp date matches created. The ready fixture proves core
+creation-order selection, including snooze equality. The invalid fixture covers
+duplicate identities, stale killed and archived prerequisites, cycles, invalid
+parents, and terminal-date invariants.

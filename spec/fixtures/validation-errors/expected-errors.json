@@ -4,27 +4,68 @@
     {
       "path": "ledger/01-duplicate-a.md",
       "field": "id",
-      "code": "duplicate-id"
+      "code": "duplicate-id",
+      "message": "ID wb_01KGCH5YG0W955MCP9Q3466ZQ3 is used by more than one ledger item."
     },
     {
       "path": "ledger/02-duplicate-b.md",
       "field": "id",
-      "code": "duplicate-id"
+      "code": "duplicate-id",
+      "message": "ID wb_01KGCH5YG0W955MCP9Q3466ZQ3 is used by more than one ledger item."
     },
     {
       "path": "ledger/03-invalid-status.md",
       "field": "status",
-      "code": "unknown-status"
+      "code": "unknown-status",
+      "message": "Status paused is not one of the schema version 1 statuses."
     },
     {
       "path": "ledger/04-unknown-dependency.md",
       "field": "depends_on",
-      "code": "unresolved-dependency"
+      "code": "unresolved-dependency",
+      "message": "Dependency wb_01KGHNZCG0Q4R81FQK9A85BN8E does not resolve to an item in the configured ledger."
     },
     {
-      "path": "ledger/06-stale-dependency.md",
+      "path": "ledger/06-dependent-on-killed.md",
       "field": "depends_on",
-      "code": "terminal-dependency-must-be-related"
+      "code": "terminal-dependency-must-be-related",
+      "message": "Dependency wb_01KGM8C3G0DZ8G2FSTB39WX0GQ is terminal (killed) and must be moved to related with a durable disposition decision."
+    },
+    {
+      "path": "ledger/08-dependent-on-archived.md",
+      "field": "depends_on",
+      "code": "archived-dependency-must-be-dispositioned",
+      "message": "Dependency wb_01KGVZJ8G034ZDHF7WMGKKPF40 is archived and cannot remain a live blocker; restore it or explicitly disposition the dependent."
+    },
+    {
+      "path": "ledger/09-cycle-a.md",
+      "field": "depends_on",
+      "code": "dependency-cycle",
+      "message": "Dependency cycle detected: wb_01KH3PRDG0PWW0WRY8HXCCZ6J4 -> wb_01KH6954G0BPHZRV5RS8418ZVP -> wb_01KH3PRDG0PWW0WRY8HXCCZ6J4."
+    },
+    {
+      "path": "ledger/10-cycle-b.md",
+      "field": "depends_on",
+      "code": "dependency-cycle",
+      "message": "Dependency cycle detected: wb_01KH6954G0BPHZRV5RS8418ZVP -> wb_01KH3PRDG0PWW0WRY8HXCCZ6J4 -> wb_01KH6954G0BPHZRV5RS8418ZVP."
+    },
+    {
+      "path": "ledger/12-child-with-task-parent.md",
+      "field": "parent",
+      "code": "parent-must-be-epic",
+      "message": "Parent wb_01KH8VHVG0EFWMK0R3T2XDN5JF must resolve to an epic item."
+    },
+    {
+      "path": "ledger/13-done-missing-completed.md",
+      "field": "completed",
+      "code": "missing-terminal-date",
+      "message": "Status done requires completed and forbids killed and archived."
+    },
+    {
+      "path": "ledger/14-backlog-terminal-date.md",
+      "field": "completed",
+      "code": "terminal-date-not-allowed",
+      "message": "Status backlog forbids completed, killed, and archived."
     }
   ]
 }

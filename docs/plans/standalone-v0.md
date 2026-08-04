@@ -13,56 +13,65 @@ PropertyCompass experience may inform anonymized synthetic fixtures and general
 requirements, but no consumer data, source paths, vocabulary, report branding,
 or backlog records enter this repository.
 
-## Phase 0: Contract and fixtures
+## Phase 0: contract and fixtures
 
-Deliver SPEC.md, the identity-and-claim ADR, and synthetic black-box fixtures.
-The contract specifies lifecycle, validation, readiness, capability boundaries,
-and the difference between durable ledger work and run-local work.
+Deliver SPEC.md, ADR 0001, and synthetic black-box fixtures. The contract
+defines immutable identity, structured provenance, lifecycle safety, dependency
+liveness, fail-closed validation, deterministic read-only readiness, and the
+durable-ledger versus run-local boundary.
 
 Exit criteria:
 
-- fixture data contains no consumer-specific facts;
-- the ID and claim contract requires no remote;
+- fixtures contain no consumer-specific facts;
+- IDs are remote-independent and their UTC timestamp dates match created;
+- killed or archived prerequisites cannot silently ready dependents;
 - the documents do not choose an implementation language or dependencies.
 
-## Phase 1: Read-only core
+## Phase 1: read-only core
 
 Implement validate and ready against the specification and fixture suite.
-Validation fails closed. Ready emits deterministic machine-readable output and
-does not mutate files.
+Validation fails closed. Ready emits deterministic machine-readable output,
+orders by created then ID, and does not mutate files.
 
 Exit criteria:
 
-- valid and invalid fixtures produce the expected results;
+- valid and invalid fixtures produce the expected results and stable messages;
 - the core runs without an adapter, remote, policy engine, or claim backend;
-- malformed or incomplete ledgers never produce a partial ready queue.
+- malformed or incomplete ledgers never produce a partial ready queue;
+- snoozed_until equality is eligible and epics never dispatch.
 
-## Phase 2: Mutations and compare-and-set
+## Phase 2: mutations and compare-and-set
 
-Implement item creation, lifecycle transitions, dependency normalisation, and
+Implement item creation, lifecycle transitions, dependent disposition, and
 capability reporting. Add compare-and-set behaviour only where a backend can
 honestly provide it.
 
 Exit criteria:
 
-- creation uses collision-resistant immutable IDs;
-- unsupported claim or CAS requests fail without changing the ledger;
+- creation uses collision-resistant immutable IDs and required provenance;
+- done, killed, and archived transitions enforce the relation cleanup in
+  SPEC.md;
+- unsupported mutation or CAS requests fail without changing the ledger;
 - conflict and recovery cases are black-box tested;
 - no documentation promises global atomicity for a local or Git-only backend.
 
-## Phase 3: Optional policy engine
+Work-claim storage is not part of this phase until a follow-on ADR defines the
+claim envelope and fail-closed resolution behaviour.
 
-Define a generic policy-input contract for consumers that want scoring, ranking,
-report styling, or enrichment guidance. The core remains useful without it.
-Policy values and weighting schemes are consumer-owned.
+## Phase 3: optional policy engine
+
+Define a generic policy-input contract for consumers that want ranking, report
+styling, or enrichment guidance. Core ready first returns the valid lifecycle
+candidate set ordered by created and ID; policy ranks or decorates that result
+separately and cannot change core validity or readiness.
 
 Exit criteria:
 
 - core readiness remains deterministic when no policy is installed;
 - policy absence never causes invented defaults;
-- fixtures prove that policy cannot change lifecycle validity.
+- fixtures prove that policy cannot bypass lifecycle validity.
 
-## Phase 4: Harness adapters
+## Phase 4: harness adapters
 
 Build thin Claude Code and Codex adapters that discover instructions and invoke
 the same core commands. Document the generic tool contract for other harnesses.
@@ -76,7 +85,7 @@ Exit criteria:
   results;
 - adapters remain optional to core operation.
 
-## Phase 5: Release readiness
+## Phase 5: release readiness
 
 Document installation, compatibility guarantees, versioning, security posture,
 and supported backend capabilities. Publish only after the standalone core and
@@ -96,6 +105,6 @@ PropertyCompass adoption is a later, independent consumer decision. It starts
 only after a versioned Wowbagger release exists and a separate consumer
 adoption item selects that version and defines its migration evidence.
 
-No current Wowbagger phase may modify PropertyCompass files, install an
-adapter there, move its policies, or migrate its backlog. Historical
-PropertyCompass material remains reference evidence in its own repository.
+No current Wowbagger phase may modify PropertyCompass files, install an adapter
+there, move its policies, or migrate its backlog. Historical PropertyCompass
+material remains reference evidence in its own repository.

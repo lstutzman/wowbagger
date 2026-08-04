@@ -1,14 +1,16 @@
 ---
 schema_version: 1
-id: wb_01ARZ3NDEKTSV4RRFFQ69G5FB2
+id: wb_01KEHA1DG0SW77TVDJ5KJ6AN62
 title: "Deferred task"
 kind: task
 status: backlog
 created: 2026-01-09
 updated: 2026-01-09
+provenance:
+  source: "fixture/ready-selection"
+  recorded_at: "2026-01-09T12:00:00Z"
 depends_on: []
 related: []
-priority: 1
 snoozed_until: 2030-02-01
 ---
 

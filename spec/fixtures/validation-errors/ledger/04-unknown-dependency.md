@@ -1,12 +1,15 @@
 ---
 schema_version: 1
-id: wb_01ARZ3NDEKTSV4RRFFQ69G5FC2
+id: wb_01KGHNZCG0Q4R81FQK9A85BN8D
 title: "Unknown dependency"
 kind: task
 status: backlog
-created: 2026-01-04
-updated: 2026-01-04
-depends_on: [wb_01ARZ3NDEKTSV4RRFFQ69G5FC9]
+created: 2026-02-03
+updated: 2026-02-03
+provenance:
+  source: "fixture/validation-errors"
+  recorded_at: "2026-02-03T12:00:00Z"
+depends_on: [wb_01KGHNZCG0Q4R81FQK9A85BN8E]
 related: []
 ---
 

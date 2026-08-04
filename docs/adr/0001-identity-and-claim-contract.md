@@ -1,100 +1,114 @@
-# ADR 0001: Identity and claim contract
+# ADR 0001: Identity and future claim contract
 
-Status: accepted for the standalone v0 contract
+Status: accepted for standalone v0
 
 ## Context
 
 Wowbagger must work in a local repository, a shared Git repository, and a
-harness that has no permission to push a shared branch. Sequential numeric IDs
-allocated by a direct push race require a specific remote and branch policy.
-They are therefore not a portable identity mechanism.
+harness that cannot push a shared branch. Sequential numeric IDs allocated by a
+push race require a particular remote and branch policy. They are not a
+portable identity mechanism.
 
-The words create, claim, and transition describe different operations. Treating
-them as one operation hides the concurrency guarantee a host actually has.
+Creation, a work claim, and a lifecycle transition are different operations.
+Treating them as one operation hides the guarantee a backend actually has.
 
 ## Decision
 
-Wowbagger uses immutable collision-resistant IDs as its primary identity:
+Wowbagger version 1 uses immutable collision-resistant IDs:
 
     wb_<ULID>
 
-The ULID is generated when an item is created. It permits independent local
-creation without a remote round trip. It is an identifier, not a globally
-authoritative clock, sequence, or lock. A merge-time validator still detects a
-duplicate ID; collision-resistant does not mean mathematically impossible.
+The full identity rule, UTC timestamp-date check, 80-bit entropy expectation,
+and collision retry requirement live in SPEC.md. An ID permits independent
+local creation without a remote round trip. It is not a global sequence, lock,
+or authoritative clock. Merge-time validation still detects duplicate IDs;
+collision-resistant does not mean impossible.
 
-Sequential numbers, filenames, and priority positions are optional consumer
+Sequential numbers, filenames, and display positions are optional consumer
 views. They MUST NOT be required to create an item or to determine identity.
 
-## Separate operations
+## Operation boundaries
 
-| Operation | Purpose | Minimum guarantee |
+| Operation | Purpose | Version 1 position |
 |---|---|---|
-| Create | Add a new durable item with a fresh immutable ID. | The created item has a syntactically valid, collision-resistant identity. |
-| Work claim | State that a worker intends to work on an existing item. | Only the guarantee advertised by the configured claim backend. |
-| Lifecycle transition | Change item state, such as triage to backlog or in-progress to done. | The transition is validated against the current item representation and backend capability. |
+| Create | Add a new durable item with a fresh immutable ID and provenance. | Defined by the schema; runtime implementation is deferred. |
+| Work claim | State that a worker intends to perform an existing item. | Deliberately not stored or resolved by schema version 1. |
+| Lifecycle transition | Change a validated status and required relations. | Semantics are specified; runtime transport is deferred. |
 
-Creation is not a claim on existing work. A claim is not proof that a lifecycle
-transition was accepted. A lifecycle transition does not grant an exclusive
-claim unless its backend explicitly says so.
+Creation is not a claim on existing work. A future claim is not proof that a
+lifecycle transition was accepted. A future lifecycle transition does not grant
+an exclusive claim unless its backend explicitly says so.
 
 ## Capability tiers and backends
 
 | Tier | Typical backend | What it can promise | What it must not claim |
 |---|---|---|---|
-| Read-only | Filesystem snapshot or exported ledger | Validate and calculate deterministic readiness. | Any mutation or cross-worker coordination. |
-| Local write | One working copy | Create unique-format IDs and write validated state locally. | Atomicity across processes, worktrees, or clones. |
+| Read-only | Filesystem snapshot or exported ledger | Validate and calculate deterministic readiness. | Mutation or cross-worker coordination. |
+| Local write | One working copy | Create valid IDs and write validated state locally. | Atomicity across processes, worktrees, or clones. |
 | Git-mediated | Shared Git with normal merges and per-file changes | Auditability, conflict detection, and merge review. | Linearizable global claims or conflict-free concurrent edits to the same item. |
-| Coordinated CAS | Explicit pluggable lock or compare-and-set service | The backend's documented single-item claim or transition semantics. | Guarantees beyond the backend's scope, availability, or lease duration. |
+| Coordinated CAS | Explicit pluggable compare-and-set or lease service | Only the documented single-item claim or transition semantics of that backend. | Guarantees beyond backend scope, availability, or lease duration. |
 
-A backend exposes its available capabilities to the caller. If a requested
-claim or compare-and-set operation is unavailable, the operation MUST fail
-clearly and leave the ledger unchanged.
+Version 1 has only the read-only core contract. The other rows define future
+capability vocabulary; they do not make a claim backend exist today.
+
+## Deferred claim storage
+
+Claim metadata is intentionally absent from schema version 1. Therefore version
+1 ready selection does not resolve, expire, or exclude claims.
+
+Before a mutation release adds claims, a follow-on ADR and schema version MUST
+define all of the following together:
+
+- a common persisted claim envelope, including backend identity, holder, issued
+  instant, expiry or lease semantics, and an opaque comparison token;
+- how a backend resolves that envelope and reports unsupported or stale claims;
+- the precise fail-closed behaviour when claim resolution is unavailable; and
+- whether a recognised unexpired claim changes ready output or only reports
+  coordination state.
+
+Deferring the envelope is safer than publishing an optional field no portable
+reader can interpret.
 
 ## Transition preconditions
 
-Every mutation-capable backend needs an expected-current-state check. It may
-use an opaque revision token, content hash, Git object identity, or an
-equivalent backend-specific comparison. The exact transport is intentionally
-deferred until the mutation phase.
+Every future mutation backend needs an expected-current-state check, such as an
+opaque revision token, content hash, Git object identity, or equivalent
+comparison. The exact transport is deferred.
 
-A failed comparison is a conflict result, not permission to overwrite the item.
-The caller must reload the ledger and decide whether to retry, merge, or stop.
-
-## Consequences
-
-- A standalone read-only validate and ready implementation needs no remote,
-  lock service, sequential counter, or claim backend.
-- The first mutating implementation cannot claim global atomicity merely
-  because it writes Git files.
-- Consumer-specific branch names, remote names, direct-push carve-outs, and
-  human numbering policies belong in a consumer backend or adapter, never in
-  core identity.
-- Claim expiry, owner identity, and lease renewal remain backend concerns. The
-  core only defines how an unexpired recognised claim affects readiness.
+For a done transition, dependent cleanup is part of the operation. For a killed
+or archived transition, the backend must apply every dependent disposition
+required by SPEC.md within its advertised atomic scope or fail unchanged. A
+failed comparison or incomplete dependent disposition is a conflict result, not
+permission to overwrite the ledger.
 
 ## Alternatives considered
 
 ### Sequential IDs with a shared-branch push race
 
 Rejected as the core default. It assumes a remote, permission to push, and a
-specific branch topology. It provides optimistic conflict handling rather than
-a portable atomic claim.
+specific branch topology. It offers optimistic conflict handling, not a
+portable atomic claim.
 
 ### Require a hosted coordination service
 
 Rejected for v0. It violates the plain Markdown and Git posture and prevents
 offline or local-only use.
 
+### Persist an optional claim field now
+
+Rejected. Without a shared envelope and resolution rules, readers would either
+ignore it or invent unsafe semantics.
+
 ### Collision-resistant identity plus explicit capability reporting
 
-Accepted. It makes creation independent of a remote while being honest about
-the additional backend required for exclusive claims and compare-and-set
-transitions.
+Accepted. It makes creation remote-independent while remaining honest that
+exclusive claims and compare-and-set transitions need a capable backend.
 
 ## Deferred decisions
 
 - The implementation language and distribution format.
 - The concrete mutation transport and revision-token representation.
+- The claim envelope, ownership model, expiry, and renewal behaviour.
 - Whether a future optional backend offers leases, locks, or both.
-- Any consumer's friendly numbering, display order, or branch policy.
+- Any consumer's friendly numbering, policy ranking, display order, or branch
+  policy.
