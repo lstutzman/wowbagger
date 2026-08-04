@@ -3,7 +3,7 @@ schema_version: 1
 id: wb_01KZ77NSW876B92APQN8Q8NK6X
 title: "Implement the standalone mutation runtime"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-04
 updated: 2026-08-04
 provenance:
