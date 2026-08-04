@@ -1,0 +1,30 @@
+{
+  "valid": false,
+  "errors": [
+    {
+      "path": "ledger/01-duplicate-a.md",
+      "field": "id",
+      "code": "duplicate-id"
+    },
+    {
+      "path": "ledger/02-duplicate-b.md",
+      "field": "id",
+      "code": "duplicate-id"
+    },
+    {
+      "path": "ledger/03-invalid-status.md",
+      "field": "status",
+      "code": "unknown-status"
+    },
+    {
+      "path": "ledger/04-unknown-dependency.md",
+      "field": "depends_on",
+      "code": "unresolved-dependency"
+    },
+    {
+      "path": "ledger/06-stale-dependency.md",
+      "field": "depends_on",
+      "code": "terminal-dependency-must-be-related"
+    }
+  ]
+}

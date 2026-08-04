@@ -1,0 +1,46 @@
+{
+  "as_of": "2030-01-15",
+  "valid": true,
+  "ready": [
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+      "reason": "backlog task with no live blockers",
+      "priority": 10
+    },
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+      "reason": "backlog task with no live blockers",
+      "priority": 20
+    }
+  ],
+  "excluded": [
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      "reason": "terminal status done"
+    },
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FAY",
+      "reason": "status in-progress"
+    },
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FAZ",
+      "reason": "blocked by wb_01ARZ3NDEKTSV4RRFFQ69G5FAY"
+    },
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FB0",
+      "reason": "status triage"
+    },
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FB1",
+      "reason": "kind epic"
+    },
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FB2",
+      "reason": "snoozed until 2030-02-01"
+    },
+    {
+      "id": "wb_01ARZ3NDEKTSV4RRFFQ69G5FB3",
+      "reason": "status archived"
+    }
+  ]
+}
