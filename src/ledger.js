@@ -10,13 +10,31 @@ export async function loadLedger(ledgerDirectory) {
     throw new Error(`Ledger directory is not a real directory: ${ledgerDirectory}`);
   }
 
-  const files = await collectMarkdownFiles(root);
+  const collected = await collectMarkdownFiles(root, root);
   const items = [];
-  const errors = [];
+  const errors = [...collected.errors];
 
-  for (const file of files) {
-    const source = await readFile(file, 'utf8');
+  for (const file of collected.files) {
     const displayPath = ledgerPath(root, file);
+    let source;
+
+    try {
+      const fileStat = await lstat(file);
+      if (!fileStat.isFile() || fileStat.isSymbolicLink()) {
+        errors.push(symlinkError(displayPath));
+        continue;
+      }
+      source = await readFile(file, 'utf8');
+    } catch {
+      errors.push({
+        path: displayPath,
+        field: 'path',
+        code: 'ledger-read-error',
+        message: 'Ledger item could not be read.',
+      });
+      continue;
+    }
+
     const parsed = parseItem(source);
 
     if (parsed.error) {
@@ -34,19 +52,31 @@ export async function loadLedger(ledgerDirectory) {
   return { items, errors };
 }
 
-async function collectMarkdownFiles(directory) {
+async function collectMarkdownFiles(root, directory) {
+  const directoryStat = await lstat(directory);
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+    return {
+      files: [],
+      errors: [symlinkError(ledgerPath(root, directory))],
+    };
+  }
+
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
+  const errors = [];
 
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     const entryPath = path.join(directory, entry.name);
 
     if (entry.isSymbolicLink()) {
+      errors.push(symlinkError(ledgerPath(root, entryPath)));
       continue;
     }
 
     if (entry.isDirectory()) {
-      files.push(...await collectMarkdownFiles(entryPath));
+      const nested = await collectMarkdownFiles(root, entryPath);
+      files.push(...nested.files);
+      errors.push(...nested.errors);
       continue;
     }
 
@@ -55,7 +85,16 @@ async function collectMarkdownFiles(directory) {
     }
   }
 
-  return files;
+  return { files, errors };
+}
+
+function symlinkError(displayPath) {
+  return {
+    path: displayPath,
+    field: 'path',
+    code: 'symlink-not-allowed',
+    message: 'Ledger entries must not be symbolic links.',
+  };
 }
 
 function ledgerPath(root, file) {
@@ -90,7 +129,7 @@ function parseItem(source) {
         code: error.code === 'DUPLICATE_KEY' ? 'duplicate-yaml-key' : 'invalid-yaml',
         message: error.code === 'DUPLICATE_KEY'
           ? 'YAML mapping keys must be unique.'
-          : error.message,
+          : 'Frontmatter contains invalid YAML.',
       },
     };
   }
