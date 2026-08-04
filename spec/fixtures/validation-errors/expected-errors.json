@@ -28,7 +28,7 @@
     {
       "path": "ledger/06-dependent-on-killed.md",
       "field": "depends_on",
-      "code": "terminal-dependency-must-be-related",
+      "code": "terminal-dependency-invalid",
       "message": "Dependency wb_01KGM8C3G0DZ8G2FSTB39WX0GQ is terminal (killed) and cannot remain live; replace it with a valid live blocker, waive it with a durable decision, or terminalize the dependent."
     },
     {
@@ -88,8 +88,8 @@
     {
       "path": "ledger/18-done-with-dependency.md",
       "field": "depends_on",
-      "code": "done-task-has-dependencies",
-      "message": "Done task wb_01KHSK4H00VQG2VTW797VCH555 must have an empty depends_on list; resolve or explicitly disposition every dependency before completion."
+      "code": "done-item-has-dependencies",
+      "message": "Done item wb_01KHSK4H00VQG2VTW797VCH555 must have an empty depends_on list; resolve or explicitly disposition every dependency before completion."
     },
     {
       "path": "ledger/20-child-under-killed-epic.md",
@@ -108,6 +108,12 @@
       "field": "decisions",
       "code": "missing-matching-terminal-decision",
       "message": "Status killed requires an action kill decision dated 2026-02-26."
+    },
+    {
+      "path": "ledger/24-done-epic-with-dependency.md",
+      "field": "depends_on",
+      "code": "done-item-has-dependencies",
+      "message": "Done item wb_01KJE6A900SRTMTER3CN7Y50SX must have an empty depends_on list; resolve or explicitly disposition every dependency before completion."
     }
   ]
 }

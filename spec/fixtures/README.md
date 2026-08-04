@@ -13,11 +13,11 @@ validate and ready interfaces.
   validation, stable error reporting, and one repair target per affected item.
 
 All fixture items include portable structured provenance and canonical IDs whose
-embedded UTC timestamp date matches created. The ready fixture has 13 valid
+embedded UTC timestamp date matches created. The ready fixture has 16 valid
 items and proves the exact minimal ready result, creation-order selection,
-snooze equality, matching terminal decisions, and a valid epic rollup. The
-invalid fixture has 23 items and 18 expected errors covering duplicate
-identities, stale killed and archived prerequisites, dependency and containment
-cycles, self-parents, invalid parents, done tasks with dependencies, live
-children under terminal epics, mismatched terminal decisions, and terminal-date
-invariants.
+snooze equality, backlog-versus-triage ancestor readiness, matching terminal
+decisions, and a valid epic rollup. The invalid fixture has 24 items and 19
+expected errors covering duplicate identities, stale killed and archived
+prerequisites, dependency and containment cycles, self-parents, invalid parents,
+done tasks and epics with dependencies, live children under terminal epics,
+mismatched terminal decisions, and terminal-date invariants.

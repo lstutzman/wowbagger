@@ -122,7 +122,7 @@ The allowed version 1 transitions are kind-specific:
 | task or epic | triage | backlog, killed | action: accept decision for backlog; action: kill decision and killed date for killed. |
 | task | backlog | in-progress, archived, killed | Archive or kill preconditions in section 6; matching terminal decision. |
 | task | in-progress | backlog, done, killed | depends_on MUST be empty before done; done or kill date and matching terminal decision. |
-| epic | backlog | done, archived, killed | Epic done rollup preconditions below; archive or kill child-disposition preconditions in section 6; matching terminal decision. |
+| epic | backlog | done, archived, killed | depends_on MUST be empty before done; epic rollup preconditions below; archive or kill child-disposition preconditions in section 6; matching terminal decision. |
 | task or epic | archived | backlog | Clear archived date and add an action: restore decision. |
 | task or epic | done or killed | none | Create a new item if work is reconsidered or discovered. |
 
@@ -136,13 +136,13 @@ status MUST clear every terminal date. Terminal-date invariants are strict:
 - archived requires archived and forbids completed and killed;
 - triage, backlog, and in-progress forbid completed, killed, and archived.
 
-An in-progress task MAY transition to done only when its depends_on list is
-already empty. A mutation MUST refuse completion while any dependency remains;
-it MUST NOT infer that a dependency was satisfied, replaced, or waived. Any
-replacement or waiver MUST be recorded explicitly before the completion
-attempt, and a replacement remains a blocker until it is separately resolved or
-waived. A validator MUST reject a persisted done task with a non-empty
-depends_on list.
+Any task or epic MAY transition to done only when its depends_on list is already
+empty. A mutation MUST refuse completion while any dependency remains; it MUST
+NOT infer that a dependency was satisfied, replaced, or waived. Any replacement
+or waiver MUST be recorded explicitly before the completion attempt, and a
+replacement remains a blocker until it is separately resolved or waived. A
+validator MUST reject every persisted done item with a non-empty depends_on
+list.
 
 An epic is a container regardless of status. An epic MUST NEVER enter
 in-progress, be dispatched, or be returned by a ready query. A backlog epic MAY
@@ -226,7 +226,7 @@ Validation MUST reject:
 - a self-dependency or dependency cycle;
 - a done or killed dependency left in depends_on;
 - an archived dependency left in depends_on;
-- a done task with a non-empty depends_on list;
+- any done item with a non-empty depends_on list;
 - a parent that does not resolve to an epic;
 - a parent equal to the item's own ID;
 - a containment cycle through parent references;
@@ -304,9 +304,18 @@ unknown kind or status values, invalid dates or timestamps, an ID whose
 timestamp date disagrees with created, invalid provenance, missing required
 fields, invalid field types, impossible status-date combinations, unresolved
 relations, invalid parent targets, terminal or archived live dependencies, a
-done task with live dependencies, terminal epics with non-terminal children,
+done item with live dependencies, terminal epics with non-terminal children,
 invalid or mismatched terminal decisions, dependency cycles, parent
 self-references, containment cycles, and invalid epic rollup evidence.
+
+Validation errors have deterministic prerequisites. For a terminal item, the
+required terminal date is validated before the matching decision action and
+date, and before date-dependent epic rollup evidence. If that required date is
+missing or invalid, the validator MUST emit the terminal-date error and MUST
+suppress decision-mismatch and rollup-date errors whose evaluation depends on
+it. Independent errors on the same item are not suppressed. This rule makes a
+missing completed field produce its missing-terminal-date error without a
+second derived missing-matching-terminal-decision error.
 
 Machine-readable validation errors MUST contain a stable code, file path, field
 when applicable, and a human-readable message. Output sorts by path, then
@@ -315,6 +324,10 @@ own duplicate-id error. Each item participating in a dependency cycle MUST
 receive its own dependency-cycle error. A self-parent MUST receive its own
 self-parent error, and each item participating in a multi-item containment
 cycle MUST receive its own containment-cycle error.
+
+The stable code for a killed dependency that remains in depends_on is
+terminal-dependency-invalid. The code is repair-neutral; its message MUST allow
+replacement, waiver, or terminalization rather than prescribe only one repair.
 
 A ready query MUST surface validation failure rather than silently omitting
 invalid work.
@@ -339,7 +352,7 @@ black-box tests:
   the exact minimal public ready result;
 - validation-errors proves duplicate IDs, bad status, unresolved dependencies,
   killed and archived prerequisite safety, dependency and containment cycles,
-  self-parent validation, invalid parent targets, done-task dependency safety,
+  self-parent validation, invalid parent targets, done-item dependency safety,
   terminal-epic child safety, terminal decisions, and terminal-date invariants.
 
 They contain no consumer product data and MUST remain suitable for any
