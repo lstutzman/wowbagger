@@ -11,7 +11,7 @@
     "wowbagger": "./bin/wowbagger.js"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "yaml": "^2.9.0"
