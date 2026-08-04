@@ -99,6 +99,21 @@ they are not a sandbox against a privileged process racing filesystem changes.
 The executable is packaged as `wowbagger` for a future installation path. This
 pre-alpha repository intentionally documents direct checkout use only.
 
+## This repository's ledger
+
+Wowbagger dogfoods its own draft format in the repository-local
+[`ledger/`](ledger/) directory. It tracks only remaining standalone Wowbagger
+work; PropertyCompass adoption is deliberately a separate, deferred consumer
+decision. From a checkout, query it with:
+
+```sh
+./bin/wowbagger.js validate --ledger ledger --json
+./bin/wowbagger.js ready --ledger ledger --as-of 2026-08-04 --json
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the small set of ledger-maintenance
+rules while mutation commands are still under development.
+
 ## Design principles
 
 1. **Markdown is canonical.** Humans can inspect and edit the backlog using
