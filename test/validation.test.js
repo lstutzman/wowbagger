@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { runCli, withLedger } from './support.js';
+
+const invalidFixtureLedger = fileURLToPath(
+  new URL('../spec/fixtures/validation-errors/ledger', import.meta.url),
+);
+const expectedFixtureErrors = JSON.parse(readFileSync(
+  new URL('../spec/fixtures/validation-errors/expected-errors.json', import.meta.url),
+));
 
 test('validate rejects a status outside schema version 1', async () => {
   await withLedger({
@@ -67,4 +76,12 @@ depends_on: []
       }],
     });
   });
+});
+
+test('validate matches the normative invalid-ledger fixture', () => {
+  const result = runCli('validate', '--ledger', invalidFixtureLedger, '--json');
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(result.stdout), expectedFixtureErrors);
 });
