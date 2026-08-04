@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCli } from './support.js';
+import { runCli, withLedger } from './support.js';
 
 const capabilitiesFixture = new URL(
   '../spec/fixtures/mutations/capabilities/expected.json',
@@ -72,4 +74,25 @@ test('inspect fails closed when another ledger item is invalid', () => {
     result.stdout,
     `${JSON.stringify(JSON.parse(readFileSync(fileURLToPath(new URL('expected.json', fixture)), 'utf8')))}\n`,
   );
+});
+
+test('create atomically publishes the canonical caller-identified triage item', async () => {
+  const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, readFileSync(fileURLToPath(new URL('request.json', fixture))));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.equal(
+      result.stdout,
+      `${JSON.stringify(JSON.parse(readFileSync(fileURLToPath(new URL('expected.json', fixture)), 'utf8')))}\n`,
+    );
+    assert.equal(
+      await readFile(path.join(ledger, 'wb_01Q45X474N28T5CY4GNF6YY4HM.md'), 'utf8'),
+      readFileSync(fileURLToPath(new URL('expected-item.md', fixture)), 'utf8'),
+    );
+  });
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { loadLedger } from '../src/ledger.js';
-import { inspectItem } from '../src/mutation.js';
+import { createItem, inspectItem } from '../src/mutation.js';
 import { selectReady } from '../src/ready.js';
 import { isCalendarDate, validateLedger } from '../src/validate.js';
 
@@ -51,6 +51,20 @@ async function main(argumentsList) {
       command,
       contract_version: 1,
       result: { item: result.item },
+    })}\n`);
+    return;
+  }
+
+  if (command === 'create') {
+    const options = parseOptions(command, argumentsList.slice(1));
+    const request = JSON.parse(await requestSource(options.input));
+    const item = await createItem(options.ledger, request);
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      command,
+      contract_version: 1,
+      state: 'committed',
+      result: { item },
     })}\n`);
     return;
   }
@@ -154,6 +168,12 @@ function parseOptions(command, argumentsList) {
       }
       options.id = readOptionValue(command, argument, argumentsList, index);
       index += 1;
+    } else if (argument === '--input' && command === 'create') {
+      if (options.input) {
+        throw new Error(usage(command));
+      }
+      options.input = readOptionValue(command, argument, argumentsList, index);
+      index += 1;
     } else if (argument === '--json') {
       if (options.json) {
         throw new Error(usage(command));
@@ -166,6 +186,7 @@ function parseOptions(command, argumentsList) {
 
   if (!options.ledger || !options.json
     || (command === 'inspect' && !options.id)
+    || (command === 'create' && !options.input)
     || (command === 'ready' && !options.asOf)) {
     throw new Error(usage(command));
   }
@@ -194,7 +215,24 @@ function usage(command) {
     return 'Usage: wowbagger inspect --ledger <dir> --id <id> --json';
   }
 
+  if (command === 'create') {
+    return 'Usage: wowbagger create --ledger <dir> --input <json-file|-> --json';
+  }
+
   return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD --json';
+}
+
+async function requestSource(input) {
+  if (input === '-') {
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks).toString('utf8');
+  }
+
+  const { readFile } = await import('node:fs/promises');
+  return readFile(input, 'utf8');
 }
 
 main(process.argv.slice(2)).catch((error) => {
