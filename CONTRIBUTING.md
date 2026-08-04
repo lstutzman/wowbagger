@@ -15,7 +15,8 @@ current UTC date:
 ./bin/wowbagger.js ready --ledger ledger --as-of YYYY-MM-DD --json
 ```
 
-The current core is read-only. Until a reviewed mutation command exists, make
-ledger edits as ordinary, reviewable Git changes and do not represent them as
-atomic compare-and-set operations or work claims. Keep standalone Wowbagger
-work separate from any consumer-adoption decision.
+Use `inspect`, `create`, and `transition` only within their documented local
+scope. A transition that requires changing a dependent or child must remain a
+reviewable multi-file Git change until a future backend advertises a suitable
+atomic scope. Do not represent a short mutation lock as a work claim. Keep
+standalone Wowbagger work separate from any consumer-adoption decision.

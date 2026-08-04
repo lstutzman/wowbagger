@@ -2,7 +2,7 @@
   "name": "wowbagger",
   "version": "0.1.0-prealpha",
   "private": true,
-  "description": "Standalone read-only Markdown ledger validation and readiness selection.",
+  "description": "Standalone Markdown ledger validation, readiness selection, and guarded local mutations.",
   "type": "module",
   "engines": {
     "node": ">=20"

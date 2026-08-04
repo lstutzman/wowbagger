@@ -372,43 +372,41 @@ replacement, waiver, or terminalization rather than prescribe only one repair.
 A ready query MUST surface validation failure rather than silently omitting
 invalid work.
 
-## 10. Capability boundary and proposed mutation contract
+## 10. Capability boundary and local mutation contract
 
-The currently implemented version 1 core is read-only. It contains no
-persisted work-claim or revision metadata, and ready does not resolve or
-exclude claims.
+The implemented version 1 core has no persisted work-claim or revision
+metadata, and ready does not resolve or exclude claims.
 
-[docs/mutation-contract.md](docs/mutation-contract.md) is the clearly marked
-**proposed** next-phase contract for separate capabilities, inspect/revision,
-create, and lifecycle transition commands. Inspect parses, exposes, and hashes
-one raw byte buffer and returns a lossless base64 source alongside a normalized
-core view. Create requires a caller-generated canonical ID and either publishes
-complete bytes with an atomic no-clobber primitive or fails unchanged. Revision
-is SHA-256 over exact item-file bytes; it is not added to frontmatter and YAML
-is not normalized before hashing. The first backend is explicitly limited to
-cooperative single-item CAS among Wowbagger writers in one working copy.
-[ADR 0003](docs/adr/0003-local-mutation-and-cas.md) records the local lock,
+[docs/mutation-contract.md](docs/mutation-contract.md) specifies the
+implemented local backend for `capabilities`, inspect/revision, create, and
+lifecycle transition commands. Inspect parses, exposes, and hashes one raw byte
+buffer and returns a lossless base64 source alongside a normalized core view.
+Create requires a caller-generated canonical ID and either publishes complete
+bytes with an atomic no-clobber primitive or fails unchanged. Revision is
+SHA-256 over exact item-file bytes; it is not added to frontmatter and YAML is
+not normalized before hashing. The backend is explicitly limited to cooperative
+single-item CAS among Wowbagger writers in one working copy. [ADR
+0003](docs/adr/0003-local-mutation-and-cas.md) records the local lock,
 publication, crash-recovery, and portability trade-offs.
 
-The proposed contract is not implemented by the current executable. A future
-backend MUST report a missing capability rather than pretending a local or Git
-write is globally atomic. Before transition publication it MUST validate the
-complete one-item proposed ledger and refuse every required dependent cleanup
-or child disposition when it lacks multi-item atomicity. It MUST report work
-claims unsupported until a separate claim contract exists.
+Any later backend MUST report a missing capability rather than pretending a
+local or Git write is globally atomic. Before transition publication the local
+backend validates the complete one-item proposed ledger and refuses every
+required dependent cleanup or child disposition when it lacks multi-item
+atomicity. It reports work claims unsupported until a separate claim contract
+exists.
 
-The proposed command contract distinguishes immutable-ID collision from an
-unrelated item or valid directory occupying the default creation path. It also
-defines a stable candidate-invalid refusal when the complete proposed ledger
-fails validation after more-specific collision, multi-item, and lifecycle
-checks. Unexpected
-mutation failures expose closed operation-phase and reason values rather than
-platform exception text.
+The command contract distinguishes immutable-ID collision from an unrelated
+item or valid directory occupying the default creation path. It also defines a
+stable candidate-invalid refusal when the complete proposed ledger fails
+validation after more-specific collision, multi-item, and lifecycle checks.
+Unexpected mutation failures expose closed operation-phase and reason values
+rather than platform exception text.
 
 ## 11. Fixture contract
 
-The synthetic fixtures under spec/fixtures are normative examples for later
-black-box tests:
+The synthetic fixtures under spec/fixtures are normative executable black-box
+tests:
 
 - ready-selection proves deterministic creation-order selection, snooze
   equality, ancestor safety, non-dispatchable epics, a valid epic rollup, and
@@ -417,7 +415,7 @@ black-box tests:
   killed and archived prerequisite safety, dependency and containment cycles,
   self-parent validation, invalid parent targets, done-item dependency safety,
   terminal-epic child safety, terminal decisions, and terminal-date invariants.
-- mutations defines proposed, non-executable local mutation design vectors with
+- mutations defines local mutation vectors with
   invocation manifests for lossless exact-byte inspection, caller-ID creation,
   strict JSON, body boundaries, lifecycle transitions, concurrency and
   recovery states, and deterministic multi-item refusal.

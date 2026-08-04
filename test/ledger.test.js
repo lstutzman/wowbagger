@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { lstat, open, readdir, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { loadLedger } from '../src/ledger.js';
 import { runCli, withLedger } from './support.js';
 
@@ -118,6 +119,43 @@ test('validate rejects special filesystem entries with markdown names', async ()
         code: 'ledger-read-error',
         message: 'Ledger path could not be read.',
       }],
+    });
+  });
+});
+
+test('lock metadata directory follows ordinary fail-closed ledger traversal without blocking', async () => {
+  await withLedger({
+    '.wowbagger-locks/hidden.md': 'not frontmatter\n',
+    '.wowbagger-locks/ordinary.lock': '{"writer_id":"ordinary"}\n',
+  }, async (ledger) => {
+    const lockDirectory = path.join(ledger, '.wowbagger-locks');
+    await symlink('ordinary.lock', path.join(lockDirectory, 'linked.lock'));
+    execFileSync('mkfifo', [path.join(lockDirectory, 'special.lock')]);
+
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url)),
+      'validate', '--ledger', ledger, '--json',
+    ], { encoding: 'utf8', timeout: 750 });
+
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/.wowbagger-locks/hidden.md',
+          field: 'frontmatter',
+          code: 'malformed-frontmatter',
+          message: 'Item must begin with one YAML frontmatter document delimited by --- lines.',
+        },
+        {
+          path: 'ledger/.wowbagger-locks/linked.lock',
+          field: 'path',
+          code: 'symlink-not-allowed',
+          message: 'Ledger entries must not be symbolic links.',
+        },
+      ],
     });
   });
 });
