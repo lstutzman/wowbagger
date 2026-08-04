@@ -91,7 +91,10 @@ returns:
 Both commands require `--ledger` and `--json`; `ready` also requires an ISO
 calendar `--as-of` date. Invalid ledgers return the validation JSON and exit
 nonzero. The core reads Markdown only, does not mutate the ledger, and rejects
-symbolic-link entries rather than following them.
+invalid UTF-8, symbolic-link entries, unreadable paths, and `.md` special files
+rather than returning a partial view. Real directories ending in `.md` remain
+containers and are traversed. These checks provide deterministic read hygiene;
+they are not a sandbox against a privileged process racing filesystem changes.
 
 The executable is packaged as `wowbagger` for a future installation path. This
 pre-alpha repository intentionally documents direct checkout use only.

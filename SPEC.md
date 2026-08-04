@@ -33,9 +33,24 @@ run-local notes.
   filename convention are consumer configuration; filenames are not identities.
 - Every item starts with exactly one YAML frontmatter document delimited by
   lines containing three hyphens.
+- Item files MUST be valid UTF-8. Invalid byte sequences are a ledger
+  validation error; readers MUST NOT substitute replacement characters.
 - Every cross-item reference uses an item ID, never a filename or display rank.
 - A reader loads the complete configured ledger before validation or readiness.
   It MUST NOT treat a missing item as satisfied.
+
+Only regular files whose names end in `.md` are item files. A real directory
+whose name ends in `.md` remains a container and is traversed. A symbolic link
+encountered anywhere below the configured ledger, and any non-regular
+filesystem entry named `.md` (for example a FIFO, socket, or device), MUST make
+the ledger invalid. A read or traversal failure MUST likewise be surfaced as a
+ledger error rather than producing a partial result.
+
+This rejection is a deterministic-read hygiene boundary, not a hostile
+filesystem sandbox. It prevents the configured ledger from silently expanding
+through links or blocking on special item paths. It does not claim to prevent a
+privileged local process from racing or replacing ancestor directories while a
+read is in progress.
 
 ## 4. Schema version 1
 
@@ -90,7 +105,13 @@ Provenance is a required portable mapping:
 | Subfield | Required | Meaning |
 |---|---:|---|
 | source | Yes | Non-empty opaque origin label or reference, such as user-request, import, or fixture. |
-| recorded_at | Yes | RFC 3339 UTC instant at which the item was recorded. |
+| recorded_at | Yes | Canonical RFC 3339 UTC instant at which the item was recorded. |
+
+The canonical recorded_at representation is
+`YYYY-MM-DDTHH:MM:SS[.fraction]Z`: uppercase `T` and `Z`, a valid calendar date,
+hours 00 through 23, minutes and seconds 00 through 59, and an optional
+fractional-second component. Numeric offsets, including `+00:00`, and leap
+second value `60` are not accepted in schema version 1.
 
 Consumers MAY add provenance subfields, but source and recorded_at remain
 mandatory. Provenance identifies where the durable item came from; it is not a
@@ -323,7 +344,9 @@ field, then code. Each item participating in a duplicate ID MUST receive its
 own duplicate-id error. Each item participating in a dependency cycle MUST
 receive its own dependency-cycle error. A self-parent MUST receive its own
 self-parent error, and each item participating in a multi-item containment
-cycle MUST receive its own containment-cycle error.
+cycle MUST receive its own containment-cycle error. A multi-item cycle message
+identifies the relation, strongly connected component size, and the
+participating item's own ID; it does not enumerate an unbounded cycle path.
 
 The stable code for a killed dependency that remains in depends_on is
 terminal-dependency-invalid. The code is repair-neutral; its message MUST allow
