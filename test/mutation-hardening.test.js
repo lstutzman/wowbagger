@@ -185,7 +185,7 @@ test('a temporary-file sync failure is classified before any final item is publi
     }));
 
     const result = spawnSync(process.execPath, [
-      fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url)),
+      fileURLToPath(new URL('./mutation-runner.js', import.meta.url)),
       'create', '--ledger', ledger, '--input', requestPath, '--json',
     ], {
       encoding: 'utf8',
@@ -202,6 +202,41 @@ test('a temporary-file sync failure is classified before any final item is publi
     assert.equal(output.error.details.operation, 'sync-temporary');
     assert.deepEqual((await readdir(ledger)).filter((entry) => entry.endsWith('.md')), []);
     assert.deepEqual((await readdir(ledger)).filter((entry) => entry.startsWith('.wowbagger-tmp-')), []);
+  });
+});
+
+test('the production CLI ignores test fault-injection environment variables', async () => {
+  const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      item: {
+        title: 'Keep test controls outside production',
+        kind: 'task',
+        provenance: {
+          source: 'test/mutation-hardening',
+          recorded_at: '2030-01-10T12:34:56.789Z',
+        },
+        depends_on: [],
+      },
+      body: '',
+    }));
+
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url)),
+      'create', '--ledger', ledger, '--input', requestPath, '--json',
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        WOWBAGGER_TEST_SCENARIO: 'temporary-file-sync-fails',
+      },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).state, 'committed');
   });
 });
 

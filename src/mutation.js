@@ -127,7 +127,7 @@ export function validateCreateRequest(request, parseIssues = []) {
   return sortIssues(issues);
 }
 
-export async function createItem(ledgerDirectory, request, scenario = testScenario()) {
+export async function createItem(ledgerDirectory, request, scenario) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
 
@@ -347,7 +347,7 @@ export function validateTransitionRequest(request, parseIssues = []) {
   return sortIssues(issues);
 }
 
-export async function transitionItem(ledgerDirectory, request, scenario = testScenario()) {
+export async function transitionItem(ledgerDirectory, request, scenario) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
 
@@ -1053,10 +1053,6 @@ function sameIds(left, right) {
 
 function displayItemPath(displayPath) {
   return displayPath.slice(displayPath.indexOf('/') + 1);
-}
-
-function testScenario() {
-  return process.env.NODE_ENV === 'test' ? process.env.WOWBAGGER_TEST_SCENARIO : undefined;
 }
 
 async function readRegularFile(file) {

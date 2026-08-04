@@ -8,7 +8,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
-const cli = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
+const cli = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
 const fixtureRoot = fileURLToPath(new URL('../spec/fixtures/mutations/', import.meta.url));
 
 for (const vector of await loadVectors()) {
