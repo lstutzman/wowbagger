@@ -141,6 +141,13 @@ IDs, confirms its absence, and prepares the complete bytes in a same-directory
 temporary file. The completed temporary handle must be synced before
 publication.
 
+Identity and path conflicts are separate. If the requested ID already exists
+at any ledger path, create reports an ID collision. If that ID is absent but
+the default `<requested-id>.md` path contains a valid item with another ID,
+create reports a path collision naming the occupant and leaves its bytes
+unchanged. The identity collision takes precedence because filenames are not
+identities.
+
 Publication requires one atomic no-clobber primitive that makes only the
 complete prepared file visible at the final name. A verified same-filesystem
 hard-link publication is one example. Hard links are not assumed available or
@@ -154,6 +161,12 @@ partial final items. After publication, the writer re-opens the known final ID
 path and compares its exact bytes. Exact expected bytes mean committed even if
 directory sync or cleanup later fails; absence can be unchanged; any
 indeterminate or different result is unknown.
+
+Complete candidate-ledger validation can still reject a locally well-formed
+single-item proposal, such as creating or restoring a nonterminal child below
+a killed or archived epic. After more specific conflicts, multi-item blockers,
+and transition preconditions are classified, the backend reports that
+candidate rejection deterministically and leaves the ledger unchanged.
 
 ## Options considered
 
@@ -256,5 +269,7 @@ silently delete a lock based only on age.
   suitable atomic scope.
 - Mutation output must expose its actual outcome rather than treating every
   nonzero exit as an unchanged ledger.
+- Operating failures use closed phase and reason values; platform exception
+  text and OS error codes do not enter the normative envelope.
 - Work claims, adapters, consumer policy, and PropertyCompass adoption remain
   out of scope.

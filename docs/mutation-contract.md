@@ -139,9 +139,9 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or lifecycle-precondition failure. | invalid-request, item-not-found, transition-precondition-failed |
+| 2 | Argument, request, lookup, or candidate/lifecycle-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, candidate-invalid |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
-| 4 | Cooperative comparison, lock, or identity conflict. | revision-conflict, lock-held, id-collision |
+| 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
 | 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown |
 
@@ -417,10 +417,22 @@ killed, archived, decisions, or body. Create inserts schema_version 1, status
 triage, created and updated equal to the UTC date encoded by id, and related []
 when omitted. It adds no terminal date or decision.
 
-The candidate complete ledger must validate before publication. If the ID
-already exists after the requested-ID lock and locked revalidation, create
-returns id-collision, exit 4, and state unchanged. It never chooses a different
-ID for the caller.
+The candidate complete ledger must validate before publication. After the
+requested-ID lock and locked revalidation, create applies this collision
+precedence:
+
+1. If the requested ID exists anywhere in the ledger, return id-collision,
+   exit 4, and unchanged. details contain id, the existing item's
+   ledger-relative path, and actual_revision.
+2. Otherwise, if the default path is occupied by an item with another ID,
+   return path-collision, exit 4, and unchanged. details contain id, the
+   ledger-relative default path, and occupying_id. The message is exactly
+   "The default item path is occupied by a different item."
+3. Otherwise, continue to candidate validation.
+
+Create never chooses a different ID or path for the caller. Collision checks
+do not infer identity from a filename: an item whose frontmatter has another
+ID occupies a path without claiming the requested ID.
 
 The default final path is:
 
@@ -647,9 +659,42 @@ an ambiguous precedence rule.
 If blockers is nonempty, atomic-scope-required is returned after collecting
 both all blockers and all precondition issues. If blockers is empty but
 precondition issues is nonempty, transition-precondition-failed is returned.
-Only an empty set of both permits publication.
+Only an empty set of both proceeds to the candidate validator.
 
-The candidate complete-ledger validation is the final authority. A proposed
+### Candidate-validation refusal and precedence
+
+The candidate complete-ledger validator is the final authority. When it rejects
+a proposed single-item create or transition for a reason not already
+represented by a more specific collision, multi-item blocker, or transition
+precondition, the command returns candidate-invalid, exit 2, and unchanged:
+
+~~~json
+{
+  "id": "wb_...",
+  "validation_errors": [
+    {
+      "path": "ledger/wb_....md",
+      "field": "parent",
+      "code": "nonterminal-child-of-terminal-epic",
+      "message": "Triage child wb_... cannot remain under archived epic wb_...; terminalize or reparent the child before the epic transition."
+    }
+  ]
+}
+~~~
+
+validation_errors is exactly the deterministic SPEC.md validator sequence for
+the complete proposed ledger, sorted by path, field, code, and message under
+the existing validator rules. The response message is exactly "The proposed
+item would make the ledger invalid."
+
+For transition, refusal precedence after locked revalidation is: revision and
+lock conflicts; aggregate all multi-item blockers and ordinary precondition
+issues; atomic-scope-required when blockers exist; otherwise
+transition-precondition-failed when ordinary issues exist; otherwise
+candidate-invalid when the candidate validator reports errors. For create,
+id-collision precedes path-collision as specified in section 7, and both
+precede candidate-invalid. No validator issue already represented by the
+selected more-specific response is duplicated in a second envelope. A proposed
 ledger that remains invalid for any reason is never published.
 
 Transition publication uses a fully written and synced same-directory
@@ -667,18 +712,21 @@ operation without universal crash durability or hostile-writer protection.
 | item-not-found | id |
 | ledger-invalid | validation_errors |
 | transition-precondition-failed | id, issues |
+| candidate-invalid | id, validation_errors |
 | revision-conflict | id, expected_revision, actual_revision |
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
+| path-collision | id, path, occupying_id |
 | atomic-scope-required | id, blockers, precondition_issues |
 | capability-unavailable | capability, reason, recovery_artifacts, recovery_artifacts_truncated |
-| operation-failed | operation, reason, recovery_artifacts, recovery_artifacts_truncated |
+| operation-failed | id, operation, reason, recovery_artifacts, recovery_artifacts_truncated |
 | post-commit-recovery-required | id, revision, recovery_artifacts, recovery_artifacts_truncated |
 | write-outcome-unknown | id, recovery_artifacts, recovery_artifacts_truncated |
 
-ledger-invalid validation_errors are exactly the deterministic SPEC.md error
-sequence. Error messages are stable human summaries; automation branches on
-code, mutation state, and documented details.
+ledger-invalid and candidate-invalid validation_errors are exactly the
+deterministic SPEC.md error sequence for the current or proposed ledger,
+respectively. Error messages are stable human summaries; automation branches
+on code, mutation state, and documented details.
 
 ### Recovery artifact shape
 
@@ -702,18 +750,42 @@ Artifacts are unique by path and sorted by path, then kind. If more than 16 are
 observed, the first 16 are returned and recovery_artifacts_truncated is true.
 Otherwise it is false. No artifact content is returned.
 
-### Failure-state mapping
+### Deterministic operation failures and state mapping
 
-- Before a publication attempt, an unexpected mutation failure is
-  operation-failed with state unchanged.
-- After a publication attempt, exact expected final bytes produce state
-  committed. A remaining cleanup or sync problem is
-  post-commit-recovery-required.
-- Proven old bytes or proven absence, as appropriate to the operation, produce
-  state unchanged.
-- A final path that is unreadable, different, or otherwise indeterminate
-  produces write-outcome-unknown with state unknown.
-- Read-only operation-failed responses have no state.
+operation-failed is a mutation-only error. operation is exactly one of:
+
+- lock-closure;
+- prepare-temporary;
+- sync-temporary;
+- publish;
+- verify-publication; or
+- cleanup.
+
+reason is exactly retry-limit-exhausted, io-error, or verification-failed.
+retry-limit-exhausted is used only with lock-closure. verification-failed is
+used only when verification proves the expected publication is absent for
+create or proves the original bytes remain for transition. All other handled
+filesystem failures use io-error. Platform exception text, errno names,
+numeric OS error codes, and absolute paths are not members of the normative
+JSON envelope and cannot alter operation or reason.
+
+Before a publication attempt, lock-closure, prepare-temporary, sync-temporary,
+or cleanup failure returns operation-failed with state unchanged. After a
+publication attempt, the backend must inspect the final path before choosing a
+response:
+
+- exact expected final bytes produce state committed; a remaining verify or
+  cleanup problem is post-commit-recovery-required;
+- proven absence for create or exact original bytes for transition produce
+  operation-failed with state unchanged, operation publish or
+  verify-publication as applicable, and reason io-error or
+  verification-failed as applicable; and
+- unreadable, different, or otherwise indeterminate final bytes produce
+  write-outcome-unknown with state unknown.
+
+operation-failed always contains the canonical target id and the bounded
+recovery artifact fields. Its message is exactly "The mutation operation
+failed before a commit was established."
 
 A normal handled unchanged failure removes its own temporary files and locks.
 A cleanup failure reports the remaining bounded artifacts. Locks are never
@@ -729,11 +801,12 @@ arguments, input transport, expected exit, exact stdout/stderr expectations,
 and before/after file digests.
 
 The matrix covers capability honesty; lossless inspect and failure envelopes;
-caller-known create identity, file/stdin equivalence, strict input, collision,
-body boundaries, publication limitation and recovery outcomes; transition
-revision, locking, date monotonicity, lifecycle edges, all three multi-item
-reasons, terminal referrers, combined blockers, and unchanged/committed/unknown
-states.
+caller-known create identity, file/stdin equivalence, strict input, ID and path
+collision, candidate validation, body boundaries, publication limitation and
+recovery outcomes; transition revision, locking, date monotonicity, lifecycle
+edges, all three multi-item reasons, terminal referrers, combined blockers,
+candidate validation, deterministic operation failures, and
+unchanged/committed/unknown states.
 
 The vectors are design-only in this phase. They do not assert that the current
 read-only executable implements mutation commands.

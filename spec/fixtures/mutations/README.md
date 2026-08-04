@@ -73,9 +73,10 @@ named source and hash to the declared revision.
 | Inspect | lossless success, not found, invalid ledger |
 | Create transport | equivalent file and stdin requests |
 | Create validation | invalid JSON, duplicate JSON key, unknown request member, unknown flag, missing member |
-| Create identity/body | collision, empty body, LF-leading body |
+| Create identity/body | ID collision, unrelated default-path collision, empty body, LF-leading body |
+| Candidate validation | create child under terminal epic, restore child under terminal epic |
 | Create publication/recovery | unavailable atomic no-clobber, verified committed cleanup failure, unknown verification outcome |
-| Transition concurrency | success, stale revision, held lock, date rollback |
+| Transition concurrency | success, stale revision, held lock, exhausted lock-closure retries, date rollback |
 | Transition lifecycle | task terminalization, archive restore, epic completion |
 | Multi-item refusal | dependent cleanup, dependent disposition, child disposition, terminal referrer, combined blockers |
 | Mutation states | unchanged, committed, and unknown |

@@ -1,0 +1,17 @@
+{
+  "ok": false,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "operation-failed",
+    "message": "The mutation operation failed before a commit was established.",
+    "details": {
+      "id": "wb_01Q5HKWEG020ECSK6CSK6CSK6B",
+      "operation": "lock-closure",
+      "reason": "retry-limit-exhausted",
+      "recovery_artifacts": [],
+      "recovery_artifacts_truncated": false
+    }
+  }
+}

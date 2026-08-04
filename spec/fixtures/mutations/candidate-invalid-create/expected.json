@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "candidate-invalid",
+    "message": "The proposed item would make the ledger invalid.",
+    "details": {
+      "id": "wb_01Q5PRNWG020FEXVQEXVQEXVQD",
+      "validation_errors": [
+        {
+          "path": "ledger/wb_01Q5PRNWG020FEXVQEXVQEXVQD.md",
+          "field": "parent",
+          "code": "nonterminal-child-of-terminal-epic",
+          "message": "Triage child wb_01Q5PRNWG020FEXVQEXVQEXVQD cannot remain under archived epic wb_01Q5M695G020EXVQEXVQEXVQEW; terminalize or reparent the child before the epic transition."
+        }
+      ]
+    }
+  }
+}
