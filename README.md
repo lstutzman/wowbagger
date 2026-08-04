@@ -102,13 +102,15 @@ pre-alpha repository intentionally documents direct checkout use only.
 ## This repository's ledger
 
 Wowbagger dogfoods its own draft format in the repository-local
-[`ledger/`](ledger/) directory. It tracks only remaining standalone Wowbagger
-work; PropertyCompass adoption is deliberately a separate, deferred consumer
-decision. From a checkout, query it with:
+[`ledger/`](ledger/) directory. Its standalone epic and current ready work track
+only remaining standalone Wowbagger delivery. The ledger also contains a
+separate, parentless, triage-only item recording possible future PropertyCompass
+adoption as a deferred consumer decision. From a checkout, query it with the
+current UTC date in place of `YYYY-MM-DD`:
 
 ```sh
 ./bin/wowbagger.js validate --ledger ledger --json
-./bin/wowbagger.js ready --ledger ledger --as-of 2026-08-04 --json
+./bin/wowbagger.js ready --ledger ledger --as-of YYYY-MM-DD --json
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the small set of ledger-maintenance

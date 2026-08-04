@@ -20,6 +20,17 @@ decisions:
     rationale: "The standalone v0 plan explicitly defers claims until mutation support and a dedicated claim contract exist."
 ---
 
-Define the portable claim envelope, expiration or resolution rules, and
-fail-closed behaviour before implementing claim storage. Do not treat a claim
-as a substitute for ledger mutation safety.
+Define the portable claim envelope and fail-closed resolution behaviour before
+implementing claim storage. The protocol's acceptance criteria are:
+
+- each claim identifies its owner and carries a monotonically advancing epoch
+  that acts as its fencing token;
+- acquire, renew, and release are compare-and-set operations;
+- expiry and takeover semantics are explicit, and takeover advances the epoch;
+- a worker holding a stale epoch self-fences before attempting a protected
+  ledger write; and
+- claim writes are followed by read-back evidence that confirms the observed
+  owner, epoch, and operation outcome.
+
+These are requirements for future implementation, not claims about the current
+read-only runtime. A work claim does not substitute for ledger mutation safety.

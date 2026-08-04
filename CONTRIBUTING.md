@@ -7,11 +7,12 @@ Wowbagger ledger-item Markdown files; keep explanatory documentation outside
 that directory.
 
 Before submitting a change that adds or edits an item, validate the whole
-ledger and inspect its current ready work:
+ledger and inspect its current ready work, replacing `YYYY-MM-DD` with the
+current UTC date:
 
 ```sh
 ./bin/wowbagger.js validate --ledger ledger --json
-./bin/wowbagger.js ready --ledger ledger --as-of 2026-08-04 --json
+./bin/wowbagger.js ready --ledger ledger --as-of YYYY-MM-DD --json
 ```
 
 The current core is read-only. Until a reviewed mutation command exists, make

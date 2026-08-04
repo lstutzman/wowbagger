@@ -11,6 +11,7 @@ provenance:
   recorded_at: "2026-08-04T20:33:09Z"
 depends_on:
   - wb_01KZ77NSW876B92APQN8Q8NK6X
+  - wb_01KZ77NSW8825RKWA4AHJKN2YX
 related: []
 parent: wb_01KZ77NSW8PNA4S48NYT26AGMH
 decisions:
@@ -21,5 +22,7 @@ decisions:
 ---
 
 Add standalone black-box tests for concurrent writers, failures around durable
-publication, and recovery reporting. The tests must describe only guarantees
-the approved backend can honestly provide.
+publication, and recovery reporting. Claim coverage must include contention,
+expiry and takeover, renewal and release, and rejection of a stale-fenced
+writer after another owner advances the epoch. The tests must describe only
+guarantees the implemented backend can honestly provide.
