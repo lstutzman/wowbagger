@@ -147,7 +147,18 @@ function parseItem(source) {
     };
   }
 
-  const data = document.toJS();
+  let data;
+  try {
+    data = document.toJS();
+  } catch {
+    return {
+      error: {
+        field: 'frontmatter',
+        code: 'invalid-yaml',
+        message: 'Frontmatter contains invalid YAML.',
+      },
+    };
+  }
 
   if (data === null || Array.isArray(data) || typeof data !== 'object') {
     return {

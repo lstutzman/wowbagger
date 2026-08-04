@@ -487,3 +487,41 @@ depends_on: []
     });
   });
 });
+
+test('validate contains YAML conversion failures in validation JSON', async () => {
+  await withLedger({
+    'alias-limit.md': `---
+a: &a [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+b: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]
+c: [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]
+---
+`,
+    'unresolved-alias.md': `---
+schema_version: 1
+id: *missing
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/alias-limit.md',
+          field: 'frontmatter',
+          code: 'invalid-yaml',
+          message: 'Frontmatter contains invalid YAML.',
+        },
+        {
+          path: 'ledger/unresolved-alias.md',
+          field: 'frontmatter',
+          code: 'invalid-yaml',
+          message: 'Frontmatter contains invalid YAML.',
+        },
+      ],
+    });
+  });
+});
