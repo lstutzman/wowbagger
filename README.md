@@ -7,9 +7,9 @@ plain Markdown and Git. It is intended to give agents durable work memory,
 dependency-aware task selection, and auditable multi-worktree coordination without
 putting a database or hosted service inside your repository.
 
-> **Status: pre-alpha.** Wowbagger is being specified and built as a standalone
-> project from production lessons. No stable release or installation path exists
-> yet; consumer adoption is a later, separate decision.
+> **Status: pre-alpha.** The standalone read-only core can validate a Markdown
+> ledger and select its deterministic ready tasks. Mutation, claims, adapters,
+> a stable release, and consumer adoption remain separate future work.
 
 ## Why the name?
 
@@ -65,6 +65,37 @@ provide agent tools. Wowbagger integrations will document the host capabilities
 they require rather than pretending API compatibility guarantees harness
 compatibility.
 
+## Read-only core
+
+The current core requires Node.js 20 or later. From a Wowbagger checkout:
+
+```sh
+npm ci
+./bin/wowbagger.js validate --ledger path/to/ledger --json
+./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15 --json
+```
+
+`validate` writes exactly one JSON result to standard output. A valid ledger
+returns:
+
+```json
+{"valid":true,"errors":[]}
+```
+
+`ready` validates first, then returns only the normative ready result:
+
+```json
+{"as_of":"2030-01-15","valid":true,"ready":["wb_..."]}
+```
+
+Both commands require `--ledger` and `--json`; `ready` also requires an ISO
+calendar `--as-of` date. Invalid ledgers return the validation JSON and exit
+nonzero. The core reads Markdown only, does not mutate the ledger, and rejects
+symbolic-link entries rather than following them.
+
+The executable is packaged as `wowbagger` for a future installation path. This
+pre-alpha repository intentionally documents direct checkout use only.
+
 ## Design principles
 
 1. **Markdown is canonical.** Humans can inspect and edit the backlog using
@@ -111,9 +142,10 @@ It is the durable work ledger beneath those systems.
 - Publish a standalone Markdown ledger contract and synthetic compatibility
   fixtures.
 - Provide read-only validation and deterministic ready selection by creation
-  order before mutable coordination.
+  order before mutable coordination. **Implemented in this checkout; not yet a
+  stable release.**
 - Separate optional reusable mechanisms from consumer-specific policy.
-- Provide stable machine-readable commands and compatibility fixtures.
+- Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters.
 - Document the generic tool contract for other agent harnesses.
 - Treat any PropertyCompass adoption as a later, separately-scoped consumer

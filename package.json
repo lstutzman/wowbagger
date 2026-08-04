@@ -11,6 +11,7 @@
     "wowbagger": "./bin/wowbagger.js"
   },
   "scripts": {
+    "check": "npm test && git diff --check && git diff --cached --check",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
