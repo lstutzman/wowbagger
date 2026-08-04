@@ -655,9 +655,7 @@ function validateCycles(facts, index, relation, context) {
       continue;
     }
 
-    const members = new Set(component);
     for (const id of [...component].sort(compareText)) {
-      const cycle = cycleFrom(id, graph, members);
       const fact = index.uniqueById.get(id);
       const field = relation === 'dependency' ? 'depends_on' : 'parent';
       const code = relation === 'dependency' ? 'dependency-cycle' : 'containment-cycle';
@@ -666,7 +664,7 @@ function validateCycles(facts, index, relation, context) {
         fact,
         field,
         code,
-        `${label} cycle detected: ${cycle.join(' -> ')}.`,
+        `${label} cycle detected in a component of ${component.length} items; member ${id}.`,
         context,
       );
     }
@@ -737,28 +735,6 @@ function stronglyConnectedComponents(graph) {
   }
 
   return components;
-}
-
-function cycleFrom(start, graph, members) {
-  const visit = (id, path, seen) => {
-    for (const neighbor of graph.get(id) ?? []) {
-      if (!members.has(neighbor)) {
-        continue;
-      }
-      if (neighbor === start && path.length > 1) {
-        return [...path, start];
-      }
-      if (!seen.has(neighbor)) {
-        const result = visit(neighbor, [...path, neighbor], new Set([...seen, neighbor]));
-        if (result) {
-          return result;
-        }
-      }
-    }
-    return null;
-  };
-
-  return visit(start, [start], new Set([start])) ?? [start, start];
 }
 
 function indexChildren(facts) {

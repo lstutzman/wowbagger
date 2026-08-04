@@ -346,19 +346,19 @@ depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
           path: 'ledger/a.md',
           field: 'depends_on',
           code: 'dependency-cycle',
-          message: 'Dependency cycle detected: wb_01KDWPVNG05FCBFC6R7R7CJANX -> wb_01KDZ98CG0YH769STZ754EKXSZ -> wb_01KE1VN3G0HV9ZDBB8BEASXBBG -> wb_01KDWPVNG05FCBFC6R7R7CJANX.',
+          message: 'Dependency cycle detected in a component of 3 items; member wb_01KDWPVNG05FCBFC6R7R7CJANX.',
         },
         {
           path: 'ledger/b.md',
           field: 'depends_on',
           code: 'dependency-cycle',
-          message: 'Dependency cycle detected: wb_01KDZ98CG0YH769STZ754EKXSZ -> wb_01KE1VN3G0HV9ZDBB8BEASXBBG -> wb_01KDWPVNG05FCBFC6R7R7CJANX -> wb_01KDZ98CG0YH769STZ754EKXSZ.',
+          message: 'Dependency cycle detected in a component of 3 items; member wb_01KDZ98CG0YH769STZ754EKXSZ.',
         },
         {
           path: 'ledger/c.md',
           field: 'depends_on',
           code: 'dependency-cycle',
-          message: 'Dependency cycle detected: wb_01KE1VN3G0HV9ZDBB8BEASXBBG -> wb_01KDWPVNG05FCBFC6R7R7CJANX -> wb_01KDZ98CG0YH769STZ754EKXSZ -> wb_01KE1VN3G0HV9ZDBB8BEASXBBG.',
+          message: 'Dependency cycle detected in a component of 3 items; member wb_01KE1VN3G0HV9ZDBB8BEASXBBG.',
         },
       ],
     });
