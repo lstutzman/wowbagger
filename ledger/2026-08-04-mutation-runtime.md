@@ -9,9 +9,9 @@ updated: 2026-08-04
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
-depends_on:
+depends_on: []
+related:
   - wb_01KZ77NSW8P89118K6D6FSBFX2
-related: []
 parent: wb_01KZ77NSW8PNA4S48NYT26AGMH
 decisions:
   - action: accept
