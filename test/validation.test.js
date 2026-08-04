@@ -525,3 +525,105 @@ id: *missing
     });
   });
 });
+
+test('validate retains terminal conflicts when the active terminal date is missing', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Conflicting terminal dates"
+kind: task
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+killed: 2026-01-02
+archived: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/item.md',
+          field: 'archived',
+          code: 'terminal-date-conflict',
+          message: 'Status done forbids archived.',
+        },
+        {
+          path: 'ledger/item.md',
+          field: 'completed',
+          code: 'missing-terminal-date',
+          message: 'Status done requires completed and forbids killed and archived.',
+        },
+        {
+          path: 'ledger/item.md',
+          field: 'killed',
+          code: 'terminal-date-conflict',
+          message: 'Status done forbids killed.',
+        },
+      ],
+    });
+  });
+});
+
+test('validate retains terminal conflicts when the active terminal date is invalid', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Invalid active terminal date"
+kind: task
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+completed: not-a-date
+killed: 2026-01-02
+archived: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: complete
+    date: 2026-01-02
+    summary: "Attempted completion."
+    rationale: "The persisted completion date is malformed."
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/item.md',
+          field: 'archived',
+          code: 'terminal-date-conflict',
+          message: 'Status done forbids archived.',
+        },
+        {
+          path: 'ledger/item.md',
+          field: 'completed',
+          code: 'invalid-date',
+          message: 'Field completed must be an ISO calendar date.',
+        },
+        {
+          path: 'ledger/item.md',
+          field: 'killed',
+          code: 'terminal-date-conflict',
+          message: 'Status done forbids killed.',
+        },
+      ],
+    });
+  });
+});

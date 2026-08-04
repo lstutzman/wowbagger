@@ -789,6 +789,7 @@ function validateTerminalDates(fact, context) {
         context,
       );
     }
+    validateForbiddenTerminalDates(fact, terminal.field, context);
     return;
   }
 
@@ -803,7 +804,11 @@ function validateTerminalDates(fact, context) {
     );
   }
 
-  for (const field of forbiddenTerminalFields(terminal.field)) {
+  validateForbiddenTerminalDates(fact, terminal.field, context);
+}
+
+function validateForbiddenTerminalDates(fact, activeField, context) {
+  for (const field of forbiddenTerminalFields(activeField)) {
     if (hasOwn(fact.data, field)) {
       addError(
         fact,
