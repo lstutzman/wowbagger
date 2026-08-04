@@ -41,13 +41,13 @@
       "path": "ledger/09-cycle-a.md",
       "field": "depends_on",
       "code": "dependency-cycle",
-      "message": "Dependency cycle detected: wb_01KH3PRDG0PWW0WRY8HXCCZ6J4 -> wb_01KH6954G0BPHZRV5RS8418ZVP -> wb_01KH3PRDG0PWW0WRY8HXCCZ6J4."
+      "message": "Dependency cycle detected in a component of 2 items; member wb_01KH3PRDG0PWW0WRY8HXCCZ6J4."
     },
     {
       "path": "ledger/10-cycle-b.md",
       "field": "depends_on",
       "code": "dependency-cycle",
-      "message": "Dependency cycle detected: wb_01KH6954G0BPHZRV5RS8418ZVP -> wb_01KH3PRDG0PWW0WRY8HXCCZ6J4 -> wb_01KH6954G0BPHZRV5RS8418ZVP."
+      "message": "Dependency cycle detected in a component of 2 items; member wb_01KH6954G0BPHZRV5RS8418ZVP."
     },
     {
       "path": "ledger/12-child-with-task-parent.md",
@@ -77,13 +77,13 @@
       "path": "ledger/16-containment-cycle-a.md",
       "field": "parent",
       "code": "containment-cycle",
-      "message": "Containment cycle detected: wb_01KHMEB3007DQWQ28B6A36W53S -> wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z -> wb_01KHMEB3007DQWQ28B6A36W53S."
+      "message": "Containment cycle detected in a component of 2 items; member wb_01KHMEB3007DQWQ28B6A36W53S."
     },
     {
       "path": "ledger/17-containment-cycle-b.md",
       "field": "parent",
       "code": "containment-cycle",
-      "message": "Containment cycle detected: wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z -> wb_01KHMEB3007DQWQ28B6A36W53S -> wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z."
+      "message": "Containment cycle detected in a component of 2 items; member wb_01KHQ0QT00HEJWDAJ3HHYD1Y4Z."
     },
     {
       "path": "ledger/18-done-with-dependency.md",

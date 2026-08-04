@@ -1,0 +1,20 @@
+{
+  "name": "wowbagger",
+  "version": "0.1.0-prealpha",
+  "private": true,
+  "description": "Standalone read-only Markdown ledger validation and readiness selection.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "wowbagger": "./bin/wowbagger.js"
+  },
+  "scripts": {
+    "check": "npm test && git diff --check && git diff --cached --check",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
+}
