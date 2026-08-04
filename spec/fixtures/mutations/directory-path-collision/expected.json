@@ -1,0 +1,15 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "path-collision",
+    "message": "The default item path is occupied by a different item.",
+    "details": {
+      "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+      "path": "wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+      "occupant_kind": "directory"
+    }
+  }
+}

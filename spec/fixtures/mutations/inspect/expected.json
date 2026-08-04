@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "contract_version": 1,
+  "result": {
+    "item": {
+      "id": "wb_01Q4837BM01W70T30B184GG1R6",
+      "path": "wb_01Q4837BM01W70T30B184GG1R6.md",
+      "revision": "sha256:d1f401557d6a897c1b38dcb4ad356a0af6d8128f9ef9bc5273da869aa9d7f6c9",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIkluc3BlY3QgdGhlIGZpY3Rpb25hbCB0ZWxlc2NvcGUgbWFwIgpraW5kOiB0YXNrCnN0YXR1czogdHJpYWdlCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpwcm92ZW5hbmNlOgogIHNvdXJjZTogImZpeHR1cmUvbXV0YXRpb25zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwOTowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmZpY3Rpb25hbF9sYWJlbDogInRlbGVzY29wZS1hcmMiCmZpY3Rpb25hbF9leHRlbnNpb246CiAgZXhhY3RfaW50ZWdlcjogOTAwNzE5OTI1NDc0MDk5MzEyMzQ1CiAgcHJpbWFyeV9zaWduYWw6ICZzaWduYWwgInZpb2xldCIKICByZXBlYXRlZF9zaWduYWw6ICpzaWduYWwKLS0tCgpUaGlzIGJvZHkgaXMgaW50ZW50aW9uYWxseSByZXRhaW5lZCBieXRlLWZvci1ieXRlIGJ5IGEgbGF0ZXIgdHJhbnNpdGlvbi4K",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "title": "Inspect the fictional telescope map",
+        "kind": "task",
+        "status": "triage",
+        "created": "2030-01-11",
+        "updated": "2030-01-11",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-11T09:00:00Z"
+        },
+        "depends_on": [],
+        "related": []
+      },
+      "body": "\nThis body is intentionally retained byte-for-byte by a later transition.\n"
+    }
+  }
+}

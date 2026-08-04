@@ -1,0 +1,62 @@
+{
+  "case": "transition-epic-backlog-to-done",
+  "argv": [
+    "transition",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4N9GHG0208H248H248H248G.md",
+          "source_file": "before-epic.md",
+          "sha256": "sha256:aef0720e5f587b9eed6e6108e9116b2c546c11749cb5c5dc6bea97a26ae7b7ba"
+        },
+        {
+          "path": "ledger/wb_01Q4QVX8G0209248H248H248H1.md",
+          "source_file": "child-done.md",
+          "sha256": "sha256:ef64654f6bac1c32dfd57e2432a9c71b8526e47d6d092eb6df74cb7136cb8fce"
+        },
+        {
+          "path": "ledger/wb_01Q4TE9ZG0209K6CSK6CSK6CSJ.md",
+          "source_file": "child-killed.md",
+          "sha256": "sha256:0d7e471c0249049e39208bb8038826837dbf8eaa9c2cabe7a23d038799922147"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4N9GHG0208H248H248H248G.md",
+          "source_file": "expected-epic.md",
+          "sha256": "sha256:3f9860305f837380d18c45cfcc19e2a1027bdaf9e96db0484d4c8555f669c97f"
+        },
+        {
+          "path": "ledger/wb_01Q4QVX8G0209248H248H248H1.md",
+          "source_file": "child-done.md",
+          "sha256": "sha256:ef64654f6bac1c32dfd57e2432a9c71b8526e47d6d092eb6df74cb7136cb8fce"
+        },
+        {
+          "path": "ledger/wb_01Q4TE9ZG0209K6CSK6CSK6CSJ.md",
+          "source_file": "child-killed.md",
+          "sha256": "sha256:0d7e471c0249049e39208bb8038826837dbf8eaa9c2cabe7a23d038799922147"
+        }
+      ]
+    }
+  }
+}

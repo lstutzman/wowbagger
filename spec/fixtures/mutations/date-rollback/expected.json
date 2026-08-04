@@ -1,0 +1,27 @@
+{
+  "ok": false,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "transition-precondition-failed",
+    "message": "The requested lifecycle transition failed its preconditions.",
+    "details": {
+      "id": "wb_01Q4DJACG0206XVQEXVQEXVQEX",
+      "issues": [
+        {
+          "code": "date-before-created",
+          "field": "date",
+          "message": "Transition date must not be earlier than the current created date.",
+          "related_ids": []
+        },
+        {
+          "code": "date-before-updated",
+          "field": "date",
+          "message": "Transition date must not be earlier than the current updated date.",
+          "related_ids": []
+        }
+      ]
+    }
+  }
+}

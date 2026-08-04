@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+  "expected_revision": "sha256:17ac31f4fc0cf9f20fcab06a9af082708acc671c17c24c4ab8475e0eaa236888",
+  "to_status": "backlog",
+  "date": "2030-01-13",
+  "decision": {
+    "summary": "Accept the fictional lighthouse survey.",
+    "rationale": "The fictional scope is self-contained and ready for later planning."
+  }
+}

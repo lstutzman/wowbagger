@@ -1,0 +1,51 @@
+{
+  "ok": true,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "committed",
+  "result": {
+    "item": {
+      "id": "wb_01Q4N9GHG0208H248H248H248G",
+      "path": "wb_01Q4N9GHG0208H248H248H248G.md",
+      "revision": "sha256:3f9860305f837380d18c45cfcc19e2a1027bdaf9e96db0484d4c8555f669c97f",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0TjlHSEcwMjA4SDI0OEgyNDhIMjQ4Rwp0aXRsZTogIkNvbXBsZXRlIHRoZSBmaWN0aW9uYWwgY29uc3RlbGxhdGlvbiBzdXJ2ZXkiCmtpbmQ6IGVwaWMKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTYKdXBkYXRlZDogMjAzMC0wMS0yMApjb21wbGV0ZWQ6IDIwMzAtMDEtMjAKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL211dGF0aW9ucyIKICByZWNvcmRlZF9hdDogIjIwMzAtMDEtMTZUMTI6MDA6MDBaIgpkZXBlbmRzX29uOiBbXQpyZWxhdGVkOiBbXQpkZWNpc2lvbnM6CiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTIwCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjb25zdGVsbGF0aW9uIHN1cnZleS4iCiAgICByYXRpb25hbGU6ICJFdmVyeSBkaXJlY3Qgc3ludGhldGljIGNoaWxkIGlzIHRlcm1pbmFsLiIKICAgIHJvbGx1cDoKICAgICAgLSBpZDogd2JfMDFRNFFWWDhHMDIwOTI0OEgyNDhIMjQ4SDEKICAgICAgICBzdGF0dXM6IGRvbmUKICAgICAgLSBpZDogd2JfMDFRNFRFOVpHMDIwOUs2Q1NLNkNTSzZDU0oKICAgICAgICBzdGF0dXM6IGtpbGxlZAotLS0KCkJvdGggZmljdGlvbmFsIHN1cnZleSBjaGlsZHJlbiBhcmUgYWxyZWFkeSB0ZXJtaW5hbC4K",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q4N9GHG0208H248H248H248G",
+        "title": "Complete the fictional constellation survey",
+        "kind": "epic",
+        "status": "done",
+        "created": "2030-01-16",
+        "updated": "2030-01-20",
+        "completed": "2030-01-20",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-16T12:00:00Z"
+        },
+        "depends_on": [],
+        "related": [],
+        "decisions": [
+          {
+            "action": "complete",
+            "date": "2030-01-20",
+            "summary": "Complete the fictional constellation survey.",
+            "rationale": "Every direct synthetic child is terminal.",
+            "rollup": [
+              {
+                "id": "wb_01Q4QVX8G0209248H248H248H1",
+                "status": "done"
+              },
+              {
+                "id": "wb_01Q4TE9ZG0209K6CSK6CSK6CSJ",
+                "status": "killed"
+              }
+            ]
+          }
+        ]
+      },
+      "body": "\nBoth fictional survey children are already terminal.\n"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "case": "create-default-path-collision",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 4,
+    "stdout": {
+      "json_file": "expected-path-collision.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+          "source_file": "path-collision-occupant.md",
+          "sha256": "sha256:a9e4c1b6dd6e071e3b287778d6c22586689cb25689cfe4acd0a45043a30de80f"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+          "source_file": "path-collision-occupant.md",
+          "sha256": "sha256:a9e4c1b6dd6e071e3b287778d6c22586689cb25689cfe4acd0a45043a30de80f"
+        }
+      ]
+    }
+  }
+}

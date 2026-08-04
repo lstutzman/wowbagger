@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q5HKWEG020ECSK6CSK6CSK6B",
+  "expected_revision": "sha256:03a0dd4f8e7e9b191d2bea9ec9cf2cc2e46cbe3cc95d85180497b97a7acc258d",
+  "to_status": "backlog",
+  "date": "2030-01-28",
+  "decision": {
+    "summary": "Accept the fictional lock-closure study.",
+    "rationale": "The fault seam exhausts lock-closure retries before publication."
+  }
+}

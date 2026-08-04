@@ -1,0 +1,23 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "committed",
+  "error": {
+    "code": "post-commit-recovery-required",
+    "message": "The item was committed, but cleanup requires recovery.",
+    "details": {
+      "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+      "revision": "sha256:18020373117ad3a699e1337cb318920643bff2b0a2321b0ec5d85feb9483d543",
+      "recovery_artifacts": [
+        {
+          "path": ".wowbagger-locks/wb_01Q45X474N28T5CY4GNF6YY4HM.lock",
+          "kind": "lock-file",
+          "sha256": "sha256:78afa518c36a32569199ec191d1a9f6374cbb16b3354b65e2eabb49560ebbc26",
+          "size_bytes": 179
+        }
+      ],
+      "recovery_artifacts_truncated": false
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "case": "create-candidate-invalid-terminal-parent",
+  "argv": ["create", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q5M695G020EXVQEXVQEXVQEW.md", "source_file": "ledger/wb_01Q5M695G020EXVQEXVQEXVQEW.md", "sha256": "sha256:4310891ae46efd35f8d36bcf54fb0a87cf32dbc17b510b790663a39293647d01"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q5M695G020EXVQEXVQEXVQEW.md", "source_file": "ledger/wb_01Q5M695G020EXVQEXVQEXVQEW.md", "sha256": "sha256:4310891ae46efd35f8d36bcf54fb0a87cf32dbc17b510b790663a39293647d01"}
+      ]
+    }
+  }
+}

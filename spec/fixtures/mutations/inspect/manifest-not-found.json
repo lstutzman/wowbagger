@@ -1,0 +1,42 @@
+{
+  "case": "inspect-not-found",
+  "argv": [
+    "inspect",
+    "--ledger",
+    "ledger",
+    "--id",
+    "wb_01Q4AZXNG0206CSK6CSK6CSK6C",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected-not-found.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4837BM01W70T30B184GG1R6.md",
+          "source_file": "ledger/wb_01Q4837BM01W70T30B184GG1R6.md",
+          "sha256": "sha256:d1f401557d6a897c1b38dcb4ad356a0af6d8128f9ef9bc5273da869aa9d7f6c9"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4837BM01W70T30B184GG1R6.md",
+          "source_file": "ledger/wb_01Q4837BM01W70T30B184GG1R6.md",
+          "sha256": "sha256:d1f401557d6a897c1b38dcb4ad356a0af6d8128f9ef9bc5273da869aa9d7f6c9"
+        }
+      ]
+    }
+  }
+}

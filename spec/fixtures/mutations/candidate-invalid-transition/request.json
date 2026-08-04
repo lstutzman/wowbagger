@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q5PRNWG020FEXVQEXVQEXVQE",
+  "expected_revision": "sha256:4be8f7af071b7069a1dda9f40dcc2754b68b38d96508bb155fe58a49f371fc0e",
+  "to_status": "backlog",
+  "date": "2030-01-31",
+  "decision": {
+    "summary": "Restore the fictional tidal charts.",
+    "rationale": "The isolated child restore intentionally leaves its parent archived."
+  }
+}

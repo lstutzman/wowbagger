@@ -1,0 +1,36 @@
+{
+  "case": "create-publication-verification-unknown",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "final-verification-read-fails-after-publication",
+  "expected": {
+    "exit": 6,
+    "stdout": {
+      "json_file": "expected-outcome-unknown.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": [
+        {
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+          "source_file": "expected-item.md",
+          "sha256": "sha256:18020373117ad3a699e1337cb318920643bff2b0a2321b0ec5d85feb9483d543"
+        }
+      ]
+    }
+  }
+}

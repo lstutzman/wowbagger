@@ -205,6 +205,13 @@ When a dependency becomes done, a mutation-capable implementation MUST remove
 that ID from every affected dependent's depends_on list and append it to related
 if absent. That cleanup is part of the successful done transition.
 
+A mutation preflight MUST inspect every item whose depends_on contains the
+target, regardless of the referring item's own status. The explicit disposition
+choices below describe live dependents, but they do not permit a terminal
+dependent or any other item to retain a reference that would make the complete
+proposed ledger invalid. Such a transition MUST fail unchanged when the
+backend cannot atomically make every required item change.
+
 Killing or archiving a prerequisite is different. Before either transition, the
 implementation MUST find every live dependent that lists the prerequisite in
 depends_on. It MUST refuse the transition unless, in the same backend operation,
@@ -247,6 +254,9 @@ validator MUST reject each non-terminal child whose direct parent is a killed
 or archived epic. A done epic remains subject to the stricter rollup rule in
 section 5. Because validation precedes readiness, an invalid terminal ancestor
 causes the whole ready query to fail closed rather than exposing a descendant.
+Mutation preflight MUST enumerate every direct child before applying these
+status-specific rules and MUST validate the complete proposed ledger before
+publication.
 
 Validation MUST reject:
 
@@ -362,15 +372,38 @@ replacement, waiver, or terminalization rather than prescribe only one repair.
 A ready query MUST surface validation failure rather than silently omitting
 invalid work.
 
-## 10. Capability boundary
+## 10. Capability boundary and proposed mutation contract
 
-Version 1 defines a read-only ledger contract. It contains no work-claim or
-revision metadata, and ready does not resolve or exclude claims. Creation,
-claims, lifecycle mutation, compare-and-set transport, and claim storage are
-deferred to a later mutation contract described by ADR 0001.
+The currently implemented version 1 core is read-only. It contains no
+persisted work-claim or revision metadata, and ready does not resolve or
+exclude claims.
 
-A future backend MUST report a missing capability rather than pretending a
-local or Git write is globally atomic.
+[docs/mutation-contract.md](docs/mutation-contract.md) is the clearly marked
+**proposed** next-phase contract for separate capabilities, inspect/revision,
+create, and lifecycle transition commands. Inspect parses, exposes, and hashes
+one raw byte buffer and returns a lossless base64 source alongside a normalized
+core view. Create requires a caller-generated canonical ID and either publishes
+complete bytes with an atomic no-clobber primitive or fails unchanged. Revision
+is SHA-256 over exact item-file bytes; it is not added to frontmatter and YAML
+is not normalized before hashing. The first backend is explicitly limited to
+cooperative single-item CAS among Wowbagger writers in one working copy.
+[ADR 0003](docs/adr/0003-local-mutation-and-cas.md) records the local lock,
+publication, crash-recovery, and portability trade-offs.
+
+The proposed contract is not implemented by the current executable. A future
+backend MUST report a missing capability rather than pretending a local or Git
+write is globally atomic. Before transition publication it MUST validate the
+complete one-item proposed ledger and refuse every required dependent cleanup
+or child disposition when it lacks multi-item atomicity. It MUST report work
+claims unsupported until a separate claim contract exists.
+
+The proposed command contract distinguishes immutable-ID collision from an
+unrelated item or valid directory occupying the default creation path. It also
+defines a stable candidate-invalid refusal when the complete proposed ledger
+fails validation after more-specific collision, multi-item, and lifecycle
+checks. Unexpected
+mutation failures expose closed operation-phase and reason values rather than
+platform exception text.
 
 ## 11. Fixture contract
 
@@ -384,6 +417,10 @@ black-box tests:
   killed and archived prerequisite safety, dependency and containment cycles,
   self-parent validation, invalid parent targets, done-item dependency safety,
   terminal-epic child safety, terminal decisions, and terminal-date invariants.
+- mutations defines proposed, non-executable local mutation design vectors with
+  invocation manifests for lossless exact-byte inspection, caller-ID creation,
+  strict JSON, body boundaries, lifecycle transitions, concurrency and
+  recovery states, and deterministic multi-item refusal.
 
 They contain no consumer product data and MUST remain suitable for any
 Wowbagger installation.

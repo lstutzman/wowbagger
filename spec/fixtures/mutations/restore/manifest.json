@@ -1,0 +1,42 @@
+{
+  "case": "transition-archived-to-backlog-restore",
+  "argv": [
+    "transition",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4JQ3TG0207ZZZZZZZZZZZZZ.md",
+          "source_file": "before.md",
+          "sha256": "sha256:548874c6dcdcd287ad7f7209c7f2cf46bfa6ed905de583f41269818b66c9d1d5"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4JQ3TG0207ZZZZZZZZZZZZZ.md",
+          "source_file": "expected-item.md",
+          "sha256": "sha256:95c8c17a5aa5d406a31b5c2586be261e320862096d5c672d9c412fdb79027007"
+        }
+      ]
+    }
+  }
+}

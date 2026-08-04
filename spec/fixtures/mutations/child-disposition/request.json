@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q54QWVG020BQEXVQEXVQEXVP",
+  "expected_revision": "sha256:fb9f8ffaf46ec7cbfce7ea80c0d1fe0549e9073e2e6907cbaf87da8c02f7f91f",
+  "to_status": "archived",
+  "date": "2030-01-24",
+  "decision": {
+    "summary": "Archive the fictional observatory programme.",
+    "rationale": "The synthetic programme is being retired."
+  }
+}

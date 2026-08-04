@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q4JQ3TG0207ZZZZZZZZZZZZZ",
+  "expected_revision": "sha256:548874c6dcdcd287ad7f7209c7f2cf46bfa6ed905de583f41269818b66c9d1d5",
+  "to_status": "backlog",
+  "date": "2030-01-18",
+  "decision": {
+    "summary": "Restore the fictional comet catalogue.",
+    "rationale": "Fresh fictional observations make the task relevant again."
+  }
+}

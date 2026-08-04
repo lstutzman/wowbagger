@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The create request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "",
+          "code": "invalid-json",
+          "message": "Request input must be valid JSON."
+        }
+      ]
+    }
+  }
+}

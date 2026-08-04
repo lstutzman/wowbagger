@@ -1,0 +1,36 @@
+{
+  "case": "create-lf-body-stdin-input",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "-",
+    "--json"
+  ],
+  "input": {
+    "transport": "stdin",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": [
+        {
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+          "source_file": "expected-item.md",
+          "sha256": "sha256:18020373117ad3a699e1337cb318920643bff2b0a2321b0ec5d85feb9483d543"
+        }
+      ]
+    }
+  }
+}

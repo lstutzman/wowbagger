@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "command": "create",
+  "contract_version": 1,
+  "state": "committed",
+  "result": {
+    "item": {
+      "id": "wb_01Q45V47G0205ANANANANANANA",
+      "path": "wb_01Q45V47G0205ANANANANANANA.md",
+      "revision": "sha256:835d0ce96ab17ccad9a3804b583ec19613e57cf4e93c2c6b025f994474becab8",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0NVY0N0cwMjA1QU5BTkFOQU5BTkFOQQp0aXRsZTogIlJlY29yZCBhbiBlbXB0eSBmaWN0aW9uYWwgb2JzZXJ2YXRpb24iCmtpbmQ6IHRhc2sKc3RhdHVzOiB0cmlhZ2UKY3JlYXRlZDogMjAzMC0wMS0xMAp1cGRhdGVkOiAyMDMwLTAxLTEwCnByb3ZlbmFuY2U6CiAgc291cmNlOiAiZml4dHVyZS9tdXRhdGlvbnMiCiAgcmVjb3JkZWRfYXQ6ICIyMDMwLTAxLTEwVDEyOjAwOjAwWiIKZGVwZW5kc19vbjogW10KcmVsYXRlZDogW10KLS0tCg==",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q45V47G0205ANANANANANANA",
+        "title": "Record an empty fictional observation",
+        "kind": "task",
+        "status": "triage",
+        "created": "2030-01-10",
+        "updated": "2030-01-10",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-10T12:00:00Z"
+        },
+        "depends_on": [],
+        "related": []
+      },
+      "body": ""
+    }
+  }
+}

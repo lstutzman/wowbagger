@@ -11,6 +11,9 @@ validate and ready interfaces.
 - ready-selection is a valid ledger evaluated at a fixed date.
 - validation-errors is an invalid ledger whose errors demonstrate fail-closed
   validation, stable error reporting, and one repair target per affected item.
+- mutations is a proposed, non-executable mutation-contract vector suite for
+  local capabilities, inspection revisions, creation, single-item transition,
+  stale writes, locks, and multi-item refusal.
 
 All fixture items include portable structured provenance and canonical IDs whose
 embedded UTC timestamp date matches created. The ready fixture has 16 valid

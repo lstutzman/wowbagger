@@ -1,0 +1,42 @@
+{
+  "case": "inspect-invalid-ledger",
+  "argv": [
+    "inspect",
+    "--ledger",
+    "ledger",
+    "--id",
+    "wb_01Q4AZXNG0206CSK6CSK6CSK6C",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 3,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/bad.md",
+          "source_file": "ledger/bad.md",
+          "sha256": "sha256:da6cf06fc358f5f1144cb0cc13eb5f6ae8da1c3a2bfd168ca9d56dbf63df7fdf"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/bad.md",
+          "source_file": "ledger/bad.md",
+          "sha256": "sha256:da6cf06fc358f5f1144cb0cc13eb5f6ae8da1c3a2bfd168ca9d56dbf63df7fdf"
+        }
+      ]
+    }
+  }
+}

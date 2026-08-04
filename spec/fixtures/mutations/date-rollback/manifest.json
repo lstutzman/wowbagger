@@ -1,0 +1,42 @@
+{
+  "case": "transition-date-cannot-move-updated-backwards",
+  "argv": [
+    "transition",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+          "source_file": "before.md",
+          "sha256": "sha256:e3e834c8d0652e53b4816c94c8cdc8649607c9b976125c295469714099041a27"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+          "source_file": "before.md",
+          "sha256": "sha256:e3e834c8d0652e53b4816c94c8cdc8649607c9b976125c295469714099041a27"
+        }
+      ]
+    }
+  }
+}

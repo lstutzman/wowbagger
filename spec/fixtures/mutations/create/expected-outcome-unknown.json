@@ -1,0 +1,22 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "unknown",
+  "error": {
+    "code": "write-outcome-unknown",
+    "message": "The create publication outcome could not be verified.",
+    "details": {
+      "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+      "recovery_artifacts": [
+        {
+          "path": "wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+          "kind": "final-item",
+          "sha256": null,
+          "size_bytes": null
+        }
+      ],
+      "recovery_artifacts_truncated": false
+    }
+  }
+}

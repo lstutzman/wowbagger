@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "committed",
+  "result": {
+    "item": {
+      "id": "wb_01Q4JQ3TG0207ZZZZZZZZZZZZZ",
+      "path": "wb_01Q4JQ3TG0207ZZZZZZZZZZZZZ.md",
+      "revision": "sha256:95c8c17a5aa5d406a31b5c2586be261e320862096d5c672d9c412fdb79027007",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0SlEzVEcwMjA3WlpaWlpaWlpaWlpaWgp0aXRsZTogIlJlc3RvcmUgdGhlIGZpY3Rpb25hbCBjb21ldCBjYXRhbG9ndWUiCmtpbmQ6IHRhc2sKc3RhdHVzOiBiYWNrbG9nCmNyZWF0ZWQ6IDIwMzAtMDEtMTUKdXBkYXRlZDogMjAzMC0wMS0xOApwcm92ZW5hbmNlOgogIHNvdXJjZTogImZpeHR1cmUvbXV0YXRpb25zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xNVQxMjowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYXJjaGl2ZQogICAgZGF0ZTogMjAzMC0wMS0xNgogICAgc3VtbWFyeTogIkFyY2hpdmUgdGhlIGZpY3Rpb25hbCBjb21ldCBjYXRhbG9ndWUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZpY3Rpb25hbCBvYnNlcnZhdGlvbnMgd2VyZSB0ZW1wb3JhcmlseSBzdGFsZS4iCiAgLSBhY3Rpb246IHJlc3RvcmUKICAgIGRhdGU6IDIwMzAtMDEtMTgKICAgIHN1bW1hcnk6ICJSZXN0b3JlIHRoZSBmaWN0aW9uYWwgY29tZXQgY2F0YWxvZ3VlLiIKICAgIHJhdGlvbmFsZTogIkZyZXNoIGZpY3Rpb25hbCBvYnNlcnZhdGlvbnMgbWFrZSB0aGUgdGFzayByZWxldmFudCBhZ2Fpbi4iCi0tLQoKUmVzdG9yYXRpb24gcHJlc2VydmVzIHRoZSBib2R5IGFuZCBwcmlvciBhcmNoaXZlIGRlY2lzaW9uLgo=",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q4JQ3TG0207ZZZZZZZZZZZZZ",
+        "title": "Restore the fictional comet catalogue",
+        "kind": "task",
+        "status": "backlog",
+        "created": "2030-01-15",
+        "updated": "2030-01-18",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-15T12:00:00Z"
+        },
+        "depends_on": [],
+        "related": [],
+        "decisions": [
+          {
+            "action": "archive",
+            "date": "2030-01-16",
+            "summary": "Archive the fictional comet catalogue.",
+            "rationale": "The fictional observations were temporarily stale."
+          },
+          {
+            "action": "restore",
+            "date": "2030-01-18",
+            "summary": "Restore the fictional comet catalogue.",
+            "rationale": "Fresh fictional observations make the task relevant again."
+          }
+        ]
+      },
+      "body": "\nRestoration preserves the body and prior archive decision.\n"
+    }
+  }
+}

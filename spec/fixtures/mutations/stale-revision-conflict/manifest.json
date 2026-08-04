@@ -1,0 +1,42 @@
+{
+  "case": "transition-stale-revision",
+  "argv": [
+    "transition",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 4,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4DEWGW0K6CTNANVQF6CSQEX.md",
+          "source_file": "ledger/wb_01Q4DEWGW0K6CTNANVQF6CSQEX.md",
+          "sha256": "sha256:e3dc7571b01ae886e8b8d5d953d5b5f0f0582ab5ffa8523f67b1a26318c15809"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4DEWGW0K6CTNANVQF6CSQEX.md",
+          "source_file": "ledger/wb_01Q4DEWGW0K6CTNANVQF6CSQEX.md",
+          "sha256": "sha256:e3dc7571b01ae886e8b8d5d953d5b5f0f0582ab5ffa8523f67b1a26318c15809"
+        }
+      ]
+    }
+  }
+}

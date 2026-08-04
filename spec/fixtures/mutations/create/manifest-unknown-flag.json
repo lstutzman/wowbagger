@@ -1,0 +1,31 @@
+{
+  "case": "create-unknown-command-flag",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--mystery",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected-unknown-flag.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}

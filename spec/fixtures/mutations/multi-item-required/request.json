@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q4JTHP40ZVEBN63PAGS11ZPW",
+  "expected_revision": "sha256:7bb16ce95da101e9ffbfd8ffcd7055a2b31ecf057d4a0a5b67e8313349a4b20f",
+  "to_status": "done",
+  "date": "2030-01-17",
+  "decision": {
+    "summary": "Complete the fictional signal relay.",
+    "rationale": "The work itself is complete, but dependent cleanup exceeds local atomic scope."
+  }
+}

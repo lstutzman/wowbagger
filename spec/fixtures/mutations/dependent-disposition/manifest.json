@@ -1,0 +1,21 @@
+{
+  "case": "transition-multi-item-dependent-disposition",
+  "argv": ["transition", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 5,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md", "source_file": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md", "sha256": "sha256:0671fb13de7c4c88150fc798ee93dbd5c8a3af6fddce412320b350d40904ab12"},
+        {"path": "ledger/wb_01Q525G4G020B6CSK6CSK6CSK5.md", "source_file": "ledger/wb_01Q525G4G020B6CSK6CSK6CSK5.md", "sha256": "sha256:ce48c996d5fed1dab94cc49bad656b7d867efc44d7e0169d29a84e841c8edf91"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md", "source_file": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md", "sha256": "sha256:0671fb13de7c4c88150fc798ee93dbd5c8a3af6fddce412320b350d40904ab12"},
+        {"path": "ledger/wb_01Q525G4G020B6CSK6CSK6CSK5.md", "source_file": "ledger/wb_01Q525G4G020B6CSK6CSK6CSK5.md", "sha256": "sha256:ce48c996d5fed1dab94cc49bad656b7d867efc44d7e0169d29a84e841c8edf91"}
+      ]
+    }
+  }
+}

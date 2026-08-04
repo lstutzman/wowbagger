@@ -3,9 +3,10 @@ schema_version: 1
 id: wb_01KZ77NSW8P89118K6D6FSBFX2
 title: "Complete the mutation and compare-and-set contract"
 kind: task
-status: in-progress
+status: done
 created: 2026-08-04
 updated: 2026-08-04
+completed: 2026-08-04
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -21,6 +22,10 @@ decisions:
     date: 2026-08-04
     summary: "The mutation and compare-and-set contract is under active review."
     rationale: "Its draft is being worked on separately and is not yet canonical in main."
+  - action: complete
+    date: 2026-08-04
+    summary: "Complete the standalone mutation and compare-and-set contract."
+    rationale: "The proposed contract, ADR, and synthetic compatibility suite now define lossless inspection, caller-known creation, guarded transitions, deterministic refusal and recovery outcomes, and honest local coordination limits; 33 exact manifests and all 35 read-only core tests pass."
 ---
 
 Finish reviewing and merge the standalone mutation and compare-and-set contract

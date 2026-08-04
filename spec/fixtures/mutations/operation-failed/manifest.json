@@ -1,0 +1,19 @@
+{
+  "case": "transition-lock-closure-retry-limit",
+  "argv": ["transition", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "expand-lock-closure-through-bounded-retry-limit",
+  "expected": {
+    "exit": 6,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q5HKWEG020ECSK6CSK6CSK6B.md", "source_file": "ledger/wb_01Q5HKWEG020ECSK6CSK6CSK6B.md", "sha256": "sha256:03a0dd4f8e7e9b191d2bea9ec9cf2cc2e46cbe3cc95d85180497b97a7acc258d"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q5HKWEG020ECSK6CSK6CSK6B.md", "source_file": "ledger/wb_01Q5HKWEG020ECSK6CSK6CSK6B.md", "sha256": "sha256:03a0dd4f8e7e9b191d2bea9ec9cf2cc2e46cbe3cc95d85180497b97a7acc258d"}
+      ]
+    }
+  }
+}

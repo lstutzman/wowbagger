@@ -1,0 +1,42 @@
+{
+  "case": "transition-triage-to-backlog",
+  "argv": [
+    "transition",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+          "source_file": "before.md",
+          "sha256": "sha256:17ac31f4fc0cf9f20fcab06a9af082708acc671c17c24c4ab8475e0eaa236888"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+          "source_file": "expected-item.md",
+          "sha256": "sha256:7eb112f684c13add0e6db1d816213cf39be7524fa6aea41c0939d1808d89bb8b"
+        }
+      ]
+    }
+  }
+}

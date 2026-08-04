@@ -1,0 +1,26 @@
+{
+  "ok": false,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "atomic-scope-required",
+    "message": "The requested transition requires multi-item atomicity.",
+    "details": {
+      "id": "wb_01Q5F1FQG020DVQEXVQEXVQEXT",
+      "blockers": [
+        {
+          "code": "child-disposition",
+          "item_id": "wb_01Q5HKWEG020ECSK6CSK6CSK6B",
+          "field": "parent"
+        },
+        {
+          "code": "dependent-disposition",
+          "item_id": "wb_01Q5HKWEG020ECSK6CSK6CSK6B",
+          "field": "depends_on"
+        }
+      ],
+      "precondition_issues": []
+    }
+  }
+}
