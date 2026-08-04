@@ -674,49 +674,66 @@ function validateCycles(facts, index, relation, context) {
 }
 
 function stronglyConnectedComponents(graph) {
-  const indexes = new Map();
-  const lowLinks = new Map();
-  const stack = [];
-  const onStack = new Set();
-  const components = [];
-  let nextIndex = 0;
+  const nodes = [...graph.keys()].sort(compareText);
+  const reverseGraph = new Map(nodes.map((id) => [id, []]));
+  for (const [id, neighbors] of graph) {
+    for (const neighbor of neighbors) {
+      reverseGraph.get(neighbor).push(id);
+    }
+  }
+  for (const neighbors of reverseGraph.values()) {
+    neighbors.sort(compareText);
+  }
 
-  function visit(id) {
-    indexes.set(id, nextIndex);
-    lowLinks.set(id, nextIndex);
-    nextIndex += 1;
-    stack.push(id);
-    onStack.add(id);
-
-    for (const neighbor of graph.get(id) ?? []) {
-      if (!indexes.has(neighbor)) {
-        visit(neighbor);
-        lowLinks.set(id, Math.min(lowLinks.get(id), lowLinks.get(neighbor)));
-      } else if (onStack.has(neighbor)) {
-        lowLinks.set(id, Math.min(lowLinks.get(id), indexes.get(neighbor)));
-      }
+  const visited = new Set();
+  const finished = [];
+  for (const start of nodes) {
+    if (visited.has(start)) {
+      continue;
     }
 
-    if (lowLinks.get(id) !== indexes.get(id)) {
-      return;
+    visited.add(start);
+    const stack = [{ id: start, nextNeighbor: 0 }];
+    while (stack.length > 0) {
+      const frame = stack.at(-1);
+      const neighbors = graph.get(frame.id) ?? [];
+      if (frame.nextNeighbor < neighbors.length) {
+        const neighbor = neighbors[frame.nextNeighbor];
+        frame.nextNeighbor += 1;
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          stack.push({ id: neighbor, nextNeighbor: 0 });
+        }
+        continue;
+      }
+
+      finished.push(frame.id);
+      stack.pop();
+    }
+  }
+
+  const components = [];
+  visited.clear();
+  for (let index = finished.length - 1; index >= 0; index -= 1) {
+    const start = finished[index];
+    if (visited.has(start)) {
+      continue;
     }
 
     const component = [];
-    while (true) {
+    const stack = [start];
+    visited.add(start);
+    while (stack.length > 0) {
       const member = stack.pop();
-      onStack.delete(member);
       component.push(member);
-      if (member === id) {
-        break;
+      for (const neighbor of reverseGraph.get(member) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          stack.push(neighbor);
+        }
       }
     }
     components.push(component);
-  }
-
-  for (const id of [...graph.keys()].sort(compareText)) {
-    if (!indexes.has(id)) {
-      visit(id);
-    }
   }
 
   return components;
