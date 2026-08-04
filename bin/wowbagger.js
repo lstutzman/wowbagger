@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import { loadLedger } from '../src/ledger.js';
-import { createItem, inspectItem } from '../src/mutation.js';
+import {
+  createItem,
+  inspectItem,
+  transitionItem,
+  validateCreateRequest,
+  validateTransitionRequest,
+} from '../src/mutation.js';
+import { parseJsonRequest, sortIssues } from '../src/request.js';
 import { selectReady } from '../src/ready.js';
 import { isCalendarDate, validateLedger } from '../src/validate.js';
 
@@ -56,16 +63,78 @@ async function main(argumentsList) {
   }
 
   if (command === 'create') {
-    const options = parseOptions(command, argumentsList.slice(1));
-    const request = JSON.parse(await requestSource(options.input));
-    const item = await createItem(options.ledger, request);
-    process.stdout.write(`${JSON.stringify({
-      ok: true,
-      command,
-      contract_version: 1,
-      state: 'committed',
-      result: { item },
-    })}\n`);
+    const parsedOptions = parseMutationOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeMutation(command, {
+        ok: false,
+        exit: 6,
+        state: 'unchanged',
+        error: {
+          code: 'operation-failed',
+          message: 'The mutation operation failed before a commit was established.',
+          details: {
+            id: 'unknown',
+            operation: 'prepare-temporary',
+            reason: 'io-error',
+            recovery_artifacts: [],
+            recovery_artifacts_truncated: false,
+          },
+        },
+      });
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    const issues = validateCreateRequest(parsedRequest.value, parsedRequest.issues);
+    if (issues.length > 0) {
+      writeInvalidRequest(command, issues);
+      return;
+    }
+    writeMutation(command, await createItem(parsedOptions.options.ledger, parsedRequest.value));
+    return;
+  }
+
+  if (command === 'transition') {
+    const parsedOptions = parseMutationOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeMutation(command, {
+        ok: false,
+        exit: 6,
+        state: 'unchanged',
+        error: {
+          code: 'operation-failed',
+          message: 'The mutation operation failed before a commit was established.',
+          details: {
+            id: 'unknown',
+            operation: 'prepare-temporary',
+            reason: 'io-error',
+            recovery_artifacts: [],
+            recovery_artifacts_truncated: false,
+          },
+        },
+      });
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    const issues = validateTransitionRequest(parsedRequest.value, parsedRequest.issues);
+    if (issues.length > 0) {
+      writeInvalidRequest(command, issues);
+      return;
+    }
+    writeMutation(command, await transitionItem(parsedOptions.options.ledger, parsedRequest.value));
     return;
   }
 
@@ -198,6 +267,87 @@ function parseOptions(command, argumentsList) {
   return options;
 }
 
+function parseMutationOptions(command, argumentsList) {
+  const options = {};
+  const issues = [];
+  for (let index = 0; index < argumentsList.length; index += 1) {
+    const argument = argumentsList[index];
+    if (argument === '--json') {
+      if (options.json) {
+        issues.push(argumentIssue(index + 1, 'repeated-argument', 'Argument --json must not be repeated.'));
+      }
+      options.json = true;
+      continue;
+    }
+    if (argument !== '--ledger' && argument !== '--input') {
+      issues.push(argumentIssue(index + 1, 'unknown-argument', `Argument ${argument} is not recognized.`));
+      continue;
+    }
+    const key = argument === '--ledger' ? 'ledger' : 'input';
+    if (hasOwn(options, key)) {
+      issues.push(argumentIssue(index + 1, 'repeated-argument', `Argument ${argument} must not be repeated.`));
+      continue;
+    }
+    const value = argumentsList[index + 1];
+    if (!value || value.startsWith('--')) {
+      issues.push(argumentIssue(index + 1, 'missing-argument', `Argument ${argument} requires a value.`));
+      continue;
+    }
+    options[key] = value;
+    index += 1;
+  }
+  for (const [key, flag] of [['ledger', '--ledger'], ['input', '--input']]) {
+    if (!hasOwn(options, key)) {
+      issues.push(argumentIssue(-1, 'missing-argument', `Argument ${flag} is required.`));
+    }
+  }
+  if (!options.json) {
+    issues.push(argumentIssue(-1, 'missing-argument', 'Argument --json is required.'));
+  }
+  return { options, issues: sortIssues(issues) };
+}
+
+function argumentIssue(index, code, message) {
+  return {
+    path: index < 0 ? '/arguments' : `/arguments/${index}`,
+    code,
+    message,
+  };
+}
+
+function writeInvalidRequest(command, issues) {
+  writeMutation(command, {
+    ok: false,
+    exit: 2,
+    state: 'unchanged',
+    error: {
+      code: 'invalid-request',
+      message: `The ${command} request is invalid.`,
+      details: { issues },
+    },
+  });
+}
+
+function writeMutation(command, outcome) {
+  const envelope = outcome.ok
+    ? {
+      ok: true,
+      command,
+      contract_version: 1,
+      state: outcome.state,
+      result: { item: outcome.item },
+    }
+    : {
+      ok: false,
+      command,
+      contract_version: 1,
+      state: outcome.state,
+      error: outcome.error,
+    };
+  process.stdout.write(`${JSON.stringify(envelope)}\n`);
+  process.exitCode = outcome.exit;
+}
+
 function readOptionValue(command, option, argumentsList, index) {
   const value = argumentsList[index + 1];
   if (!value || value.startsWith('--')) {
@@ -219,6 +369,10 @@ function usage(command) {
     return 'Usage: wowbagger create --ledger <dir> --input <json-file|-> --json';
   }
 
+  if (command === 'transition') {
+    return 'Usage: wowbagger transition --ledger <dir> --input <json-file|-> --json';
+  }
+
   return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD --json';
 }
 
@@ -228,11 +382,15 @@ async function requestSource(input) {
     for await (const chunk of process.stdin) {
       chunks.push(chunk);
     }
-    return Buffer.concat(chunks).toString('utf8');
+    return Buffer.concat(chunks);
   }
 
   const { readFile } = await import('node:fs/promises');
-  return readFile(input, 'utf8');
+  return readFile(input);
+}
+
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 main(process.argv.slice(2)).catch((error) => {
