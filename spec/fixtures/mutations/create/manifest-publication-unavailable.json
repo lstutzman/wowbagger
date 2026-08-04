@@ -1,0 +1,30 @@
+{
+  "case": "create-publication-capability-unavailable",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "atomic-no-clobber-primitive-unavailable",
+  "expected": {
+    "exit": 5,
+    "stdout": {
+      "json_file": "expected-publication-unavailable.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}

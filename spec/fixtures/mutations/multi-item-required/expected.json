@@ -8,10 +8,14 @@
     "message": "The requested transition requires multi-item atomicity.",
     "details": {
       "id": "wb_01Q4JTHP40ZVEBN63PAGS11ZPW",
-      "reason": "dependent-cleanup",
-      "affected_ids": [
-        "wb_01Q4M9YB0004HMASW9NF6YY093"
-      ]
+      "blockers": [
+        {
+          "code": "dependent-cleanup",
+          "item_id": "wb_01Q4M9YB0004HMASW9NF6YY093",
+          "field": "depends_on"
+        }
+      ],
+      "precondition_issues": []
     }
   }
 }

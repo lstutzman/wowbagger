@@ -1,4 +1,5 @@
 {
+  "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
   "item": {
     "title": "Map a fictional moon route",
     "kind": "task",
@@ -10,5 +11,5 @@
     "related": [],
     "fictional_label": "nebula-7"
   },
-  "body": "Plot a fictional route from Brindle Station to Lumen Reef.\n"
+  "body": "\nPlot a fictional route from Brindle Station to Lumen Reef.\n"
 }

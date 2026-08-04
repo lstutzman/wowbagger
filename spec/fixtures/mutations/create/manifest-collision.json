@@ -1,0 +1,42 @@
+{
+  "case": "create-requested-id-collision",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 4,
+    "stdout": {
+      "json_file": "expected-collision.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+          "source_file": "expected-item.md",
+          "sha256": "sha256:18020373117ad3a699e1337cb318920643bff2b0a2321b0ec5d85feb9483d543"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+          "source_file": "expected-item.md",
+          "sha256": "sha256:18020373117ad3a699e1337cb318920643bff2b0a2321b0ec5d85feb9483d543"
+        }
+      ]
+    }
+  }
+}

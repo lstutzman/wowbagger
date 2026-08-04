@@ -150,7 +150,8 @@ It is the durable work ledger beneath those systems.
   order before mutable coordination. **Implemented in this checkout; not yet a
   stable release.**
 - Define the proposed local-filesystem inspect, create, and single-item
-  lifecycle-transition contract, including exact-byte revisions and explicit
+  lifecycle-transition contract, including lossless exact-byte inspection,
+  caller-known IDs, atomic no-clobber creation or refusal, and explicit
   multi-item refusal. **Documented only; not yet executable.**
 - Separate optional reusable mechanisms from consumer-specific policy.
 - Stabilize the machine-readable command contract and compatibility evidence.

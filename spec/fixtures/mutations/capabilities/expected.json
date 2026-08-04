@@ -9,20 +9,32 @@
     },
     "operations": {
       "inspect": {
-        "supported": true
+        "supported": true,
+        "write_scope": "none",
+        "cas_scope": "none"
       },
       "create": {
         "supported": true,
-        "atomic_scope": "single-item"
+        "write_scope": "single-item",
+        "cas_scope": "requested-id-lock",
+        "publication_visibility": "atomic-no-clobber-or-fail",
+        "publication_probe": "per-ledger-operation"
       },
       "transition": {
         "supported": true,
-        "atomic_scope": "single-item"
+        "write_scope": "single-item",
+        "cas_scope": "exact-byte-sha256"
       },
       "work_claim": {
         "supported": false,
         "reason": "not-implemented"
       }
+    },
+    "durability": {
+      "temporary_file_sync": "required-before-publication",
+      "directory_sync": "best-effort-when-supported",
+      "post_publication_verification": "exact-bytes-required",
+      "power_loss_guarantee": "none"
     },
     "limits": {
       "multi_item_atomicity": false,

@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The create request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "/arguments/5",
+          "code": "unknown-argument",
+          "message": "Argument --mystery is not recognized."
+        }
+      ]
+    }
+  }
+}

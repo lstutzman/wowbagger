@@ -15,7 +15,8 @@
         "operation": "transition",
         "writer_id": "fixture-writer-4f2d",
         "started_at": "2030-01-16T08:00:00Z"
-      }
+      },
+      "owner_diagnostic": null
     }
   }
 }

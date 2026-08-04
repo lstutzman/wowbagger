@@ -1,0 +1,16 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "capability-unavailable",
+    "message": "Atomic no-clobber publication is unavailable for this ledger.",
+    "details": {
+      "capability": "atomic-no-clobber-publication",
+      "reason": "filesystem-primitive-unavailable",
+      "recovery_artifacts": [],
+      "recovery_artifacts_truncated": false
+    }
+  }
+}

@@ -29,7 +29,7 @@ operations:
 |---|---|---|
 | capabilities | Describe the exact backend scope. | Supported when this phase is implemented. |
 | inspect | Read one validated item and issue its revision token. | Supported when this phase is implemented. |
-| create | Publish one new triage item with a generated ID. | Supported when this phase is implemented. |
+| create | Publish one new triage item under a caller-generated ID. | Supported when this phase is implemented. |
 | transition | Compare and replace one existing item through an allowed lifecycle edge. | Supported only when the whole change writes that one item. |
 | work claim | Reserve existing work for a worker. | Unsupported and not implemented. |
 
@@ -53,21 +53,28 @@ The revision is returned by inspect and successful mutation responses. It is
 not persisted in frontmatter. SHA-256 is a stale-write detector for cooperative
 writers, not an authentication signature or an authorization decision.
 
+Inspect parses the normalized core view, extracts the body, computes this
+digest, and produces the lossless source encoding from one raw buffer read
+through one validated file handle. Arbitrary YAML extensions are omitted from
+the normalized JSON core and retained in the exact base64-encoded source.
+
 ### Filename and identity
 
 For creation, the portable default publication name is:
 
-    <generated-id>.md
+    <requested-id>.md
 
-at the configured ledger root. The generated ID remains the identity; the
+at the configured ledger root. The requested ID remains the identity; the
 filename is only the default physical location. Existing items may have a
 consumer-selected layout, and a future consumer configuration may select a
 different creation layout without changing identity or references. The v1
-create request does not let a caller choose an arbitrary filename.
+create request requires a caller-generated collision-resistant ULID but does
+not let the caller choose an arbitrary filename.
 
 ### Local lock protocol
 
-Each existing item has one lock identity keyed by immutable ID, not filename:
+Each immutable item ID has one lock identity, even before its create
+publication. Locks are keyed by ID, not filename:
 
     <ledger>/.wowbagger-locks/<item-id>.lock
 
@@ -94,25 +101,31 @@ For an operation that refers to existing items, a writer:
 3. acquires the required per-item locks in ascending immutable-ID order using
    exclusive creation;
 4. re-loads and re-validates the complete ledger while those locks are held;
-5. re-reads and hashes every locked item from its actual regular file;
+5. re-reads, re-parses, and hashes every locked existing item from its actual
+   regular file;
 6. compares the target's expected revision only after that re-read;
-7. writes at most one replacement item; and
-8. removes its locks and temporary files after a confirmed result whenever the
+7. constructs and completely validates the one-item proposed ledger;
+8. writes at most one item only when no other item would require mutation; and
+9. removes its locks and temporary files after a confirmed result whenever the
    filesystem permits.
 
-The target item is always locked for a transition. A create operation also
-locks every existing parent and live dependency named by the new item before it
-publishes the new file. That prevents cooperative creation of a new incoming
-edge while a target is being terminalized. Locks are not writes to ledger items;
-they do not turn a multi-item lifecycle change into an atomic transaction.
+The target, every relevant referenced or referring item, and every direct child
+needed for an epic check are locked in deterministic ID order. Every item whose
+depends_on contains a terminalizing target is considered regardless of that
+item's own status. A create operation locks its requested ID plus every existing
+parent and live dependency named by the new item. That prevents cooperative
+creation of a new incoming edge while a target is being terminalized. Locks are
+not writes to ledger items; they do not turn a multi-item lifecycle change into
+an atomic transaction.
 
-Temporary files use the same directory as the target item and a name that does
-not end in .md. The writer creates the temporary file exclusively, writes the
-complete next bytes, synchronizes the file where supported, then replaces the
-target using a same-directory rename. Keeping the names in one directory avoids
-cross-device rename behaviour. After replacement it re-reads and re-hashes the
-published target before reporting the new revision. Directory synchronization
-is attempted only where the platform and filesystem support it.
+Temporary files use the same directory as the item and a name that does not end
+in .md. The writer creates the temporary file exclusively, writes the complete
+next bytes, and synchronizes the completed open handle before publication.
+Transition then uses the platform's existing-file atomic replacement primitive.
+Create uses the stricter no-clobber publication rule below. Keeping the names in
+one directory avoids cross-device behaviour. After publication the writer
+re-reads and re-hashes the final path before reporting the new revision.
+Directory synchronization is best effort and capability-reported.
 
 This is the strongest practical local replacement sequence, not a promise of a
 universal durable transaction. Node and operating systems do not give
@@ -122,24 +135,25 @@ an operation result rather than silently choosing a weaker overwrite strategy.
 
 ### Create publication
 
-Creation first chooses a collision-resistant ULID, validates that it is absent
-from the complete ledger, and prepares its bytes in a same-directory temporary
-file. Publication must use an exclusive, no-overwrite final-name strategy.
+The caller supplies a canonical collision-resistant ULID before mutation.
+Create validates it, locks that ID alongside referenced parent and dependency
+IDs, confirms its absence, and prepares the complete bytes in a same-directory
+temporary file. The completed temporary handle must be synced before
+publication.
 
-An implementation may use an explicitly verified same-filesystem hard-link
-publication path when the filesystem supports it. It MUST NOT assume that hard
-links are available or equally permitted on Windows, macOS, Linux, network
-filesystems, or managed working directories. The portable fallback reserves the
-final path with exclusive creation and writes the prepared bytes to that newly
-reserved file. A normal rename is not the portable no-overwrite primitive:
-POSIX replacement can replace an existing destination, and Windows behaviour
-and sharing rules differ.
+Publication requires one atomic no-clobber primitive that makes only the
+complete prepared file visible at the final name. A verified same-filesystem
+hard-link publication is one example. Hard links are not assumed available or
+equally permitted on Windows, macOS, Linux, network filesystems, or managed
+working directories. If the configured filesystem cannot provide a suitable
+primitive, create fails unchanged with a capability result.
 
-The fallback intentionally has a visibility and crash window after final-path
-reservation. A crash can leave an empty or partial item even though no existing
-item was overwritten. Validation will fail closed on that artifact. Recovery
-must be manual and auditable; a later create MUST NOT overwrite it merely
-because its name resembles a generated ID.
+A check followed by an overwriting rename is not no-clobber. Reserving the
+final path and copying bytes into it is forbidden because it exposes empty or
+partial final items. After publication, the writer re-opens the known final ID
+path and compares its exact bytes. Exact expected bytes mean committed even if
+directory sync or cleanup later fails; absence can be unchanged; any
+indeterminate or different result is unknown.
 
 ## Options considered
 
@@ -182,8 +196,8 @@ renames.
 |---|---|---|
 | Revision comparison | Cooperative writers compare the target's raw bytes under its lock. | Protection against editors or processes that ignore the lock. |
 | Replacement | A successful normal transition replaces one target through a same-directory temporary file and re-hashes the resulting bytes. | Crash durability, distributed atomicity, or a filesystem-independent atomic-rename proof. |
-| Creation | A normal create never intentionally overwrites an existing final filename. | All-or-nothing visibility or recovery after a crash during final publication. |
-| Relationships | A mutation that needs dependent cleanup or child disposition is refused before an item write. | Multi-file atomicity by sequencing local writes. |
+| Creation | A normal create atomically exposes complete bytes without clobbering an existing ID, or fails unchanged when that primitive is unavailable. | Universal availability of hard links or another atomic no-clobber primitive; power-loss durability. |
+| Relationships | Every referring item is checked for terminalization and every required dependent or child mutation is reported and refused before publication. | Multi-file atomicity by sequencing local writes. |
 | Scope | Coordination is among Wowbagger writers using the same ledger directory in one working copy. | Coordination across clones, worktrees, machines, shared mounts with different semantics, or non-cooperating writers. |
 | Claims | No claim is created, renewed, interpreted, or enforced. | Any implied exclusive work ownership from a local lock. |
 
@@ -197,16 +211,19 @@ Normal failures before publication leave Markdown item bytes unchanged. A crash
 or an I/O failure after a publication attempt can leave one of these states:
 
 - a temporary file remains and the original item is still present;
-- a final create reservation is empty or partial;
-- the replacement is visible but the lock remains;
+- no final create item is visible and a complete temporary file remains;
+- the complete published item or replacement is visible but a lock or
+  temporary name remains;
 - the writer cannot determine whether the replacement became visible.
 
 The response contract distinguishes unchanged, committed, and unknown outcomes.
 Clients must inspect after an unknown outcome and must not retry a transition
 blindly.
 
-Stale-lock and partial-create recovery is an explicit administrator action, not
-a writer timeout. Before removing or repairing an artifact, the operator must
+Stale-lock and artifact recovery is an explicit administrator action, not a
+writer timeout. The caller-known create ID is the automated recovery key:
+inspect that ID first, and retry only after inspect proves it absent. Before
+removing or repairing an artifact, the operator must
 capture its path, raw-byte SHA-256, observed UTC time, rationale, and the
 before/after item revisions in a durable audit record such as a reviewed Git
 commit or incident log. The operator then inspects and validates the full

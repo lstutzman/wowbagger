@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "atomic-scope-required",
+    "message": "The requested transition requires multi-item atomicity.",
+    "details": {
+      "id": "wb_01Q59WP9G020CSK6CSK6CSK6CR",
+      "blockers": [
+        {
+          "code": "dependent-cleanup",
+          "item_id": "wb_01Q5CF30G020DANANANANANAN9",
+          "field": "depends_on"
+        }
+      ],
+      "precondition_issues": []
+    }
+  }
+}

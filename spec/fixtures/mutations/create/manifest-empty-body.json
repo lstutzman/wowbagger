@@ -1,0 +1,36 @@
+{
+  "case": "create-empty-body",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request-empty-body.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request-empty-body.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected-empty.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": [
+        {
+          "path": "ledger/wb_01Q45V47G0205ANANANANANANA.md",
+          "source_file": "expected-empty-item.md",
+          "sha256": "sha256:835d0ce96ab17ccad9a3804b583ec19613e57cf4e93c2c6b025f994474becab8"
+        }
+      ]
+    }
+  }
+}

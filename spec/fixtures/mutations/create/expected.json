@@ -8,7 +8,10 @@
       "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
       "path": "wb_01Q45X474N28T5CY4GNF6YY4HM.md",
       "revision": "sha256:18020373117ad3a699e1337cb318920643bff2b0a2321b0ec5d85feb9483d543",
-      "frontmatter": {
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0NVg0NzROMjhUNUNZNEdORjZZWTRITQp0aXRsZTogIk1hcCBhIGZpY3Rpb25hbCBtb29uIHJvdXRlIgpraW5kOiB0YXNrCnN0YXR1czogdHJpYWdlCmNyZWF0ZWQ6IDIwMzAtMDEtMTAKdXBkYXRlZDogMjAzMC0wMS0xMApwcm92ZW5hbmNlOgogIHNvdXJjZTogImZpeHR1cmUvbXV0YXRpb25zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMFQxMjozNDo1Ni43ODlaIgpkZXBlbmRzX29uOiBbXQpyZWxhdGVkOiBbXQpmaWN0aW9uYWxfbGFiZWw6ICJuZWJ1bGEtNyIKLS0tCgpQbG90IGEgZmljdGlvbmFsIHJvdXRlIGZyb20gQnJpbmRsZSBTdGF0aW9uIHRvIEx1bWVuIFJlZWYuCg==",
+      "core": {
         "schema_version": 1,
         "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
         "title": "Map a fictional moon route",
@@ -21,8 +24,7 @@
           "recorded_at": "2030-01-10T12:34:56.789Z"
         },
         "depends_on": [],
-        "related": [],
-        "fictional_label": "nebula-7"
+        "related": []
       },
       "body": "\nPlot a fictional route from Brindle Station to Lumen Reef.\n"
     }

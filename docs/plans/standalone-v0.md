@@ -55,11 +55,13 @@ disposition, or other multi-file write.
 
 Exit criteria:
 
-- creation uses collision-resistant immutable IDs and required provenance;
-- inspection revisions hash exact item bytes and successful local transitions
-  use cooperative single-item CAS only;
+- creation requires a caller-generated collision-resistant immutable ID and
+  publishes complete bytes through atomic no-clobber or fails unchanged;
+- inspection exposes a lossless exact source from the same bytes it hashes, and
+  successful local transitions use cooperative single-item CAS only;
 - done, killed, and archived transitions that require relation cleanup in
-  SPEC.md fail unchanged until a backend advertises a suitable atomic scope;
+  SPEC.md inspect every referring item, validate the complete proposed ledger,
+  and fail unchanged until a backend advertises suitable multi-item atomicity;
 - unsupported mutation or CAS requests fail without changing the ledger;
 - conflict and recovery cases are black-box tested;
 - no documentation promises global atomicity for a local or Git-only backend.

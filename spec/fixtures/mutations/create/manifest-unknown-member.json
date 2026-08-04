@@ -1,0 +1,30 @@
+{
+  "case": "create-unknown-request-member",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request-unknown-member.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request-unknown-member.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected-unknown-member.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}

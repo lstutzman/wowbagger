@@ -1,0 +1,30 @@
+{
+  "case": "create-missing-body",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request-missing-body.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request-missing-body.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected-missing-body.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}

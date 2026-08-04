@@ -1,0 +1,26 @@
+{
+  "case": "capabilities-local-scope",
+  "argv": [
+    "capabilities",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}

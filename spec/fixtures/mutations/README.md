@@ -1,42 +1,84 @@
-# Proposed mutation contract vectors
+# Proposed mutation compatibility vectors
 
-These vectors are fictional, normative design fixtures for
+These fictional vectors are normative design fixtures for
 [the proposed mutation contract](../../../docs/mutation-contract.md). They are
-not executable tests and do not claim that the current read-only Wowbagger CLI
-has mutation commands.
+not executable tests and do not claim that the current read-only CLI implements
+mutation.
 
-Each directory is independent. When a vector contains a ledger directory, that
-directory is the complete configured ledger for the invocation. Invocation
-files describe the command inputs relative to the vector directory; create and
-transition request files are the contents passed through --input.
+## Manifest contract
 
-Create starts with an empty valid ledger and publishes expected-item.md under
-its generated default filename. Transition-success starts with before.md copied
-to the target's default filename in an otherwise empty valid ledger, then
-replaces it with expected-item.md. Stale-revision-conflict starts with its
-ledger directory; previous-item.md is the earlier inspected source whose hash
-appears in the request. Lock-held starts with its ledger directory plus
-held-lock.json installed as the documented per-ID lock file. The remaining
-ledger directories are ready to invoke as written.
+Every case has a manifest JSON object:
 
-The fixture-only generation-context file is not a public create request. It
-pins a clock and entropy value so the expected generated ULID and item bytes
-are reproducible in a future black-box test harness.
+~~~json
+{
+  "case": "inspect-success-lossless",
+  "argv": ["inspect", "--ledger", "ledger", "--id", "wb_...", "--json"],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}
+~~~
 
-All item sources are UTF-8 with LF line endings. Every expected revision is
-SHA-256 over the exact raw bytes of the named item file, including frontmatter
-delimiters and the final line-feed. Hashes must use the lowercase
-sha256:<hex> form.
+transport is none, file, or stdin. For file input, argv includes --input and
+the same path. For stdin, argv includes --input and dash while path names the
+bytes fed to standard input. Files with a .json suffix are valid unique-key
+JSON. Intentionally invalid JSON input uses a .input suffix.
 
-| Vector | Demonstrates |
+scenario is normal or a named deterministic filesystem fault seam documented
+by that case. The runtime API does not expose a scenario flag.
+
+stdout names the exact JSON object; the process adds one LF. stderr is exact.
+before and after contain every Markdown item and recovery artifact in the
+simulated ledger:
+
+~~~json
+{
+  "path": "ledger/wb_....md",
+  "source_file": "expected-item.md",
+  "sha256": "sha256:<exact tracked-source digest>"
+}
+~~~
+
+Entries sort by path. source_file is relative to the manifest. An absent source
+file means path itself is the tracked source. Empty arrays mean an empty ledger
+state. An unknown command outcome can still have an exact simulated after state:
+the harness knows the injected filesystem result even when the command could
+not verify it.
+
+All Markdown sources use UTF-8 and LF. Hashes cover exact tracked bytes,
+including delimiters and the final LF. source_base64 values decode to the exact
+named source and hash to the declared revision.
+
+## Coverage
+
+| Area | Cases |
 |---|---|
-| capabilities | Exact advertised local backend scope, including unsupported work claims. |
-| inspect | Parsed item/body response and exact-byte revision for a fixed source file. |
-| create | JSON input, fixture-only deterministic ID generation, default filename, expected item, and committed result. |
-| transition-success | A triage-to-backlog single-item CAS transition with preserved body and unknown field. |
-| stale-revision-conflict | A stale inspected revision refusing to overwrite current bytes. |
-| lock-held | A structured existing lock preventing a transition without automatic stale-lock handling. |
-| multi-item-required | A done transition refusing required dependent cleanup rather than making two independent writes. |
+| Capabilities | precise local scope and unsupported claims |
+| Inspect | lossless success, not found, invalid ledger |
+| Create transport | equivalent file and stdin requests |
+| Create validation | invalid JSON, duplicate JSON key, unknown request member, unknown flag, missing member |
+| Create identity/body | collision, empty body, LF-leading body |
+| Create publication/recovery | unavailable atomic no-clobber, verified committed cleanup failure, unknown verification outcome |
+| Transition concurrency | success, stale revision, held lock, date rollback |
+| Transition lifecycle | task terminalization, archive restore, epic completion |
+| Multi-item refusal | dependent cleanup, dependent disposition, child disposition, terminal referrer, combined blockers |
+| Mutation states | unchanged, committed, and unknown |
 
-The fixtures deliberately do not exercise claims, adapters, PropertyCompass
-data, a database, Git transport, or a multi-item backend.
+Claims, adapters, PropertyCompass data, Git transport, and multi-item
+implementation are deliberately absent.

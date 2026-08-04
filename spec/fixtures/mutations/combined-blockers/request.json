@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q5F1FQG020DVQEXVQEXVQEXT",
+  "expected_revision": "sha256:deb374c68236801d15a99a82005cc1d98f865f6823acbed66cbd32da73c10d4a",
+  "to_status": "killed",
+  "date": "2030-01-28",
+  "decision": {
+    "summary": "Kill the fictional atlas programme.",
+    "rationale": "The synthetic atlas programme has been superseded."
+  }
+}

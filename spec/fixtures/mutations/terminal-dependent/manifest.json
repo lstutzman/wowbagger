@@ -1,0 +1,21 @@
+{
+  "case": "transition-terminal-dependent-cleanup",
+  "argv": ["transition", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 5,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q59WP9G020CSK6CSK6CSK6CR.md", "source_file": "ledger/wb_01Q59WP9G020CSK6CSK6CSK6CR.md", "sha256": "sha256:f3f42acec721f66da376e704fa526c1d1872852ceba6f9eccc3c209595befdba"},
+        {"path": "ledger/wb_01Q5CF30G020DANANANANANAN9.md", "source_file": "ledger/wb_01Q5CF30G020DANANANANANAN9.md", "sha256": "sha256:9bd01e99ba57766b6dabde287d289fc7e172146e5680733a39a01c84f84ba601"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q59WP9G020CSK6CSK6CSK6CR.md", "source_file": "ledger/wb_01Q59WP9G020CSK6CSK6CSK6CR.md", "sha256": "sha256:f3f42acec721f66da376e704fa526c1d1872852ceba6f9eccc3c209595befdba"},
+        {"path": "ledger/wb_01Q5CF30G020DANANANANANAN9.md", "source_file": "ledger/wb_01Q5CF30G020DANANANANANAN9.md", "sha256": "sha256:9bd01e99ba57766b6dabde287d289fc7e172146e5680733a39a01c84f84ba601"}
+      ]
+    }
+  }
+}

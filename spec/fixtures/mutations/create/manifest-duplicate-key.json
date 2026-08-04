@@ -1,0 +1,30 @@
+{
+  "case": "create-duplicate-json-key",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request-duplicate-key.input",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request-duplicate-key.input"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected-duplicate-key.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}

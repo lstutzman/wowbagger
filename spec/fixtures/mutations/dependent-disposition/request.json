@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q4ZK3DG020ANANANANANANAM",
+  "expected_revision": "sha256:0671fb13de7c4c88150fc798ee93dbd5c8a3af6fddce412320b350d40904ab12",
+  "to_status": "killed",
+  "date": "2030-01-22",
+  "decision": {
+    "summary": "Kill the fictional beacon.",
+    "rationale": "The synthetic beacon is no longer needed."
+  }
+}

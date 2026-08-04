@@ -1,0 +1,30 @@
+{
+  "case": "create-invalid-json",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request-invalid-json.input",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request-invalid-json.input"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected-invalid-json.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [],
+      "after": []
+    }
+  }
+}

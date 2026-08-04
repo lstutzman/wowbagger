@@ -8,7 +8,10 @@
       "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
       "path": "wb_01Q4AS1Y80248J48HK6D248NAN.md",
       "revision": "sha256:7eb112f684c13add0e6db1d816213cf39be7524fa6aea41c0939d1808d89bb8b",
-      "frontmatter": {
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0QVMxWTgwMjQ4SjQ4SEs2RDI0OE5BTgp0aXRsZTogIkFjY2VwdCB0aGUgZmljdGlvbmFsIGxpZ2h0aG91c2Ugc3VydmV5IgpraW5kOiB0YXNrCnN0YXR1czogYmFja2xvZwpjcmVhdGVkOiAyMDMwLTAxLTEyCnVwZGF0ZWQ6IDIwMzAtMDEtMTMKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL211dGF0aW9ucyIKICByZWNvcmRlZF9hdDogIjIwMzAtMDEtMTJUMTA6MDA6MDBaIgpkZXBlbmRzX29uOiBbXQpyZWxhdGVkOiBbXQpmaWN0aW9uYWxfbGFiZWw6ICJsaWdodGhvdXNlLXNhZmZyb24iCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTEzCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgbGlnaHRob3VzZSBzdXJ2ZXkuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZpY3Rpb25hbCBzY29wZSBpcyBzZWxmLWNvbnRhaW5lZCBhbmQgcmVhZHkgZm9yIGxhdGVyIHBsYW5uaW5nLiIKLS0tCgpUaGUgYm9keSBhbmQgZmljdGlvbmFsIGxhYmVsIG11c3Qgc3Vydml2ZSB0aGUgYWNjZXB0IHRyYW5zaXRpb24uCg==",
+      "core": {
         "schema_version": 1,
         "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
         "title": "Accept the fictional lighthouse survey",
@@ -22,7 +25,6 @@
         },
         "depends_on": [],
         "related": [],
-        "fictional_label": "lighthouse-saffron",
         "decisions": [
           {
             "action": "accept",

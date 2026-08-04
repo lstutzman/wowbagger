@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The create request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "/filename",
+          "code": "unknown-member",
+          "message": "Request member filename is not allowed."
+        }
+      ]
+    }
+  }
+}
