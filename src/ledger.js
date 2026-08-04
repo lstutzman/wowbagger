@@ -94,20 +94,30 @@ async function collectMarkdownFiles(root, directory, fileSystem) {
 
   for (const entry of entries.sort((left, right) => compareText(left.name, right.name))) {
     const entryPath = path.join(directory, entry.name);
+    let entryType = entry;
 
-    if (entry.isSymbolicLink()) {
+    if (!entry.isSymbolicLink() && !entry.isDirectory() && !entry.isFile()) {
+      try {
+        entryType = await fileSystem.lstat(entryPath);
+      } catch {
+        errors.push(ledgerReadError(ledgerPath(root, entryPath)));
+        continue;
+      }
+    }
+
+    if (entryType.isSymbolicLink()) {
       errors.push(symlinkError(ledgerPath(root, entryPath)));
       continue;
     }
 
-    if (entry.isDirectory()) {
+    if (entryType.isDirectory()) {
       const nested = await collectMarkdownFiles(root, entryPath, fileSystem);
       files.push(...nested.files);
       errors.push(...nested.errors);
       continue;
     }
 
-    if (entry.isFile() && entry.name.endsWith('.md')) {
+    if (entryType.isFile() && entry.name.endsWith('.md')) {
       files.push(entryPath);
       continue;
     }
