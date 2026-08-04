@@ -5,16 +5,17 @@ import { TextDecoder } from 'node:util';
 import { parseDocument } from 'yaml';
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+const DEFAULT_FILE_SYSTEM = { lstat, open, readdir };
 
-export async function loadLedger(ledgerDirectory) {
+export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYSTEM) {
   const root = path.resolve(ledgerDirectory);
-  const rootStat = await lstat(root);
+  const rootStat = await fileSystem.lstat(root);
 
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
     throw new Error(`Ledger directory is not a real directory: ${ledgerDirectory}`);
   }
 
-  const collected = await collectMarkdownFiles(root, root);
+  const collected = await collectMarkdownFiles(root, root, fileSystem);
   const items = [];
   const errors = [...collected.errors];
 
@@ -23,7 +24,7 @@ export async function loadLedger(ledgerDirectory) {
     let source;
 
     try {
-      const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const handle = await fileSystem.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const fileStat = await handle.stat();
         if (!fileStat.isFile()) {
@@ -61,8 +62,17 @@ export async function loadLedger(ledgerDirectory) {
   return { items, errors };
 }
 
-async function collectMarkdownFiles(root, directory) {
-  const directoryStat = await lstat(directory);
+async function collectMarkdownFiles(root, directory, fileSystem) {
+  let directoryStat;
+  try {
+    directoryStat = await fileSystem.lstat(directory);
+  } catch {
+    return {
+      files: [],
+      errors: [ledgerReadError(ledgerPath(root, directory))],
+    };
+  }
+
   if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
     return {
       files: [],
@@ -70,7 +80,15 @@ async function collectMarkdownFiles(root, directory) {
     };
   }
 
-  const entries = await readdir(directory, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await fileSystem.readdir(directory, { withFileTypes: true });
+  } catch {
+    return {
+      files: [],
+      errors: [ledgerReadError(ledgerPath(root, directory))],
+    };
+  }
   const files = [];
   const errors = [];
 
@@ -83,7 +101,7 @@ async function collectMarkdownFiles(root, directory) {
     }
 
     if (entry.isDirectory()) {
-      const nested = await collectMarkdownFiles(root, entryPath);
+      const nested = await collectMarkdownFiles(root, entryPath, fileSystem);
       files.push(...nested.files);
       errors.push(...nested.errors);
       continue;
@@ -115,7 +133,7 @@ function ledgerReadError(displayPath) {
     path: displayPath,
     field: 'path',
     code: 'ledger-read-error',
-    message: 'Ledger item could not be read.',
+    message: 'Ledger path could not be read.',
   };
 }
 
