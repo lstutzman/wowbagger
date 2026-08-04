@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "command": "capabilities",
+  "contract_version": 1,
+  "result": {
+    "backend": {
+      "name": "local-filesystem",
+      "coordination_scope": "same-working-copy-cooperative-writers"
+    },
+    "operations": {
+      "inspect": {
+        "supported": true
+      },
+      "create": {
+        "supported": true,
+        "atomic_scope": "single-item"
+      },
+      "transition": {
+        "supported": true,
+        "atomic_scope": "single-item"
+      },
+      "work_claim": {
+        "supported": false,
+        "reason": "not-implemented"
+      }
+    },
+    "limits": {
+      "multi_item_atomicity": false,
+      "cross_clone_coordination": false,
+      "cross_worktree_coordination": false,
+      "cross_machine_coordination": false,
+      "noncooperating_writer_protection": false,
+      "automatic_stale_lock_breaking": false
+    }
+  }
+}

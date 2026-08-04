@@ -1,0 +1,10 @@
+{
+  "command": "inspect",
+  "arguments": [
+    "--ledger",
+    "ledger",
+    "--id",
+    "wb_01Q4837BM01W70T30B184GG1R6",
+    "--json"
+  ]
+}

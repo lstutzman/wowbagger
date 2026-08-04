@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "lock-held",
+    "message": "The item is locked by another cooperative Wowbagger writer.",
+    "details": {
+      "id": "wb_01Q4G4Q3G004HMASW9NF6YY093",
+      "lock_path": ".wowbagger-locks/wb_01Q4G4Q3G004HMASW9NF6YY093.lock",
+      "owner": {
+        "lock_version": 1,
+        "item_id": "wb_01Q4G4Q3G004HMASW9NF6YY093",
+        "operation": "transition",
+        "writer_id": "fixture-writer-4f2d",
+        "started_at": "2030-01-16T08:00:00Z"
+      }
+    }
+  }
+}

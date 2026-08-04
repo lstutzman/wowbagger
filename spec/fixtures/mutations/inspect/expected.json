@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "contract_version": 1,
+  "result": {
+    "item": {
+      "id": "wb_01Q4837BM01W70T30B184GG1R6",
+      "path": "wb_01Q4837BM01W70T30B184GG1R6.md",
+      "revision": "sha256:26637941cc2f1394e8d8d3534d095c0f627922d16117c155ea264061b940e4d6",
+      "frontmatter": {
+        "schema_version": 1,
+        "id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "title": "Inspect the fictional telescope map",
+        "kind": "task",
+        "status": "triage",
+        "created": "2030-01-11",
+        "updated": "2030-01-11",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-11T09:00:00Z"
+        },
+        "depends_on": [],
+        "related": [],
+        "fictional_label": "telescope-arc"
+      },
+      "body": "\nThis body is intentionally retained byte-for-byte by a later transition.\n"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q4DEWGW0K6CTNANVQF6CSQEX",
+  "expected_revision": "sha256:a983d33a4973a3ddec05a0fa8cbf866a437bac4ce3c6798d6f8838ff7b5415a8",
+  "to_status": "backlog",
+  "date": "2030-01-15",
+  "decision": {
+    "summary": "Accept the fictional harbor signal review.",
+    "rationale": "The stale writer must re-inspect the revised fictional item first."
+  }
+}

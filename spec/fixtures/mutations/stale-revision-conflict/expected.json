@@ -1,0 +1,15 @@
+{
+  "ok": false,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "revision-conflict",
+    "message": "The item changed after it was inspected.",
+    "details": {
+      "id": "wb_01Q4DEWGW0K6CTNANVQF6CSQEX",
+      "expected_revision": "sha256:a983d33a4973a3ddec05a0fa8cbf866a437bac4ce3c6798d6f8838ff7b5415a8",
+      "actual_revision": "sha256:e3dc7571b01ae886e8b8d5d953d5b5f0f0582ab5ffa8523f67b1a26318c15809"
+    }
+  }
+}

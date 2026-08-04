@@ -1,0 +1,14 @@
+{
+  "item": {
+    "title": "Map a fictional moon route",
+    "kind": "task",
+    "provenance": {
+      "source": "fixture/mutations",
+      "recorded_at": "2030-01-10T12:34:56.789Z"
+    },
+    "depends_on": [],
+    "related": [],
+    "fictional_label": "nebula-7"
+  },
+  "body": "Plot a fictional route from Brindle Station to Lumen Reef.\n"
+}

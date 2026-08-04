@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "command": "transition",
+  "contract_version": 1,
+  "state": "committed",
+  "result": {
+    "item": {
+      "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+      "path": "wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "revision": "sha256:7eb112f684c13add0e6db1d816213cf39be7524fa6aea41c0939d1808d89bb8b",
+      "frontmatter": {
+        "schema_version": 1,
+        "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+        "title": "Accept the fictional lighthouse survey",
+        "kind": "task",
+        "status": "backlog",
+        "created": "2030-01-12",
+        "updated": "2030-01-13",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-12T10:00:00Z"
+        },
+        "depends_on": [],
+        "related": [],
+        "fictional_label": "lighthouse-saffron",
+        "decisions": [
+          {
+            "action": "accept",
+            "date": "2030-01-13",
+            "summary": "Accept the fictional lighthouse survey.",
+            "rationale": "The fictional scope is self-contained and ready for later planning."
+          }
+        ]
+      },
+      "body": "\nThe body and fictional label must survive the accept transition.\n"
+    }
+  }
+}
