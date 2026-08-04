@@ -65,7 +65,7 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
       continue;
     }
 
-    const parsed = parseItem(source);
+    const parsed = parseLedgerItemSource(source);
 
     if (parsed.error) {
       errors.push({ path: displayPath, ...parsed.error });
@@ -77,7 +77,7 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
       file,
       bytes,
       source,
-      body: bodyFromSource(source),
+      body: parsed.body,
       data: parsed.data,
     });
   }
@@ -222,7 +222,7 @@ function ledgerPath(root, file) {
   return relative ? `${path.basename(root)}/${relative}` : path.basename(root);
 }
 
-function parseItem(source) {
+export function parseLedgerItemSource(source) {
   const frontmatter = extractFrontmatter(source);
 
   if (frontmatter === null) {
@@ -277,7 +277,7 @@ function parseItem(source) {
     };
   }
 
-  return { data };
+  return { data, body: bodyFromSource(source) };
 }
 
 function extractFrontmatter(source) {

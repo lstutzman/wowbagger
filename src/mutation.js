@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { link, lstat, mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { link, lstat, mkdir, open, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { loadLedger } from './ledger.js';
+import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
-import { isCalendarDate, validateLedger } from './validate.js';
+import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
 
 const REQUIRED_CORE_FIELDS = [
   'schema_version',
@@ -38,22 +38,32 @@ export async function inspectItem(ledgerDirectory, id) {
     return { item: null };
   }
 
-  return {
-    item: {
-      id,
-      path: item.path.slice(item.path.indexOf('/') + 1),
-      revision: revisionFor(item.bytes),
-      source_encoding: 'base64',
-      source_media_type: 'text/markdown; charset=utf-8',
-      source_base64: item.bytes.toString('base64'),
-      core: coreView(item.data),
-      body: item.body,
-    },
-  };
+  return { item: inspectedItem(id, displayItemPath(item.path), item.bytes, item.data, item.body) };
 }
 
 export function revisionFor(bytes) {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+function inspectedPublishedItem(id, displayPath, bytes) {
+  const parsed = parseLedgerItemSource(bytes.toString('utf8'));
+  if (parsed.error) {
+    throw new Error('Published bytes could not be parsed.');
+  }
+  return inspectedItem(id, displayPath, bytes, parsed.data, parsed.body);
+}
+
+function inspectedItem(id, displayPath, bytes, data, body) {
+  return {
+    id,
+    path: displayPath,
+    revision: revisionFor(bytes),
+    source_encoding: 'base64',
+    source_media_type: 'text/markdown; charset=utf-8',
+    source_base64: bytes.toString('base64'),
+    core: coreView(data),
+    body,
+  };
 }
 
 export function validateCreateRequest(request, parseIssues = []) {
@@ -120,7 +130,6 @@ export function validateCreateRequest(request, parseIssues = []) {
 export async function createItem(ledgerDirectory, request, scenario = testScenario()) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
-  let requiredIds = null;
 
   for (let attempt = 0; attempt < MAX_LOCK_CLOSURE_RETRIES; attempt += 1) {
     const initial = await loadedValidLedger(root);
@@ -131,14 +140,9 @@ export async function createItem(ledgerDirectory, request, scenario = testScenar
     if (scenario === 'expand-lock-closure-through-bounded-retry-limit') {
       return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
     }
-    if (requiredIds && sameIds(requiredIds, nextIds)) {
-      return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
-    }
-    requiredIds = nextIds;
-
     let locks;
     try {
-      locks = await acquireLocks(root, requiredIds, 'create', scenario);
+      locks = await acquireLocks(root, nextIds, 'create', scenario);
     } catch (error) {
       if (error instanceof LockHeldError) {
         return lockHeld(id, error.file, await lockDetails(error.file));
@@ -154,8 +158,7 @@ export async function createItem(ledgerDirectory, request, scenario = testScenar
         return ledgerInvalid(current.validation);
       }
       const stableIds = lockIdsForCreate(request, current.ledger);
-      if (!sameIds(requiredIds, stableIds)) {
-        requiredIds = stableIds;
+      if (!sameIds(nextIds, stableIds)) {
         continue;
       }
 
@@ -183,13 +186,14 @@ export async function createItem(ledgerDirectory, request, scenario = testScenar
       }
 
       const candidate = createData(request, dateFromId(id));
-      const candidateValidation = validateLedger({
-        items: [...current.ledger.items, {
-          path: `${path.basename(root)}/${id}.md`,
-          data: candidate,
-        }],
-        errors: [],
-      });
+      const bytes = Buffer.from(serializeCreate(candidate, request.body), 'utf8');
+      const candidateValidation = validateSerializedCandidate(
+        current.ledger,
+        null,
+        bytes,
+        `${path.basename(root)}/${id}.md`,
+        finalPath,
+      );
       if (!candidateValidation.valid) {
         return mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
           id,
@@ -206,7 +210,6 @@ export async function createItem(ledgerDirectory, request, scenario = testScenar
         });
       }
 
-      const bytes = Buffer.from(serializeCreate(candidate, request.body), 'utf8');
       temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
       try {
         const temporary = await open(temporaryPath, 'wx');
@@ -277,20 +280,27 @@ export async function createItem(ledgerDirectory, request, scenario = testScenar
         });
       }
 
+      try {
+        await syncDirectoryIfSupported(root);
+      } catch {
+        preserveLocks = true;
+        return postCommitRecovery(id, bytes, await artifactsForLocks(locks, root));
+      }
+
       if (scenario === 'final-bytes-verified-directory-sync-and-lock-cleanup-fail') {
         const lock = locks.find((entry) => entry.id === id);
         await writeFixtureRecoveryLock(lock.file, id);
         preserveLocks = true;
-        return mutationError('post-commit-recovery-required', 'The item was committed, but cleanup requires recovery.', 'committed', 6, {
-          id,
-          revision: revisionFor(bytes),
-          recovery_artifacts: [await artifactFor(lock.file, root, 'lock-file')],
-          recovery_artifacts_truncated: false,
-        });
+        return postCommitRecovery(id, bytes, await artifactsForLocks(locks, root));
       }
 
-      const result = await inspectItem(root, id);
-      return mutationSuccess(result.item);
+      const result = inspectedPublishedItem(id, `${id}.md`, published);
+      const failedLocks = await releaseLocks(locks);
+      if (failedLocks.length > 0) {
+        preserveLocks = true;
+        return postCommitRecovery(id, bytes, await artifactsForLocks(failedLocks, root));
+      }
+      return mutationSuccess(result);
     } finally {
       if (temporaryPath) {
         await unlink(temporaryPath).catch(() => {});
@@ -347,7 +357,6 @@ export function validateTransitionRequest(request, parseIssues = []) {
 export async function transitionItem(ledgerDirectory, request, scenario = testScenario()) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
-  let requiredIds = null;
 
   for (let attempt = 0; attempt < MAX_LOCK_CLOSURE_RETRIES; attempt += 1) {
     const initial = await loadedValidLedger(root);
@@ -362,14 +371,9 @@ export async function transitionItem(ledgerDirectory, request, scenario = testSc
     if (scenario === 'expand-lock-closure-through-bounded-retry-limit') {
       return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
     }
-    if (requiredIds && sameIds(requiredIds, nextIds)) {
-      return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
-    }
-    requiredIds = nextIds;
-
     let locks;
     try {
-      locks = await acquireLocks(root, requiredIds, 'transition', scenario);
+      locks = await acquireLocks(root, nextIds, 'transition', scenario);
     } catch (error) {
       if (error instanceof LockHeldError) {
         return lockHeld(id, error.file, await lockDetails(error.file));
@@ -377,6 +381,7 @@ export async function transitionItem(ledgerDirectory, request, scenario = testSc
       return operationFailed(id, 'lock-closure', 'io-error');
     }
 
+    let preserveLocks = false;
     let temporaryPath = null;
     try {
       const current = await loadedValidLedger(root);
@@ -388,8 +393,7 @@ export async function transitionItem(ledgerDirectory, request, scenario = testSc
         return mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id });
       }
       const stableIds = lockIdsForTransition(lockedTarget, current.ledger);
-      if (!sameIds(requiredIds, stableIds)) {
-        requiredIds = stableIds;
+      if (!sameIds(nextIds, stableIds)) {
         continue;
       }
 
@@ -426,12 +430,14 @@ export async function transitionItem(ledgerDirectory, request, scenario = testSc
       }
 
       const successor = transitionData(lockedTarget.data, request, edge, current.ledger);
-      const candidateValidation = validateLedger({
-        items: current.ledger.items.map((item) => item.data.id === id
-          ? { ...item, data: successor }
-          : item),
-        errors: [],
-      });
+      const bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
+      const candidateValidation = validateSerializedCandidate(
+        current.ledger,
+        id,
+        bytes,
+        lockedTarget.path,
+        lockedTarget.file,
+      );
       if (!candidateValidation.valid) {
         return mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
           id,
@@ -439,7 +445,6 @@ export async function transitionItem(ledgerDirectory, request, scenario = testSc
         });
       }
 
-      const bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
       temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
       try {
         const temporary = await open(temporaryPath, 'wx');
@@ -487,13 +492,26 @@ export async function transitionItem(ledgerDirectory, request, scenario = testSc
           recovery_artifacts_truncated: false,
         });
       }
-      const result = await inspectItem(root, id);
-      return mutationSuccess(result.item);
+      try {
+        await syncDirectoryIfSupported(root);
+      } catch {
+        preserveLocks = true;
+        return postCommitRecovery(id, bytes, await artifactsForLocks(locks, root));
+      }
+      const result = inspectedPublishedItem(id, displayItemPath(lockedTarget.path), published);
+      const failedLocks = await releaseLocks(locks);
+      if (failedLocks.length > 0) {
+        preserveLocks = true;
+        return postCommitRecovery(id, bytes, await artifactsForLocks(failedLocks, root));
+      }
+      return mutationSuccess(result);
     } finally {
       if (temporaryPath) {
         await unlink(temporaryPath).catch(() => {});
       }
-      await releaseLocks(locks);
+      if (!preserveLocks) {
+        await releaseLocks(locks);
+      }
     }
   }
 
@@ -652,7 +670,10 @@ function transitionData(data, request, edge, ledger) {
 
 function serializeTransition(source, successor, edge) {
   const bounds = frontmatterBounds(source);
-  const lines = source.slice(bounds.start, bounds.end).split(/\r?\n/);
+  const segment = source.slice(bounds.start, bounds.end);
+  const trailingNewline = segment.endsWith(bounds.newline) ? bounds.newline : '';
+  const frontmatter = trailingNewline ? segment.slice(0, -trailingNewline.length) : segment;
+  const lines = frontmatter.length === 0 ? [] : frontmatter.split(bounds.newline);
   replaceScalar(lines, 'status', successor.status);
   replaceScalar(lines, 'updated', successor.updated);
   removeScalar(lines, 'completed');
@@ -665,26 +686,40 @@ function serializeTransition(source, successor, edge) {
   if (edge.requiresDecision) {
     appendDecision(lines, successor.decisions.at(-1));
   }
-  return `${source.slice(0, bounds.start)}${lines.join('\n')}${source.slice(bounds.end)}`;
+  return `${source.slice(0, bounds.start)}${lines.join(bounds.newline)}${trailingNewline}${source.slice(bounds.end)}`;
 }
 
 function frontmatterBounds(source) {
-  let start = 0;
-  let line = 0;
-  while (start <= source.length) {
-    const newline = source.indexOf('\n', start);
-    const next = newline === -1 ? source.length : newline + 1;
-    const raw = source.slice(start, newline === -1 ? source.length : newline);
-    const content = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
-    if (line > 0 && content === '---') {
-      const frontmatterStart = source.indexOf('\n') + 1;
-      const frontmatterEnd = raw.startsWith('\r') ? start - 2 : start - 1;
-      return { start: frontmatterStart, end: frontmatterEnd };
+  const opening = nextLine(source, 0);
+  if (opening.content !== '---' || opening.next === null) {
+    throw new Error('missing frontmatter delimiter');
+  }
+  const start = opening.next;
+  let cursor = start;
+  while (cursor < source.length) {
+    const line = nextLine(source, cursor);
+    if (line.content === '---') {
+      return { start, end: cursor, newline: opening.newline ?? line.newline ?? '\n' };
     }
-    start = next;
-    line += 1;
+    if (line.next === null) {
+      break;
+    }
+    cursor = line.next;
   }
   throw new Error('missing frontmatter delimiter');
+}
+
+function nextLine(source, start) {
+  const lf = source.indexOf('\n', start);
+  if (lf === -1) {
+    return { content: source.slice(start), newline: null, next: null };
+  }
+  const carriageReturn = lf > start && source[lf - 1] === '\r';
+  return {
+    content: source.slice(start, carriageReturn ? lf - 1 : lf),
+    newline: carriageReturn ? '\r\n' : '\n',
+    next: lf + 1,
+  };
 }
 
 function replaceScalar(lines, key, value) {
@@ -746,6 +781,24 @@ async function loadedValidLedger(root) {
   return { ledger, validation, valid: validation.valid };
 }
 
+function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file) {
+  const source = bytes.toString('utf8');
+  const parsed = parseLedgerItemSource(source);
+  const errors = parsed.error ? [{ path: displayPath, ...parsed.error }] : [];
+  const candidate = parsed.error ? null : {
+    path: displayPath,
+    file,
+    bytes,
+    source,
+    body: parsed.body,
+    data: parsed.data,
+  };
+  const items = replacementId
+    ? ledger.items.map((item) => item.data.id === replacementId ? candidate : item)
+    : [...ledger.items, candidate];
+  return validateLedger({ items: items.filter(Boolean), errors });
+}
+
 function lockIdsForCreate(request, ledger) {
   const existingIds = new Set(ledger.items.map((item) => item.data.id));
   const references = [request.item.parent, ...(request.item.depends_on ?? [])]
@@ -785,7 +838,17 @@ async function acquireLocks(root, ids, operation, scenario) {
 }
 
 async function releaseLocks(locks) {
-  await Promise.all(locks.map(({ file }) => unlink(file).catch(() => {})));
+  const failed = [];
+  await Promise.all(locks.map(async (lock) => {
+    try {
+      await unlink(lock.file);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        failed.push(lock);
+      }
+    }
+  }));
+  return failed;
 }
 
 class LockHeldError extends Error {
@@ -866,7 +929,7 @@ async function lockDetails(file) {
       const code = parsed.issues[0].code;
       return {
         owner: null,
-        owner_diagnostic: code === 'duplicate-key' ? 'duplicate-key' : 'invalid-json',
+        owner_diagnostic: parsed.inputDiagnostic ?? (code === 'duplicate-key' ? 'duplicate-key' : 'invalid-json'),
       };
     }
     const owner = parsed.value;
@@ -904,8 +967,7 @@ function validLockOwner(owner, file) {
     && (owner.operation === 'create' || owner.operation === 'transition')
     && typeof owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(owner.writer_id)
-    && typeof owner.started_at === 'string'
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(owner.started_at);
+    && isRfc3339Utc(owner.started_at);
 }
 
 function lockSource(id, operation) {
@@ -931,7 +993,7 @@ async function writeFixtureRecoveryLock(file, id) {
 
 async function artifactFor(file, root, kind) {
   try {
-    const bytes = await readFile(file);
+    const bytes = await readRegularFile(file);
     return {
       path: path.relative(root, file).split(path.sep).join('/'),
       kind,
@@ -945,6 +1007,36 @@ async function artifactFor(file, root, kind) {
       sha256: null,
       size_bytes: null,
     };
+  }
+}
+
+async function artifactsForLocks(locks, root) {
+  const artifacts = await Promise.all(locks.map(({ file }) => artifactFor(file, root, 'lock-file')));
+  return artifacts.sort((left, right) => compareText(left.path, right.path));
+}
+
+function postCommitRecovery(id, bytes, recoveryArtifacts) {
+  const artifacts = recoveryArtifacts.slice(0, 16);
+  return mutationError('post-commit-recovery-required', 'The item was committed, but cleanup requires recovery.', 'committed', 6, {
+    id,
+    revision: revisionFor(bytes),
+    recovery_artifacts: artifacts,
+    recovery_artifacts_truncated: recoveryArtifacts.length > artifacts.length,
+  });
+}
+
+async function syncDirectoryIfSupported(directory) {
+  let handle;
+  try {
+    handle = await open(directory, constants.O_RDONLY | constants.O_NOFOLLOW);
+    await handle.sync();
+  } catch (error) {
+    if (['EISDIR', 'EINVAL', 'ENOSYS', 'ENOTSUP', 'EOPNOTSUPP', 'EPERM'].includes(error?.code)) {
+      return;
+    }
+    throw error;
+  } finally {
+    await handle?.close();
   }
 }
 
@@ -1065,37 +1157,52 @@ function provenanceExtensions(provenance) {
 
 function yamlLines(key, value, indentation) {
   const prefix = ' '.repeat(indentation);
+  const renderedKey = yamlKey(key);
   if (Array.isArray(value)) {
     if (value.length === 0) {
-      return [`${prefix}${key}: []`];
+      return [`${prefix}${renderedKey}: []`];
     }
-    const lines = [`${prefix}${key}:`];
-    for (const entry of value) {
-      if (isMapping(entry)) {
-        const entries = Object.entries(entry);
-        if (entries.length === 0) {
-          lines.push(`${prefix}  - {}`);
-          continue;
-        }
-        const [[firstKey, firstValue], ...remaining] = entries;
-        lines.push(`${prefix}  - ${firstKey}: ${yamlScalar(firstValue)}`);
-        for (const [childKey, childValue] of remaining) {
-          lines.push(...yamlLines(childKey, childValue, indentation + 4));
-        }
-      } else {
-        lines.push(`${prefix}  - ${yamlScalar(entry)}`);
+    return [`${prefix}${renderedKey}:`, ...yamlSequenceLines(value, indentation + 2)];
+  }
+  if (isMapping(value)) {
+    const entries = Object.entries(value);
+    if (entries.length === 0) {
+      return [`${prefix}${renderedKey}: {}`];
+    }
+    return [`${prefix}${renderedKey}:`, ...yamlMappingLines(entries, indentation + 2)];
+  }
+  return [`${prefix}${renderedKey}: ${yamlScalar(value)}`];
+}
+
+function yamlMappingLines(entries, indentation) {
+  return entries.flatMap(([key, value]) => yamlLines(key, value, indentation));
+}
+
+function yamlSequenceLines(values, indentation) {
+  const prefix = ' '.repeat(indentation);
+  return values.flatMap((value) => {
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return [`${prefix}- []`];
       }
+      return [`${prefix}-`, ...yamlSequenceLines(value, indentation + 2)];
     }
-    return lines;
-  }
-  if (value !== null && typeof value === 'object') {
-    const lines = [`${prefix}${key}:`];
-    for (const [childKey, childValue] of Object.entries(value)) {
-      lines.push(...yamlLines(childKey, childValue, indentation + 2));
+    if (isMapping(value)) {
+      const entries = Object.entries(value);
+      if (entries.length === 0) {
+        return [`${prefix}- {}`];
+      }
+      const [[firstKey, firstValue], ...remaining] = entries;
+      const first = yamlLines(firstKey, firstValue, indentation + 2);
+      first[0] = `${prefix}- ${first[0].slice(indentation + 2)}`;
+      return [...first, ...yamlMappingLines(remaining, indentation + 2)];
     }
-    return lines;
-  }
-  return [`${prefix}${key}: ${yamlScalar(value)}`];
+    return [`${prefix}- ${yamlScalar(value)}`];
+  });
+}
+
+function yamlKey(key) {
+  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(key) ? key : quote(key);
 }
 
 function yamlScalar(value) {

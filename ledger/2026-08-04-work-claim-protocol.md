@@ -9,9 +9,9 @@ updated: 2026-08-04
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
-depends_on:
+depends_on: []
+related:
   - wb_01KZ77NSW876B92APQN8Q8NK6X
-related: []
 parent: wb_01KZ77NSW8PNA4S48NYT26AGMH
 decisions:
   - action: accept
@@ -39,8 +39,8 @@ implementing claim storage. The protocol's acceptance criteria are:
 - claim writes are followed by read-back evidence that confirms the observed
   owner, epoch, and operation outcome.
 
-These are requirements for future implementation, not claims about the current
-read-only runtime. A backend that cannot enforce fencing at its write boundary
+These are requirements for future claim implementation, not claims about the
+current local mutation runtime. A backend that cannot enforce fencing at its write boundary
 must advertise claims as advisory and unfenced, and must not advertise safe
 exclusive dispatch. A work claim does not substitute for ledger mutation
 safety.

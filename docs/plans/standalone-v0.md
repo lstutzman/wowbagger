@@ -1,6 +1,6 @@
 # Wowbagger standalone v0 plan
 
-Status: planned
+Status: in progress
 
 ## Product boundary
 
@@ -42,11 +42,11 @@ Exit criteria:
 
 ## Phase 2: mutations and compare-and-set
 
-Status: contract design complete; runtime implementation planned.
+Status: implemented and verified in the pre-alpha standalone runtime.
 
-ADR 0003, the proposed mutation contract, and synthetic mutation vectors define
-the first backend as local-filesystem, cooperative, and single-item only. They
-do not add executable mutation commands to the current read-only core.
+ADR 0003, the local mutation contract, and synthetic mutation vectors define
+the implemented first backend as local-filesystem, cooperative, and single-item
+only. The runtime exposes those commands directly without an adapter.
 
 Implement capability reporting, item creation, inspect/revision, and lifecycle
 transitions only where a backend can honestly provide them. The local backend

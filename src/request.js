@@ -7,7 +7,7 @@ export function parseJsonRequest(bytes) {
   try {
     source = UTF8.decode(bytes);
   } catch {
-    return invalidJson();
+    return invalidJson('invalid-utf8');
   }
 
   try {
@@ -35,9 +35,10 @@ export class JsonNumber {
   }
 }
 
-function invalidJson() {
+function invalidJson(inputDiagnostic = null) {
   return {
     value: null,
+    inputDiagnostic,
     issues: [{
       path: '',
       code: 'invalid-json',

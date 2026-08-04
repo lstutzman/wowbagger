@@ -7,10 +7,11 @@ plain Markdown and Git. It is intended to give agents durable work memory,
 dependency-aware task selection, and auditable multi-worktree coordination without
 putting a database or hosted service inside your repository.
 
-> **Status: pre-alpha.** The standalone read-only core can validate a Markdown
-> ledger and select its deterministic ready tasks. A proposed local
-> single-item mutation contract and synthetic vectors are documented, but no
-> mutation command exists yet. Claims, adapters, a stable release, and consumer
+> **Status: pre-alpha.** The standalone core validates a Markdown ledger,
+> selects deterministic ready tasks, and implements the documented guarded
+> local `capabilities`, `inspect`, `create`, and `transition` commands. Its
+> mutation scope is deliberately narrow: cooperative writers in one working
+> copy, one item at a time. Claims, adapters, a stable release, and consumer
 > adoption remain separate future work.
 
 ## Why the name?
@@ -36,8 +37,11 @@ Wowbagger makes the repository the durable coordination boundary:
 - YAML metadata for lifecycle, dependencies, and structured provenance.
 - Git history as the audit log and recovery mechanism.
 - Dependency-aware ready queues so an agent can ask what is actionable now.
-- A future path to capability-aware claims and guarded transitions, without
-  treating either as part of the read-only core.
+- Guarded one-item creation and lifecycle transitions with exact-byte
+  revisions, cooperative locks, and explicit refusal when a change needs a
+  multi-item transaction.
+- A future path to capability-aware claims, without treating a short mutation
+  lock as ownership of work.
 - Mechanical validation and derived reports instead of duplicated status data.
 
 ## Harness-neutral by design
@@ -67,7 +71,7 @@ provide agent tools. Wowbagger integrations will document the host capabilities
 they require rather than pretending API compatibility guarantees harness
 compatibility.
 
-## Read-only core
+## Core commands
 
 The current core requires Node.js 20 or later. From a Wowbagger checkout:
 
@@ -75,6 +79,10 @@ The current core requires Node.js 20 or later. From a Wowbagger checkout:
 npm ci
 ./bin/wowbagger.js validate --ledger path/to/ledger --json
 ./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15 --json
+./bin/wowbagger.js capabilities --json
+./bin/wowbagger.js inspect --ledger path/to/ledger --id wb_... --json
+./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js transition --ledger path/to/ledger --input request.json --json
 ```
 
 `validate` writes exactly one JSON result to standard output. A valid ledger
@@ -90,13 +98,22 @@ returns:
 {"as_of":"2030-01-15","valid":true,"ready":["wb_..."]}
 ```
 
-Both commands require `--ledger` and `--json`; `ready` also requires an ISO
-calendar `--as-of` date. Invalid ledgers return the validation JSON and exit
-nonzero. The core reads Markdown only, does not mutate the ledger, and rejects
-invalid UTF-8, symbolic-link entries, unreadable paths, and `.md` special files
-rather than returning a partial view. Real directories ending in `.md` remain
-containers and are traversed. These checks provide deterministic read hygiene;
-they are not a sandbox against a privileged process racing filesystem changes.
+`validate` and `ready` require `--ledger` and `--json`; `ready` also requires
+an ISO calendar `--as-of` date. Invalid ledgers return the validation JSON and
+exit nonzero. The core rejects invalid UTF-8, symbolic-link entries, unreadable
+paths, and `.md` special files rather than returning a partial view. Real
+directories ending in `.md` remain containers and are traversed. These checks
+provide deterministic read hygiene; they are not a sandbox against a privileged
+process racing filesystem changes.
+
+`inspect` returns a lossless raw-byte snapshot and its SHA-256 revision.
+`create` publishes only a caller-supplied canonical ID through atomic
+no-clobber publication. `transition` compares the inspected revision while
+cooperative per-ID locks are held, then changes one lifecycle item or refuses
+the request if dependent cleanup or child disposition would require changing
+another item. See [the mutation contract](docs/mutation-contract.md) for the
+JSON request, response, recovery, and scope details. A lock is never a work
+claim.
 
 The executable is packaged as `wowbagger` for a future installation path. This
 pre-alpha repository intentionally documents direct checkout use only.
@@ -116,7 +133,7 @@ current UTC date in place of `YYYY-MM-DD`:
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the small set of ledger-maintenance
-rules while mutation commands are still under development.
+rules and the limits of the local mutation runtime.
 
 ## Design principles
 
@@ -166,10 +183,11 @@ It is the durable work ledger beneath those systems.
 - Provide read-only validation and deterministic ready selection by creation
   order before mutable coordination. **Implemented in this checkout; not yet a
   stable release.**
-- Define the proposed local-filesystem inspect, create, and single-item
+- Implement the local-filesystem inspect, create, and single-item
   lifecycle-transition contract, including lossless exact-byte inspection,
   caller-known IDs, atomic no-clobber creation or refusal, and explicit
-  multi-item refusal. **Documented only; not yet executable.**
+  multi-item refusal. **Implemented and covered by black-box vectors; still
+  pre-alpha and intentionally local in scope.**
 - Separate optional reusable mechanisms from consumer-specific policy.
 - Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters.
@@ -181,10 +199,10 @@ It is the durable work ledger beneath those systems.
 
 ## Contributing
 
-The project is at the architecture and contract stage. Issues describing
-concrete portability requirements, coordination failures, or harness-integration
-constraints are welcome. Please avoid proposing harness-specific behavior in the
-core when it can live in an adapter.
+The project has a pre-alpha standalone core. Issues describing concrete
+portability requirements, coordination failures, or harness-integration
+constraints are welcome. Please avoid proposing harness-specific behavior in
+the core when it can live in an adapter.
 
 ## License
 

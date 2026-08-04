@@ -1,0 +1,226 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { withLedger } from './support.js';
+
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const cli = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
+const fixtures = new URL('../spec/fixtures/mutations/', import.meta.url);
+const CREATE_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+
+test('two create processes leave one complete item and no temporary or lock files', async () => {
+  await withLedger({}, async (ledger) => {
+    const firstRequest = path.join(path.dirname(ledger), 'first.json');
+    const secondRequest = path.join(path.dirname(ledger), 'second.json');
+    await writeFile(firstRequest, JSON.stringify(createRequest(CREATE_ID, `\n${'a'.repeat(1024 * 1024)}\n`)));
+    await writeFile(secondRequest, JSON.stringify(createRequest(CREATE_ID, `\n${'b'.repeat(1024 * 1024)}\n`)));
+
+    const finalPath = path.join(ledger, `${CREATE_ID}.md`);
+    let finished = false;
+    const commands = Promise.all([
+      runCli('create', '--ledger', ledger, '--input', firstRequest, '--json'),
+      runCli('create', '--ledger', ledger, '--input', secondRequest, '--json'),
+    ]);
+    commands.finally(() => { finished = true; }).catch(() => {});
+
+    const observations = [];
+    while (!finished) {
+      try {
+        observations.push(fingerprint(await readFile(finalPath)));
+      } catch (error) {
+        assert.equal(error.code, 'ENOENT');
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    const results = await commands;
+    const output = results.map(parseOutput);
+    const successes = output.filter((entry) => entry.ok);
+    const conflicts = output.filter((entry) => !entry.ok);
+
+    assert.equal(successes.length, 1);
+    assert.equal(conflicts.length, 1);
+    assert.ok(['id-collision', 'lock-held'].includes(conflicts[0].error.code));
+    assert.ok([0, 4].includes(results[0].status));
+    assert.ok([0, 4].includes(results[1].status));
+
+    const finalBytes = await readFile(finalPath);
+    observations.push(fingerprint(finalBytes));
+    const expected = Buffer.from(successes[0].result.item.source_base64, 'base64');
+    assert.deepEqual(finalBytes, expected);
+    assert.ok(observations.every((entry) => entry.size === finalBytes.length && entry.sha256 === fingerprint(finalBytes).sha256));
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('a stale transition snapshot cannot overwrite the committed successor', async () => {
+  const source = await fixtureText('transition-success/before.md');
+  const request = JSON.parse(await fixtureText('transition-success/request.json'));
+  const id = request.id;
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, JSON.stringify(request));
+
+    const committed = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    const stale = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(committed.status, 0, committed.stderr);
+    assert.equal(stale.status, 4, stale.stderr);
+    assert.equal(parseOutput(stale).error.code, 'revision-conflict');
+    const finalBytes = await readFile(path.join(ledger, `${id}.md`));
+    assert.deepEqual(finalBytes, Buffer.from(parseOutput(committed).result.item.source_base64, 'base64'));
+    assert.match(finalBytes.toString('utf8'), /^status: backlog$/m);
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('a valid existing lock prevents a competing transition without changing the item', async () => {
+  const source = await fixtureText('lock-held/ledger/wb_01Q4G4Q3G004HMASW9NF6YY093.md');
+  const request = JSON.parse(await fixtureText('lock-held/request.json'));
+  const id = request.id;
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const lockDirectory = path.join(ledger, '.wowbagger-locks');
+    const lockPath = path.join(lockDirectory, `${id}.lock`);
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    const lockSource = JSON.stringify({
+      lock_version: 1,
+      item_id: id,
+      operation: 'transition',
+      writer_id: 'process-lock-contention',
+      started_at: '2030-01-16T08:00:00Z',
+    });
+    await mkdir(lockDirectory);
+    await writeFile(lockPath, lockSource);
+    await writeFile(requestPath, JSON.stringify(request));
+
+    const result = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 4, result.stderr);
+    assert.equal(parseOutput(result).error.code, 'lock-held');
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+    assert.equal(await readFile(lockPath, 'utf8'), lockSource);
+  });
+});
+
+test('create reports a directory collision without touching its contents', async () => {
+  await withLedger({}, async (ledger) => {
+    const finalDirectory = path.join(ledger, `${CREATE_ID}.md`);
+    const occupant = path.join(finalDirectory, 'occupant.txt');
+    const requestPath = path.join(path.dirname(ledger), 'create.json');
+    await mkdir(finalDirectory);
+    await writeFile(occupant, 'do not replace me\n');
+    await writeFile(requestPath, JSON.stringify(createRequest(CREATE_ID, '')));
+
+    const result = await runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 4, result.stderr);
+    assert.equal(parseOutput(result).error.code, 'path-collision');
+    assert.equal(await readFile(occupant, 'utf8'), 'do not replace me\n');
+    assert.equal((await readdir(finalDirectory)).length, 1);
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('inspect derives revision, raw source, and body from one file snapshot', async () => {
+  const id = 'wb_01Q4837BM01W70T30B184GG1R6';
+  const source = await fixtureText(`inspect/ledger/${id}.md`);
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const result = await runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const item = parseOutput(result).result.item;
+    const raw = Buffer.from(item.source_base64, 'base64');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(item.revision, `sha256:${createHash('sha256').update(raw).digest('hex')}`);
+    assert.equal(raw.toString('utf8'), source);
+    assert.ok(raw.toString('utf8').endsWith(item.body));
+  });
+});
+
+test('a terminal lifecycle change requiring dependent cleanup remains a no-write refusal', async () => {
+  const targetId = 'wb_01Q4JTHP40ZVEBN63PAGS11ZPW';
+  const dependentId = 'wb_01Q4M9YB0004HMASW9NF6YY093';
+  const target = await fixtureText(`multi-item-required/ledger/${targetId}.md`);
+  const dependent = await fixtureText(`multi-item-required/ledger/${dependentId}.md`);
+  const request = await fixtureText('multi-item-required/request.json');
+
+  await withLedger({ [`${targetId}.md`]: target, [`${dependentId}.md`]: dependent }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, request);
+
+    const result = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 5, result.stderr);
+    assert.equal(parseOutput(result).error.code, 'atomic-scope-required');
+    assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), target);
+    assert.equal(await readFile(path.join(ledger, `${dependentId}.md`), 'utf8'), dependent);
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+function createRequest(id, body) {
+  return {
+    id,
+    item: {
+      title: 'Exercise real-process mutation coordination',
+      kind: 'task',
+      provenance: {
+        source: 'test/mutation-process',
+        recorded_at: '2030-01-10T12:34:56.789Z',
+      },
+      depends_on: [],
+    },
+    body,
+  };
+}
+
+function runCli(...argumentsList) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [cli, ...argumentsList], {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+    child.on('error', reject);
+    child.on('close', (status) => {
+      resolve({
+        status,
+        stdout: Buffer.concat(stdout).toString('utf8'),
+        stderr: Buffer.concat(stderr).toString('utf8'),
+      });
+    });
+  });
+}
+
+function parseOutput(result) {
+  assert.equal(result.stderr, '');
+  return JSON.parse(result.stdout);
+}
+
+async function fixtureText(relativePath) {
+  return readFile(fileURLToPath(new URL(relativePath, fixtures)), 'utf8');
+}
+
+function fingerprint(bytes) {
+  return {
+    size: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  };
+}
+
+async function assertNoOwnArtifacts(ledger) {
+  const entries = await readdir(ledger);
+  assert.deepEqual(entries.filter((entry) => entry.startsWith('.wowbagger-tmp-')), []);
+  if (entries.includes('.wowbagger-locks')) {
+    assert.deepEqual(await readdir(path.join(ledger, '.wowbagger-locks')), []);
+  }
+}

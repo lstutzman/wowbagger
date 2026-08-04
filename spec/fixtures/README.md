@@ -5,13 +5,12 @@ without importing a consumer's source paths, policies, people, products, or
 backlog data.
 
 Each fixture declares its expected result instead of an implementation detail.
-A future core implementation must satisfy the result through its public
-validate and ready interfaces.
+The standalone core satisfies the result through its public command interfaces.
 
 - ready-selection is a valid ledger evaluated at a fixed date.
 - validation-errors is an invalid ledger whose errors demonstrate fail-closed
   validation, stable error reporting, and one repair target per affected item.
-- mutations is a proposed, non-executable mutation-contract vector suite for
+- mutations is an executable black-box mutation-contract vector suite for
   local capabilities, inspection revisions, creation, single-item transition,
   stale writes, locks, and multi-item refusal.
 

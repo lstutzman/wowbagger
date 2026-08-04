@@ -1,6 +1,6 @@
 # ADR 0003: Local mutation and compare-and-set
 
-Status: accepted design; implementation deferred
+Status: accepted; implemented by the pre-alpha local runtime
 
 ## Context
 
@@ -22,19 +22,19 @@ machine, editor, Git client, or process that ignores Wowbagger's lock protocol.
 
 ## Decision
 
-Define a proposed local-filesystem mutation contract with four separate
+Define a local-filesystem mutation contract with four separate
 operations:
 
 | Operation | Purpose | Local backend position |
 |---|---|---|
-| capabilities | Describe the exact backend scope. | Supported when this phase is implemented. |
-| inspect | Read one validated item and issue its revision token. | Supported when this phase is implemented. |
-| create | Publish one new triage item under a caller-generated ID. | Supported when this phase is implemented. |
+| capabilities | Describe the exact backend scope. | Supported. |
+| inspect | Read one validated item and issue its revision token. | Supported. |
+| create | Publish one new triage item under a caller-generated ID. | Supported. |
 | transition | Compare and replace one existing item through an allowed lifecycle edge. | Supported only when the whole change writes that one item. |
 | work claim | Reserve existing work for a worker. | Unsupported and not implemented. |
 
 The machine interface is specified in
-[the proposed mutation contract](../mutation-contract.md). This ADR defines the
+[the local mutation contract](../mutation-contract.md). This ADR defines the
 storage and coordination model behind that interface.
 
 ### Revisions

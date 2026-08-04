@@ -31,9 +31,9 @@ views. They MUST NOT be required to create an item or to determine identity.
 
 | Operation | Purpose | Version 1 position |
 |---|---|---|
-| Create | Add a new durable item with a fresh immutable ID and provenance. | Defined by the schema; runtime implementation is deferred. |
+| Create | Add a new durable item with a fresh immutable ID and provenance. | Implemented by the local mutation runtime. |
 | Work claim | State that a worker intends to perform an existing item. | Deliberately not stored or resolved by schema version 1. |
-| Lifecycle transition | Change a validated status and required relations. | Semantics are specified; runtime transport is deferred. |
+| Lifecycle transition | Change a validated status and required relations. | Implemented for guarded one-item local transitions. |
 
 Creation is not a claim on existing work. A future claim is not proof that a
 lifecycle transition was accepted. A future lifecycle transition does not grant
@@ -48,8 +48,9 @@ an exclusive claim unless its backend explicitly says so.
 | Git-mediated | Shared Git with normal merges and per-file changes | Auditability, conflict detection, and merge review. | Linearizable global claims or conflict-free concurrent edits to the same item. |
 | Coordinated CAS | Explicit pluggable compare-and-set or lease service | Only the documented single-item claim or transition semantics of that backend. | Guarantees beyond backend scope, availability, or lease duration. |
 
-Version 1 has only the read-only core contract. The other rows define future
-capability vocabulary; they do not make a claim backend exist today.
+Version 1 has the read-only core and a deliberately narrow local mutation
+contract. The work-claim row defines future capability vocabulary; it does not
+make a claim backend exist today.
 
 ## Deferred claim storage
 
@@ -71,9 +72,10 @@ reader can interpret.
 
 ## Transition preconditions
 
-Every future mutation backend needs an expected-current-state check, such as an
-opaque revision token, content hash, Git object identity, or equivalent
-comparison. The exact transport is deferred.
+Every additional mutation backend needs an expected-current-state check, such
+as an opaque revision token, content hash, Git object identity, or equivalent
+comparison. The local runtime uses the exact SHA-256 item-byte revision defined
+by the mutation contract.
 
 For a done transition, dependent cleanup is part of the operation. For a killed
 or archived transition, the backend must apply every dependent disposition
@@ -106,8 +108,6 @@ exclusive claims and compare-and-set transitions need a capable backend.
 
 ## Deferred decisions
 
-- The implementation language and distribution format.
-- The concrete mutation transport and revision-token representation.
 - The claim envelope, ownership model, expiry, and renewal behaviour.
 - Whether a future optional backend offers leases, locks, or both.
 - Any consumer's friendly numbering, policy ranking, display order, or branch
