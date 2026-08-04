@@ -40,6 +40,7 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
   for (const file of collected.files) {
     const displayPath = ledgerPath(root, file);
     let source;
+    let bytes;
 
     try {
       const handle = await fileSystem.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -49,7 +50,7 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
           errors.push(ledgerReadError(displayPath));
           continue;
         }
-        const bytes = await handle.readFile();
+        bytes = await handle.readFile();
         try {
           source = UTF8_DECODER.decode(bytes);
         } catch {
@@ -73,11 +74,39 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
 
     items.push({
       path: displayPath,
+      file,
+      bytes,
+      source,
+      body: bodyFromSource(source),
       data: parsed.data,
     });
   }
 
   return { items, errors };
+}
+
+function bodyFromSource(source) {
+  let index = 0;
+  let lineNumber = 0;
+
+  while (index <= source.length) {
+    const lineEnd = source.indexOf('\n', index);
+    const nextIndex = lineEnd === -1 ? source.length : lineEnd + 1;
+    const rawLine = source.slice(index, lineEnd === -1 ? source.length : lineEnd);
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+
+    if (lineNumber > 0 && line === '---') {
+      return source.slice(nextIndex);
+    }
+
+    if (nextIndex === source.length) {
+      return '';
+    }
+    index = nextIndex;
+    lineNumber += 1;
+  }
+
+  return '';
 }
 
 async function collectMarkdownFiles(root, directory, fileSystem) {

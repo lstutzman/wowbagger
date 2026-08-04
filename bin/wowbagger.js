@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { loadLedger } from '../src/ledger.js';
+import { inspectItem } from '../src/mutation.js';
 import { selectReady } from '../src/ready.js';
 import { isCalendarDate, validateLedger } from '../src/validate.js';
 
@@ -11,6 +12,46 @@ async function main(argumentsList) {
       throw new Error('Usage: wowbagger capabilities --json');
     }
     process.stdout.write(`${JSON.stringify(capabilities())}\n`);
+    return;
+  }
+
+  if (command === 'inspect') {
+    const options = parseOptions(command, argumentsList.slice(1));
+    const result = await inspectItem(options.ledger, options.id);
+    if (result.validation) {
+      process.stdout.write(`${JSON.stringify({
+        ok: false,
+        command,
+        contract_version: 1,
+        error: {
+          code: 'ledger-invalid',
+          message: 'The configured ledger is invalid.',
+          details: { validation_errors: result.validation.errors },
+        },
+      })}\n`);
+      process.exitCode = 3;
+      return;
+    }
+    if (!result.item) {
+      process.stdout.write(`${JSON.stringify({
+        ok: false,
+        command,
+        contract_version: 1,
+        error: {
+          code: 'item-not-found',
+          message: 'The requested item was not found.',
+          details: { id: options.id },
+        },
+      })}\n`);
+      process.exitCode = 2;
+      return;
+    }
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      command,
+      contract_version: 1,
+      result: { item: result.item },
+    })}\n`);
     return;
   }
 
@@ -107,6 +148,12 @@ function parseOptions(command, argumentsList) {
       }
       options.asOf = readOptionValue(command, argument, argumentsList, index);
       index += 1;
+    } else if (argument === '--id' && command === 'inspect') {
+      if (options.id) {
+        throw new Error(usage(command));
+      }
+      options.id = readOptionValue(command, argument, argumentsList, index);
+      index += 1;
     } else if (argument === '--json') {
       if (options.json) {
         throw new Error(usage(command));
@@ -118,6 +165,7 @@ function parseOptions(command, argumentsList) {
   }
 
   if (!options.ledger || !options.json
+    || (command === 'inspect' && !options.id)
     || (command === 'ready' && !options.asOf)) {
     throw new Error(usage(command));
   }
@@ -140,6 +188,10 @@ function readOptionValue(command, option, argumentsList, index) {
 function usage(command) {
   if (command === 'validate') {
     return 'Usage: wowbagger validate --ledger <dir> --json';
+  }
+
+  if (command === 'inspect') {
+    return 'Usage: wowbagger inspect --ledger <dir> --id <id> --json';
   }
 
   return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD --json';
