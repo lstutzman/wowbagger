@@ -11,8 +11,8 @@ provenance:
   recorded_at: "2026-08-04T20:33:09Z"
 depends_on:
   - wb_01KZ77NSW8825RKWA4AHJKN2YX
+related:
   - wb_01KZ77NSW876B92APQN8Q8NK6X
-related: []
 parent: wb_01KZ77NSW8PNA4S48NYT26AGMH
 decisions:
   - action: accept
