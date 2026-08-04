@@ -944,7 +944,7 @@ function validateTerminalParent(fact, index, context) {
   }
 }
 
-function isCalendarDate(value) {
+export function isCalendarDate(value) {
   if (typeof value !== 'string') {
     return false;
   }

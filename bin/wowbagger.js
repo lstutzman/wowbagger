@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { loadLedger } from '../src/ledger.js';
 import { selectReady } from '../src/ready.js';
-import { validateLedger } from '../src/validate.js';
+import { isCalendarDate, validateLedger } from '../src/validate.js';
 
 async function main(argumentsList) {
   const command = argumentsList[0];
@@ -37,20 +37,45 @@ function parseOptions(command, argumentsList) {
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--ledger') {
-      options.ledger = argumentsList[++index];
+      if (options.ledger) {
+        throw new Error(usage(command));
+      }
+      options.ledger = readOptionValue(command, argument, argumentsList, index);
+      index += 1;
     } else if (argument === '--as-of' && command === 'ready') {
-      options.asOf = argumentsList[++index];
-    } else if (argument !== '--json') {
+      if (options.asOf) {
+        throw new Error(usage(command));
+      }
+      options.asOf = readOptionValue(command, argument, argumentsList, index);
+      index += 1;
+    } else if (argument === '--json') {
+      if (options.json) {
+        throw new Error(usage(command));
+      }
+      options.json = true;
+    } else {
       throw new Error(`Unknown argument: ${argument}`);
     }
   }
 
-  if (!options.ledger || !argumentsList.includes('--json')
+  if (!options.ledger || !options.json
     || (command === 'ready' && !options.asOf)) {
     throw new Error(usage(command));
   }
 
+  if (command === 'ready' && !isCalendarDate(options.asOf)) {
+    throw new Error('--as-of must be an ISO calendar date.');
+  }
+
   return options;
+}
+
+function readOptionValue(command, option, argumentsList, index) {
+  const value = argumentsList[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(usage(command));
+  }
+  return value;
 }
 
 function usage(command) {
