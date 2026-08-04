@@ -109,6 +109,11 @@ async function collectMarkdownFiles(root, directory, fileSystem) {
 
     if (entry.isFile() && entry.name.endsWith('.md')) {
       files.push(entryPath);
+      continue;
+    }
+
+    if (entry.name.endsWith('.md')) {
+      errors.push(ledgerReadError(ledgerPath(root, entryPath)));
     }
   }
 

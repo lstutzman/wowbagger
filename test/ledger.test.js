@@ -1,9 +1,30 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { lstat, open, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { loadLedger } from '../src/ledger.js';
-import { withLedger } from './support.js';
+import { runCli, withLedger } from './support.js';
+
+test('validate rejects special filesystem entries with markdown names', async () => {
+  await withLedger({}, async (ledger) => {
+    execFileSync('mkfifo', [path.join(ledger, 'special.md')]);
+
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/special.md',
+        field: 'path',
+        code: 'ledger-read-error',
+        message: 'Ledger path could not be read.',
+      }],
+    });
+  });
+});
 
 test('loader accumulates nested traversal failures as ledger errors', async () => {
   await withLedger({
