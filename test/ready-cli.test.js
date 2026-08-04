@@ -28,3 +28,17 @@ test('ready prints the normative selected fixture result', () => {
     ],
   });
 });
+
+test('validate prints the canonical valid-ledger result', () => {
+  const result = spawnSync(
+    process.execPath,
+    [cli, 'validate', '--ledger', ledger, '--json'],
+    { cwd: root, encoding: 'utf8' },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    valid: true,
+    errors: [],
+  });
+});
