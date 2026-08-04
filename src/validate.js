@@ -327,6 +327,7 @@ function inspectDecisions(fact, context) {
 
     const inspected = {
       index,
+      valid: true,
       action: null,
       date: null,
       hasRollup: hasOwn(decision, 'rollup'),
@@ -334,16 +335,20 @@ function inspectDecisions(fact, context) {
     };
 
     if (!hasOwn(decision, 'action')) {
+      inspected.valid = false;
       addError(fact, `${field}.action`, 'missing-decision-field', 'Each decision requires action.', context);
     } else if (typeof decision.action !== 'string' || !DECISION_ACTIONS.has(decision.action)) {
+      inspected.valid = false;
       addError(fact, `${field}.action`, 'invalid-decision-action', 'Decision action is not recognized by schema version 1.', context);
     } else {
       inspected.action = decision.action;
     }
 
     if (!hasOwn(decision, 'date')) {
+      inspected.valid = false;
       addError(fact, `${field}.date`, 'missing-decision-field', 'Each decision requires date.', context);
     } else if (!isCalendarDate(decision.date)) {
+      inspected.valid = false;
       addError(fact, `${field}.date`, 'invalid-date', 'Decision date must be an ISO calendar date.', context);
     } else {
       inspected.date = decision.date;
@@ -351,6 +356,7 @@ function inspectDecisions(fact, context) {
 
     for (const requiredField of ['summary', 'rationale']) {
       if (!hasOwn(decision, requiredField)) {
+        inspected.valid = false;
         addError(
           fact,
           `${field}.${requiredField}`,
@@ -359,6 +365,7 @@ function inspectDecisions(fact, context) {
           context,
         );
       } else if (!isNonEmptyString(decision[requiredField])) {
+        inspected.valid = false;
         addError(
           fact,
           `${field}.${requiredField}`,
@@ -847,7 +854,9 @@ function validateTerminalDecisions(fact, context) {
   }
 
   const matching = fact.decisions.find(
-    (decision) => decision.action === terminal.action && decision.date === fact.terminalDate,
+    (decision) => decision.valid
+      && decision.action === terminal.action
+      && decision.date === fact.terminalDate,
   );
 
   if (!matching) {
