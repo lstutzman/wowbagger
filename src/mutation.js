@@ -211,16 +211,9 @@ export async function createItem(ledgerDirectory, request, scenario = testScenar
       }
 
       temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
-      try {
-        const temporary = await open(temporaryPath, 'wx');
-        try {
-          await temporary.writeFile(bytes);
-          await temporary.sync();
-        } finally {
-          await temporary.close();
-        }
-      } catch {
-        return operationFailed(id, 'prepare-temporary', 'io-error');
+      const temporaryFailure = await prepareTemporary(temporaryPath, bytes, scenario);
+      if (temporaryFailure) {
+        return operationFailed(id, temporaryFailure, 'io-error');
       }
 
       try {
@@ -446,16 +439,9 @@ export async function transitionItem(ledgerDirectory, request, scenario = testSc
       }
 
       temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
-      try {
-        const temporary = await open(temporaryPath, 'wx');
-        try {
-          await temporary.writeFile(bytes);
-          await temporary.sync();
-        } finally {
-          await temporary.close();
-        }
-      } catch {
-        return operationFailed(id, 'prepare-temporary', 'io-error');
+      const temporaryFailure = await prepareTemporary(temporaryPath, bytes, scenario);
+      if (temporaryFailure) {
+        return operationFailed(id, temporaryFailure, 'io-error');
       }
 
       try {
@@ -1237,6 +1223,38 @@ function dateFromId(id) {
 
 function randomSuffix() {
   return createHash('sha256').update(`${process.pid}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 24);
+}
+
+async function prepareTemporary(file, bytes, scenario) {
+  let handle;
+  try {
+    handle = await open(file, 'wx');
+  } catch {
+    return 'prepare-temporary';
+  }
+
+  let failure = null;
+  try {
+    await handle.writeFile(bytes);
+  } catch {
+    failure = 'prepare-temporary';
+  }
+  if (!failure) {
+    try {
+      if (scenario === 'temporary-file-sync-fails') {
+        throw new Error('fixture temporary sync failure');
+      }
+      await handle.sync();
+    } catch {
+      failure = 'sync-temporary';
+    }
+  }
+  try {
+    await handle.close();
+  } catch {
+    failure ??= 'sync-temporary';
+  }
+  return failure;
 }
 
 function compareText(left, right) {

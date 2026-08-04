@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { parseDocument } from 'yaml';
 import { runCli, withLedger } from './support.js';
 
@@ -162,6 +164,45 @@ test('lock diagnostics distinguish invalid UTF-8 from invalid metadata shape', a
       assert.equal(output.error.details.owner_diagnostic, expectedDiagnostic);
     });
   }
+});
+
+test('a temporary-file sync failure is classified before any final item is published', async () => {
+  const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      item: {
+        title: 'Classify temporary sync failure',
+        kind: 'task',
+        provenance: {
+          source: 'test/mutation-hardening',
+          recorded_at: '2030-01-10T12:34:56.789Z',
+        },
+        depends_on: [],
+      },
+      body: '',
+    }));
+
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url)),
+      'create', '--ledger', ledger, '--input', requestPath, '--json',
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        WOWBAGGER_TEST_SCENARIO: 'temporary-file-sync-fails',
+      },
+    });
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 6, result.stderr);
+    assert.equal(output.error.code, 'operation-failed');
+    assert.equal(output.error.details.operation, 'sync-temporary');
+    assert.deepEqual((await readdir(ledger)).filter((entry) => entry.endsWith('.md')), []);
+    assert.deepEqual((await readdir(ledger)).filter((entry) => entry.startsWith('.wowbagger-tmp-')), []);
+  });
 });
 
 function triageSource(id) {

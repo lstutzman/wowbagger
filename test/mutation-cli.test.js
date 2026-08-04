@@ -96,3 +96,25 @@ test('create atomically publishes the canonical caller-identified triage item', 
     );
   });
 });
+
+test('mutation argument validation consumes the value of a repeated option once', () => {
+  const result = runCli(
+    'create',
+    '--ledger',
+    'first-ledger',
+    '--ledger',
+    'second-ledger',
+    '--input',
+    'request.json',
+    '--json',
+  );
+  const output = JSON.parse(result.stdout);
+
+  assert.equal(result.status, 2, result.stderr);
+  assert.equal(output.error.code, 'invalid-request');
+  assert.deepEqual(output.error.details.issues, [{
+    path: '/arguments/3',
+    code: 'repeated-argument',
+    message: 'Argument --ledger must not be repeated.',
+  }]);
+});

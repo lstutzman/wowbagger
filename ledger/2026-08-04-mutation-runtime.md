@@ -22,7 +22,7 @@ decisions:
   - action: complete
     date: 2026-08-04
     summary: "Complete the standalone mutation runtime."
-    rationale: "The local capabilities, inspect, create, and guarded single-item transition commands are implemented; all 33 exact mutation manifests and the 83-test standalone suite pass."
+    rationale: "The local capabilities, inspect, create, and guarded single-item transition commands are implemented; all 33 exact mutation manifests and the complete standalone suite pass."
 ---
 
 Implement only the approved standalone creation and lifecycle-mutation

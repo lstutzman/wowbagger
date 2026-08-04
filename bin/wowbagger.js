@@ -286,6 +286,10 @@ function parseMutationOptions(command, argumentsList) {
     const key = argument === '--ledger' ? 'ledger' : 'input';
     if (hasOwn(options, key)) {
       issues.push(argumentIssue(index + 1, 'repeated-argument', `Argument ${argument} must not be repeated.`));
+      const repeatedValue = argumentsList[index + 1];
+      if (repeatedValue && !repeatedValue.startsWith('--')) {
+        index += 1;
+      }
       continue;
     }
     const value = argumentsList[index + 1];
