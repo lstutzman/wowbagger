@@ -424,15 +424,24 @@ precedence:
 1. If the requested ID exists anywhere in the ledger, return id-collision,
    exit 4, and unchanged. details contain id, the existing item's
    ledger-relative path, and actual_revision.
-2. Otherwise, if the default path is occupied by an item with another ID,
-   return path-collision, exit 4, and unchanged. details contain id, the
-   ledger-relative default path, and occupying_id. The message is exactly
-   "The default item path is occupied by a different item."
+2. Otherwise, lstat the default path without following symbolic links. If any
+   filesystem object occupies it, return path-collision, exit 4, and unchanged.
+   details contain id, the ledger-relative default path, and occupant_kind.
+   occupant_kind is exactly item or directory. For item it also contains
+   occupying_id; for directory occupying_id is absent. The message is exactly
+   "The default item path is occupied by a different item." This stable human
+   message is shared by both kinds; automation distinguishes them through
+   occupant_kind.
 3. Otherwise, continue to candidate validation.
 
 Create never chooses a different ID or path for the caller. Collision checks
 do not infer identity from a filename: an item whose frontmatter has another
-ID occupies a path without claiming the requested ID.
+ID occupies a path without claiming the requested ID. Complete-ledger
+validation precedes these collision checks. A symbolic link, special file, or
+invalid regular .md occupant therefore produces ledger-invalid rather than
+path-collision. A real directory whose name ends in .md and whose contents
+leave the complete ledger valid is valid input under SPEC.md and produces
+path-collision when it occupies the default path.
 
 The default final path is:
 
@@ -716,7 +725,7 @@ operation without universal crash durability or hostile-writer protection.
 | revision-conflict | id, expected_revision, actual_revision |
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
-| path-collision | id, path, occupying_id |
+| path-collision | id, path, occupant_kind; occupying_id iff occupant_kind is item |
 | atomic-scope-required | id, blockers, precondition_issues |
 | capability-unavailable | capability, reason, recovery_artifacts, recovery_artifacts_truncated |
 | operation-failed | id, operation, reason, recovery_artifacts, recovery_artifacts_truncated |

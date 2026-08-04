@@ -25,7 +25,7 @@ decisions:
   - action: complete
     date: 2026-08-04
     summary: "Complete the standalone mutation and compare-and-set contract."
-    rationale: "The proposed contract, ADR, and synthetic compatibility suite now define lossless inspection, caller-known creation, guarded transitions, deterministic refusal and recovery outcomes, and honest local coordination limits; 32 exact manifests and all 35 read-only core tests pass."
+    rationale: "The proposed contract, ADR, and synthetic compatibility suite now define lossless inspection, caller-known creation, guarded transitions, deterministic refusal and recovery outcomes, and honest local coordination limits; 33 exact manifests and all 35 read-only core tests pass."
 ---
 
 Finish reviewing and merge the standalone mutation and compare-and-set contract

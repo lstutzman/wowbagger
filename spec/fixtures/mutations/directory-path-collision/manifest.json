@@ -1,0 +1,37 @@
+{
+  "case": "create-default-directory-path-collision",
+  "argv": ["create", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 4,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {
+          "type": "directory",
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md"
+        },
+        {
+          "type": "file",
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md/occupant.txt",
+          "source_file": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md/occupant.txt",
+          "sha256": "sha256:c7eb1d972c6c0ec96d73ef610827f6fc3bd3ed67fef0d84d6d7e9ac7557ae053"
+        }
+      ],
+      "after": [
+        {
+          "type": "directory",
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md"
+        },
+        {
+          "type": "file",
+          "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md/occupant.txt",
+          "source_file": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md/occupant.txt",
+          "sha256": "sha256:c7eb1d972c6c0ec96d73ef610827f6fc3bd3ed67fef0d84d6d7e9ac7557ae053"
+        }
+      ]
+    }
+  }
+}

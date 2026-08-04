@@ -143,10 +143,11 @@ publication.
 
 Identity and path conflicts are separate. If the requested ID already exists
 at any ledger path, create reports an ID collision. If that ID is absent but
-the default `<requested-id>.md` path contains a valid item with another ID,
-create reports a path collision naming the occupant and leaves its bytes
-unchanged. The identity collision takes precedence because filenames are not
-identities.
+the default `<requested-id>.md` pathname is occupied by another valid item or
+by a real directory, create reports a typed path collision and leaves the
+occupant and any directory contents unchanged. The identity collision takes
+precedence because filenames are not identities. Symlinks, special files, and
+invalid Markdown occupants fail complete-ledger validation earlier.
 
 Publication requires one atomic no-clobber primitive that makes only the
 complete prepared file visible at the final name. A verified same-filesystem

@@ -398,9 +398,10 @@ or child disposition when it lacks multi-item atomicity. It MUST report work
 claims unsupported until a separate claim contract exists.
 
 The proposed command contract distinguishes immutable-ID collision from an
-unrelated item occupying the default creation path. It also defines a stable
-candidate-invalid refusal when the complete proposed ledger fails validation
-after more-specific collision, multi-item, and lifecycle checks. Unexpected
+unrelated item or valid directory occupying the default creation path. It also
+defines a stable candidate-invalid refusal when the complete proposed ledger
+fails validation after more-specific collision, multi-item, and lifecycle
+checks. Unexpected
 mutation failures expose closed operation-phase and reason values rather than
 platform exception text.
 
