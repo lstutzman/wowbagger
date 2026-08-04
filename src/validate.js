@@ -830,6 +830,10 @@ function validateTerminalDecisions(fact, context) {
 }
 
 function validateRollupPlacement(fact, context) {
+  if (fact.kind === 'epic' && fact.status === 'done' && !fact.terminalDate) {
+    return;
+  }
+
   for (const decision of fact.decisions) {
     if (!decision.hasRollup) {
       continue;

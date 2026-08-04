@@ -145,3 +145,41 @@ id: [
     });
   });
 });
+
+test('validate suppresses rollup diagnostics when an epic terminal date is missing', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Incomplete epic transition"
+kind: epic
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: complete
+    date: 2026-01-02
+    summary: "Attempted completion."
+    rationale: "This intentionally omits the terminal date."
+    rollup: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/item.md',
+        field: 'completed',
+        code: 'missing-terminal-date',
+        message: 'Status done requires completed and forbids killed and archived.',
+      }],
+    });
+  });
+});
