@@ -3,7 +3,7 @@ schema_version: 1
 id: wb_01KZ77NSW8825RKWA4AHJKN2YX
 title: "Define and implement the work-claim protocol"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-04
 updated: 2026-08-05
 provenance:
