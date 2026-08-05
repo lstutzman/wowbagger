@@ -1,0 +1,457 @@
+# Fenced work-claim contract
+
+Status: accepted protocol design. The standalone Wowbagger CLI does not
+implement this contract; this branch contains the no-I/O reference model and
+conformance fixtures only.
+
+This document defines version 1 of a future, transport-neutral work-claim and
+claimed-publication API. The words MUST, MUST NOT, SHOULD, and MAY are
+normative. JSON examples show objects before compact serialization; a CLI
+prints exactly one compact JSON object followed by LF.
+
+## 1. Safety boundary
+
+A claim is a durable lease for one work item in one ledger. It is not a Git
+branch, file lock, lifecycle field, assignment, or proof that a later write
+succeeded. Git history can retain evidence, but Git cannot atomically compare a
+claim at a ledger publication boundary.
+
+There are four state classes:
+
+| State | Authority |
+|---|---|
+| ledger bytes and revision | durable ledger store |
+| claim, epoch high-water mark, clock floor | durable coordinator |
+| publication outcome by operation identity | durable coordinator |
+| preflight, retry, and self-fencing cache | disposable process memory |
+
+A backend is safely fenced only if one transactional coordinator serializes
+claim decisions, the monotonic clock floor, every write path that can mutate a
+claimed item, the ledger publication, and its idempotency outcome. A separate
+claim service plus an ordinary file rename is advisory.
+
+## 2. Ledger namespace and identity
+
+Every claim key is the immutable tuple `(ledger_namespace, item_id)`. No state,
+request, fence, read-back, or publication may omit either member.
+
+`ledger_namespace` is a provisioned ASCII identifier matching exactly:
+
+    wbns_[a-f0-9]{32}
+
+It is not inferred from a path, repository URL, clone, worktree, display name,
+or item ID. Provisioning creates a namespace once and binds it to one logical
+ledger. Moving or cloning that same logical ledger retains the binding; making
+an independent logical ledger requires a new namespace. Rebinding a namespace
+to different ledger history is forbidden. A shared endpoint MUST use an
+explicit allowlist or equally strong durable mapping and MUST reject an
+unprovisioned namespace before consulting claim state.
+
+`item_id` retains Wowbagger's canonical `wb_` identity syntax. Equal item IDs
+in different ledger namespaces are unrelated: their claims, epoch counters,
+clock floors, publications, and idempotency outcomes cannot collide.
+
+`owner_id` identifies one worker run and matches
+`[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}`. A fresh collision-resistant value is
+required for every run. It is not a credential.
+
+`epoch` is a canonical unsigned 64-bit decimal string. `"0"` is only the
+unallocated high-water mark. Active epochs match `[1-9][0-9]{0,19}` and are at
+most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
+
+## 3. Capability discovery and write-path closure
+
+`work-claim.capabilities` accepts exactly `{}`. A fenced response is:
+
+```json
+{
+  "ok": true,
+  "namespace": "work-claim",
+  "command": "capabilities",
+  "contract_version": 1,
+  "result": {
+    "backend": {
+      "name": "example-backend",
+      "coordination_scope": "shared-transactional-coordinator",
+      "ledger_binding": {
+        "mode": "explicit-allowlist",
+        "namespaces": ["wbns_11111111111111111111111111111111"]
+      }
+    },
+    "operations": {
+      "work_claim": {
+        "supported": true,
+        "api_version": 1,
+        "mode": "fenced",
+        "claim_protected_publication": true,
+        "fencing_enforced_at": "ledger-publication-commit-boundary",
+        "safe_exclusive_dispatch": true,
+        "write_paths": {
+          "alternate": "none",
+          "claimed_publication_v1": "atomic-fence",
+          "legacy_create_v1": "reject-claimed-id",
+          "legacy_transition_v1": "reject-active-claim"
+        }
+      }
+    }
+  }
+}
+```
+
+`safe_exclusive_dispatch` may be `true` only when all of the following hold:
+
+1. claim state, epoch high-water marks, clock floors, and operation outcomes
+   are durable;
+2. acquire, renew, release, expiry, and takeover obey this contract;
+3. `publish-claimed` fences and publishes atomically;
+4. legacy transition rejects an active claimed item inside the same
+   coordinator transaction;
+5. legacy create rejects an identity with claim history inside that
+   transaction; and
+6. every other mutation entry point is absent or participates in the same
+   atomic fence.
+
+The coordinator scope MUST be `shared-transactional-coordinator`, the ledger
+binding MUST be an explicit non-empty allowlist, and the advertised binding
+must cover the provisioned namespaces. A `local-filesystem` scope or an empty
+allowlist is advisory even when the four write-path values otherwise match.
+
+The backend MUST enumerate every entry point. An unknown, uncoordinated,
+plugin, maintenance, import, alternate, or direct-write path is a bypass. Any
+bypass forces `mode: "advisory"`,
+`claim_protected_publication: false`, `fencing_enforced_at: "none"`, and
+`safe_exclusive_dispatch: false`. An advisory endpoint MUST reject
+`publish-claimed`; a caller must never upgrade an advisory capability locally.
+
+The current filesystem mutation runtime is unchanged and remains
+claim-unsupported.
+
+## 4. Durable claim and authoritative time
+
+The normalized durable record is:
+
+```json
+{
+  "ledger_namespace": "wbns_11111111111111111111111111111111",
+  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+  "last_epoch": "8",
+  "active": {
+    "owner_id": "agent-example-run-1",
+    "epoch": "8",
+    "issued_at": "2030-01-11T09:00:00.000Z",
+    "expires_at": "2030-01-11T09:05:00.000Z"
+  }
+}
+```
+
+`active` is either that exact object or `null`. Its epoch equals `last_epoch`.
+An untouched tuple reads as `last_epoch: "0"` and `active: null`.
+
+Instants use exactly `YYYY-MM-DDTHH:MM:SS.mmmZ`. `lease_duration_ms` is a JSON
+integer from 1 through 86,400,000. A lease is active exactly while
+`effective_now < expires_at`; equality is expired.
+
+The backend chooses `effective_now = max(physical_utc, durable_clock_floor)`
+within the declared namespace scope. Client clocks never authorize a lease.
+For every authoritative lease decision—including successful and rejected
+acquire, renew, release, takeover, publication fence check, and legacy
+active-claim guard—the backend MUST durably persist a clock floor at least as
+large as `effective_now` before returning the decision. On success, the floor,
+claim or ledger change, and operation outcome commit atomically. On rejection,
+the advanced floor and the unchanged claim/ledger result commit atomically.
+
+Restart recovers the floor before deciding anything. A backward wall-clock
+step therefore cannot resurrect earlier effective time. If floor persistence
+fails or its durability is uncertain, the backend returns exit 6 with
+`clock-floor-persistence-failed`, makes no claim or ledger change, and refuses
+to guess. It cannot report a lease success or semantic rejection whose time
+was not persisted.
+
+When `last_epoch` is `18446744073709551615` (the unsigned 64-bit maximum), a
+new acquire or takeover is impossible. After the authoritative decision time
+has been persisted, the backend returns exit 6 `epoch-exhausted` with message
+`The epoch high-water mark is exhausted.` and details containing the claim
+tuple and `last_epoch`. The claim, epoch high-water mark, and ledger remain
+unchanged; epochs MUST NOT wrap.
+
+## 5. Claim requests and CAS rules
+
+All public requests are UTF-8 JSON with one top-level object, no duplicate
+member at any depth, and exactly the listed members. Unknown members, wrong
+types, noncanonical values, and unprovisioned namespaces are exit 2
+`invalid-request`; no authoritative lease decision has then occurred.
+
+### Read
+
+`work-claim.read` accepts exactly:
+
+```json
+{"ledger_namespace":"wbns_11111111111111111111111111111111","item_id":"wb_01Q4837BM01W70T30B184GG1R6"}
+```
+
+If the tuple has never been provisioned, it returns the same successful empty
+state with `last_epoch: "0"` and `active: null`; namespaces remain isolated.
+It returns `result.read_back` with exactly `ledger_namespace`, `item_id`,
+`observed_at`, `last_epoch`, and `active`. A read is evidence, not a future
+reservation. It is the recovery operation after a lost claim response: the
+caller reads the tuple before retrying an acquire, renew, or release.
+
+### Acquire and takeover
+
+`work-claim.acquire` accepts exactly:
+
+```json
+{
+  "ledger_namespace": "wbns_11111111111111111111111111111111",
+  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+  "owner_id": "agent-example-run-1",
+  "lease_duration_ms": 300000,
+  "expected": {"last_epoch":"7","active":null}
+}
+```
+
+`expected` is a CAS witness over the complete `last_epoch` and `active` object.
+After persisting the decision time, precedence is:
+
+1. unequal witness: exit 4 `claim-conflict`;
+2. equal witness with unexpired active claim: exit 4 `claim-held`;
+3. exhausted high-water mark: exit 6 `epoch-exhausted`; or
+4. allocate exactly `last_epoch + 1`, replace `active`, atomically commit, and
+   return exit 0 with `claim` and `read_back`.
+
+Acquiring an expired record is takeover and always advances the epoch.
+
+### Renew
+
+`work-claim.renew` accepts exactly:
+
+```json
+{
+  "ledger_namespace": "wbns_11111111111111111111111111111111",
+  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+  "owner_id": "agent-example-run-1",
+  "epoch": "8",
+  "expected_expires_at": "2030-01-11T09:05:00.000Z",
+  "lease_duration_ms": 300000
+}
+```
+
+Owner, epoch, and expected expiry are one CAS tuple. Mismatch is exit 4
+`claim-conflict`; an exactly matching but expired tuple is exit 4
+`claim-expired`. Success retains `issued_at` and epoch, sets expiry from the
+persisted decision time, and returns `claim` plus `read_back`.
+
+### Release
+
+`work-claim.release` accepts the renew object without `lease_duration_ms`.
+It uses the same precedence. Success sets `active` to `null`, retains
+`last_epoch`, and returns `released_claim` plus `read_back`. A later acquire
+must allocate a greater epoch, preventing ABA even across restart.
+
+Success envelopes for these three commands have exactly `ok`, `namespace`,
+`command`, `contract_version`, `state: "committed"`, and `result`. Semantic
+failures replace `result` with `error`, use `state: "unchanged"`, and include
+the exact normalized read-back in `error.details`.
+
+## 6. Claimed publication API
+
+The public operation is `ledger-publication.publish-claimed` version 1. It
+accepts exactly:
+
+```json
+{
+  "operation_id": "pub_agent-example-run-1_0001",
+  "ledger_namespace": "wbns_11111111111111111111111111111111",
+  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+  "expected_revision": "sha256:9160d4be34c8695bd172a76c7c7966587ea5a4d991ad22c87b2b91af54aa9ebb",
+  "candidate_source_base64": "YWZ0ZXIK",
+  "candidate_sha256": "sha256:7b9a72466d3960eb2aacccfc848939453490db0678bd4725def3f789b891c919",
+  "claim_fence": {
+    "ledger_namespace": "wbns_11111111111111111111111111111111",
+    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+    "owner_id": "agent-example-run-1",
+    "epoch": "8"
+  }
+}
+```
+
+`operation_id` matches `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}` and identifies the
+entire immutable request. The backend computes `operation_digest` as
+`sha256:` plus the SHA-256 of canonical UTF-8 JSON for the complete request
+(object keys sorted lexicographically, no insignificant whitespace, and no
+duplicate members). It stores that digest with the durable terminal outcome
+and compares it before any revision, clock, fence, or candidate-ledger
+decision. `expected_revision` and `candidate_sha256` are
+lowercase `sha256:` plus 64 hexadecimal digits. `candidate_source_base64` is
+canonical padded RFC 4648 base64 without whitespace and decodes to at most
+8,388,608 bytes. Its SHA-256 MUST equal `candidate_sha256`. The candidate is
+the complete replacement ledger source, not a patch.
+
+Every public commit attempt, including a retry after response loss, MUST carry
+the complete request. An operation ID alone is not a retry request and returns
+exit 2 `invalid-request` with message `The publish-claimed retry must include
+its complete request.`
+
+Validation and decision precedence is normative:
+
+1. strict JSON and exact schema;
+2. canonical identifiers, sizes, base64, and candidate digest;
+3. provisioned namespace and ledger binding;
+4. durable `operation_id` lookup: the same `operation_digest` returns its
+   stored terminal envelope; a different digest is exit 4
+   `idempotency-conflict`;
+5. ordinary candidate-ledger validation;
+6. begin the coordinator transaction and persist authoritative decision time;
+7. require fence namespace equal request namespace, then fence item equal
+   request item, then an active claim, then matching owner, then matching epoch,
+   then an unexpired claim;
+8. require the durable ledger revision equal `expected_revision`; and
+9. atomically publish the exact candidate bytes and store the success envelope.
+
+The first failure wins. Publication errors use these exact codes and messages:
+
+Candidate validation MUST parse the complete replacement bytes as a schema
+version 1 ledger item and require its canonical `id` to equal the request's
+`item_id`. Arbitrary text, a different item, or an invalid schema is exit 3
+`ledger-invalid` before a preflight is retained or any publication mutation.
+
+| Step | Exit and code | Message |
+|---:|---|---|
+| 1 | 2 `invalid-request` | `The request is not unique-key UTF-8 JSON.` |
+| 2 | 2 `invalid-request` | `The request does not match publish-claimed version 1.` |
+| 2, base64 | 2 `invalid-request` | `The candidate source is not canonical base64.` |
+| 2, digest | 2 `candidate-digest-mismatch` | `The candidate digest does not match the candidate source.` |
+| 3 | 2 `ledger-namespace-unbound` | `The ledger namespace is not provisioned for this endpoint.` |
+| 4 | 4 `idempotency-conflict` | `The operation identity is already bound to a different request.` |
+| 5 | 3 `ledger-invalid` | `The candidate ledger is invalid.` |
+| 6 | 6 `clock-floor-persistence-failed` | `The authoritative clock floor could not be persisted.` |
+| 6 | 6 `publication-outcome-unknown` | `The publication outcome could not be determined.` |
+| 7 | 4 `claim-fence-rejected` | `The supplied claim fence is not the active owner generation.` |
+| 8 | 4 `ledger-revision-conflict` | `The durable ledger revision no longer matches this publication.` |
+
+An advisory capability has no atomic publication boundary. It MUST reject
+`publish-claimed` before preflight or commit with exit 2
+`capability-unavailable`, message `Claim-protected publication is unavailable
+on an advisory backend.`, and `details.reason: "advisory-capability"`.
+
+Steps 1 through 3 use `state: "unchanged"` and deterministic `details` naming
+the first invalid JSON pointer or namespace. Step 5 details are the ordered
+ledger validation issues. Steps 6 through 8 include `ledger_namespace` and
+`item_id`; fence details additionally use the fields and reason defined below,
+and revision details contain `expected_revision` then `actual_revision`.
+
+Steps 6 through 9 are one serialized commit boundary. No takeover can occur
+between the fence decision and publication. A preflight read or candidate
+validation never authorizes a write. A worker paused after preflight at epoch N
+is rejected at commit after epoch N+1 takes over.
+
+Fence rejection uses exit 4 `claim-fence-rejected`, message `The supplied
+claim fence is not the active owner generation.`, and one of these ordered
+`details.reason` values: `ledger-namespace-mismatch`, `item-id-mismatch`,
+`no-active-claim`, `owner-mismatch`, `epoch-mismatch`, or `claim-expired`.
+Wrong owner with the correct epoch and correct owner with the wrong epoch are
+both failures. Wrong ledger and wrong item never fall through to another
+record. Revision mismatch is exit 4 `ledger-revision-conflict`.
+
+A success envelope contains `operation_id` at top level and result fields
+`ledger_namespace`, `item_id`, `committed_revision`, the exact `claim_fence`,
+and `claim_read_back`. Publication does not renew or release the claim.
+
+`ledger-publication.read` accepts exactly
+`{"operation_id":"...","ledger_namespace":"...","item_id":"..."}`
+and returns the durable operation identity, `operation_digest`, and terminal
+`outcome`. A missing operation returns exit 2 `operation-not-found` with
+message `The publication operation outcome was not found.` and unchanged
+state. If a commit response is lost, the caller MUST read this operation
+outcome before retrying; an identical request then returns the stored envelope
+without a second ledger write.
+
+## 7. Legacy and alternate writes
+
+For a fenced capability, legacy transition MUST check the active claim inside
+the coordinator transaction and return exit 4
+`active-claim-write-refused` before changing an active claimed item. Legacy
+create MUST reject any item identity whose tuple has claim history with exit 4
+`claimed-item-write-refused`; this prevents recreation from bypassing an epoch
+high-water mark. Both checks persist authoritative decision time before their
+response.
+
+An implementation may instead route a legacy write through
+`publish-claimed`, but it cannot silently omit a fence. Administrative repair,
+bulk import, plugins, direct database writes, and filesystem writers count as
+alternate mutation paths. Unless absent, transactionally fenced, or refused
+for claimed tuples, they make the capability advisory.
+
+## 8. Errors, exits, and recovery
+
+Error envelopes contain exactly `ok: false`, namespace, command,
+`contract_version: 1`, state, and `error` with `code`, `message`, and `details`.
+Publication envelopes also contain `operation_id` once schema validation has
+accepted it.
+
+| Exit | Meaning | Required state |
+|---:|---|---|
+| 0 | committed success | `committed` |
+| 2 | invalid syntax, schema, canonical value, digest, binding, capability, missing operation, or missing fence | `unchanged` |
+| 3 | candidate ledger invalid | `unchanged` |
+| 4 | CAS, held, expired, fence, revision, idempotency, or legacy refusal | `unchanged` |
+| 5 | authentication or authorization refusal | `unchanged` |
+| 6 | durable floor/result unavailable or epoch exhausted | `unchanged` or `unknown` as the code defines |
+
+Stable messages used by the reference vectors are part of version 1. A backend
+must not substitute free-form prose for the specified codes and details.
+
+Claim-operation semantic messages are likewise exact:
+
+| Code | Message |
+|---|---|
+| `claim-conflict` (acquire) | `The observed claim state no longer matches this request.` |
+| `claim-conflict` (renew/release) | `The active claim tuple no longer matches this request.` |
+| `claim-held` | `The item has an unexpired active claim.` |
+| `claim-expired` | `The matching claim has expired.` |
+| `clock-floor-persistence-failed` | `The authoritative clock floor could not be persisted.` |
+| `active-claim-write-refused` | `Legacy transition cannot write an item with an active claim.` |
+| `claimed-item-write-refused` | `Legacy create cannot write an item identity with claim history.` |
+| `epoch-exhausted` | `The epoch high-water mark is exhausted.` |
+| `capability-unavailable` | `Claim-protected publication is unavailable on an advisory backend.` |
+| `operation-not-found` | `The publication operation outcome was not found.` |
+| `idempotency-conflict` | `The operation identity is already bound to a different request.` |
+| `publication-outcome-unknown` | `The publication outcome could not be determined.` |
+
+The publication outcome and ledger change are one atomic record. If the commit
+succeeds but the response is lost, retrying the identical `operation_id` and
+request returns the stored success without writing twice. Reusing the identity
+with different bytes or fence fails. If failure occurs before the atomic
+commit, ledger and outcome remain unchanged. If an implementation cannot
+establish which side of its commit boundary occurred, it returns exit 6
+`publication-outcome-unknown`; the caller reads the outcome by operation ID
+before attempting anything else.
+
+## 9. Reference vectors and backend conformance
+
+[`spec/fixtures/work-claims`](../spec/fixtures/work-claims/README.md) contains
+version 2 normative reference-model vectors. Each manifest declares explicit
+durable and process-local initial state, exact source bytes and SHA-256 digests,
+the clock authority and floor, ordered CAS/barrier/fault/restart actions, every
+exact envelope, and the exact final state.
+
+The no-I/O state-machine runner executes those committed manifests in tests.
+The fixture loader separately requires every manifest and source to be a real
+regular file beneath the fixture root, using `lstat` and no-follow open; it
+rejects traversal, symlinks, directories, and special files.
+
+A passing reference-model vector proves that the normative model and committed
+expected transcript agree. Independent hand-authored goldens and invariant /
+tamper tests check critical safety properties without using the model's
+expected transcript as an oracle. It does **not** prove that a future storage backend
+is conformant. Backend conformance requires running the same public requests,
+barriers, restarts, and fault schedule against that backend and comparing its
+envelopes, durable read-back, and exact ledger bytes to the manifest.
+
+## 10. Current compatibility
+
+This design adds no members to schema version 1 Markdown items and changes no
+current create or transition request. Existing parsers continue to reject
+unknown claim members. The current local capability remains unsupported, and
+callers must treat it as unsafe for exclusive dispatch until an implementation
+passes backend conformance.

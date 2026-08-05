@@ -21,7 +21,16 @@ The contract keeps four concerns separate:
 - transition changes one existing item through a guarded lifecycle edge.
 
 Work claiming is unsupported. A write lock protects a short mutation attempt;
-it is not a claim, assignment, lease, or reservation.
+it is not a claim, assignment, lease, or reservation. The separate [fenced
+work-claim contract](work-claim-contract.md) defines a future backend protocol;
+it does not add a member or guarantee to these version 1 requests.
+
+If a future backend advertises safely fenced claims while retaining these
+legacy entry points, it must run them through the same coordinator: transition
+refuses an active claimed `(ledger_namespace, item_id)` and create refuses an
+identity with claim history. Until then, the local runtime's unsupported
+capability is authoritative; callers cannot combine this API with an external
+claim hint and infer fencing.
 
 The first backend coordinates only cooperative Wowbagger writers using the same
 ledger directory in one working copy. It does not coordinate clones, worktrees,

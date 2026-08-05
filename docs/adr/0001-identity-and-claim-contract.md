@@ -54,21 +54,20 @@ make a claim backend exist today.
 
 ## Deferred claim storage
 
-Claim metadata is intentionally absent from schema version 1. Therefore version
-1 ready selection does not resolve, expire, or exclude claims.
+Claim metadata remains intentionally absent from schema version 1. Therefore
+version 1 ready selection does not resolve, expire, or exclude claims.
 
-Before a mutation release adds claims, a follow-on ADR and schema version MUST
-define all of the following together:
+[ADR 0004](0004-fenced-work-claim-protocol.md) and the [fenced work-claim
+contract](../work-claim-contract.md) now define a separate backend namespace
+for owner identity, epochs, leases, read-back, and fail-closed publication
+fencing. They do not define a schema version 1 frontmatter field or make a
+claim backend exist today.
 
-- a common persisted claim envelope, including backend identity, holder, issued
-  instant, expiry or lease semantics, and an opaque comparison token;
-- how a backend resolves that envelope and reports unsupported or stale claims;
-- the precise fail-closed behaviour when claim resolution is unavailable; and
-- whether a recognised unexpired claim changes ready output or only reports
-  coordination state.
-
-Deferring the envelope is safer than publishing an optional field no portable
-reader can interpret.
+Before a mutation release implements claims, it MUST implement that separate
+contract and introduce a new claimed-mutation request or command version. It
+MUST NOT add an optional claim field that an existing backend could ignore. The
+question whether a recognised unexpired claim changes ready output or only
+reports coordination state remains deferred.
 
 ## Transition preconditions
 
@@ -108,7 +107,9 @@ exclusive claims and compare-and-set transitions need a capable backend.
 
 ## Deferred decisions
 
-- The claim envelope, ownership model, expiry, and renewal behaviour.
-- Whether a future optional backend offers leases, locks, or both.
+- Whether a recognised claim affects future ready output or only coordination
+  reporting.
+- Any backend-specific authentication, authorization, durability, and
+  coordination scope beyond its advertised capabilities.
 - Any consumer's friendly numbering, policy ranking, display order, or branch
   policy.

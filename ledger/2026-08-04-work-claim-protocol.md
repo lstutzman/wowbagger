@@ -3,9 +3,10 @@ schema_version: 1
 id: wb_01KZ77NSW8825RKWA4AHJKN2YX
 title: "Define and implement the work-claim protocol"
 kind: task
-status: backlog
+status: done
 created: 2026-08-04
 updated: 2026-08-05
+completed: 2026-08-05
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-04
     summary: "A separate work-claim protocol is accepted for follow-on design and implementation."
     rationale: "The standalone v0 plan explicitly defers claims until mutation support and a dedicated claim contract exist."
+  - action: complete
+    date: 2026-08-05
+    summary: "The fenced work-claim protocol contract and executable reference model are complete."
+    rationale: "The documented v1 envelopes, fail-closed fencing semantics, durable clock and outcome recovery, independent goldens, and conformance tests are implemented and verified."
 ---
 
 Define the portable claim envelope and fail-closed resolution behaviour before
