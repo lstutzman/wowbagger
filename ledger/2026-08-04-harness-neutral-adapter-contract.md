@@ -3,9 +3,9 @@ schema_version: 1
 id: wb_01KZ77NSW8CG8NMNZ726CFKWQE
 title: "Define the harness-neutral adapter contract"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-04
-updated: 2026-08-04
+updated: 2026-08-05
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
