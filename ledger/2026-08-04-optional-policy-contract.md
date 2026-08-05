@@ -5,13 +5,13 @@ title: "Define the optional policy-input contract"
 kind: task
 status: backlog
 created: 2026-08-04
-updated: 2026-08-04
+updated: 2026-08-05
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
-depends_on:
+depends_on: []
+related:
   - wb_01KZ77NSW876B92APQN8Q8NK6X
-related: []
 parent: wb_01KZ77NSW8PNA4S48NYT26AGMH
 decisions:
   - action: accept

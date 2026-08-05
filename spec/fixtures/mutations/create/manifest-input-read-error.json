@@ -1,0 +1,15 @@
+{
+  "case": "create-input-read-error",
+  "argv": ["create", "--ledger", "ledger", "--input", "missing-request.json", "--json"],
+  "input": {"transport": "file", "path": "missing-request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected-input-read-error.json",
+      "trailing_lf": true
+    },
+    "stderr": {"exact": ""},
+    "files": {"before": [], "after": []}
+  }
+}

@@ -1,15 +1,15 @@
-# Proposed mutation contract
+# Local mutation contract
 
-Status: proposed for the next standalone phase; not implemented by the current
-read-only executable.
+Status: implemented by the pre-alpha standalone local-filesystem runtime.
 
-This document defines the machine contract a future local-filesystem mutation
-backend must implement. It supplements [SPEC.md](../SPEC.md) and
+This document defines the machine contract implemented by the local-filesystem
+mutation backend. It supplements [SPEC.md](../SPEC.md) and
 [ADR 0003](adr/0003-local-mutation-and-cas.md); it does not relax schema version
 1 lifecycle invariants.
 
-The current executable supports only validate and ready. The commands below are
-contract targets, not capabilities a caller may assume exist today.
+The executable supports `validate`, `ready`, and the commands below. Clients
+must still call `capabilities` and honor its advertised limits before assuming a
+backend can provide a particular write guarantee.
 
 ## 1. Scope
 
@@ -33,7 +33,7 @@ transport state and are not persisted in item frontmatter.
 
 ## 2. Commands and transport
 
-The proposed commands are:
+The local commands are:
 
 ~~~text
 wowbagger capabilities --json
@@ -186,7 +186,7 @@ semantics. Controlled core names forbidden by create are invalid-value issues.
 
 ## 4. Capabilities
 
-The future local backend returns:
+The local backend returns:
 
 ~~~json
 {
@@ -406,6 +406,11 @@ Create accepts exactly:
 | item.snoozed_until | No | Valid ISO calendar date. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
+
+If a file named by `--input` cannot be read before a request ID is known,
+create or transition returns `invalid-request` with one `invalid-value` issue at
+`/input`, the stable message `Request input could not be read.`, and mutation
+state `unchanged`.
 
 The caller generates id with the timestamp for the intended creation instant
 and at least 80 bits of collision-resistant entropy. Create validates its
@@ -805,7 +810,7 @@ outcomes and must not retry blindly.
 
 The synthetic vectors under
 [spec/fixtures/mutations](../spec/fixtures/mutations/README.md) are the
-compatibility target for this proposed contract. Each case has a manifest with
+executable compatibility target for this contract. Each case has a manifest with
 arguments, input transport, expected exit, exact stdout/stderr expectations,
 and before/after file digests.
 
@@ -817,5 +822,5 @@ edges, all three multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
 unchanged/committed/unknown states.
 
-The vectors are design-only in this phase. They do not assert that the current
-read-only executable implements mutation commands.
+The runtime executes every vector as a black-box CLI test, including exact
+response bytes and the complete before/after ledger snapshot.

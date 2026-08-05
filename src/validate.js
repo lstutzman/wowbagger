@@ -1015,7 +1015,7 @@ export function isCalendarDate(value) {
   return day <= monthLengths[month - 1];
 }
 
-function isRfc3339Utc(value) {
+export function isRfc3339Utc(value) {
   if (typeof value !== 'string') {
     return false;
   }

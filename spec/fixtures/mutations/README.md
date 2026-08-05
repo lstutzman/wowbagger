@@ -1,9 +1,9 @@
-# Proposed mutation compatibility vectors
+# Mutation compatibility vectors
 
-These fictional vectors are normative design fixtures for
-[the proposed mutation contract](../../../docs/mutation-contract.md). They are
-not executable tests and do not claim that the current read-only CLI implements
-mutation.
+These fictional vectors are normative black-box fixtures for
+[the local mutation contract](../../../docs/mutation-contract.md). The runtime
+executes every manifest and verifies its exact CLI output and complete
+before/after filesystem snapshot.
 
 ## Manifest contract
 
