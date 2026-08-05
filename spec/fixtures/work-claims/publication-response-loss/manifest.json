@@ -1,0 +1,431 @@
+{
+  "case": "publication-response-loss",
+  "fixture_version": 2,
+  "status": "normative-reference-model",
+  "description": "The atomic ledger write and idempotency outcome survive response loss and restart, so retry returns the committed envelope.",
+  "coverage": [
+    "fault",
+    "idempotency",
+    "operation-read",
+    "publication-recovery",
+    "response-loss",
+    "restart"
+  ],
+  "clock": {
+    "authority": "backend-effective-utc",
+    "client_timestamps_trusted": false,
+    "durable_floor_scope": "ledger-namespace"
+  },
+  "source_files": [
+    {
+      "path": "ledger/before.md",
+      "sha256": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBpbi1wcm9ncmVzcwpjcmVhdGVkOiAyMDMwLTAxLTExCnVwZGF0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYmVmb3JlIGEgY2xhaW0tcHJvdGVjdGVkIHB1YmxpY2F0aW9uLgo="
+    },
+    {
+      "path": "ledger/after.md",
+      "sha256": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg=="
+    }
+  ],
+  "initial": {
+    "backend": {
+      "name": "reference-backend",
+      "coordination_scope": "shared-transactional-coordinator",
+      "durability": "durable-coordinator",
+      "ledger_binding": {
+        "mode": "explicit-allowlist",
+        "namespaces": [
+          "wbns_11111111111111111111111111111111",
+          "wbns_22222222222222222222222222222222"
+        ]
+      },
+      "write_paths": {
+        "alternate": "none",
+        "claimed_publication_v1": "atomic-fence",
+        "legacy_create_v1": "reject-claimed-id",
+        "legacy_transition_v1": "reject-active-claim"
+      }
+    },
+    "faults": {},
+    "durable": {
+      "clock_floors": [
+        {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "observed_at": "2030-01-11T09:00:00.000Z"
+        }
+      ],
+      "claims": [
+        {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "last_epoch": "11",
+          "active": {
+            "owner_id": "agent-a-run-1",
+            "epoch": "11",
+            "issued_at": "2030-01-11T09:00:00.000Z",
+            "expires_at": "2030-01-11T09:05:00.000Z"
+          }
+        }
+      ],
+      "ledgers": [
+        {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+          "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBpbi1wcm9ncmVzcwpjcmVhdGVkOiAyMDMwLTAxLTExCnVwZGF0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYmVmb3JlIGEgY2xhaW0tcHJvdGVjdGVkIHB1YmxpY2F0aW9uLgo="
+        }
+      ],
+      "publication_outcomes": []
+    },
+    "process": {
+      "preflights": []
+    }
+  },
+  "actions": [
+    {
+      "operation": "ledger-publication.preflight",
+      "request": {
+        "operation_id": "pub_response_lost",
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "expected_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "candidate_source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+        "candidate_sha256": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "claim_fence": {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "owner_id": "agent-a-run-1",
+          "epoch": "11"
+        }
+      }
+    },
+    {
+      "operation": "control.inject-fault",
+      "target": "publication-response-loss"
+    },
+    {
+      "operation": "ledger-publication.commit",
+      "physical_now": "2030-01-11T09:00:01.000Z",
+      "operation_id": "pub_response_lost",
+      "request": {
+        "operation_id": "pub_response_lost",
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "expected_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "candidate_source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+        "candidate_sha256": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "claim_fence": {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "owner_id": "agent-a-run-1",
+          "epoch": "11"
+        }
+      }
+    },
+    {
+      "operation": "ledger-publication.read",
+      "request": {
+        "operation_id": "pub_response_lost",
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6"
+      }
+    },
+    {
+      "operation": "control.restart"
+    },
+    {
+      "operation": "ledger-publication.read",
+      "request": {
+        "operation_id": "pub_response_lost",
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6"
+      }
+    },
+    {
+      "operation": "ledger-publication.commit",
+      "physical_now": "2030-01-11T08:00:00.000Z",
+      "operation_id": "pub_response_lost",
+      "request": {
+        "operation_id": "pub_response_lost",
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "expected_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "candidate_source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+        "candidate_sha256": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "claim_fence": {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "owner_id": "agent-a-run-1",
+          "epoch": "11"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "transcript": [
+      {
+        "event": "preflight-complete",
+        "operation_id": "pub_response_lost"
+      },
+      {
+        "event": "fault-injected",
+        "target": "publication-response-loss"
+      },
+      {
+        "event": "response-lost",
+        "operation_id": "pub_response_lost"
+      },
+      {
+        "exit": 0,
+        "stdout": {
+          "ok": true,
+          "namespace": "ledger-publication",
+          "command": "read",
+          "contract_version": 1,
+          "state": "committed",
+          "operation_id": "pub_response_lost",
+          "result": {
+            "operation_id": "pub_response_lost",
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "operation_digest": "sha256:e0d174f5d07159ad6a588dcbcfd93dc87c7a4d7aecf47ca6930c0c6d0e3b72ab",
+            "outcome": {
+              "exit": 0,
+              "stdout": {
+                "ok": true,
+                "namespace": "ledger-publication",
+                "command": "publish-claimed",
+                "contract_version": 1,
+                "state": "committed",
+                "operation_id": "pub_response_lost",
+                "result": {
+                  "ledger_namespace": "wbns_11111111111111111111111111111111",
+                  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                  "committed_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+                  "claim_fence": {
+                    "ledger_namespace": "wbns_11111111111111111111111111111111",
+                    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                    "owner_id": "agent-a-run-1",
+                    "epoch": "11"
+                  },
+                  "claim_read_back": {
+                    "ledger_namespace": "wbns_11111111111111111111111111111111",
+                    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                    "observed_at": "2030-01-11T09:00:01.000Z",
+                    "last_epoch": "11",
+                    "active": {
+                      "owner_id": "agent-a-run-1",
+                      "epoch": "11",
+                      "issued_at": "2030-01-11T09:00:00.000Z",
+                      "expires_at": "2030-01-11T09:05:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "event": "restart"
+      },
+      {
+        "exit": 0,
+        "stdout": {
+          "ok": true,
+          "namespace": "ledger-publication",
+          "command": "read",
+          "contract_version": 1,
+          "state": "committed",
+          "operation_id": "pub_response_lost",
+          "result": {
+            "operation_id": "pub_response_lost",
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "operation_digest": "sha256:e0d174f5d07159ad6a588dcbcfd93dc87c7a4d7aecf47ca6930c0c6d0e3b72ab",
+            "outcome": {
+              "exit": 0,
+              "stdout": {
+                "ok": true,
+                "namespace": "ledger-publication",
+                "command": "publish-claimed",
+                "contract_version": 1,
+                "state": "committed",
+                "operation_id": "pub_response_lost",
+                "result": {
+                  "ledger_namespace": "wbns_11111111111111111111111111111111",
+                  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                  "committed_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+                  "claim_fence": {
+                    "ledger_namespace": "wbns_11111111111111111111111111111111",
+                    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                    "owner_id": "agent-a-run-1",
+                    "epoch": "11"
+                  },
+                  "claim_read_back": {
+                    "ledger_namespace": "wbns_11111111111111111111111111111111",
+                    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                    "observed_at": "2030-01-11T09:00:01.000Z",
+                    "last_epoch": "11",
+                    "active": {
+                      "owner_id": "agent-a-run-1",
+                      "epoch": "11",
+                      "issued_at": "2030-01-11T09:00:00.000Z",
+                      "expires_at": "2030-01-11T09:05:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "exit": 0,
+        "stdout": {
+          "ok": true,
+          "namespace": "ledger-publication",
+          "command": "publish-claimed",
+          "contract_version": 1,
+          "state": "committed",
+          "operation_id": "pub_response_lost",
+          "result": {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "committed_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+            "claim_fence": {
+              "ledger_namespace": "wbns_11111111111111111111111111111111",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "owner_id": "agent-a-run-1",
+              "epoch": "11"
+            },
+            "claim_read_back": {
+              "ledger_namespace": "wbns_11111111111111111111111111111111",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "observed_at": "2030-01-11T09:00:01.000Z",
+              "last_epoch": "11",
+              "active": {
+                "owner_id": "agent-a-run-1",
+                "epoch": "11",
+                "issued_at": "2030-01-11T09:00:00.000Z",
+                "expires_at": "2030-01-11T09:05:00.000Z"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "final": {
+      "backend": {
+        "name": "reference-backend",
+        "coordination_scope": "shared-transactional-coordinator",
+        "durability": "durable-coordinator",
+        "ledger_binding": {
+          "mode": "explicit-allowlist",
+          "namespaces": [
+            "wbns_11111111111111111111111111111111",
+            "wbns_22222222222222222222222222222222"
+          ]
+        },
+        "write_paths": {
+          "alternate": "none",
+          "claimed_publication_v1": "atomic-fence",
+          "legacy_create_v1": "reject-claimed-id",
+          "legacy_transition_v1": "reject-active-claim"
+        }
+      },
+      "faults": {
+        "publication-response-loss": false
+      },
+      "durable": {
+        "clock_floors": [
+          {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "observed_at": "2030-01-11T09:00:01.000Z"
+          }
+        ],
+        "claims": [
+          {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "last_epoch": "11",
+            "active": {
+              "owner_id": "agent-a-run-1",
+              "epoch": "11",
+              "issued_at": "2030-01-11T09:00:00.000Z",
+              "expires_at": "2030-01-11T09:05:00.000Z"
+            }
+          }
+        ],
+        "ledgers": [
+          {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+            "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg=="
+          }
+        ],
+        "publication_outcomes": [
+          {
+            "operation_id": "pub_response_lost",
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "request": {
+              "operation_id": "pub_response_lost",
+              "ledger_namespace": "wbns_11111111111111111111111111111111",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "expected_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+              "candidate_source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+              "candidate_sha256": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+              "claim_fence": {
+                "ledger_namespace": "wbns_11111111111111111111111111111111",
+                "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                "owner_id": "agent-a-run-1",
+                "epoch": "11"
+              }
+            },
+            "operation_digest": "sha256:e0d174f5d07159ad6a588dcbcfd93dc87c7a4d7aecf47ca6930c0c6d0e3b72ab",
+            "envelope": {
+              "exit": 0,
+              "stdout": {
+                "ok": true,
+                "namespace": "ledger-publication",
+                "command": "publish-claimed",
+                "contract_version": 1,
+                "state": "committed",
+                "operation_id": "pub_response_lost",
+                "result": {
+                  "ledger_namespace": "wbns_11111111111111111111111111111111",
+                  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                  "committed_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+                  "claim_fence": {
+                    "ledger_namespace": "wbns_11111111111111111111111111111111",
+                    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                    "owner_id": "agent-a-run-1",
+                    "epoch": "11"
+                  },
+                  "claim_read_back": {
+                    "ledger_namespace": "wbns_11111111111111111111111111111111",
+                    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+                    "observed_at": "2030-01-11T09:00:01.000Z",
+                    "last_epoch": "11",
+                    "active": {
+                      "owner_id": "agent-a-run-1",
+                      "epoch": "11",
+                      "issued_at": "2030-01-11T09:00:00.000Z",
+                      "expires_at": "2030-01-11T09:05:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "process": {
+        "preflights": []
+      }
+    }
+  }
+}

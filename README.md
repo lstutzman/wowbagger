@@ -7,12 +7,13 @@ plain Markdown and Git. It is intended to give agents durable work memory,
 dependency-aware task selection, and auditable multi-worktree coordination without
 putting a database or hosted service inside your repository.
 
-> **Status: pre-alpha.** The standalone core validates a Markdown ledger,
-> selects deterministic ready tasks, and implements the documented guarded
+> **Status: pre-alpha and self-hosted.** The standalone core validates a
+> Markdown ledger, selects deterministic ready tasks, and implements guarded
 > local `capabilities`, `inspect`, `create`, and `transition` commands. Its
 > mutation scope is deliberately narrow: cooperative writers in one working
-> copy, one item at a time. Claims, adapters, a stable release, and consumer
-> adoption remain separate future work.
+> copy, one item at a time. The harness-neutral adapter boundary is documented,
+> but no adapter is shipped as a stable release. Fenced work claims are under
+> active development in this branch and are not available from the core CLI.
 
 ## Why the name?
 
@@ -40,8 +41,8 @@ Wowbagger makes the repository the durable coordination boundary:
 - Guarded one-item creation and lifecycle transitions with exact-byte
   revisions, cooperative locks, and explicit refusal when a change needs a
   multi-item transaction.
-- A future path to capability-aware claims, without treating a short mutation
-  lock as ownership of work.
+- A documented adapter boundary for tool-capable agent harnesses, without
+  coupling the core to one vendor.
 - Mechanical validation and derived reports instead of duplicated status data.
 
 ## Harness-neutral by design
@@ -56,10 +57,10 @@ flowchart TD
     Codex[Codex adapter] --> Core
     Other[Kimi and other tool-capable agents] --> Core
     Core --> Markdown[Markdown and YAML backlog]
-    Core --> Git[Git coordination and history]
+    Core --> Git[Git audit and history]
 ```
 
-The initial compatibility targets are:
+The documented compatibility targets are:
 
 - Claude Code
 - OpenAI Codex
@@ -67,9 +68,10 @@ The initial compatibility targets are:
   provide repository filesystem and command-execution tools
 
 An OpenAI-compatible API describes model transport; it does not by itself
-provide agent tools. Wowbagger integrations will document the host capabilities
-they require rather than pretending API compatibility guarantees harness
-compatibility.
+provide agent tools. The [adapter contract](docs/adapter-contract.md) records
+the required host capabilities and refusal rules. It does not claim that API
+compatibility alone makes a harness compatible, and this checkout does not ship
+Claude, Codex, Kimi, or OpenAI-hosted adapters.
 
 ## Core commands
 
@@ -113,10 +115,29 @@ cooperative per-ID locks are held, then changes one lifecycle item or refuses
 the request if dependent cleanup or child disposition would require changing
 another item. See [the mutation contract](docs/mutation-contract.md) for the
 JSON request, response, recovery, and scope details. A lock is never a work
-claim.
+claim. See [the fenced work-claim contract](docs/work-claim-contract.md) for
+the separate future claim protocol and its strict backend boundary.
 
 The executable is packaged as `wowbagger` for a future installation path. This
 pre-alpha repository intentionally documents direct checkout use only.
+
+## Verify a checkout
+
+The development workflow is intentionally self-hosted: edit code and ledger
+fixtures locally, run the deterministic checks, and review the resulting Git
+diff. Node.js 20 or later is required.
+
+```sh
+npm ci
+npm test
+npm audit --omit=dev
+git diff --check
+./bin/wowbagger.js validate --ledger ledger --json
+```
+
+The claim/fencing contract has its own normative documentation and fixtures in
+[`docs/work-claim-contract.md`](docs/work-claim-contract.md); it remains an
+in-progress protocol until merged and implemented by a supported backend.
 
 ## This repository's ledger
 
@@ -192,8 +213,9 @@ It is the durable work ledger beneath those systems.
 - Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters.
 - Document the generic tool contract for other agent harnesses.
-- Define work claims only after a separate portable claim and resolution
-  contract exists; local mutation locks are not claims.
+- Complete and review the separate portable claim and resolution contract;
+  local mutation locks are not claims. **In progress on the claim branch; not
+  merged or implemented by the standalone CLI.**
 - Treat any PropertyCompass adoption as a later, separately-scoped consumer
   project.
 
@@ -203,6 +225,11 @@ The project has a pre-alpha standalone core. Issues describing concrete
 portability requirements, coordination failures, or harness-integration
 constraints are welcome. Please avoid proposing harness-specific behavior in
 the core when it can live in an adapter.
+
+For a change, create a focused branch, keep ledger edits reviewable, run the
+verification commands above, and open a pull request with the tests and
+contract links that justify the change. Do not claim support for an adapter or
+fenced backend until its contract and implementation have merged.
 
 ## License
 

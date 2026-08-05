@@ -393,8 +393,11 @@ Any later backend MUST report a missing capability rather than pretending a
 local or Git write is globally atomic. Before transition publication the local
 backend validates the complete one-item proposed ledger and refuses every
 required dependent cleanup or child disposition when it lacks multi-item
-atomicity. It reports work claims unsupported until a separate claim contract
-exists.
+atomicity. The current local backend reports work claims unsupported. A future
+claim backend MUST implement the separate [fenced work-claim
+contract](docs/work-claim-contract.md) and [ADR
+0004](docs/adr/0004-fenced-work-claim-protocol.md); it MUST NOT add claim state
+to schema version 1 Markdown merely because that backend can coordinate it.
 
 The command contract distinguishes immutable-ID collision from an unrelated
 item or valid directory occupying the default creation path. It also defines a
@@ -419,6 +422,12 @@ tests:
   invocation manifests for lossless exact-byte inspection, caller-ID creation,
   strict JSON, body boundaries, lifecycle transitions, concurrency and
   recovery states, and deterministic multi-item refusal.
+- work-claims defines executable normative reference-model vectors with strict
+  JSON, exact base64 source bytes and hashes, immutable ledger namespaces,
+  capability honesty across every write path, epochs, leases, publication
+  fencing, faults, restart recovery, and monotonic clock-floor evidence. A
+  reference-model pass is not backend conformance and is not evidence that the
+  current local runtime supports claims.
 
 They contain no consumer product data and MUST remain suitable for any
 Wowbagger installation.

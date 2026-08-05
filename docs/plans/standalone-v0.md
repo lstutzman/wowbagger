@@ -66,8 +66,11 @@ Exit criteria:
 - conflict and recovery cases are black-box tested;
 - no documentation promises global atomicity for a local or Git-only backend.
 
-Work-claim storage is not part of this phase until a follow-on ADR defines the
-claim envelope and fail-closed resolution behaviour.
+Work-claim storage is not part of this implemented phase. [ADR
+0004](../adr/0004-fenced-work-claim-protocol.md) and the separate claim
+contract now define the required envelope and fail-closed resolution behaviour;
+the current local runtime remains claim-unsupported until a future backend
+implements them.
 
 ## Phase 3: optional policy engine
 
