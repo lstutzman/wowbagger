@@ -9,8 +9,43 @@ const namespace = 'wbns_11111111111111111111111111111111';
 const itemId = 'wb_01Q4837BM01W70T30B184GG1R6';
 const maxEpoch = '18446744073709551615';
 
+// The two committed fixture ledger revisions, quoted literally.
+const beforeRevision = 'sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5';
+const afterRevision = 'sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8';
+
+// operation_digest values for the two publish-claimed requests below, derived
+// independently from docs/work-claim-contract.md section 6 (sha256 of canonical
+// UTF-8 JSON, keys sorted lexicographically, no insignificant whitespace) with a
+// separate Python implementation. They are NOT obtained from digestRequest().
+const committedOperationDigest = 'sha256:45f66c4c79523c7b83ed5b0c73594c6da708408fde72b16edadf0b8aba45e0cc';
+const retriedOperationDigest = 'sha256:75c476624e9aa2e984d45f51f12c312ca957331f5e23a5b4916957a366d78324';
+
 function manifest(name) {
   return JSON.parse(readFileSync(new URL(`${name}/manifest.json`, fixtureRoot), 'utf8'));
+}
+
+// Build publish-claimed requests from the public contract operations only.
+function publicationRequest(operationId, expectedRevision, candidate, epoch = '9') {
+  return {
+    operation_id: operationId,
+    ledger_namespace: namespace,
+    item_id: itemId,
+    expected_revision: expectedRevision,
+    candidate_source_base64: candidate.source_base64,
+    candidate_sha256: candidate.sha256,
+    claim_fence: {
+      ledger_namespace: namespace,
+      item_id: itemId,
+      owner_id: 'agent-a-run-1',
+      epoch,
+    },
+  };
+}
+
+function sourceFile(source, path) {
+  const file = source.source_files.find((entry) => entry.path === path);
+  if (!file) throw new Error(`missing fixture source: ${path}`);
+  return file;
 }
 
 test('manual epoch-exhaustion golden rejects overflow and preserves the claim', () => {
@@ -97,26 +132,138 @@ test('independent publication refusal envelopes reject tampered code and details
   assert.notDeepEqual(actual.transcript[1], wrong);
 });
 
-test('hand-authored refusal goldens execute and reject tampering', () => {
+test('hand-authored fence-dimension envelopes are literal and tamper checked', () => {
   const source = manifest('fence-dimension-rejections');
+
+  // One complete hand-authored envelope per ordered fence dimension. Each is
+  // written out in full rather than derived from the model's own output, so a
+  // wrong field anywhere in the envelope fails instead of self-confirming.
+  const namespaceMismatch = {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      operation_id: 'pub_wrong_namespace',
+      error: {
+        code: 'claim-fence-rejected',
+        message: 'The supplied claim fence is not the active owner generation.',
+        details: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          observed_at: '2030-01-11T09:00:01.000Z',
+          reason: 'ledger-namespace-mismatch',
+          supplied_owner_id: 'agent-a-run-1',
+          supplied_epoch: '3',
+          active_owner_id: 'agent-a-run-1',
+          active_epoch: '3',
+        },
+      },
+    },
+  };
+  const itemMismatch = {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      operation_id: 'pub_wrong_item',
+      error: {
+        code: 'claim-fence-rejected',
+        message: 'The supplied claim fence is not the active owner generation.',
+        details: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          observed_at: '2030-01-11T09:00:02.000Z',
+          reason: 'item-id-mismatch',
+          supplied_owner_id: 'agent-a-run-1',
+          supplied_epoch: '3',
+          active_owner_id: 'agent-a-run-1',
+          active_epoch: '3',
+        },
+      },
+    },
+  };
+  const ownerMismatch = {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      operation_id: 'pub_wrong_owner',
+      error: {
+        code: 'claim-fence-rejected',
+        message: 'The supplied claim fence is not the active owner generation.',
+        details: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          observed_at: '2030-01-11T09:00:03.000Z',
+          reason: 'owner-mismatch',
+          supplied_owner_id: 'agent-b-run-1',
+          supplied_epoch: '3',
+          active_owner_id: 'agent-a-run-1',
+          active_epoch: '3',
+        },
+      },
+    },
+  };
+  const epochMismatch = {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      operation_id: 'pub_wrong_epoch',
+      error: {
+        code: 'claim-fence-rejected',
+        message: 'The supplied claim fence is not the active owner generation.',
+        details: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          observed_at: '2030-01-11T09:00:04.000Z',
+          reason: 'epoch-mismatch',
+          supplied_owner_id: 'agent-a-run-1',
+          supplied_epoch: '2',
+          active_owner_id: 'agent-a-run-1',
+          active_epoch: '3',
+        },
+      },
+    },
+  };
+
   const actual = runReferenceVector({ initial: source.initial, actions: source.actions });
-  const expected = [
-    { index: 1, code: 'claim-fence-rejected', message: 'The supplied claim fence is not the active owner generation.' },
-    { index: 3, code: 'claim-fence-rejected', message: 'The supplied claim fence is not the active owner generation.' },
-    { index: 5, code: 'claim-fence-rejected', message: 'The supplied claim fence is not the active owner generation.' },
-    { index: 7, code: 'claim-fence-rejected', message: 'The supplied claim fence is not the active owner generation.' },
-  ];
-  for (const gold of expected) {
-    const envelope = actual.transcript[gold.index];
-    assert.equal(envelope.exit, 4);
-    assert.equal(envelope.stdout.namespace, 'ledger-publication');
-    assert.equal(envelope.stdout.command, 'publish-claimed');
-    assert.equal(envelope.stdout.state, 'unchanged');
-    assert.deepEqual({ code: envelope.stdout.error.code, message: envelope.stdout.error.message }, { code: gold.code, message: gold.message });
-    assert.ok(Object.keys(envelope.stdout.error.details).length > 0);
-    const tampered = structuredClone(envelope); tampered.stdout.error.code = 'ledger-revision-conflict';
-    assert.notDeepEqual(tampered, envelope);
-  }
+  assert.deepEqual(actual.transcript[1], namespaceMismatch);
+  assert.deepEqual(actual.transcript[3], itemMismatch);
+  assert.deepEqual(actual.transcript[5], ownerMismatch);
+  assert.deepEqual(actual.transcript[7], epochMismatch);
+
+  // Tamper the literal expected artifacts, not a clone of the model output.
+  const wrongReason = structuredClone(namespaceMismatch);
+  wrongReason.stdout.error.details.reason = 'item-id-mismatch';
+  assert.notDeepEqual(actual.transcript[1], wrongReason);
+
+  const wrongSuppliedOwner = structuredClone(ownerMismatch);
+  wrongSuppliedOwner.stdout.error.details.supplied_owner_id = 'agent-a-run-1';
+  assert.notDeepEqual(actual.transcript[5], wrongSuppliedOwner);
+
+  const wrongSuppliedEpoch = structuredClone(epochMismatch);
+  wrongSuppliedEpoch.stdout.error.details.supplied_epoch = '3';
+  assert.notDeepEqual(actual.transcript[7], wrongSuppliedEpoch);
+
+  const wrongCode = structuredClone(itemMismatch);
+  wrongCode.stdout.error.code = 'ledger-revision-conflict';
+  assert.notDeepEqual(actual.transcript[3], wrongCode);
+
+  // No fence rejection may advance the durable ledger.
+  assert.equal(actual.final.durable.ledgers[0].revision, beforeRevision);
 });
 
 test('hand-authored claim-expired envelope is literal and tamper checked', () => {
@@ -128,4 +275,213 @@ test('hand-authored claim-expired envelope is literal and tamper checked', () =>
   const actual = runReferenceVector({ initial, actions: [{ operation: 'work-claim.renew', physical_now: '2030-01-11T09:00:01.000Z', request }] }).transcript[0];
   assert.deepEqual(actual, expected);
   const tampered = structuredClone(expected); tampered.stdout.error.details.last_epoch = '2'; assert.notDeepEqual(actual, tampered);
+});
+
+test('hand-authored idempotency-conflict envelope is literal and tamper checked', () => {
+  // Minimal valid sequence: preflight and commit one publication, then reuse the
+  // same operation identity with a different request. Contract step 4 decides
+  // before any revision, clock, fence, or candidate decision.
+  const source = manifest('paused-writer-commit-boundary');
+  const after = sourceFile(source, 'ledger/after.md');
+  const committedRequest = publicationRequest('pub_agent_a_1', beforeRevision, after);
+  const retriedRequest = publicationRequest('pub_agent_a_1', afterRevision, after);
+
+  const committedEnvelope = {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'committed',
+      operation_id: 'pub_agent_a_1',
+      result: {
+        ledger_namespace: namespace,
+        item_id: itemId,
+        committed_revision: afterRevision,
+        claim_fence: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          owner_id: 'agent-a-run-1',
+          epoch: '9',
+        },
+        claim_read_back: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          observed_at: '2030-01-11T09:00:30.000Z',
+          last_epoch: '9',
+          active: {
+            owner_id: 'agent-a-run-1',
+            epoch: '9',
+            issued_at: '2030-01-11T09:00:00.000Z',
+            expires_at: '2030-01-11T09:01:00.000Z',
+          },
+        },
+      },
+    },
+  };
+  const conflictEnvelope = {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      operation_id: 'pub_agent_a_1',
+      error: {
+        code: 'idempotency-conflict',
+        message: 'The operation identity is already bound to a different request.',
+        details: {
+          operation_id: 'pub_agent_a_1',
+          expected_operation_digest: committedOperationDigest,
+          actual_operation_digest: retriedOperationDigest,
+        },
+      },
+    },
+  };
+
+  const actual = runReferenceVector({
+    initial: source.initial,
+    actions: [
+      { operation: 'ledger-publication.preflight', request: committedRequest },
+      {
+        operation: 'ledger-publication.commit',
+        operation_id: 'pub_agent_a_1',
+        physical_now: '2030-01-11T09:00:30.000Z',
+        request: committedRequest,
+      },
+      {
+        operation: 'ledger-publication.commit',
+        operation_id: 'pub_agent_a_1',
+        physical_now: '2030-01-11T09:00:31.000Z',
+        request: retriedRequest,
+      },
+    ],
+  });
+
+  assert.deepEqual(actual.transcript, [
+    { event: 'preflight-complete', operation_id: 'pub_agent_a_1' },
+    committedEnvelope,
+    conflictEnvelope,
+  ]);
+
+  // The refused retry writes neither the ledger nor a second outcome.
+  assert.equal(actual.final.durable.ledgers[0].revision, afterRevision);
+  assert.equal(actual.final.durable.ledgers[0].source_base64, after.source_base64);
+  assert.equal(actual.final.durable.publication_outcomes.length, 1);
+
+  const wrongExpectedDigest = structuredClone(conflictEnvelope);
+  wrongExpectedDigest.stdout.error.details.expected_operation_digest = retriedOperationDigest;
+  assert.notDeepEqual(actual.transcript[2], wrongExpectedDigest);
+
+  const wrongCode = structuredClone(conflictEnvelope);
+  wrongCode.stdout.error.code = 'ledger-revision-conflict';
+  assert.notDeepEqual(actual.transcript[2], wrongCode);
+});
+
+test('hand-authored ledger-revision-conflict envelope is literal and tamper checked', () => {
+  // Both writers preflight at revision N. The first commit advances the ledger to
+  // N+1, so the second reaches contract step 8 with a stale expected_revision.
+  // Preflighting the second request after the commit cannot reach this state:
+  // preflight rejects the stale revision itself and stores no plan.
+  const source = manifest('paused-writer-commit-boundary');
+  const after = sourceFile(source, 'ledger/after.md');
+  const firstRequest = publicationRequest('pub_agent_a_1', beforeRevision, after);
+  const staleRequest = publicationRequest('pub_agent_a_2', beforeRevision, after);
+
+  const committedEnvelope = {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'committed',
+      operation_id: 'pub_agent_a_1',
+      result: {
+        ledger_namespace: namespace,
+        item_id: itemId,
+        committed_revision: afterRevision,
+        claim_fence: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          owner_id: 'agent-a-run-1',
+          epoch: '9',
+        },
+        claim_read_back: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          observed_at: '2030-01-11T09:00:30.000Z',
+          last_epoch: '9',
+          active: {
+            owner_id: 'agent-a-run-1',
+            epoch: '9',
+            issued_at: '2030-01-11T09:00:00.000Z',
+            expires_at: '2030-01-11T09:01:00.000Z',
+          },
+        },
+      },
+    },
+  };
+  const revisionConflictEnvelope = {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      operation_id: 'pub_agent_a_2',
+      error: {
+        code: 'ledger-revision-conflict',
+        message: 'The durable ledger revision no longer matches this publication.',
+        details: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          expected_revision: beforeRevision,
+          actual_revision: afterRevision,
+        },
+      },
+    },
+  };
+
+  const actual = runReferenceVector({
+    initial: source.initial,
+    actions: [
+      { operation: 'ledger-publication.preflight', request: firstRequest },
+      { operation: 'ledger-publication.preflight', request: staleRequest },
+      {
+        operation: 'ledger-publication.commit',
+        operation_id: 'pub_agent_a_1',
+        physical_now: '2030-01-11T09:00:30.000Z',
+        request: firstRequest,
+      },
+      {
+        operation: 'ledger-publication.commit',
+        operation_id: 'pub_agent_a_2',
+        physical_now: '2030-01-11T09:00:31.000Z',
+        request: staleRequest,
+      },
+    ],
+  });
+
+  assert.deepEqual(actual.transcript, [
+    { event: 'preflight-complete', operation_id: 'pub_agent_a_1' },
+    { event: 'preflight-complete', operation_id: 'pub_agent_a_2' },
+    committedEnvelope,
+    revisionConflictEnvelope,
+  ]);
+
+  // The stale publication leaves the first writer's bytes in place.
+  assert.equal(actual.final.durable.ledgers[0].revision, afterRevision);
+  assert.equal(actual.final.durable.ledgers[0].source_base64, after.source_base64);
+
+  const wrongActual = structuredClone(revisionConflictEnvelope);
+  wrongActual.stdout.error.details.actual_revision = beforeRevision;
+  assert.notDeepEqual(actual.transcript[3], wrongActual);
+
+  const wrongCode = structuredClone(revisionConflictEnvelope);
+  wrongCode.stdout.error.code = 'claim-fence-rejected';
+  assert.notDeepEqual(actual.transcript[3], wrongCode);
 });
