@@ -1,0 +1,24 @@
+{
+  "carrier": {
+    "handoff_carrier_version": 1,
+    "workspace_id": "fixture-handoff-workspace",
+    "content_encoding": "base64",
+    "content_base64": "eyJoYW5kb2ZmX3ZlcnNpb24iOjEsIndvcmtzcGFjZV9pZCI6ImZpeHR1cmUtaGFuZG9mZi13b3Jrc3BhY2UiLCJpbnN0cnVjdGlvbl9zZXRfZGlnZXN0Ijoic2hhMjU2OjRmNTNjZGExOGMyYmFhMGMwMzU0YmI1ZjlhM2VjYmU1ZWQxMmFiNGQ4ZTExYmE4NzNjMmYxMTE2MTIwMmI5NDUiLCJpdGVtIjp7ImlkIjoid2JfMDFLRFdQVk5HMDAwMDAwMDAwMDAwMDAwMDAiLCJyZXZpc2lvbiI6InNoYTI1NjozMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn19Cg==",
+    "byte_length": 295,
+    "sha256": "sha256:a2083cd7ad2017d472503fc7546d3aaa665133b8dfe5d5540e3104814ccf443d",
+    "resume_request": {
+      "item_id": "wb_01KDWPVNG00000000000000000",
+      "expected_revision": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "instruction_set_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "options": {
+    "workspace_id": "fixture-handoff-workspace",
+    "max_bytes": 1024,
+    "current": {
+      "item_id": "wb_01KDWPVNG00000000000000000",
+      "revision": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "instruction_set_digest": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  }
+}

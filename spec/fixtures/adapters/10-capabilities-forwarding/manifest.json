@@ -1,0 +1,48 @@
+{
+  "adapter_vector_version": 1,
+  "case": "capabilities-forwarding",
+  "coverage": [
+    "capabilities",
+    "core-forwarding"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "direct-core",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "equivalence",
+  "assertions": [
+    {
+      "id": "preserve-core-capability-truth",
+      "type": "core-baseline",
+      "stdout_artifact": "expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 0
+    },
+    {
+      "id": "claims-remain-unsupported",
+      "type": "capability",
+      "expect": "work-claim-supported-false"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "core-invocation.json",
+      "sha256": "sha256:4fb8194e65b82e4f135c95a7450144cfe67f242bb4390e4a9107f74b1e3e5fa4"
+    },
+    {
+      "path": "expected-adapter-result.json",
+      "sha256": "sha256:a56954b10bc7f639dc5595955ec3939a8500de089f3c26dbd1b41a8d02ddf3bf"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "sha256": "sha256:a5abe52f9e26c0e63a20c1b2297dc134cae4e94c58042bd93772076b17b9837a"
+    },
+    {
+      "path": "invocation.json",
+      "sha256": "sha256:02a1199e3c4892342f2f0be8a4fc2b66c221bd5b3f550a06517202c5c0730093"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "command": "capabilities",
+  "argv": [
+    "capabilities",
+    "--json"
+  ],
+  "stdin_base64": ""
+}

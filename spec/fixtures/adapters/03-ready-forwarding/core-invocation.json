@@ -1,0 +1,12 @@
+{
+  "command": "ready",
+  "argv": [
+    "ready",
+    "--ledger",
+    "ledger",
+    "--as-of",
+    "2030-01-15",
+    "--json"
+  ],
+  "stdin_base64": ""
+}

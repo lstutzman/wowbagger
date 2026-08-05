@@ -1,0 +1,52 @@
+{
+  "now": "2030-01-15T12:01:00Z",
+  "base_binding": {
+    "request_id": "mutation-approval-0001",
+    "adapter": { "id": "example.reference", "version": "1.0.0", "contract_version": 1 },
+    "core": {
+      "executable_identity": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "contract_version": 1,
+      "argv": ["transition", "--ledger", "/approved/workspace/ledger", "--input", "-", "--json"],
+      "input_base64": "e30K"
+    },
+    "workspace": {
+      "id": "fixture-workspace",
+      "root": "/approved/workspace",
+      "cwd": "/approved/workspace",
+      "ledger": "/approved/workspace/ledger"
+    },
+    "limits": { "context_bytes": 1024, "stdout_bytes": 4096, "stderr_bytes": 4096, "timeout_ms": 30000 },
+    "instruction_set_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "handoff_digest": null
+  },
+  "base_approval": {
+    "approval_version": 1,
+    "source": "consumer",
+    "nonce": "single-use-approval-0001",
+    "issued_at": "2030-01-15T12:00:00Z",
+    "expires_at": "2030-01-15T12:05:00Z",
+    "invocation_digest": "sha256:9b816d872e401982098a82d399347637813d1523430e752d7290f35c3bd44eb0"
+  },
+  "cases": [
+    { "id": "valid", "expected": "ok" },
+    { "id": "approval-version", "set": { "path": "approval_version", "value": 2 }, "expected": "invalid-approval" },
+    { "id": "missing-field", "delete": "nonce", "expected": "invalid-approval" },
+    { "id": "extra-field", "set": { "path": "extra", "value": true }, "expected": "invalid-approval" },
+    { "id": "nonce-syntax", "set": { "path": "nonce", "value": "short" }, "expected": "invalid-approval" },
+    { "id": "digest-syntax", "set": { "path": "invocation_digest", "value": "sha256:bad" }, "expected": "invalid-approval" },
+    { "id": "invalid-issued-time", "set": { "path": "issued_at", "value": "not-a-time" }, "expected": "invalid-approval" },
+    { "id": "time-order", "set": { "path": "expires_at", "value": "2030-01-15T12:00:00Z" }, "expected": "invalid-approval-time-order" },
+    { "id": "invalid-current-time", "now": "not-a-time", "expected": "invalid-approval-time" },
+    { "id": "not-yet-valid", "now": "2030-01-15T11:59:59Z", "expected": "approval-not-yet-valid" },
+    { "id": "expired", "now": "2030-01-15T12:05:00Z", "expected": "approval-expired" },
+    { "id": "untrusted-source", "set": { "path": "source", "value": "model" }, "expected": "approval-source-untrusted" },
+    { "id": "untrusted-agent", "set": { "path": "source", "value": "agent" }, "expected": "approval-source-untrusted" },
+    { "id": "untrusted-system", "set": { "path": "source", "value": "system" }, "expected": "approval-source-untrusted" },
+    { "id": "untrusted-tool", "set": { "path": "source", "value": "tool" }, "expected": "approval-source-untrusted" },
+    { "id": "trusted-source-extra", "trusted_sources": ["consumer", "model"], "expected": "approval-source-untrusted" },
+    { "id": "replay", "replay": true, "expected": "approval-replayed" },
+    { "id": "binding-mismatch", "target": "binding", "set": { "path": "core.contract_version", "value": 2 }, "expected": "approval-binding-mismatch" },
+    { "id": "binding-missing", "target": "binding", "delete": "core.executable_identity", "expected": "invalid-approval-binding" },
+    { "id": "binding-extra", "target": "binding", "set": { "path": "extra", "value": true }, "expected": "invalid-approval-binding" }
+  ]
+}

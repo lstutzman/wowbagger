@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "adapter_contract_version": 1,
+  "request_id": "validation-failure-0001",
+  "result": {
+    "core_command": "validate",
+    "core_exit_code": 1,
+    "stdout": {
+      "encoding": "base64",
+      "data": "eyJ2YWxpZCI6ZmFsc2UsImVycm9ycyI6W3sicGF0aCI6ImxlZGdlci9iYWQubWQiLCJmaWVsZCI6ImZyb250bWF0dGVyIiwiY29kZSI6Im1hbGZvcm1lZC1mcm9udG1hdHRlciIsIm1lc3NhZ2UiOiJJdGVtIG11c3QgYmVnaW4gd2l0aCBvbmUgWUFNTCBmcm9udG1hdHRlciBkb2N1bWVudCBkZWxpbWl0ZWQgYnkgLS0tIGxpbmVzLiJ9XX0K",
+      "sha256": "sha256:0bf5de3695059d1c77d1b744083afff431eb7c84e4f7bf83c5d5136e9e76a41d",
+      "byte_length": 192
+    },
+    "stderr": {
+      "encoding": "base64",
+      "data": "",
+      "sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_length": 0
+    }
+  }
+}

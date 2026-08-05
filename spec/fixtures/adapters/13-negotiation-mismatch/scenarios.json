@@ -1,0 +1,530 @@
+{
+  "base_request": {
+    "bootstrap_wire_version": 1,
+    "supported_adapter_contract_versions": [1, 2],
+    "request_id": "fixture-describe-0001"
+  },
+  "base_manifest": {
+    "adapter_manifest_version": 1,
+    "adapter_id": "example.reference",
+    "adapter_version": "1.0.0",
+    "adapter_contract_versions": [1],
+    "bootstrap_wire_version": 1,
+    "required_core_contract_version": 1,
+    "entrypoints": {
+      "describe": { "kind": "command", "executable": "bin/adapter", "fixed_args": ["describe"] },
+      "invoke": { "kind": "command", "executable": "bin/adapter", "fixed_args": ["invoke"] }
+    },
+    "platforms": {
+      "darwin": "unverified",
+      "linux": "unverified",
+      "win32": "unverified"
+    }
+  },
+  "base_dynamic": {
+    "ok": true,
+    "bootstrap_wire_version": 1,
+    "selected_adapter_contract_version": 1,
+    "adapter_id": "example.reference",
+    "adapter_version": "1.0.0",
+    "core": {
+      "required_core_contract_version": 1,
+      "commands": ["capabilities", "create", "inspect", "ready", "transition", "validate"]
+    },
+    "host": {
+      "command_execution": {
+        "supported": true,
+        "arguments_array": true,
+        "shell": false,
+        "stdio": true,
+        "process_tree_containment": true,
+        "orphan_detection": true,
+        "timeout_enforcement": true,
+        "stdout_limit": true,
+        "stderr_limit": true
+      },
+      "filesystem": {
+        "workspace_selection": "guarded-relative",
+        "no_follow_resolution": true,
+        "stable_identity": true,
+        "component_walk": true
+      },
+      "model_transport": { "available": true, "protocol": "openai-compatible" },
+      "instruction_input": { "mode": "host-provided", "max_sources": 8, "max_bytes": 65536 },
+      "handoff": { "supported": true, "persistence": "explicit-only" },
+      "trusted_approval": { "supported": true, "sources": ["consumer"] },
+      "integration_mechanisms": { "hooks": false, "slash_commands": false, "mcp": false, "daemon": false }
+    },
+    "optional_features": { "claims": false, "policy": false },
+    "limits": {
+      "max_request_bytes": 65536,
+      "max_context_bytes": 65536,
+      "max_stdout_bytes": 1048576,
+      "max_stderr_bytes": 65536,
+      "max_timeout_ms": 30000
+    },
+    "platforms": {
+      "darwin": "unverified",
+      "linux": "unverified",
+      "win32": "unverified"
+    }
+  },
+  "entrypoint_paths": [
+    {
+      "id": "entrypoint-link",
+      "package_root": "/installed/adapter",
+      "executable": "bin/adapter",
+      "before": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "symbolic-link", "identity": "bin-link" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "after": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "symbolic-link", "identity": "bin-link" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "expected": "path-rejected"
+    },
+    {
+      "id": "entrypoint-replaced",
+      "package_root": "/installed/adapter",
+      "executable": "bin/adapter",
+      "before": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "directory", "identity": "bin-1" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "after": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "directory", "identity": "bin-1" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-2" }
+      },
+      "expected": "path-replaced"
+    },
+    {
+      "id": "entrypoint-final-identity-missing",
+      "package_root": "/installed/adapter",
+      "executable": "bin/adapter",
+      "before": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "directory", "identity": "bin-1" },
+        "bin/adapter": { "kind": "regular-file" }
+      },
+      "after": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "directory", "identity": "bin-1" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "expected": "path-rejected"
+    },
+    {
+      "id": "entrypoint-parent-identity-missing",
+      "package_root": "/installed/adapter",
+      "executable": "bin/adapter",
+      "before": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "directory", "identity": "bin-1" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "after": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "directory" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "expected": "path-rejected"
+    },
+    {
+      "id": "entrypoint-root-identity-malformed",
+      "package_root": "/installed/adapter",
+      "executable": "bin/adapter",
+      "before": {
+        ".": { "kind": "directory", "identity": { "volume_id": "volume-only" } },
+        "bin": { "kind": "directory", "identity": "bin-1" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "after": {
+        ".": { "kind": "directory", "identity": "package-1" },
+        "bin": { "kind": "directory", "identity": "bin-1" },
+        "bin/adapter": { "kind": "regular-file", "identity": "adapter-1" }
+      },
+      "expected": "path-rejected"
+    }
+  ],
+  "invoke_cases": [
+    {
+      "id": "future-invoke-version",
+      "adapter_contract_version": 2,
+      "expected": "adapter-contract-selection-mismatch"
+    }
+  ],
+  "core_probe_cases": [
+    { "id": "probe-missing", "target": "probe", "delete": "result", "expected": "core-protocol-error" },
+    { "id": "probe-extra", "target": "probe", "set": { "path": "extra", "value": true }, "expected": "core-protocol-error" },
+    { "id": "probe-malformed", "target": "probe", "set": { "path": "command", "value": "ready" }, "expected": "core-protocol-error" },
+    { "id": "probe-claims-elevation", "target": "describe", "set": { "path": "optional_features.claims", "value": true }, "expected": "core-contract-version-mismatch" },
+    { "id": "probe-policy-elevation", "target": "describe", "set": { "path": "optional_features.policy", "value": true }, "expected": "core-contract-version-mismatch" },
+    { "id": "probe-command-mismatch", "target": "describe", "set": { "path": "core.commands", "value": ["capabilities"] }, "expected": "core-contract-version-mismatch" }
+  ],
+  "cases": [
+    {
+      "id": "request-missing",
+      "target": "request",
+      "delete": "request_id",
+      "expected": "invalid-describe-request"
+    },
+    {
+      "id": "request-extra",
+      "target": "request",
+      "set": { "path": "extra", "value": true },
+      "expected": "invalid-describe-request"
+    },
+    {
+      "id": "request-empty-versions",
+      "target": "request",
+      "set": { "path": "supported_adapter_contract_versions", "value": [] },
+      "expected": "invalid-describe-request"
+    },
+    {
+      "id": "request-malformed-versions",
+      "target": "request",
+      "set": { "path": "supported_adapter_contract_versions", "value": null },
+      "expected": "invalid-describe-request"
+    },
+    {
+      "id": "manifest-missing",
+      "target": "manifest",
+      "delete": "entrypoints",
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "manifest-extra",
+      "target": "manifest",
+      "set": { "path": "extra", "value": true },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "manifest-malformed",
+      "target": "manifest",
+      "set": { "path": "adapter_contract_versions", "value": [2, 1] },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "dynamic-missing",
+      "target": "dynamic",
+      "delete": "host",
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "dynamic-extra",
+      "target": "dynamic",
+      "set": { "path": "extra", "value": true },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "dynamic-malformed",
+      "target": "dynamic",
+      "set": { "path": "limits.max_timeout_ms", "value": 0 },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "trusted-source-model",
+      "target": "dynamic",
+      "set": { "path": "host.trusted_approval.sources", "value": ["model"] },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "trusted-source-agent",
+      "target": "dynamic",
+      "set": { "path": "host.trusted_approval.sources", "value": ["agent"] },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "trusted-source-system",
+      "target": "dynamic",
+      "set": { "path": "host.trusted_approval.sources", "value": ["system"] },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "trusted-source-tool",
+      "target": "dynamic",
+      "set": { "path": "host.trusted_approval.sources", "value": ["tool"] },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "trusted-source-extra",
+      "target": "dynamic",
+      "set": { "path": "host.trusted_approval.sources", "value": ["consumer", "model"] },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "entrypoint-traversal",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "../bin/adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-absolute",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "/bin/adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-drive",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "C:/bin/adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-backslash",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "bin\\adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-unc",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "//server/share/adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-device",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "//?/C:/bin/adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-volume",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "Volume{fixture}/adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-empty-segment",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.executable", "value": "bin//adapter" },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "entrypoint-fixed-arg-control",
+      "target": "manifest",
+      "set": { "path": "entrypoints.invoke.fixed_args", "value": ["invoke\u0000hidden"] },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "supported-without-arguments-array",
+      "capability_invariant": { "mode": "supported", "member": "arguments_array", "value": false },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-stdio",
+      "capability_invariant": { "mode": "supported", "member": "stdio", "value": false },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-with-shell",
+      "capability_invariant": { "mode": "supported", "member": "shell", "value": true },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-process-tree-containment",
+      "capability_invariant": { "mode": "supported", "member": "process_tree_containment", "value": false },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-orphan-detection",
+      "capability_invariant": { "mode": "supported", "member": "orphan_detection", "value": false },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-timeout-enforcement",
+      "capability_invariant": { "mode": "supported", "member": "timeout_enforcement", "value": false },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-stdout-limit",
+      "capability_invariant": { "mode": "supported", "member": "stdout_limit", "value": false },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-stderr-limit",
+      "capability_invariant": { "mode": "supported", "member": "stderr_limit", "value": false },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-request-limit",
+      "capability_invariant": { "mode": "limit", "member": "max_request_bytes" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-context-limit",
+      "capability_invariant": { "mode": "limit", "member": "max_context_bytes" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-stdout-byte-limit",
+      "capability_invariant": { "mode": "limit", "member": "max_stdout_bytes" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-stderr-byte-limit",
+      "capability_invariant": { "mode": "limit", "member": "max_stderr_bytes" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "supported-without-timeout-limit",
+      "capability_invariant": { "mode": "limit", "member": "max_timeout_ms" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "guarded-without-no-follow",
+      "capability_invariant": { "mode": "guarded", "member": "no_follow_resolution" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "guarded-without-stable-identity",
+      "capability_invariant": { "mode": "guarded", "member": "stable_identity" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "guarded-without-component-walk",
+      "capability_invariant": { "mode": "guarded", "member": "component_walk" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-arguments-array",
+      "capability_invariant": { "mode": "unsupported", "member": "arguments_array" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-stdio",
+      "capability_invariant": { "mode": "unsupported", "member": "stdio" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-shell",
+      "capability_invariant": { "mode": "unsupported", "member": "shell" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-process-tree-containment",
+      "capability_invariant": { "mode": "unsupported", "member": "process_tree_containment" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-orphan-detection",
+      "capability_invariant": { "mode": "unsupported", "member": "orphan_detection" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-timeout-enforcement",
+      "capability_invariant": { "mode": "unsupported", "member": "timeout_enforcement" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-stdout-limit",
+      "capability_invariant": { "mode": "unsupported", "member": "stdout_limit" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-stderr-limit",
+      "capability_invariant": { "mode": "unsupported", "member": "stderr_limit" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-with-invoke",
+      "capability_invariant": { "mode": "unsupported-invoke" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "workspace-none-with-no-follow",
+      "capability_invariant": { "mode": "filesystem-none", "member": "no_follow_resolution" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "workspace-none-with-stable-identity",
+      "capability_invariant": { "mode": "filesystem-none", "member": "stable_identity" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "workspace-none-with-component-walk",
+      "capability_invariant": { "mode": "filesystem-none", "member": "component_walk" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "instruction-none-with-sources",
+      "capability_invariant": { "mode": "instruction-none", "member": "max_sources" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "instruction-none-with-bytes",
+      "capability_invariant": { "mode": "instruction-none", "member": "max_bytes" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "instruction-configured-without-sources",
+      "capability_invariant": { "mode": "instruction-configured", "member": "max_sources" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "instruction-configured-without-bytes",
+      "capability_invariant": { "mode": "instruction-configured", "member": "max_bytes" },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "unsupported-bootstrap",
+      "request": { "bootstrap_wire_version": 2 },
+      "expected": "unsupported-bootstrap-wire-version"
+    },
+    {
+      "id": "unsupported-contract",
+      "request": { "supported_adapter_contract_versions": [3] },
+      "expected": "unsupported-adapter-contract-version"
+    },
+    {
+      "id": "future-shared-contract",
+      "request": { "supported_adapter_contract_versions": [2] },
+      "manifest": { "adapter_contract_versions": [2] },
+      "dynamic": { "selected_adapter_contract_version": 2 },
+      "expected": "invalid-adapter-manifest"
+    },
+    {
+      "id": "adapter-id",
+      "dynamic": { "adapter_id": "example.other" },
+      "expected": "adapter-identity-mismatch"
+    },
+    {
+      "id": "adapter-version",
+      "dynamic": { "adapter_version": "2.0.0" },
+      "expected": "adapter-version-mismatch"
+    },
+    {
+      "id": "selected-contract",
+      "dynamic": { "selected_adapter_contract_version": 2 },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "required-core-contract",
+      "dynamic": { "core": { "required_core_contract_version": 2 } },
+      "expected": "required-core-contract-version-mismatch"
+    },
+    {
+      "id": "platform-status",
+      "dynamic": {
+        "platforms": { "darwin": "unverified", "linux": "supported", "win32": "unverified" }
+      },
+      "expected": "adapter-platform-mismatch"
+    },
+    {
+      "id": "platform-missing",
+      "dynamic": { "platforms": { "darwin": "unverified", "linux": "unverified" } },
+      "expected": "invalid-describe-result"
+    },
+    {
+      "id": "required-core-version",
+      "required_core_contract_version": 2,
+      "probed_core_contract_version": 1,
+      "expected": "core-contract-version-mismatch"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "adapter_contract_version": 1,
+  "request_id": "ready-forwarding-0001",
+  "workspace": {
+    "workspace_id": "fixture-ready-workspace",
+    "cwd": "."
+  },
+  "core_request": {
+    "command": "ready",
+    "ledger": "ledger",
+    "as_of": "2030-01-15"
+  },
+  "instruction_input": { "instruction_input_version": 1, "required": false, "sources": [] },
+  "handoff_carrier": null,
+  "limits": {
+    "context_bytes": 4096,
+    "stdout_bytes": 65536,
+    "stderr_bytes": 4096,
+    "timeout_ms": 30000
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "adapter_contract_version": 1,
+  "request_id": "path-no-follow-0001",
+  "workspace": {
+    "workspace_id": "fixture-workspace",
+    "cwd": "."
+  },
+  "core_request": {
+    "command": "validate",
+    "ledger": "ledger-link"
+  },
+  "instruction_input": { "instruction_input_version": 1, "required": false, "sources": [] },
+  "handoff_carrier": null,
+  "limits": {
+    "context_bytes": 1024,
+    "stdout_bytes": 4096,
+    "stderr_bytes": 4096,
+    "timeout_ms": 30000
+  }
+}

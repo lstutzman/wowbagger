@@ -1,0 +1,14 @@
+{
+  "ok": false,
+  "adapter_contract_version": 1,
+  "request_id": "path-no-follow-0001",
+  "error": {
+    "code": "path-rejected",
+    "message": "The requested ledger path is not a guarded real directory.",
+    "details": {
+      "path_role": "ledger",
+      "component": "ledger-link",
+      "kind": "symbolic-link"
+    }
+  }
+}

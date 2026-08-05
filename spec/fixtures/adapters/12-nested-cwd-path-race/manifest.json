@@ -1,0 +1,47 @@
+{
+  "adapter_vector_version": 1,
+  "case": "nested-cwd-path-race",
+  "coverage": [
+    "path-safety"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "protocol",
+  "assertions": [
+    {
+      "id": "ledger-is-root-anchored-not-cwd-relative",
+      "type": "path-race",
+      "expect": "root-anchored"
+    },
+    {
+      "id": "replacement-before-launch-is-refused",
+      "type": "path-race",
+      "expect": "path-replaced"
+    },
+    { "id": "posix-absolute-is-refused", "type": "path-syntax", "scenario": "posix-absolute" },
+    { "id": "drive-forward-slash-is-refused", "type": "path-syntax", "scenario": "drive-forward-slash" },
+    { "id": "drive-backslash-is-refused", "type": "path-syntax", "scenario": "drive-backslash" },
+    { "id": "drive-relative-is-refused", "type": "path-syntax", "scenario": "drive-relative" },
+    { "id": "unc-backslash-is-refused", "type": "path-syntax", "scenario": "unc-backslash" },
+    { "id": "unc-forward-slash-is-refused", "type": "path-syntax", "scenario": "unc-forward-slash" },
+    { "id": "device-backslash-is-refused", "type": "path-syntax", "scenario": "device-backslash" },
+    { "id": "device-forward-slash-is-refused", "type": "path-syntax", "scenario": "device-forward-slash" },
+    { "id": "device-dot-prefix-is-refused", "type": "path-syntax", "scenario": "device-dot-prefix" },
+    { "id": "volume-prefix-is-refused", "type": "path-syntax", "scenario": "volume-prefix" },
+    { "id": "volume-root-is-refused", "type": "path-syntax", "scenario": "volume-root" },
+    { "id": "root-initial-identity-is-required", "type": "snapshot-identity", "scenario": "root-initial-identity-missing" },
+    { "id": "parent-final-identity-is-required", "type": "snapshot-identity", "scenario": "parent-final-identity-missing" },
+    { "id": "malformed-ledger-identity-is-refused", "type": "snapshot-identity", "scenario": "ledger-identity-malformed" },
+    { "id": "same-kind-component-replacement-is-refused", "type": "snapshot-identity", "scenario": "same-kind-component-replaced" }
+  ],
+  "artifacts": [
+    {
+      "path": "scenarios.json",
+      "sha256": "sha256:da94e1ed60647a20fe0fe69f28763902181ff0da21ecfc4093d33258fc158fe7"
+    }
+  ]
+}

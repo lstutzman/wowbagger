@@ -1,0 +1,30 @@
+{
+  "adapter_vector_version": 1,
+  "case": "process-outcomes",
+  "coverage": ["bounded-io", "authority"],
+  "targets": ["claude-code", "codex", "kimi", "openai-compatible-harness"],
+  "mode": "protocol",
+  "assertions": [
+    { "id": "read-launch-failure-is-deterministic", "type": "process-outcome", "scenario": "read-launch-failed" },
+    { "id": "read-observation-doubt-is-refused", "type": "process-outcome", "scenario": "read-observation-incomplete" },
+    { "id": "mutation-timeout-is-unknown", "type": "process-outcome", "scenario": "mutation-timeout-complete" },
+    { "id": "mutation-signal-is-unknown", "type": "process-outcome", "scenario": "mutation-signal-complete" },
+    { "id": "mutation-missing-envelope-is-unknown", "type": "process-outcome", "scenario": "mutation-missing-envelope" },
+    { "id": "mutation-stdout-truncation-is-unknown", "type": "process-outcome", "scenario": "mutation-stdout-truncated" },
+    { "id": "mutation-stderr-truncation-is-unknown", "type": "process-outcome", "scenario": "mutation-stderr-truncated" },
+    { "id": "read-timeout-is-deterministic", "type": "process-outcome", "scenario": "read-timeout" },
+    { "id": "read-signal-is-deterministic", "type": "process-outcome", "scenario": "read-signal" },
+    { "id": "read-missing-envelope-is-protocol-error", "type": "process-outcome", "scenario": "read-missing-envelope" },
+    { "id": "read-stdout-truncation-is-output-error", "type": "process-outcome", "scenario": "read-stdout-truncated" },
+    { "id": "read-stderr-truncation-is-output-error", "type": "process-outcome", "scenario": "read-stderr-truncated" },
+    { "id": "read-null-exit-is-incomplete", "type": "process-outcome", "scenario": "read-null-exit" },
+    { "id": "mutation-null-exit-is-unknown", "type": "process-outcome", "scenario": "mutation-null-exit" },
+    { "id": "read-missing-exit-is-incomplete", "type": "process-outcome", "scenario": "read-missing-exit" },
+    { "id": "mutation-missing-exit-is-unknown", "type": "process-outcome", "scenario": "mutation-missing-exit" },
+    { "id": "read-invalid-exit-is-incomplete", "type": "process-outcome", "scenario": "read-invalid-exit" },
+    { "id": "mutation-invalid-exit-is-unknown", "type": "process-outcome", "scenario": "mutation-invalid-exit" }
+  ],
+  "artifacts": [
+    { "path": "scenarios.json", "sha256": "sha256:f2b0d292469d3b91008d79c5e7310917e4c9c3350ed444aadaef80f83e0f2ce0" }
+  ]
+}

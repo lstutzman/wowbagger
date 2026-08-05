@@ -1,0 +1,35 @@
+{
+  "adapter_vector_version": 1,
+  "case": "handoff-resume",
+  "coverage": [
+    "handoff"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "protocol",
+  "assertions": [
+    {
+      "id": "handoff-is-explicit-and-non-authoritative",
+      "type": "resume-plan",
+      "expect": "expected-resume-plan.json"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "expected-resume-plan.json",
+      "sha256": "sha256:4b83aac1386649bbb0bf3e4ae58b3300382a0817393d513dbb7b5ccdf71cbea0"
+    },
+    {
+      "path": "handoff-carrier.json",
+      "sha256": "sha256:cc229485536ed6275052625fbcc9d70b8e342840a9174029edf092a1822e6d17"
+    },
+    {
+      "path": "handoff.json",
+      "sha256": "sha256:7ba32633a2788adc38e0128d136110f06f09d5c9a6861ade6a5f4ed685a48ce4"
+    }
+  ]
+}

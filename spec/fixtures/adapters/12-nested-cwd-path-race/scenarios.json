@@ -1,0 +1,46 @@
+{
+  "workspace_root": "/approved/workspace",
+  "cwd": "nested/deep",
+  "ledger": "ledger/items",
+  "before": {
+    ".": { "kind": "directory", "identity": "root-1" },
+    "nested": { "kind": "directory", "identity": "nested-1" },
+    "nested/deep": { "kind": "directory", "identity": "deep-1" },
+    "ledger": { "kind": "directory", "identity": "ledger-1" },
+    "ledger/items": { "kind": "directory", "identity": "items-1" },
+    "nested/deep/ledger/items": { "kind": "directory", "identity": "decoy-1" }
+  },
+  "after": {
+    ".": { "kind": "directory", "identity": "root-1" },
+    "nested": { "kind": "directory", "identity": "nested-2" },
+    "nested/deep": { "kind": "directory", "identity": "deep-1" },
+    "ledger": { "kind": "directory", "identity": "ledger-1" },
+    "ledger/items": { "kind": "directory", "identity": "items-1" },
+    "nested/deep/ledger/items": { "kind": "directory", "identity": "decoy-1" }
+  },
+  "expected": {
+    "ledger_argument": "/approved/workspace/ledger/items",
+    "refusal": "path-replaced",
+    "path_role": "cwd",
+    "component": "nested"
+  },
+  "invalid_paths": [
+    { "id": "posix-absolute", "path": "/absolute", "expected": "path-rejected" },
+    { "id": "drive-forward-slash", "path": "C:/repo", "expected": "path-rejected" },
+    { "id": "drive-backslash", "path": "C:\\repo", "expected": "path-rejected" },
+    { "id": "drive-relative", "path": "C:repo", "expected": "path-rejected" },
+    { "id": "unc-backslash", "path": "\\\\server\\share", "expected": "path-rejected" },
+    { "id": "unc-forward-slash", "path": "//server/share", "expected": "path-rejected" },
+    { "id": "device-backslash", "path": "\\\\?\\C:\\repo", "expected": "path-rejected" },
+    { "id": "device-forward-slash", "path": "//?/C:/repo", "expected": "path-rejected" },
+    { "id": "device-dot-prefix", "path": "\\\\.\\COM1", "expected": "path-rejected" },
+    { "id": "volume-prefix", "path": "Volume{fixture}/repo", "expected": "path-rejected" },
+    { "id": "volume-root", "path": "volume{fixture}", "expected": "path-rejected" }
+  ],
+  "snapshot_cases": [
+    { "id": "root-initial-identity-missing", "side": "before", "component": ".", "operation": "delete", "expected": "path-rejected" },
+    { "id": "parent-final-identity-missing", "side": "after", "component": "nested", "operation": "delete", "expected": "path-rejected" },
+    { "id": "ledger-identity-malformed", "side": "before", "component": "ledger/items", "operation": "set", "identity": { "dev": 1 }, "expected": "path-rejected" },
+    { "id": "same-kind-component-replaced", "side": "after", "component": "ledger/items", "operation": "set", "identity": { "dev": 1, "ino": 999 }, "expected": "path-replaced" }
+  ]
+}

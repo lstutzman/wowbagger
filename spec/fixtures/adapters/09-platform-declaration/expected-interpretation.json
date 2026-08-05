@@ -1,0 +1,9 @@
+{
+  "supported_platforms": [],
+  "unverified_platforms": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "required_before_support_claim": "native-common-vector-evidence"
+}

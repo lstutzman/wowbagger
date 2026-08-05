@@ -1,0 +1,15 @@
+{
+  "ok": false,
+  "adapter_contract_version": 1,
+  "request_id": "api-only-ready-0001",
+  "error": {
+    "code": "capability-unavailable",
+    "message": "The configured host cannot invoke the Wowbagger core.",
+    "details": {
+      "missing": [
+        "command-execution",
+        "guarded-filesystem"
+      ]
+    }
+  }
+}

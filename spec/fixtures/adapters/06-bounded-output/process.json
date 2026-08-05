@@ -1,0 +1,19 @@
+{
+  "request": {
+    "adapter_contract_version": 1,
+    "request_id": "bounded-output-0001",
+    "command": "inspect",
+    "process": {
+      "started": true,
+      "process_tree_contained": true,
+      "orphaned": false,
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "stdout_complete": false,
+      "stderr_complete": true,
+      "stdout_base64": "ew==",
+      "stderr_base64": ""
+    }
+  }
+}

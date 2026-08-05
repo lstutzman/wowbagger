@@ -1,0 +1,81 @@
+{
+  "context_bytes": 512,
+  "base_invocation_limits": { "context_bytes": 512, "stdout_bytes": 1024, "stderr_bytes": 512, "timeout_ms": 1000 },
+  "advertised_invocation_limits": { "max_context_bytes": 512, "max_stdout_bytes": 1024, "max_stderr_bytes": 512, "max_timeout_ms": 1000 },
+  "instruction_limits": { "max_sources": 8, "max_bytes": 64 },
+  "base_instruction": {
+    "instruction_input_version": 1,
+    "required": true,
+    "sources": [
+      {
+        "source_id": "repository-rules",
+        "origin": "repository",
+        "content_encoding": "base64",
+        "content_base64": "cnVsZXMK",
+        "sha256": "sha256:a73e36ec19ff2a725608408e2b396eadd2ac6046cfa31e010f8d62daab565165",
+        "byte_length": 6,
+        "logical_path": "config/rules.txt"
+      }
+    ]
+  },
+  "base_handoff_carrier": {
+    "handoff_carrier_version": 1,
+    "workspace_id": "fixture-handoff-workspace",
+    "content_encoding": "base64",
+    "content_base64": "eyJoYW5kb2ZmX3ZlcnNpb24iOjEsIndvcmtzcGFjZV9pZCI6ImZpeHR1cmUtaGFuZG9mZi13b3Jrc3BhY2UiLCJpbnN0cnVjdGlvbl9zZXRfZGlnZXN0Ijoic2hhMjU2OjdjMDE0OTZiODQ1M2NlNGQ2ZGFhMzYzMDJjMzg0MWYzZDQ4NjJlMmJlZDk4NGEzMTdjNTZlMzU1NmUzZmQzYjQiLCJpdGVtIjp7ImlkIjoid2JfMDFLRFdQVk5HMDAwMDAwMDAwMDAwMDAwMDAiLCJyZXZpc2lvbiI6InNoYTI1NjozMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIn19Cg==",
+    "byte_length": 295,
+    "sha256": "sha256:eddd9a16d68381586c30115c4f20be9a7c999c697423a4aaa2ab25f838e0668b",
+    "resume_request": {
+      "item_id": "wb_01KDWPVNG00000000000000000",
+      "expected_revision": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "instruction_set_digest": "sha256:7c01496b8453ce4d6daa36302c3841f3d4862e2bed984a317c56e3556e3fd3b4"
+    }
+  },
+  "handoff_options": {
+    "workspace_id": "fixture-handoff-workspace",
+    "max_bytes": 1024,
+    "current": {
+      "item_id": "wb_01KDWPVNG00000000000000000",
+      "revision": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "instruction_set_digest": "sha256:7c01496b8453ce4d6daa36302c3841f3d4862e2bed984a317c56e3556e3fd3b4"
+    }
+  },
+  "cases": [
+    { "id": "invocation-limit-schema", "kind": "invocation-limit", "delete": "timeout_ms", "expected": "invalid-invocation" },
+    { "id": "invocation-timeout-limit", "kind": "invocation-limit", "set": { "path": "timeout_ms", "value": 1001 }, "expected": "timeout-limit-exceeded" },
+    { "id": "legacy-handoff-digest", "kind": "legacy-handoff", "handoff_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected": "handoff-digest-mismatch" },
+    { "id": "handoff-canonical-item-id", "kind": "handoff", "expected": "ok" },
+    { "id": "handoff-resume-item-id", "kind": "handoff", "set": { "path": "resume_request.item_id", "value": "generic-safe-id" }, "expected": "invalid-handoff-resume-request" },
+    { "id": "handoff-object-item-id", "kind": "handoff", "handoff_item_id": "wb_81KDWPVNG00000000000000000", "expected": "invalid-handoff-object" },
+    { "id": "instruction-version", "kind": "instruction", "set": { "path": "instruction_input_version", "value": 2 }, "expected": "invalid-instruction-input" },
+    { "id": "instruction-required-missing", "kind": "instruction", "set": { "path": "sources", "value": [] }, "expected": "required-instruction-input-missing" },
+    { "id": "instruction-origin", "kind": "instruction", "set": { "path": "sources.0.origin", "value": "unknown" }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-encoding", "kind": "instruction", "set": { "path": "sources.0.content_encoding", "value": "utf8" }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-base64", "kind": "instruction", "set": { "path": "sources.0.content_base64", "value": "***" }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-hash", "kind": "instruction", "set": { "path": "sources.0.sha256", "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-byte-length", "kind": "instruction", "set": { "path": "sources.0.byte_length", "value": 7 }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-logical-path", "kind": "instruction", "set": { "path": "sources.0.logical_path", "value": "../rules" }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-null-source", "kind": "instruction", "set": { "path": "sources.0", "value": null }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-primitive-source", "kind": "instruction", "set": { "path": "sources.0", "value": 1 }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-array-source", "kind": "instruction", "set": { "path": "sources.0", "value": [] }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-missing-source-member", "kind": "instruction", "set": { "path": "sources.0", "value": { "source_id": "missing-members" } }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-extra-source-member", "kind": "instruction", "set": { "path": "sources.0.extra", "value": true }, "expected": "invalid-instruction-source" },
+    { "id": "instruction-duplicate-id", "kind": "instruction", "duplicate_source": true, "expected": "duplicate-instruction-source-id" },
+    { "id": "instruction-source-limit", "kind": "instruction", "limit_sources": 0, "expected": "instruction-source-limit-exceeded" },
+    { "id": "instruction-total-limit", "kind": "instruction", "limit_bytes": 5, "expected": "instruction-byte-limit-exceeded" },
+    { "id": "handoff-carrier-version", "kind": "handoff", "set": { "path": "handoff_carrier_version", "value": 2 }, "expected": "invalid-handoff-carrier" },
+    { "id": "handoff-workspace", "kind": "handoff", "set": { "path": "workspace_id", "value": "other-workspace" }, "expected": "handoff-workspace-mismatch" },
+    { "id": "handoff-encoding", "kind": "handoff", "set": { "path": "content_encoding", "value": "utf8" }, "expected": "invalid-handoff-carrier" },
+    { "id": "handoff-base64", "kind": "handoff", "set": { "path": "content_base64", "value": "***" }, "expected": "invalid-handoff-bytes" },
+    { "id": "handoff-hash", "kind": "handoff", "set": { "path": "sha256", "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, "expected": "invalid-handoff-bytes" },
+    { "id": "handoff-byte-length", "kind": "handoff", "set": { "path": "byte_length", "value": 1 }, "expected": "invalid-handoff-bytes" },
+    { "id": "handoff-duplicate-json", "kind": "handoff", "duplicate_json": true, "expected": "invalid-handoff-json" },
+    { "id": "handoff-object-version", "kind": "handoff", "handoff_object_version": 2, "expected": "invalid-handoff-object" },
+    { "id": "handoff-limit", "kind": "handoff", "handoff_limit_bytes": 1, "expected": "handoff-limit-exceeded" },
+    { "id": "handoff-resume-binding", "kind": "handoff", "set": { "path": "resume_request.expected_revision", "value": "sha256:4444444444444444444444444444444444444444444444444444444444444444" }, "expected": "handoff-resume-binding-mismatch" },
+    { "id": "handoff-current-item", "kind": "handoff", "current_item_id": "wb_01KDWPVNG00000000000000001", "expected": "handoff-item-mismatch" },
+    { "id": "handoff-current-revision", "kind": "handoff", "current_revision": "sha256:4444444444444444444444444444444444444444444444444444444444444444", "expected": "handoff-stale-item-revision" },
+    { "id": "handoff-current-instructions", "kind": "handoff", "current_instruction_set_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444", "expected": "handoff-instruction-set-mismatch" },
+    { "id": "combined-context-limit", "kind": "combined", "context_bytes": 300, "expected": "context-limit-exceeded" }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "adapter_contract_version": 1,
+  "request_id": "bounded-output-0001",
+  "workspace": {
+    "workspace_id": "fixture-output-workspace",
+    "cwd": "."
+  },
+  "core_request": {
+    "command": "inspect",
+    "ledger": "ledger",
+    "id": "wb_01KDWPVNG00000000000000000"
+  },
+  "instruction_input": { "instruction_input_version": 1, "required": false, "sources": [] },
+  "handoff_carrier": null,
+  "limits": {
+    "context_bytes": 1024,
+    "stdout_bytes": 128,
+    "stderr_bytes": 128,
+    "timeout_ms": 30000
+  }
+}

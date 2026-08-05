@@ -1,0 +1,69 @@
+{
+  "ok": true,
+  "bootstrap_wire_version": 1,
+  "selected_adapter_contract_version": 1,
+  "adapter_id": "example.api-only",
+  "adapter_version": "0.0.0-fixture",
+  "core": {
+    "required_core_contract_version": 1,
+    "commands": []
+  },
+  "host": {
+    "command_execution": {
+      "supported": false,
+      "arguments_array": false,
+      "shell": false,
+      "stdio": false,
+      "process_tree_containment": false,
+      "orphan_detection": false,
+      "timeout_enforcement": false,
+      "stdout_limit": false,
+      "stderr_limit": false
+    },
+    "filesystem": {
+      "workspace_selection": "none",
+      "no_follow_resolution": false,
+      "stable_identity": false,
+      "component_walk": false
+    },
+    "model_transport": {
+      "available": true,
+      "protocol": "openai-compatible"
+    },
+    "instruction_input": {
+      "mode": "none",
+      "max_sources": 0,
+      "max_bytes": 0
+    },
+    "handoff": {
+      "supported": false,
+      "persistence": "explicit-only"
+    },
+    "trusted_approval": {
+      "supported": false,
+      "sources": ["consumer"]
+    },
+    "integration_mechanisms": {
+      "hooks": false,
+      "slash_commands": false,
+      "mcp": false,
+      "daemon": false
+    }
+  },
+  "optional_features": {
+    "claims": false,
+    "policy": false
+  },
+  "limits": {
+    "max_request_bytes": 65536,
+    "max_context_bytes": 0,
+    "max_stdout_bytes": 0,
+    "max_stderr_bytes": 0,
+    "max_timeout_ms": 1000
+  },
+  "platforms": {
+    "darwin": "unverified",
+    "linux": "unverified",
+    "win32": "unverified"
+  }
+}

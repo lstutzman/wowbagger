@@ -1,0 +1,14 @@
+{
+  "workspace_root": "fixture-workspace",
+  "entries": [
+    {
+      "path": "ledger-link",
+      "kind": "symbolic-link",
+      "target": "outside-ledger"
+    },
+    {
+      "path": "outside-ledger",
+      "kind": "directory"
+    }
+  ]
+}

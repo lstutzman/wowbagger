@@ -1,0 +1,35 @@
+{
+  "adapter_vector_version": 1,
+  "case": "path-no-follow",
+  "coverage": [
+    "path-safety"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "negative-capability",
+  "assertions": [
+    {
+      "id": "reject-link-before-core-launch",
+      "type": "path-refusal",
+      "expect": "symbolic-link"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "expected-refusal.json",
+      "sha256": "sha256:a76311164edc1dc5bc86deaff1893369b4f130ce79d394efdf92fcca257e95ed"
+    },
+    {
+      "path": "filesystem-shape.json",
+      "sha256": "sha256:c57a7cc14c186c0273a5bf2925a10eadeb583d5ddaff0d32938869c5144f5287"
+    },
+    {
+      "path": "invocation.json",
+      "sha256": "sha256:45760b87c3ce4ec104541c217cb703b023027ee01a9c37bda4044263fada8f22"
+    }
+  ]
+}
