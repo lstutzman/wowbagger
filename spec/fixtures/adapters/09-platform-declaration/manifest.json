@@ -1,0 +1,31 @@
+{
+  "adapter_vector_version": 1,
+  "case": "platform-declaration",
+  "coverage": [
+    "platforms"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "protocol",
+  "assertions": [
+    {
+      "id": "platform-status-is-evidence-based",
+      "type": "platform-status",
+      "expect": "expected-interpretation.json"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "expected-interpretation.json",
+      "sha256": "sha256:82f1314bb193c8cb5728650a837399f86fd3924eb669eef6f6faf706efb0d8d6"
+    },
+    {
+      "path": "package-manifest.json",
+      "sha256": "sha256:7908b66132db20e1d7fb7bbda082a7c723b665a481d46e9824bcdd6f45975ba6"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "adapter_vector_version": 1,
+  "case": "instruction-input",
+  "coverage": [
+    "instructions"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "protocol",
+  "assertions": [
+    {
+      "id": "preserve-host-order",
+      "type": "instruction-order",
+      "expect": [
+        "repository-rules",
+        "harness-safety"
+      ]
+    },
+    {
+      "id": "no-conventional-filename-assumption",
+      "type": "instruction-order",
+      "expect": "no-guessed-filenames"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "expected-discovery.json",
+      "sha256": "sha256:724045bd731da8ba9635513d606f8aab78277eac5e5ae8d7889820e017528591"
+    },
+    {
+      "path": "instruction-input.json",
+      "sha256": "sha256:4dcb75fccd6d2af42d803682bf5ffac3d283ac198da2f977075b7e957030a2e3"
+    }
+  ]
+}

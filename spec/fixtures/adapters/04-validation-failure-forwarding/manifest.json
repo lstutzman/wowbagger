@@ -1,0 +1,46 @@
+{
+  "adapter_vector_version": 1,
+  "case": "validation-failure-forwarding",
+  "coverage": [
+    "core-forwarding"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "direct-core",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "equivalence",
+  "assertions": [
+    {
+      "id": "preserve-validation-failure",
+      "type": "core-baseline",
+      "stdout_artifact": "expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "core-invocation.json",
+      "sha256": "sha256:c9a42163ba4bd5e97c0e8ea2fb1c042f9ecf3a82aea3c4b943e332d3082f4241"
+    },
+    {
+      "path": "expected-adapter-result.json",
+      "sha256": "sha256:97550c82e64859ecf356f4d46732d6cb03144232f3c51f6e767d45ae5bb1092e"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "sha256": "sha256:0bf5de3695059d1c77d1b744083afff431eb7c84e4f7bf83c5d5136e9e76a41d"
+    },
+    {
+      "path": "invocation.json",
+      "sha256": "sha256:edc5900cc34dc228cec550a08694c4221332b5baab6a64caa46b960e2bd66565"
+    },
+    {
+      "path": "ledger-bad.md",
+      "sha256": "sha256:c44ede398c533cb2275f8c0a9473279558b816e454ce04996d59e4919fe75b82"
+    }
+  ]
+}

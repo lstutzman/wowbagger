@@ -1,0 +1,24 @@
+{
+  "ok": false,
+  "adapter_contract_version": 1,
+  "request_id": "bounded-output-0001",
+  "error": {
+    "code": "output-limit-exceeded",
+    "message": "The core output exceeded the requested bound.",
+    "details": {
+      "streams": ["stdout"]
+    }
+  },
+  "process": {
+    "started": true,
+    "process_tree_contained": true,
+    "orphaned": false,
+    "exit_code": 0,
+    "signal": null,
+    "timed_out": false,
+    "stdout_complete": false,
+    "stderr_complete": true,
+    "core_envelope_present": true,
+    "core_envelope_valid": false
+  }
+}

@@ -1,0 +1,1 @@
+{"valid":false,"errors":[{"path":"ledger/bad.md","field":"frontmatter","code":"malformed-frontmatter","message":"Item must begin with one YAML frontmatter document delimited by --- lines."}]}

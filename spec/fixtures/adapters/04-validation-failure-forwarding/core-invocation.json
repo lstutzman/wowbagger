@@ -1,0 +1,10 @@
+{
+  "command": "validate",
+  "argv": [
+    "validate",
+    "--ledger",
+    "ledger",
+    "--json"
+  ],
+  "stdin_base64": ""
+}

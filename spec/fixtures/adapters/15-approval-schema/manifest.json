@@ -1,0 +1,32 @@
+{
+  "adapter_vector_version": 1,
+  "case": "approval-schema",
+  "coverage": ["authority"],
+  "targets": ["claude-code", "codex", "kimi", "openai-compatible-harness"],
+  "mode": "protocol",
+  "assertions": [
+    { "id": "complete-approval-is-valid", "type": "approval-schema", "scenario": "valid" },
+    { "id": "approval-version-is-exact", "type": "approval-schema", "scenario": "approval-version" },
+    { "id": "approval-required-fields-are-exact", "type": "approval-schema", "scenario": "missing-field" },
+    { "id": "approval-extra-fields-are-refused", "type": "approval-schema", "scenario": "extra-field" },
+    { "id": "approval-nonce-syntax-is-enforced", "type": "approval-schema", "scenario": "nonce-syntax" },
+    { "id": "approval-digest-syntax-is-enforced", "type": "approval-schema", "scenario": "digest-syntax" },
+    { "id": "approval-issued-time-is-canonical", "type": "approval-schema", "scenario": "invalid-issued-time" },
+    { "id": "approval-time-order-is-enforced", "type": "approval-schema", "scenario": "time-order" },
+    { "id": "approval-current-time-is-canonical", "type": "approval-schema", "scenario": "invalid-current-time" },
+    { "id": "approval-cannot-be-used-before-issue", "type": "approval-schema", "scenario": "not-yet-valid" },
+    { "id": "approval-expires-at-boundary", "type": "approval-schema", "scenario": "expired" },
+    { "id": "approval-source-is-trusted", "type": "approval-schema", "scenario": "untrusted-source" },
+    { "id": "agent-source-is-untrusted", "type": "approval-schema", "scenario": "untrusted-agent" },
+    { "id": "system-source-is-untrusted", "type": "approval-schema", "scenario": "untrusted-system" },
+    { "id": "tool-source-is-untrusted", "type": "approval-schema", "scenario": "untrusted-tool" },
+    { "id": "additional-trusted-source-is-refused", "type": "approval-schema", "scenario": "trusted-source-extra" },
+    { "id": "approval-is-single-use", "type": "approval-schema", "scenario": "replay" },
+    { "id": "approval-binding-mismatch-is-refused", "type": "approval-schema", "scenario": "binding-mismatch" },
+    { "id": "approval-binding-missing-field-is-refused", "type": "approval-schema", "scenario": "binding-missing" },
+    { "id": "approval-binding-extra-field-is-refused", "type": "approval-schema", "scenario": "binding-extra" }
+  ],
+  "artifacts": [
+    { "path": "scenarios.json", "sha256": "sha256:a5edd53483bac72af72d74f80d9147292a7e0eb2e0bb5f22a8f0ae11b842923d" }
+  ]
+}

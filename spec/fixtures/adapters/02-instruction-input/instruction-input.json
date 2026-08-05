@@ -1,0 +1,22 @@
+{
+  "instruction_input_version": 1,
+  "required": true,
+  "sources": [
+    {
+      "source_id": "repository-rules",
+      "origin": "repository",
+      "content_encoding": "base64",
+      "content_base64": "UmVhZCB0aGUgZHVyYWJsZSB3b3JrIGxlZGdlciBiZWZvcmUgZXhlY3V0aW9uLgo=",
+      "sha256": "sha256:ea85184311391b80d7adb8bc75b78fa21c016c66576d98613a12c81d5c925135",
+      "byte_length": 47
+    },
+    {
+      "source_id": "harness-safety",
+      "origin": "harness",
+      "content_encoding": "base64",
+      "content_base64": "QSBsZWRnZXIgbXV0YXRpb24gcmVxdWlyZXMgY29uc3VtZXIgYXBwcm92YWwuCg==",
+      "sha256": "sha256:e69a0c8ff9568205567f63b9f6aabc18df29d9f6d6b47a4f11f2a66ea6c838bb",
+      "byte_length": 46
+    }
+  ]
+}

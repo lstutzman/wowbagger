@@ -1,0 +1,9 @@
+{
+  "source_ids": [
+    "repository-rules",
+    "harness-safety"
+  ],
+  "discovery_mode": "host-provided",
+  "guessed_filenames": false,
+  "total_bytes": 93
+}

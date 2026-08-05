@@ -1,0 +1,27 @@
+{
+  "approval": {
+    "approval_version": 1,
+    "source": "consumer",
+    "nonce": "single-use-approval-0001",
+    "issued_at": "2030-01-15T12:00:00Z",
+    "expires_at": "2030-01-15T12:05:00Z",
+    "invocation_digest": "sha256:9b816d872e401982098a82d399347637813d1523430e752d7290f35c3bd44eb0"
+  },
+  "approval_options": {
+    "binding": {
+      "request_id": "mutation-approval-0001",
+      "adapter": { "id": "example.reference", "version": "1.0.0", "contract_version": 1 },
+      "core": {
+        "executable_identity": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "contract_version": 1,
+        "argv": ["transition", "--ledger", "/approved/workspace/ledger", "--input", "-", "--json"],
+        "input_base64": "e30K"
+      },
+      "workspace": { "id": "fixture-workspace", "root": "/approved/workspace", "cwd": "/approved/workspace", "ledger": "/approved/workspace/ledger" },
+      "limits": { "context_bytes": 1024, "stdout_bytes": 4096, "stderr_bytes": 4096, "timeout_ms": 30000 },
+      "instruction_set_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "handoff_digest": null
+    },
+    "now": "2030-01-15T12:01:00Z"
+  }
+}

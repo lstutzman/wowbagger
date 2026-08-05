@@ -1,0 +1,18 @@
+{
+  "must_invoke": [
+    "describe",
+    "validate",
+    "inspect"
+  ],
+  "must_compare": [
+    "instruction-set-digest",
+    "item-revision"
+  ],
+  "forbidden_automatic_actions": [
+    "claim-renewal",
+    "create",
+    "git-commit",
+    "git-push",
+    "transition"
+  ]
+}

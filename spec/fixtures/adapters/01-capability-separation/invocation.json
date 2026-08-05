@@ -1,0 +1,21 @@
+{
+  "adapter_contract_version": 1,
+  "request_id": "api-only-ready-0001",
+  "workspace": {
+    "workspace_id": "fictional-workspace",
+    "cwd": "."
+  },
+  "core_request": {
+    "command": "ready",
+    "ledger": "ledger",
+    "as_of": "2030-01-15"
+  },
+  "instruction_input": { "instruction_input_version": 1, "required": false, "sources": [] },
+  "handoff_carrier": null,
+  "limits": {
+    "context_bytes": 0,
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "timeout_ms": 1000
+  }
+}

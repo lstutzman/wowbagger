@@ -1,0 +1,43 @@
+{
+  "adapter_vector_version": 1,
+  "case": "ready-forwarding",
+  "coverage": [
+    "bounded-io",
+    "core-forwarding"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "direct-core",
+    "kimi",
+    "openai-compatible-harness"
+  ],
+  "mode": "equivalence",
+  "assertions": [
+    {
+      "id": "preserve-ready-baseline",
+      "type": "core-baseline",
+      "stdout_artifact": "expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 0
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "core-invocation.json",
+      "sha256": "sha256:b2d51f5a9c82b618de53422c892580a4a93f3ddc61b7daeeb838bbe29efcb086"
+    },
+    {
+      "path": "expected-adapter-result.json",
+      "sha256": "sha256:0d7e5243470e12bd693e361ded640eb09a24dee3f2b127bfdd0ab6b04ef1b63a"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "sha256": "sha256:6584f2d78576c0a9ef02427e041e539a6016759e737f942df7af18033691c931"
+    },
+    {
+      "path": "invocation.json",
+      "sha256": "sha256:a0bcc13238f9e6f61f99e2fe8c4fbbc0c8f091ab9868082c1403a8a19b5f6761"
+    }
+  ]
+}

@@ -244,8 +244,7 @@ export async function createItem(ledgerDirectory, request, scenario) {
         return await finishUncommitted(mutationError('path-collision', 'The default item path is occupied by a different item.', 'unchanged', 4, details));
       }
 
-      const candidate = createData(request, dateFromId(id));
-      const bytes = Buffer.from(serializeCreate(candidate, request.body), 'utf8');
+      const bytes = createCandidateSource(request);
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         null,
@@ -1495,6 +1494,10 @@ async function waitForTestMarker(file) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   throw new Error(`Timed out waiting for test marker ${path.basename(file)}.`);
+}
+
+export function createCandidateSource(request) {
+  return Buffer.from(serializeCreate(createData(request, dateFromId(request.id)), request.body), 'utf8');
 }
 
 function createData(request, date) {

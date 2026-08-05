@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "adapter_contract_version": 1,
+  "request_id": "ready-forwarding-0001",
+  "result": {
+    "core_command": "ready",
+    "core_exit_code": 0,
+    "stdout": {
+      "encoding": "base64",
+      "data": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOlsid2JfMDFLRFo5OENHMFlINzY5U1RaNzU0RUtYU1oiLCJ3Yl8wMUtFMVZOM0cwSFY5WkRCQjhCRUFTWEJCRyIsIndiXzAxS0VQRVRWRzA1WjVGVEdaRlMxQjI2WjUxIiwid2JfMDFLRjIxTTMwMENHV1Q3UzdYNVc4UFoxREMiXX0K",
+      "sha256": "sha256:6584f2d78576c0a9ef02427e041e539a6016759e737f942df7af18033691c931",
+      "byte_length": 174
+    },
+    "stderr": {
+      "encoding": "base64",
+      "data": "",
+      "sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_length": 0
+    }
+  }
+}
