@@ -3,9 +3,10 @@ schema_version: 1
 id: wb_01KZAZW75CWEG3R4BH4MZJAA7G
 title: "Implement advisory work claims in the core CLI"
 kind: task
-status: backlog
+status: done
 created: 2026-08-06
 updated: 2026-08-06
+completed: 2026-08-06
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T07:33:48Z"
@@ -25,6 +26,10 @@ decisions:
     date: 2026-08-06
     summary: "Rewrote the body to describe the delivered advisory scope; the prior body still briefed fencing under the new title."
     rationale: "A body describing an unbuilt fencing protocol on an item titled advisory and sitting in the ready queue would read as build instructions to the next agent that selects it."
+  - action: complete
+    date: 2026-08-06
+    summary: "Advisory work claims shipped in the core CLI."
+    rationale: "provision, claim read/acquire/renew/release, claim capabilities, and a publish-claimed that always refuses; claim state shared across worktrees via the git common directory. Enforcement was never in scope here — fencing is tracked as wb_01KZBMBEZKPE7D15HKW9Q3GSZV and remains the gate for any multi-worktree consumer."
 ---
 
 The core CLI now implements advisory work claims: `provision`, `claim read`,
