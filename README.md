@@ -121,8 +121,23 @@ JSON request, response, recovery, and scope details. A lock is never a work
 claim. See [the fenced work-claim contract](docs/work-claim-contract.md) for
 the separate future claim protocol and its strict backend boundary.
 
-The executable is packaged as `wowbagger` for a future installation path. This
-pre-alpha repository intentionally documents direct checkout use only.
+## Install
+
+The Claude Code plugin drives an installed core rather than bundling one, so a
+version mismatch is detectable instead of silent. Install the executable from
+the repository:
+
+```sh
+npm install -g github:lstutzman/wowbagger
+wowbagger capabilities --json
+```
+
+The `contract_version` in that result is what an adapter or plugin declares it
+requires. A consumer pairing a plugin with a core that reports a different
+contract version gets a refusal, not a guess.
+
+Direct checkout use — `./bin/wowbagger.js` from a clone — remains supported and
+is what this repository's own ledger uses.
 
 ## Verify a checkout
 
