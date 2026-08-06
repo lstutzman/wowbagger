@@ -22,9 +22,9 @@
       "exit_code": 0
     },
     {
-      "id": "claims-remain-unsupported",
+      "id": "claims-are-advisory",
       "type": "capability",
-      "expect": "work-claim-supported-false"
+      "expect": "work-claim-advisory"
     }
   ],
   "artifacts": [
@@ -34,11 +34,11 @@
     },
     {
       "path": "expected-adapter-result.json",
-      "sha256": "sha256:a56954b10bc7f639dc5595955ec3939a8500de089f3c26dbd1b41a8d02ddf3bf"
+      "sha256": "sha256:91bb927198151aaf60f5b79628cbecaeea0b050ac3d3b4c7ca4532e534fbae73"
     },
     {
       "path": "expected-core-stdout.jsonl",
-      "sha256": "sha256:a5abe52f9e26c0e63a20c1b2297dc134cae4e94c58042bd93772076b17b9837a"
+      "sha256": "sha256:477a99ec76e92c21f4621f84c0c025697f7f12dd919b5f8d38a3bd83cec5e913"
     },
     {
       "path": "invocation.json",

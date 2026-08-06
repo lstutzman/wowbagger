@@ -1,3 +1,5 @@
+import { coordinationScope, resolveWorkClaimCapability } from './claim-capabilities.js';
+import { resolveGitCommonDir } from './claim-store.js';
 import { loadLedger } from './ledger.js';
 import {
   createItem,
@@ -19,7 +21,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeInvalidRequest(command, parsedOptions.issues);
       return;
     }
-    process.stdout.write(`${JSON.stringify(capabilities())}\n`);
+    process.stdout.write(`${JSON.stringify(await capabilities(parsedOptions.options.ledger))}\n`);
     return;
   }
 
@@ -139,7 +141,8 @@ export async function runCli(argumentsList, { scenario } = {}) {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
-function capabilities() {
+async function capabilities(ledger) {
+  const gitCommonDir = await resolveGitCommonDir(ledger ?? process.cwd());
   return {
     ok: true,
     command: 'capabilities',
@@ -147,7 +150,7 @@ function capabilities() {
     result: {
       backend: {
         name: 'local-filesystem',
-        coordination_scope: 'same-working-copy-cooperative-writers',
+        coordination_scope: coordinationScope({ gitCommonDir }),
       },
       operations: {
         inspect: {
@@ -167,10 +170,7 @@ function capabilities() {
           write_scope: 'single-item',
           cas_scope: 'exact-byte-sha256',
         },
-        work_claim: {
-          supported: false,
-          reason: 'not-implemented',
-        },
+        work_claim: resolveWorkClaimCapability({ gitCommonDir }),
       },
       durability: {
         temporary_file_sync: 'required-before-publication',
@@ -181,7 +181,7 @@ function capabilities() {
       limits: {
         multi_item_atomicity: false,
         cross_clone_coordination: false,
-        cross_worktree_coordination: false,
+        cross_worktree_coordination: Boolean(gitCommonDir),
         cross_machine_coordination: false,
         noncooperating_writer_protection: false,
         automatic_stale_lock_breaking: false,
