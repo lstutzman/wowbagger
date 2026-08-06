@@ -74,3 +74,173 @@ test('refuses every unsafe executable path form on every platform', () => {
   }
   assert.equal(isSafeRelativeExecutable('bin/adapter'), true);
 });
+
+// Entrypoint validation tests for manifest
+test('refuses manifest when describe entrypoint is null', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = null;
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'entrypoint not an object: null');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when describe entrypoint is not an object', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = 'not an object';
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'entrypoint not an object: string');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when describe entrypoint is an array', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = [];
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'entrypoint not an object: array');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when host-tool has unknown member', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'host-tool', name: 'my-tool', extra: 'member' };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'host-tool schema not exact: extra member');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when host-tool is missing name', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'host-tool' };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'host-tool schema not exact: missing name');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when host-tool name is empty string', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'host-tool', name: '' };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'host-tool name empty');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when host-tool name is not a string', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'host-tool', name: 42 };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'host-tool name non-string');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when entrypoint kind is unknown', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'unknown', executable: 'bin/x', fixed_args: [] };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'unknown entrypoint kind');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when command has unknown member', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'command', executable: 'bin/adapter', fixed_args: ['x'], extra: true };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'command schema not exact: extra member');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when command is missing executable', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'command', fixed_args: ['x'] };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'command schema not exact: missing executable');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when command executable is unsafe', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'command', executable: '/absolute/path', fixed_args: [] };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'unsafe executable');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when command fixed_args is not an array', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'command', executable: 'bin/x', fixed_args: 'not-array' };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'fixed_args not an array');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when command fixed_args contains non-string', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'command', executable: 'bin/x', fixed_args: ['arg', 42] };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'fixed_args has non-string');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses manifest when command fixed_args contains control character', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.describe = { kind: 'command', executable: 'bin/x', fixed_args: ['arg\u0000'] };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'fixed_args has control character');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('accepts valid manifest with command entrypoints', () => {
+  const result = validateAdapterManifest(BASE_MANIFEST);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.manifest, BASE_MANIFEST);
+});
+
+test('accepts valid manifest with host-tool entrypoint', () => {
+  const good = structuredClone(BASE_MANIFEST);
+  good.entrypoints.describe = { kind: 'host-tool', name: 'my-describe-tool' };
+  good.entrypoints.invoke = { kind: 'host-tool', name: 'my-invoke-tool' };
+
+  const result = validateAdapterManifest(good);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.manifest, good);
+});
+
+test('accepts valid manifest with mixed host-tool and command entrypoints', () => {
+  const good = structuredClone(BASE_MANIFEST);
+  good.entrypoints.describe = { kind: 'host-tool', name: 'my-describe-tool' };
+  good.entrypoints.invoke = { kind: 'command', executable: 'bin/invoke', fixed_args: ['invoke'] };
+
+  const result = validateAdapterManifest(good);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.manifest, good);
+});
