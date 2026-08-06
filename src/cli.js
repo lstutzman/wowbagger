@@ -116,6 +116,23 @@ export async function runCli(argumentsList, { scenario } = {}) {
     return;
   }
 
+  if (command === 'publish-claimed') {
+    process.stdout.write(`${JSON.stringify({
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      error: {
+        code: 'capability-unavailable',
+        message: 'Claim-protected publication is unavailable on an advisory backend.',
+        details: { reason: 'advisory-capability' },
+      },
+    })}\n`);
+    process.exitCode = 2;
+    return;
+  }
+
   if (command !== 'validate' && command !== 'ready') {
     throw new Error(usage());
   }
