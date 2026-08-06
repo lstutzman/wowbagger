@@ -120,7 +120,47 @@ test('reports the request read failure, not invalid-invocation, for an unknown o
   assert.equal(response.error.code, 'invalid-describe-request');
 });
 
-test('refuses to advertise when its own manifest is invalid, before touching stdin', async () => {
+const STRUCTURALLY_INVALID_MANIFEST = JSON.stringify({
+  adapter_manifest_version: 1,
+  adapter_id: 'dev.wowbagger.adapter.claude-code',
+  adapter_version: '0.1.0',
+  adapter_contract_versions: [1],
+  bootstrap_wire_version: 1,
+  required_core_contract_version: 1,
+  entrypoints: {
+    describe: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['describe'] },
+    invoke: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['invoke'] },
+  },
+  // `platforms` deliberately omitted.
+});
+
+// A manifest that is syntactically valid JSON but carries a duplicated
+// `adapter_id` member — a lenient last-wins parser (e.g. bare JSON.parse)
+// would silently advertise the second, hostile value.
+const HOSTILE_ADAPTER_ID = 'dev.evil.impostor';
+const DUPLICATE_MEMBER_MANIFEST = `{
+  "adapter_manifest_version": 1,
+  "adapter_id": "dev.wowbagger.adapter.claude-code",
+  "adapter_id": "${HOSTILE_ADAPTER_ID}",
+  "adapter_version": "0.1.0",
+  "adapter_contract_versions": [1],
+  "bootstrap_wire_version": 1,
+  "required_core_contract_version": 1,
+  "entrypoints": {
+    "describe": { "kind": "command", "executable": "adapters/claude-code/entrypoint.js", "fixed_args": ["describe"] },
+    "invoke": { "kind": "command", "executable": "adapters/claude-code/entrypoint.js", "fixed_args": ["invoke"] }
+  },
+  "platforms": { "darwin": "unverified", "linux": "unverified", "win32": "unverified" }
+}`;
+
+// Spawns a byte-for-byte copy of the real entrypoint.js from a temp
+// directory at the same `adapters/<name>/entrypoint.js` depth (so its
+// `../../src/...` relative imports still resolve, via a symlink to the real
+// `src/`), with `wowbagger-adapter.json` replaced by `manifestContent`.
+// Passing `undefined` omits the manifest file entirely (simulating a
+// missing/unreadable install). This is the harness the manifest self-check
+// tests share; it never calls entrypoint logic directly.
+async function withTemporaryManifest(manifestContent, { operation = 'describe', stdinInput = validRequest } = {}) {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-'));
   try {
     const claudeCodeDirectory = path.join(temporaryDirectory, 'adapters', 'claude-code');
@@ -128,38 +168,72 @@ test('refuses to advertise when its own manifest is invalid, before touching std
       recursive: true,
     });
     await symlink(path.join(projectRoot, 'src'), path.join(temporaryDirectory, 'src'));
-    // Missing `platforms`: fails Task 3's `validateAdapterManifest` before
-    // any describe-request schema check runs.
-    await writeFile(path.join(claudeCodeDirectory, 'wowbagger-adapter.json'), JSON.stringify({
-      adapter_manifest_version: 1,
-      adapter_id: 'dev.wowbagger.adapter.claude-code',
-      adapter_version: '0.1.0',
-      adapter_contract_versions: [1],
-      bootstrap_wire_version: 1,
-      required_core_contract_version: 1,
-      entrypoints: {
-        describe: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['describe'] },
-        invoke: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['invoke'] },
-      },
-    }));
+    if (manifestContent !== undefined) {
+      await writeFile(path.join(claudeCodeDirectory, 'wowbagger-adapter.json'), manifestContent);
+    }
 
-    const brokenEntrypoint = path.join(claudeCodeDirectory, 'entrypoint.js');
-    const { code, stdout } = await new Promise((resolve, reject) => {
-      const child = execFile(process.execPath, [brokenEntrypoint, 'describe'], { encoding: 'buffer' });
+    const spawnedEntrypoint = path.join(claudeCodeDirectory, 'entrypoint.js');
+    return await new Promise((resolve, reject) => {
+      const child = execFile(process.execPath, [spawnedEntrypoint, operation], { encoding: 'buffer' });
       let out = Buffer.alloc(0);
+      let err = Buffer.alloc(0);
       child.stdout.on('data', (chunk) => { out = Buffer.concat([out, chunk]); });
+      child.stderr.on('data', (chunk) => { err = Buffer.concat([err, chunk]); });
       child.on('error', reject);
-      child.on('close', (exitCode) => resolve({ code: exitCode, stdout: out }));
-      // Never write to stdin: the manifest self-check must fail and respond
-      // before the entrypoint would otherwise wait for a request.
-      child.stdin.end();
+      child.on('close', (exitCode) => resolve({ code: exitCode, stdout: out, stderr: err }));
+      if (stdinInput === undefined) {
+        child.stdin.end();
+      } else {
+        child.stdin.end(stdinInput);
+      }
     });
-
-    assert.equal(code, 0);
-    const response = assertSingleJsonObject(stdout);
-    assert.equal(response.ok, false);
-    assert.equal(response.error.code, 'invalid-adapter-manifest');
   } finally {
     await rm(temporaryDirectory, { force: true, recursive: true });
   }
+}
+
+test('refuses to advertise when its own manifest is structurally invalid, before touching stdin', async () => {
+  // Never writes stdin: the manifest self-check must fail and respond
+  // before the entrypoint would otherwise wait for a request.
+  const { code, stdout } = await withTemporaryManifest(STRUCTURALLY_INVALID_MANIFEST, { stdinInput: undefined });
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-adapter-manifest');
+});
+
+test('refuses a syntactically broken manifest file with exit 0 and nothing on stderr', async () => {
+  const { code, stdout, stderr } = await withTemporaryManifest('{ this is not json', { stdinInput: undefined });
+  assert.equal(code, 0);
+  assert.equal(stderr.length, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-adapter-manifest');
+});
+
+test('refuses an absent manifest file with exit 0 and nothing on stderr', async () => {
+  const { code, stdout, stderr } = await withTemporaryManifest(undefined, { stdinInput: undefined });
+  assert.equal(code, 0);
+  assert.equal(stderr.length, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-adapter-manifest');
+});
+
+test('refuses an empty manifest file with exit 0 and nothing on stderr', async () => {
+  const { code, stdout, stderr } = await withTemporaryManifest('', { stdinInput: undefined });
+  assert.equal(code, 0);
+  assert.equal(stderr.length, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-adapter-manifest');
+});
+
+test('refuses a duplicate-member manifest and never advertises the hostile second adapter_id', async () => {
+  const { code, stdout } = await withTemporaryManifest(DUPLICATE_MEMBER_MANIFEST, { stdinInput: undefined });
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-adapter-manifest');
+  assert.equal(stdout.toString('utf8').includes(HOSTILE_ADAPTER_ID), false);
 });
