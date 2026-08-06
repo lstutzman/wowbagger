@@ -22,3 +22,19 @@ test('refuses a manifest carrying an unknown root member', () => {
   assert.equal(result.ok, false);
   assert.equal(result.error_code, 'invalid-adapter-manifest');
 });
+
+test('refuses a manifest missing a required root member', () => {
+  const { adapter_manifest_version, ...incomplete } = BASE_MANIFEST;
+
+  const result = validateAdapterManifest(incomplete);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a manifest that is not an object', () => {
+  const result = validateAdapterManifest(null);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
