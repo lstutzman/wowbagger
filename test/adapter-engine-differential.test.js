@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateAdapterManifest } from '../src/adapter/manifest.js';
+import { validateAdapterManifest, isSafeRelativeExecutable } from '../src/adapter/manifest.js';
 
 const BASE_MANIFEST = {
   adapter_manifest_version: 1,
@@ -58,4 +58,19 @@ test('refuses a number as manifest', () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses every unsafe executable path form on every platform', () => {
+  const unsafe = [
+    '/absolute/adapter', 'C:/adapter', 'C:\\adapter', 'C:adapter',
+    '\\\\server\\share\\adapter', '//server/share/adapter',
+    '\\\\.\\device\\adapter', '//./device/adapter', '//?/volume/adapter',
+    'bin\\adapter', 'bin//adapter', './bin/adapter', '../bin/adapter',
+    'bin/adapter\u0000', '',
+  ];
+
+  for (const value of unsafe) {
+    assert.equal(isSafeRelativeExecutable(value), false, value);
+  }
+  assert.equal(isSafeRelativeExecutable('bin/adapter'), true);
 });
