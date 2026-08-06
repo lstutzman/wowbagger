@@ -417,6 +417,24 @@ Claim-operation semantic messages are likewise exact:
 | `operation-not-found` | `The publication operation outcome was not found.` |
 | `idempotency-conflict` | `The operation identity is already bound to a different request.` |
 | `publication-outcome-unknown` | `The publication outcome could not be determined.` |
+| `claim-store-unavailable` | `The durable claim store is unavailable.` |
+
+`claim-store-unavailable` is exit 6 with `state: "unchanged"`. It means the
+backend could not reach the durable store that holds claims, epoch high-water
+marks, and the clock floor, so no authoritative decision was possible and
+nothing changed. It is not a statement about the request, which may be
+perfectly valid.
+
+The condition is deliberately generic: a backend whose coordinator is
+unreachable and a backend that cannot locate its store at all both use it.
+`details.reason` names the specific cause and is backend-defined — for example
+`git-directory-not-found` where a backend keeps claim state inside a git
+directory. A caller distinguishes causes through `details.reason`, never
+through the message.
+
+This code was added after the version 1 vectors were written. It is additive:
+it names a condition the original text did not model, changes no existing code,
+message, or envelope, and no reference vector emits it.
 
 The publication outcome and ledger change are one atomic record. If the commit
 succeeds but the response is lost, retrying the identical `operation_id` and

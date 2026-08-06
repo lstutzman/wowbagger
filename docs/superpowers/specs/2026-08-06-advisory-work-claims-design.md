@@ -291,7 +291,7 @@ project exists to prevent.
 | 0 | committed success |
 | 2 | invalid syntax, schema, canonical value, unprovisioned namespace, or advisory capability refusal |
 | 4 | CAS conflict, held, or expired |
-| 6 | clock floor could not be persisted, or epoch exhausted |
+| 6 | clock floor could not be persisted, epoch exhausted, or claim store unavailable |
 
 Exact messages are fixed by the contract and reproduced verbatim:
 
@@ -304,13 +304,22 @@ Exact messages are fixed by the contract and reproduced verbatim:
 | `epoch-exhausted` | `The epoch high-water mark is exhausted.` |
 | `clock-floor-persistence-failed` | `The authoritative clock floor could not be persisted.` |
 | `capability-unavailable` | `Claim-protected publication is unavailable on an advisory backend.` |
+| `claim-store-unavailable` | `The durable claim store is unavailable.` |
 
-**Absent git** is a new condition the contract does not name, because the
-contract does not know about git. It returns exit 2 `invalid-request` with
-message `Work claims require a git repository.` and
-`details.reason: "git-directory-not-found"`. It fails loudly rather than falling
-back to a narrower coordination scope, because a silent fallback would let two
-agents believe they are coordinating when they are not.
+**Absent git** returns exit 6 `claim-store-unavailable`, message `The durable
+claim store is unavailable.`, `state: "unchanged"`, and
+`details.reason: "git-directory-not-found"`.
+
+The contract did not name this condition, because it does not know about git.
+Rather than reuse `invalid-request` — which would blame a caller whose request
+was valid — the code was added to the contract as an additive version 1 change
+(`docs/work-claim-contract.md`, section 8). It is generic on purpose: any
+backend whose durable store is unreachable uses it, and `details.reason` carries
+the backend-specific cause.
+
+It fails loudly rather than falling back to a narrower coordination scope,
+because a silent fallback would let two agents believe they are coordinating
+when they are not.
 
 ## Testing
 
@@ -347,6 +356,24 @@ temporary path exceeds the 104-byte `sun_path` limit and fails
 lock file would surface it as untracked. That predates this work and is left
 alone. New claim state is unaffected: it lives under the git directory, which is
 never version-controlled.
+
+## Ledger bookkeeping when this lands
+
+The item this design implements, `wb_01KZAZW75CWEG3R4BH4MZJAA7G`, is titled
+"Implement fenced work claims in the core CLI". This delivers advisory claims,
+not fenced ones. Closing it as written would assert that fencing exists, which is
+the exact failure corrected on 2026-08-06 when an item marked done had no
+implementation behind it.
+
+So, as part of this work:
+
+- Retitle the item to `Implement advisory work claims in the core CLI`, with a
+  `record` decision explaining the narrowing.
+- File a new item, `Implement fenced work claims with a transactional
+  coordinator`, parented to the v0 epic. It carries the unanswered question this
+  design deliberately did not settle: what the coordinator is, and whether ledger
+  bytes must live inside it for publication to be atomic with the fence check.
+- The PropertyCompass gate moves to that new item.
 
 ## Documentation
 
