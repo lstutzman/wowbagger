@@ -1,6 +1,6 @@
 // test/claim-cli.test.js
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -111,4 +111,87 @@ test('claim capabilities reports the contract-shaped envelope, distinct from top
       },
     },
   });
+});
+
+test('a takeover with a non-null observed active claim succeeds and advances the epoch', async () => {
+  // Regression for the CRITICAL defect: the loose JSON parser gives every nested
+  // request object a null prototype, and claimAcquire's CAS check compares the
+  // witness with isDeepStrictEqual, which treats prototypes as significant. A
+  // shallow request normalization (unwrapping only the top-level lease_duration_ms)
+  // left `expected.active` null-prototyped, so this exact flow always returned
+  // claim-conflict even for a byte-identical, expired witness.
+  const root = await repository();
+  const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const itemId = 'wb_01Q4837BM01W70T30B184GG1R6';
+
+  const firstRequest = path.join(root, 'acquire-1.json');
+  await writeFile(firstRequest, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: itemId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 1,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const first = await capture(['claim', 'acquire', '--ledger', path.join(root, 'ledger'), '--input', firstRequest, '--json']);
+  assert.equal(first.exit, 0);
+  assert.equal(first.envelope.result.claim.epoch, '1');
+
+  // Guarantee the 1ms lease has expired before the takeover attempt.
+  await new Promise((resolve) => { setTimeout(resolve, 20); });
+
+  const takeoverRequest = path.join(root, 'acquire-2.json');
+  await writeFile(takeoverRequest, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: itemId,
+    owner_id: 'agent-b',
+    lease_duration_ms: 300000,
+    // The exact tuple returned by the first acquire — a non-null active object,
+    // which is the shape the null-prototype bug broke.
+    expected: { last_epoch: '1', active: first.envelope.result.claim },
+  }));
+  const takeover = await capture(['claim', 'acquire', '--ledger', path.join(root, 'ledger'), '--input', takeoverRequest, '--json']);
+  assert.equal(takeover.exit, 0);
+  assert.equal(takeover.envelope.result.claim.epoch, '2');
+  assert.equal(takeover.envelope.result.claim.owner_id, 'agent-b');
+});
+
+test('a null request body is rejected as invalid-request instead of crashing', async () => {
+  const root = await repository();
+  await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const request = path.join(root, 'null.json');
+  await writeFile(request, 'null');
+  const refused = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+  assert.equal(refused.exit, 2);
+  assert.equal(refused.envelope.error.code, 'invalid-request');
+});
+
+test('an acquire request missing the expected member is rejected as invalid-request', async () => {
+  const root = await repository();
+  const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const request = path.join(root, 'acquire-missing-expected.json');
+  await writeFile(request, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    owner_id: 'agent-a',
+    lease_duration_ms: 300000,
+  }));
+  const refused = await capture(['claim', 'acquire', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+  assert.equal(refused.exit, 2);
+  assert.equal(refused.envelope.error.code, 'invalid-request');
+});
+
+test('a read request missing item_id is rejected without persisting a junk record', async () => {
+  const root = await repository();
+  const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const request = path.join(root, 'read-missing-item-id.json');
+  await writeFile(request, JSON.stringify({ ledger_namespace: namespace }));
+  const refused = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+  assert.equal(refused.exit, 2);
+  assert.equal(refused.envelope.error.code, 'invalid-request');
+
+  const storePath = path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`);
+  await assert.rejects(stat(storePath), { code: 'ENOENT' });
 });

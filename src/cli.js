@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import { coordinationScope, resolveWorkClaimCapability } from './claim-capabilities.js';
 import { claimAcquire, claimRead, claimRelease, claimRenew } from './claim-operations.js';
+import { validateClaimRequest } from './claim-request.js';
 import { claimStorePath, readClaimState, resolveGitCommonDir, withClaimLock, writeClaimState } from './claim-store.js';
 import { loadLedger } from './ledger.js';
 import {
@@ -142,7 +143,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
   if (command === 'provision') {
     const parsedOptions = parseContractOptions('provision', argumentsList.slice(1));
     if (parsedOptions.issues.length > 0) {
-      writeInvalidRequest(command, parsedOptions.issues);
+      writeClaimInvalidRequest(command, parsedOptions.issues);
       return;
     }
     const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
@@ -151,12 +152,17 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
     const { namespace } = await provisionNamespace(path.dirname(gitCommonDir));
-    process.stdout.write(`${JSON.stringify({
-      ok: true,
-      command,
-      contract_version: 1,
-      result: { ledger_namespace: namespace },
-    })}\n`);
+    writeClaimEnvelope({
+      exit: 0,
+      stdout: {
+        ok: true,
+        namespace: 'work-claim',
+        command,
+        contract_version: 1,
+        state: 'committed',
+        result: { ledger_namespace: namespace },
+      },
+    });
     return;
   }
 
@@ -449,6 +455,11 @@ async function runClaimCommand(claimCommand, argumentsList) {
     return;
   }
   const request = normalizeClaimRequest(parsedRequest.value);
+  const validationIssues = validateClaimRequest(claimCommand, request);
+  if (validationIssues.length > 0) {
+    writeClaimInvalidRequest(claimCommand, validationIssues);
+    return;
+  }
 
   const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
   if (!gitCommonDir) {
@@ -495,15 +506,28 @@ async function runClaimCommand(claimCommand, argumentsList) {
   }
 }
 
+// The loose JSON parser (src/request.js) builds every object with a null prototype
+// and boxes every bare number as a JsonNumber. Both are invisible to a shallow copy:
+// claim-operations.js compares CAS witnesses with isDeepStrictEqual, which treats a
+// null-prototype object as unequal to an Object.prototype one even with identical
+// properties, so an un-rebuilt nested object silently fails every takeover comparison.
+// Rebuild the whole tree into plain objects/arrays and unwrap every JsonNumber —
+// no field-name special-casing, so this stays correct as the request shape grows.
 function normalizeClaimRequest(value) {
-  if (value === null || typeof value !== 'object') {
-    return value;
+  if (value instanceof JsonNumber) {
+    return Number(value.source);
   }
-  const normalized = { ...value };
-  if (normalized.lease_duration_ms instanceof JsonNumber) {
-    normalized.lease_duration_ms = Number(normalized.lease_duration_ms.source);
+  if (Array.isArray(value)) {
+    return value.map(normalizeClaimRequest);
   }
-  return normalized;
+  if (value !== null && typeof value === 'object') {
+    const normalized = {};
+    for (const [key, entry] of Object.entries(value)) {
+      normalized[key] = normalizeClaimRequest(entry);
+    }
+    return normalized;
+  }
+  return value;
 }
 
 function claimStoreUnavailable(command, reason) {
