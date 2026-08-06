@@ -1247,6 +1247,8 @@ function validCommandArray(value) {
       || CORE_COMMANDS.indexOf(value[index - 1]) < CORE_COMMANDS.indexOf(command));
 }
 
+const GIT_COORDINATION_SCOPES = ['same-working-copy-cooperative-writers', 'shared-git-directory-cooperative-writers'];
+
 function coreCapabilitiesSchemaIssue(value) {
   if (!hasExactKeys(value, ['ok', 'command', 'contract_version', 'result'])) return 'members';
   if (value.ok !== true) return 'ok';
@@ -1333,8 +1335,6 @@ function coreCapabilitiesSchemaIssue(value) {
   }
   return null;
 }
-
-const GIT_COORDINATION_SCOPES = ['same-working-copy-cooperative-writers', 'shared-git-directory-cooperative-writers'];
 
 function positiveSafeInteger(value) {
   return Number.isSafeInteger(value) && value > 0;
