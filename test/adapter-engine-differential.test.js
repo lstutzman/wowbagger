@@ -5,6 +5,7 @@ import { validateAdapterManifest, isSafeRelativeExecutable } from '../src/adapte
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { describeAdapter } from '../src/adapter/describe.js';
 import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
+import { sameJson } from '../src/adapter/schema-helpers.js';
 import {
   describeAdapter as referenceDescribe,
   referenceCoreCapabilities,
@@ -1024,16 +1025,25 @@ test('refuses a describe result whose core.commands is out of the required order
   assert.equal(result.error_code, 'invalid-describe-result');
 });
 
-// `isCommandArray`'s uniqueness check (`new Set(value).size === value.length`)
-// is unreachable in practice: the same loop already requires each command's
-// position in CORE_COMMAND_ORDER to strictly increase from one array element
-// to the next, and a strictly increasing sequence of indices can never
-// repeat a value. A brute-force search over every array of core commands up
-// to length 5 confirms no array with a duplicate can reach that return
-// statement, so no test can distinguish it from an unconditional `true` —
-// it is preserved as a direct expression of the "unique" half of contract
-// section 3.2's "Command arrays are unique, ordered subsets", not dead code
-// to delete, but not independently testable either.
+// Contract section 3.2: "Command arrays are unique, ordered subsets". The
+// refusal below is pinned as behaviour, not as a route to one line of
+// isCommandArray. That function's explicit uniqueness check
+// (`new Set(value).size === value.length`) is unreachable today: the same
+// loop already requires each command's position in CORE_COMMAND_ORDER to
+// strictly increase between adjacent elements, and a strictly increasing
+// index sequence cannot repeat a value, so no input distinguishes that
+// return from an unconditional `true`. Relaxing the ordering comparison from
+// `>=` to `>` would silently make it load-bearing — which is exactly why the
+// refusal itself needs a test, and why the check stays.
+test('refuses a describe result whose core.commands repeats a command', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.core.commands = ['capabilities', 'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'];
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
 
 // A required object member's absence is caught by the corresponding
 // downstream value check whenever that check would reject `undefined` — but
@@ -1209,6 +1219,55 @@ test('describeAdapter and verifyCoreProbe match the reference oracle on every ne
       assert.equal(mine.error_code, theirs.error?.code, scenario.id);
     });
   }
+});
+
+// JSON member order is not semantically significant (RFC 8259) and
+// JSON.parse preserves the source order, so a manifest and a describe result
+// can list the same platform map under different key orders over the wire.
+// The oracle compares them canonically; the engine must not refuse them.
+test('accepts a describe whose platform map is key-reordered against the manifest, as the oracle does', () => {
+  const request = structuredClone(SCENARIOS.base_request);
+  const manifest = structuredClone(SCENARIOS.base_manifest);
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  manifest.platforms = { darwin: 'unverified', linux: 'unverified', win32: 'unverified' };
+  dynamic.platforms = { win32: 'unverified', linux: 'unverified', darwin: 'unverified' };
+  assert.notEqual(
+    JSON.stringify(manifest.platforms),
+    JSON.stringify(dynamic.platforms),
+    'the two maps must differ only in key order for this case to measure anything',
+  );
+
+  const mine = describeAdapter(structuredClone(request), structuredClone(manifest), structuredClone(dynamic));
+  const theirs = referenceDescribe(structuredClone(request), structuredClone(manifest), structuredClone(dynamic));
+
+  assert.equal(theirs.ok, true);
+  assert.equal(mine.ok, true, mine.error_code);
+  assert.equal(mine.ok, theirs.ok);
+});
+
+// sameJson's other two call sites compare arrays, where order IS
+// significant: `[1, 2]` is not the same supported-version list as `[2, 1]`,
+// and a reordered `trusted_approval.sources` is a different declaration.
+// Canonicalising member order must not canonicalise element order too.
+//
+// Both of those comparands hold a single element today, so no describe input
+// can distinguish an order-sensitive array comparison from an order-blind
+// one. The property is pinned at the helper's own seam instead, where it
+// stays pinned as soon as either list grows a second element.
+test('sameJson treats array element order as significant', () => {
+  assert.equal(sameJson([1, 2], [2, 1]), false);
+  assert.equal(sameJson([1, 2], [1, 2]), true);
+  assert.equal(sameJson(['consumer', 'host'], ['host', 'consumer']), false);
+});
+
+test('sameJson treats object member order as insignificant, at every depth', () => {
+  assert.equal(sameJson({ a: 1, b: 2 }, { b: 2, a: 1 }), true);
+  assert.equal(sameJson({ a: 1, b: 2 }, { a: 1, b: 3 }), false);
+  assert.equal(sameJson({ a: 1 }, { a: 1, b: 2 }), false);
+  // Reordered members nested inside an array element: only a comparison that
+  // recurses through arrays as well as objects sees these as equal.
+  assert.equal(sameJson([{ a: 1, b: 2 }], [{ b: 2, a: 1 }]), true);
+  assert.equal(sameJson([{ a: 1, b: 2 }], [{ b: 2, a: 9 }]), false);
 });
 
 test('verifyCoreProbe matches the reference oracle on every core-probe scenario', async (t) => {

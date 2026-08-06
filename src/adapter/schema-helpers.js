@@ -36,6 +36,25 @@ export function isAllBoolean(value) {
   return Object.values(value).every((member) => typeof member === 'boolean');
 }
 
+// Recursively sorts object members by key and leaves everything else alone.
+// Array element order is deliberately untouched: two of sameJson's three call
+// sites compare arrays where order is significant (`adapter_contract_versions`
+// and `trusted_approval.sources`), so sorting elements would erase a real
+// difference. Object.fromEntries defines rather than assigns, so a member
+// named `__proto__` survives the rebuild instead of becoming a prototype.
+function canonicalize(value) {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]));
+  }
+  return value;
+}
+
+// Deep JSON equality that treats member order as insignificant, per RFC 8259.
+// JSON.parse preserves the source member order, so two wire values carrying
+// the same map under different key orders would otherwise be falsely refused.
 export function sameJson(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
 }

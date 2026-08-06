@@ -66,6 +66,18 @@ function findScenario(scenarios, id) {
   return scenario;
 }
 
+// A scenario that does not declare what it expects measures nothing:
+// `result.error_code === scenario.expected` reduces to `undefined ===
+// undefined` for every accept, so a missing or misspelled `expected` key
+// would report `ok` on the strength of a fixture typo. A fixture defect is
+// refused outright, as every other fixture defect in this runner is.
+function matchesExpectation(result, scenario) {
+  if (!Object.hasOwn(scenario, 'expected')) {
+    throw new Error(`scenario ${scenario.id} declares no expected error code`);
+  }
+  return result.error_code === scenario.expected;
+}
+
 // The negotiation, core-probe, and entrypoint-path assertions all inject a
 // synthetic manifest or describe result. The §3.3 bootstrap wire carries only
 // the describe request, so they are evaluated against the shipped engine
@@ -78,7 +90,7 @@ async function evaluateNegotiationAssertion(directory, assertion) {
     const scenario = findScenario(data.entrypoint_paths, assertion.scenario);
     const result = resolveEntrypointPath(scenario);
     return {
-      ok: result.error_code === scenario.expected,
+      ok: matchesExpectation(result, scenario),
       evidence: 'src/adapter/entrypoint-path.js',
       error_code: result.error_code,
     };
@@ -91,7 +103,7 @@ async function evaluateNegotiationAssertion(directory, assertion) {
     mutateObject(scenario.target === 'probe' ? probe : describe, scenario);
     const result = verifyCoreProbe(describe, probe);
     return {
-      ok: result.error_code === scenario.expected,
+      ok: matchesExpectation(result, scenario),
       evidence: 'src/adapter/core-probe.js',
       error_code: result.error_code,
     };
@@ -132,7 +144,7 @@ async function evaluateNegotiationAssertion(directory, assertion) {
     )
     : describeAdapter(request, manifest, dynamic);
   return {
-    ok: result.error_code === scenario.expected,
+    ok: matchesExpectation(result, scenario),
     evidence: probesCore ? 'src/adapter/core-probe.js' : 'src/adapter/describe.js',
     error_code: result.error_code,
   };
@@ -218,7 +230,6 @@ async function evaluateAssertion(directory, assertion) {
 
 export async function runImplementationVectors({
   fixtureRoot = defaultFixtureRoot,
-  entrypoint,
   platform,
 } = {}) {
   const directories = (await readdir(fixtureRoot, { withFileTypes: true }))
@@ -295,7 +306,6 @@ export async function runImplementationVectors({
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     process.stdout.write(`${JSON.stringify(await runImplementationVectors({
-      entrypoint: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: [] },
       platform: process.platform,
     }))}\n`);
   } catch (error) {

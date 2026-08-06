@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { cp, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { runImplementationVectors } from '../spec/run-adapter-implementation.js';
@@ -12,8 +12,9 @@ const fixtureRoot = fileURLToPath(new URL('../spec/fixtures/adapters/', import.m
 // Dropping the assertions Plans 2 and 3 own turns the remaining case green
 // only if every assertion this plan evidences agrees with the fixture, which
 // the real run's `fail` status cannot show on its own.
-async function isolateCase(name, keepAssertion) {
+async function isolateCase(t, name, keepAssertion) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wb-isolate-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
   const directory = path.join(root, name);
   await cp(path.join(fixtureRoot, name), directory, { recursive: true });
   const manifest = JSON.parse(await readFile(path.join(directory, 'manifest.json'), 'utf8'));
@@ -22,8 +23,9 @@ async function isolateCase(name, keepAssertion) {
   return { root, kept: manifest.assertions.length };
 }
 
-async function writeTempFixture(manifest, extraFiles = {}) {
+async function writeTempFixture(t, manifest, extraFiles = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wb-vectors-'));
+  t.after(() => rm(root, { force: true, recursive: true }));
   const directory = path.join(root, '01-synthetic');
   await mkdir(directory);
   await writeFile(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
@@ -74,11 +76,30 @@ function syntheticEntrypointFixture(expected) {
   };
 }
 
-test('reports every claude-code assertion as failing when no entrypoint answers', async () => {
-  const result = await runImplementationVectors({
-    entrypoint: { kind: 'command', executable: 'adapters/claude-code/absent.js', fixed_args: [] },
-    platform: 'darwin',
-  });
+// A scenario that omits `expected` reduces `result.error_code ===
+// scenario.expected` to `undefined === undefined` whenever the engine
+// accepts, so the assertion reports `ok` on the strength of a fixture typo.
+// The snapshots below are identical, so resolveEntrypointPath accepts and
+// returns no error code — the exact input that makes the comparison
+// fail open.
+test('refuses a scenario that omits its expected error code', async (t) => {
+  const { manifest, files } = syntheticEntrypointFixture(undefined);
+  files['scenarios.json'].entrypoint_paths[0].after = stableSnapshot;
+  assert.equal(
+    Object.hasOwn(JSON.parse(JSON.stringify(files['scenarios.json'])).entrypoint_paths[0], 'expected'),
+    false,
+    'the scenario must reach the runner with no expected key at all',
+  );
+  const root = await writeTempFixture(t, manifest, files);
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: 'darwin' }),
+    /expected/,
+  );
+});
+
+test('reports fail with every committed claude-code assertion executed', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin' });
 
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
@@ -89,8 +110,8 @@ test('reports every claude-code assertion as failing when no entrypoint answers'
   assert.equal(executed.length, 183);
 });
 
-test('fails closed on an unknown assertion type', async () => {
-  const fixtureRoot = await writeTempFixture({
+test('fails closed on an unknown assertion type', async (t) => {
+  const fixtureRoot = await writeTempFixture(t, {
     adapter_vector_version: 1,
     case: 'synthetic',
     coverage: ['capabilities'],
@@ -101,20 +122,13 @@ test('fails closed on an unknown assertion type', async () => {
   });
 
   await assert.rejects(
-    () => runImplementationVectors({ fixtureRoot, entrypoint: null, platform: 'darwin' }),
+    () => runImplementationVectors({ fixtureRoot, platform: 'darwin' }),
     /unknown assertion type/,
   );
 });
 
 test('evaluates the negotiation cases against the shipped engine', async () => {
-  const result = await runImplementationVectors({
-    entrypoint: {
-      kind: 'command',
-      executable: 'adapters/claude-code/entrypoint.js',
-      fixed_args: [],
-    },
-    platform: process.platform,
-  });
+  const result = await runImplementationVectors({ platform: process.platform });
 
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
 
@@ -173,8 +187,9 @@ test('holds the assertions that Plans 2 and 3 own at unimplemented', async () =>
   assert.equal(result.implementations['claude-code'], 'fail');
 });
 
-test('every negotiation assertion it evidences agrees with the fixture expectation', async () => {
+test('every negotiation assertion it evidences agrees with the fixture expectation', async (t) => {
   const { root, kept } = await isolateCase(
+    t,
     '13-negotiation-mismatch',
     ({ type }) => type !== 'invoke-version',
   );
@@ -203,8 +218,9 @@ test('every negotiation assertion it evidences agrees with the fixture expectati
   ]);
 });
 
-test('the capability assertion it evidences agrees with the committed artifact', async () => {
+test('the capability assertion it evidences agrees with the committed artifact', async (t) => {
   const { root, kept } = await isolateCase(
+    t,
     '01-capability-separation',
     ({ expect }) => expect === 'claims-and-policy-false',
   );
@@ -215,9 +231,9 @@ test('the capability assertion it evidences agrees with the committed artifact',
   assert.equal(result.cases[0].status, 'pass');
 });
 
-test('reports a case as passing when the shipped engine matches the fixture expectation', async () => {
+test('reports a case as passing when the shipped engine matches the fixture expectation', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
-  const fixtureRoot = await writeTempFixture(manifest, files);
+  const fixtureRoot = await writeTempFixture(t, manifest, files);
 
   const result = await runImplementationVectors({ fixtureRoot, platform: 'darwin' });
 
@@ -229,9 +245,9 @@ test('reports a case as passing when the shipped engine matches the fixture expe
   assert.deepEqual(result.observed_error_codes, ['path-replaced']);
 });
 
-test('reports a case as failing when the shipped engine disagrees with the fixture expectation', async () => {
+test('reports a case as failing when the shipped engine disagrees with the fixture expectation', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-rejected');
-  const fixtureRoot = await writeTempFixture(manifest, files);
+  const fixtureRoot = await writeTempFixture(t, manifest, files);
 
   const result = await runImplementationVectors({ fixtureRoot, platform: 'darwin' });
 
@@ -245,8 +261,8 @@ test('reports a case as failing when the shipped engine disagrees with the fixtu
 
 // Rewrites one artifact of a copied case so a single sub-expression of an
 // evaluator's verdict changes, and reports the case status that results.
-async function statusAfterEditing(name, keepAssertion, artifact, edit) {
-  const { root } = await isolateCase(name, keepAssertion);
+async function statusAfterEditing(t, name, keepAssertion, artifact, edit) {
+  const { root } = await isolateCase(t, name, keepAssertion);
   const file = path.join(root, name, artifact);
   const content = JSON.parse(await readFile(file, 'utf8'));
   await writeFile(file, JSON.stringify(edit(content) ?? content));
@@ -256,8 +272,9 @@ async function statusAfterEditing(name, keepAssertion, artifact, edit) {
 
 const keepOptionalFeatures = ({ expect }) => expect === 'claims-and-policy-false';
 
-test('reports fail when the negotiation evaluator disagrees with the fixture', async () => {
+test('reports fail when the negotiation evaluator disagrees with the fixture', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '13-negotiation-mismatch', ({ id }) => id === 'request-missing-is-refused', 'scenarios.json',
     (data) => {
       data.cases.find(({ id }) => id === 'request-missing').expected = 'invalid-describe-result';
@@ -266,8 +283,9 @@ test('reports fail when the negotiation evaluator disagrees with the fixture', a
   assert.equal(status, 'fail');
 });
 
-test('reports fail when the core-probe evaluator disagrees with the fixture', async () => {
+test('reports fail when the core-probe evaluator disagrees with the fixture', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '13-negotiation-mismatch', ({ id }) => id === 'missing-core-probe-member-is-refused', 'scenarios.json',
     (data) => {
       data.core_probe_cases.find(({ id }) => id === 'probe-missing').expected = 'core-contract-version-mismatch';
@@ -276,8 +294,9 @@ test('reports fail when the core-probe evaluator disagrees with the fixture', as
   assert.equal(status, 'fail');
 });
 
-test('reports fail when the core-version evaluator disagrees with the fixture', async () => {
+test('reports fail when the core-version evaluator disagrees with the fixture', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '13-negotiation-mismatch', ({ id }) => id === 'core-probe-mismatch-is-refused', 'scenarios.json',
     (data) => {
       data.cases.find(({ id }) => id === 'required-core-version').expected = 'core-protocol-error';
@@ -286,56 +305,62 @@ test('reports fail when the core-version evaluator disagrees with the fixture', 
   assert.equal(status, 'fail');
 });
 
-test('refuses the capability assertion when the shipped negotiator rejects the artifact', async () => {
+test('refuses the capability assertion when the shipped negotiator rejects the artifact', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '01-capability-separation', keepOptionalFeatures, 'adapter-capabilities.json',
     (capabilities) => { capabilities.ok = false; },
   );
   assert.equal(status, 'fail');
 });
 
-test('refuses the capability assertion when the artifact elevates claims', async () => {
+test('refuses the capability assertion when the artifact elevates claims', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '01-capability-separation', keepOptionalFeatures, 'adapter-capabilities.json',
     (capabilities) => { capabilities.optional_features.claims = true; },
   );
   assert.equal(status, 'fail');
 });
 
-test('refuses the capability assertion when the artifact elevates policy', async () => {
+test('refuses the capability assertion when the artifact elevates policy', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '01-capability-separation', keepOptionalFeatures, 'adapter-capabilities.json',
     (capabilities) => { capabilities.optional_features.policy = true; },
   );
   assert.equal(status, 'fail');
 });
 
-test('refuses the platform assertion when the package manifest is invalid', async () => {
+test('refuses the platform assertion when the package manifest is invalid', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '09-platform-declaration', () => true, 'package-manifest.json',
     (manifest) => { manifest.extra = true; },
   );
   assert.equal(status, 'fail');
 });
 
-test('refuses the platform assertion when the interpretation does not match', async () => {
+test('refuses the platform assertion when the interpretation does not match', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '09-platform-declaration', () => true, 'expected-interpretation.json',
     (expected) => { expected.supported_platforms = ['linux']; },
   );
   assert.equal(status, 'fail');
 });
 
-test('refuses the platform assertion when a platform is declared supported', async () => {
+test('refuses the platform assertion when a platform is declared supported', async (t) => {
   const status = await statusAfterEditing(
+    t,
     '09-platform-declaration', () => true, 'package-manifest.json',
     (manifest) => { manifest.platforms.linux = 'supported'; },
   );
   assert.equal(status, 'fail');
 });
 
-test('fails closed on a scenario naming a mutation target that does not exist', async () => {
-  const root = await writeTempFixture({
+test('fails closed on a scenario naming a mutation target that does not exist', async (t) => {
+  const root = await writeTempFixture(t, {
     adapter_vector_version: 1,
     case: 'synthetic',
     coverage: ['capabilities'],
@@ -372,8 +397,8 @@ test('fails closed on a fixture root holding no cases at all', async () => {
   );
 });
 
-test('fails closed on a fixture root whose cases all target another adapter', async () => {
-  const root = await writeTempFixture({
+test('fails closed on a fixture root whose cases all target another adapter', async (t) => {
+  const root = await writeTempFixture(t, {
     adapter_vector_version: 1,
     case: 'synthetic',
     coverage: ['capabilities'],
@@ -389,8 +414,8 @@ test('fails closed on a fixture root whose cases all target another adapter', as
   );
 });
 
-test('fails closed on a case that declares no assertions', async () => {
-  const root = await writeTempFixture({
+test('fails closed on a case that declares no assertions', async (t) => {
+  const root = await writeTempFixture(t, {
     adapter_vector_version: 1,
     case: 'synthetic',
     coverage: ['capabilities'],
@@ -406,9 +431,9 @@ test('fails closed on a case that declares no assertions', async () => {
   );
 });
 
-test('fails closed on a vector manifest that is not strict JSON', async () => {
+test('fails closed on a vector manifest that is not strict JSON', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
-  const root = await writeTempFixture(manifest, files);
+  const root = await writeTempFixture(t, manifest, files);
   await writeFile(
     path.join(root, '01-synthetic', 'manifest.json'),
     '{"adapter_vector_version": 1, "adapter_vector_version": 2}',
@@ -423,9 +448,9 @@ test('fails closed on a vector manifest that is not strict JSON', async () => {
 // `adapter_vector_version` is compared against the raw JSON source text, so a
 // numerically-equal spelling is still a different declared version.
 for (const version of ['2', '1.0', '1e0', '"1"', 'null']) {
-  test(`fails closed on adapter_vector_version ${version}`, async () => {
+  test(`fails closed on adapter_vector_version ${version}`, async (t) => {
     const { manifest, files } = syntheticEntrypointFixture('path-replaced');
-    const root = await writeTempFixture(manifest, files);
+    const root = await writeTempFixture(t, manifest, files);
     const file = path.join(root, '01-synthetic', 'manifest.json');
     const raw = JSON.parse(await readFile(file, 'utf8'));
     delete raw.adapter_vector_version;
@@ -438,19 +463,19 @@ for (const version of ['2', '1.0', '1e0', '"1"', 'null']) {
   });
 }
 
-test('accepts adapter_vector_version 1', async () => {
+test('accepts adapter_vector_version 1', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
-  const root = await writeTempFixture(manifest, files);
+  const root = await writeTempFixture(t, manifest, files);
 
   const result = await runImplementationVectors({ fixtureRoot: root, platform: 'darwin' });
 
   assert.equal(result.cases.length, 1);
 });
 
-test('fails closed on an assertion naming a scenario the fixture does not define', async () => {
+test('fails closed on an assertion naming a scenario the fixture does not define', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
   manifest.assertions[0].scenario = 'absent';
-  const fixtureRoot = await writeTempFixture(manifest, files);
+  const fixtureRoot = await writeTempFixture(t, manifest, files);
 
   await assert.rejects(
     () => runImplementationVectors({ fixtureRoot, platform: 'darwin' }),
@@ -458,9 +483,9 @@ test('fails closed on an assertion naming a scenario the fixture does not define
   );
 });
 
-test('fails closed on a scenarios file that is not strict JSON', async () => {
+test('fails closed on a scenarios file that is not strict JSON', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
-  const fixtureRoot = await writeTempFixture(manifest, files);
+  const fixtureRoot = await writeTempFixture(t, manifest, files);
   await writeFile(
     path.join(fixtureRoot, '01-synthetic', 'scenarios.json'),
     '{"entrypoint_paths": [], "entrypoint_paths": []}',
