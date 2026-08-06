@@ -1,5 +1,8 @@
+import path from 'node:path';
+
 import { coordinationScope, resolveWorkClaimCapability } from './claim-capabilities.js';
-import { resolveGitCommonDir } from './claim-store.js';
+import { claimAcquire, claimRead, claimRelease, claimRenew } from './claim-operations.js';
+import { claimStorePath, readClaimState, resolveGitCommonDir, withClaimLock, writeClaimState } from './claim-store.js';
 import { loadLedger } from './ledger.js';
 import {
   createItem,
@@ -8,9 +11,12 @@ import {
   validateCreateRequest,
   validateTransitionRequest,
 } from './mutation.js';
-import { parseJsonRequest, sortIssues } from './request.js';
+import { provisionNamespace, readNamespace } from './namespace.js';
+import { JsonNumber, parseJsonRequest, sortIssues } from './request.js';
 import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
+
+const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 
 export async function runCli(argumentsList, { scenario } = {}) {
   const command = argumentsList[0];
@@ -131,6 +137,58 @@ export async function runCli(argumentsList, { scenario } = {}) {
     })}\n`);
     process.exitCode = 2;
     return;
+  }
+
+  if (command === 'provision') {
+    const parsedOptions = parseContractOptions('provision', argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
+    if (!gitCommonDir) {
+      writeClaimEnvelope(claimStoreUnavailable(command, 'git-directory-not-found'));
+      return;
+    }
+    const { namespace } = await provisionNamespace(path.dirname(gitCommonDir));
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      command,
+      contract_version: 1,
+      result: { ledger_namespace: namespace },
+    })}\n`);
+    return;
+  }
+
+  if (command === 'claim') {
+    const subcommand = argumentsList[1];
+
+    if (subcommand === 'capabilities') {
+      const parsedOptions = parseContractOptions('claim-capabilities', argumentsList.slice(2));
+      if (parsedOptions.issues.length > 0) {
+        writeClaimInvalidRequest(subcommand, parsedOptions.issues);
+        return;
+      }
+      const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
+      process.stdout.write(`${JSON.stringify({
+        ok: true,
+        namespace: 'work-claim',
+        command: subcommand,
+        contract_version: 1,
+        result: {
+          backend: { name: 'local-filesystem', coordination_scope: coordinationScope({ gitCommonDir }) },
+          operations: { work_claim: resolveWorkClaimCapability({ gitCommonDir }) },
+        },
+      })}\n`);
+      return;
+    }
+
+    if (Object.hasOwn(CLAIM_OPERATIONS, subcommand)) {
+      await runClaimCommand(subcommand, argumentsList.slice(2));
+      return;
+    }
+
+    throw new Error(usage());
   }
 
   if (command !== 'validate' && command !== 'ready') {
@@ -267,8 +325,11 @@ function parseContractOptions(command, argumentsList) {
   const valueFlags = command === 'inspect'
     ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
     : command === 'create' || command === 'transition'
+      || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew' || command === 'claim-release'
       ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
-      : new Map();
+      : command === 'provision' || command === 'claim-capabilities'
+        ? new Map([['--ledger', 'ledger']])
+        : new Map();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--json') {
@@ -366,6 +427,124 @@ function writeMutation(command, outcome) {
     };
   process.stdout.write(`${JSON.stringify(envelope)}\n`);
   process.exitCode = outcome.exit;
+}
+
+async function runClaimCommand(claimCommand, argumentsList) {
+  const parsedOptions = parseContractOptions(`claim-${claimCommand}`, argumentsList);
+  if (parsedOptions.issues.length > 0) {
+    writeClaimInvalidRequest(claimCommand, parsedOptions.issues);
+    return;
+  }
+
+  let bytes;
+  try {
+    bytes = await requestSource(parsedOptions.options.input);
+  } catch {
+    writeClaimInvalidRequest(claimCommand, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+    return;
+  }
+  const parsedRequest = parseJsonRequest(bytes);
+  if (parsedRequest.issues.length > 0) {
+    writeClaimInvalidRequest(claimCommand, parsedRequest.issues);
+    return;
+  }
+  const request = normalizeClaimRequest(parsedRequest.value);
+
+  const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
+  if (!gitCommonDir) {
+    writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'git-directory-not-found'));
+    return;
+  }
+
+  const namespace = await readNamespace(path.dirname(gitCommonDir));
+  if (request.ledger_namespace !== namespace) {
+    writeClaimEnvelope({
+      exit: 2,
+      stdout: {
+        ok: false,
+        namespace: 'work-claim',
+        command: claimCommand,
+        contract_version: 1,
+        state: 'unchanged',
+        error: {
+          code: 'ledger-namespace-unbound',
+          message: 'The ledger namespace is not provisioned for this endpoint.',
+          details: { requested_namespace: request.ledger_namespace, provisioned_namespace: namespace },
+        },
+      },
+    });
+    return;
+  }
+
+  const storePath = claimStorePath(gitCommonDir, namespace);
+  const operation = CLAIM_OPERATIONS[claimCommand];
+  try {
+    const envelope = await withClaimLock(storePath, async () => {
+      const state = await readClaimState(storePath, namespace);
+      const applied = operation(state, request, new Date().toISOString());
+      await writeClaimState(storePath, applied.state);
+      return applied.envelope;
+    });
+    writeClaimEnvelope(envelope);
+  } catch (error) {
+    if (error?.code === 'CLAIM_LOCK_HELD') {
+      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-locked'));
+      return;
+    }
+    throw error;
+  }
+}
+
+function normalizeClaimRequest(value) {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  const normalized = { ...value };
+  if (normalized.lease_duration_ms instanceof JsonNumber) {
+    normalized.lease_duration_ms = Number(normalized.lease_duration_ms.source);
+  }
+  return normalized;
+}
+
+function claimStoreUnavailable(command, reason) {
+  return {
+    exit: 6,
+    stdout: {
+      ok: false,
+      namespace: 'work-claim',
+      command,
+      contract_version: 1,
+      state: 'unchanged',
+      error: {
+        code: 'claim-store-unavailable',
+        message: 'The durable claim store is unavailable.',
+        details: { reason },
+      },
+    },
+  };
+}
+
+function writeClaimEnvelope(envelope) {
+  process.stdout.write(`${JSON.stringify(envelope.stdout)}\n`);
+  process.exitCode = envelope.exit;
+}
+
+function writeClaimInvalidRequest(claimCommand, issues) {
+  writeClaimEnvelope({
+    exit: 2,
+    stdout: {
+      ok: false,
+      namespace: 'work-claim',
+      command: claimCommand,
+      contract_version: 1,
+      state: 'unchanged',
+      error: {
+        code: 'invalid-request',
+        message: `The ${claimCommand} request is invalid.`,
+        details: { issues },
+      },
+    },
+  });
 }
 
 function readOptionValue(command, option, argumentsList, index) {
