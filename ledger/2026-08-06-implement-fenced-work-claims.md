@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZAZW75CWEG3R4BH4MZJAA7G
-title: "Implement fenced work claims in the core CLI"
+title: "Implement advisory work claims in the core CLI"
 kind: task
 status: backlog
 created: 2026-08-06
@@ -17,6 +17,10 @@ decisions:
     date: 2026-08-06
     summary: "Accept the fenced work-claim implementation."
     rationale: "The contract is complete but unimplemented; the gap was invisible while it sat inside an item marked done."
+  - action: record
+    date: 2026-08-06
+    summary: "Narrowed to advisory claims. Fencing needs a transactional coordinator and is tracked separately."
+    rationale: "The contract defines a local-filesystem backend as advisory regardless of its write paths, so the core CLI cannot be fenced. Closing this item as written would assert that fencing exists."
 ---
 
 The fenced work-claim contract and its no-I/O reference model are complete, but
