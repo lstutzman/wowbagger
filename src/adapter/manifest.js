@@ -53,6 +53,13 @@ export function validateAdapterManifest(value) {
       return refuse(`missing root member ${member}`);
     }
   }
+  if (value.entrypoints === null || typeof value.entrypoints !== 'object' || Array.isArray(value.entrypoints)) {
+    return refuse('entrypoints is not an object');
+  }
+  const entrypointMembers = Object.keys(value.entrypoints);
+  if (entrypointMembers.length !== 2 || !entrypointMembers.includes('describe') || !entrypointMembers.includes('invoke')) {
+    return refuse('entrypoints does not have exactly describe and invoke');
+  }
   for (const key of ['describe', 'invoke']) {
     const entrypoint = value.entrypoints?.[key];
     if (entrypoint === null || typeof entrypoint !== 'object' || Array.isArray(entrypoint)) {

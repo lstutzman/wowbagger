@@ -5,7 +5,7 @@
 // "exact member set", and "deep JSON equality" so the checks agree with
 // each other.
 
-export function isPlainObject(value) {
+function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 

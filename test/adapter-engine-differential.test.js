@@ -229,6 +229,16 @@ test('refuses manifest when command fixed_args contains control character', () =
   assert.equal(result.error_code, 'invalid-adapter-manifest');
 });
 
+test('refuses a manifest whose entrypoints map carries an unknown member', () => {
+  const bad = structuredClone(BASE_MANIFEST);
+  bad.entrypoints.extra = { kind: 'host-tool', name: 'extra-tool' };
+
+  const result = validateAdapterManifest(bad);
+
+  assert.equal(result.ok, false, 'entrypoints has an unknown member');
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
 test('accepts valid manifest with command entrypoints', () => {
   const result = validateAdapterManifest(BASE_MANIFEST);
 
@@ -936,6 +946,110 @@ test('verifyCoreProbe refuses a probe with a contract_version other than 1', () 
 test('verifyCoreProbe refuses a probe result with an unknown member', () => {
   const probe = coreCapabilities();
   probe.result.extra = true;
+
+  const result = verifyCoreProbe(structuredClone(SCENARIOS.base_dynamic), probe);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'core-protocol-error');
+});
+
+// verifyCoreProbe accepts an arbitrary already-validated describe object
+// (e.g. the hand-built one in the required-core-version scenario, or a
+// caller's own partial describe result); a malformed core.commands member
+// must be a clean refusal, not an uncaught TypeError from indexing into it.
+test('verifyCoreProbe refuses (does not throw) when describe.core.commands is null', () => {
+  const describe = structuredClone(SCENARIOS.base_dynamic);
+  describe.core.commands = null;
+
+  const result = verifyCoreProbe(describe, coreCapabilities());
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'core-contract-version-mismatch');
+});
+
+test('verifyCoreProbe refuses (does not throw) when describe.core.commands is absent', () => {
+  const describe = structuredClone(SCENARIOS.base_dynamic);
+  delete describe.core.commands;
+
+  const result = verifyCoreProbe(describe, coreCapabilities());
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'core-contract-version-mismatch');
+});
+
+test('refuses a describe request whose supported_adapter_contract_versions is not sorted ascending', () => {
+  const request = { ...structuredClone(SCENARIOS.base_request), supported_adapter_contract_versions: [2, 1] };
+
+  const result = describeAdapter(request, SCENARIOS.base_manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-request');
+});
+
+test('refuses a describe result whose core.commands is out of the required order', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.core.commands = ['create', 'capabilities', 'inspect', 'ready', 'transition', 'validate'];
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+// `isCommandArray`'s uniqueness check (`new Set(value).size === value.length`)
+// is unreachable in practice: the same loop already requires each command's
+// position in CORE_COMMAND_ORDER to strictly increase from one array element
+// to the next, and a strictly increasing sequence of indices can never
+// repeat a value. A brute-force search over every array of core commands up
+// to length 5 confirms no array with a duplicate can reach that return
+// statement, so no test can distinguish it from an unconditional `true` —
+// it is preserved as a direct expression of the "unique" half of contract
+// section 3.2's "Command arrays are unique, ordered subsets", not dead code
+// to delete, but not independently testable either.
+
+// A required object member's absence is caught by the corresponding
+// downstream value check whenever that check would reject `undefined` — but
+// `isAllBoolean` (`Object.values(value).every(...)`) only iterates over
+// whatever keys are actually present, so deleting one member of an
+// all-boolean object entirely is invisible to it. Only `hasExactMembers`'s
+// required-key-presence check catches this.
+test('refuses a describe result whose integration_mechanisms is missing a required member', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  delete dynamic.host.integration_mechanisms.daemon;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+// `command_execution.supported` is only ever compared with `=== true` (to
+// pick a branch) by the §3.2 invariant, which otherwise only re-inspects the
+// seven dependent flags and `core.commands` — never `supported` itself. A
+// non-boolean `supported` value that is otherwise consistent with the
+// "unsupported" invariant (all dependent flags false, no advertised
+// commands) is therefore only caught by the schema-level `isAllBoolean`
+// check on `command_execution`.
+test(
+  'refuses a describe result whose command_execution.supported is a non-boolean satisfying the unsupported invariant',
+  () => {
+    const dynamic = unsupportedExecutionDynamic();
+    dynamic.host.command_execution.supported = 'false';
+
+    const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.error_code, 'invalid-describe-result');
+  },
+);
+
+// The three git-coordination-dependent probe members
+// (`backend.coordination_scope`, `operations.work_claim.supported`,
+// `limits.cross_worktree_coordination`) must all agree; a probe can
+// contradict via either of the latter two independently.
+test('verifyCoreProbe refuses a probe whose cross_worktree_coordination contradicts the coordination scope', () => {
+  const probe = coreCapabilities();
+  probe.result.limits.cross_worktree_coordination = true;
 
   const result = verifyCoreProbe(structuredClone(SCENARIOS.base_dynamic), probe);
 

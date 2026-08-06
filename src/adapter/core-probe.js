@@ -155,7 +155,8 @@ function coreProbeSchemaIssue(probe) {
 }
 
 function sameCommandOrder(commands) {
-  return commands.length === CORE_COMMAND_ORDER.length
+  return Array.isArray(commands)
+    && commands.length === CORE_COMMAND_ORDER.length
     && commands.every((command, index) => command === CORE_COMMAND_ORDER[index]);
 }
 

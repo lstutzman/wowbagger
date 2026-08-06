@@ -226,7 +226,7 @@ function limitsSectionIssue(limits) {
 // The §3.2 cross-field capability invariants: a contradictory describe
 // result is `invalid-describe-result` even when every individual field has
 // the right type.
-export function validateExecutionCapabilities(dynamic) {
+function validateExecutionCapabilities(dynamic) {
   const execution = dynamic.host.command_execution;
   if (execution.shell !== false) {
     return refuse('invalid-describe-result', 'host.command_execution.shell');
