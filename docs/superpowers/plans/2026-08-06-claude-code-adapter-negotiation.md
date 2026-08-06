@@ -38,6 +38,32 @@ pins the two together.
   `dev.wowbagger.adapter.claude-code`, `adapter_version` tracks `package.json`.
 - Every JSON parse is strict: duplicate members, trailing bytes, and invalid
   UTF-8 are refused. Reuse `parseJsonRequest` from `src/request.js`.
+- **`parseJsonRequest` contract — read this before writing any parse call.**
+  It takes **bytes**, not a string: read files with `readFile(path)` and no
+  encoding argument. It returns `{ value, issues }`, never the parsed value
+  directly, and adds `inputDiagnostic` on failure. A parse is acceptable only
+  when `issues.length === 0`; a non-empty `issues` array is how duplicate
+  members and trailing bytes are reported, so ignoring it silently discards the
+  strictness this contract requires. Every JSON **number** is wrapped in the
+  exported `JsonNumber` class, whose `.source` is the raw literal string — so
+  `value.adapter_vector_version !== 1` is always true and is never a valid
+  check. Use this helper, and reuse it everywhere in this plan:
+
+```js
+import { JsonNumber, parseJsonRequest } from '../src/request.js';
+
+function isJsonInteger(value, expected) {
+  return value instanceof JsonNumber && value.source === String(expected);
+}
+
+async function readStrictJson(filePath) {
+  const parsed = parseJsonRequest(await readFile(filePath));
+  if (parsed.issues.length > 0) {
+    throw new Error(`strict JSON rejected ${filePath}: ${parsed.issues[0].code}`);
+  }
+  return parsed.value;
+}
+```
 
 ---
 
@@ -134,10 +160,8 @@ export async function runImplementationVectors({
 
   const cases = [];
   for (const name of directories) {
-    const manifest = parseJsonRequest(
-      await readFile(path.join(fixtureRoot, name, 'manifest.json'), 'utf8'),
-    );
-    if (manifest.adapter_vector_version !== 1) {
+    const manifest = await readStrictJson(path.join(fixtureRoot, name, 'manifest.json'));
+    if (!isJsonInteger(manifest.adapter_vector_version, 1)) {
       throw new Error(`unsupported adapter_vector_version in ${name}`);
     }
     if (!manifest.targets.includes('claude-code')) {
@@ -905,16 +929,13 @@ export async function readBootstrapRequest(stream) {
   for await (const chunk of stream) {
     chunks.push(chunk);
   }
-  const bytes = Buffer.concat(chunks);
-  const text = bytes.toString('utf8');
-  if (Buffer.compare(Buffer.from(text, 'utf8'), bytes) !== 0) {
+  // parseJsonRequest takes bytes, decodes UTF-8 fatally itself, and reports
+  // duplicate members and trailing bytes through `issues` rather than throwing.
+  const parsed = parseJsonRequest(Buffer.concat(chunks));
+  if (parsed.issues.length > 0) {
     return { ok: false, error_code: 'invalid-describe-request' };
   }
-  try {
-    return { ok: true, request: parseJsonRequest(text) };
-  } catch {
-    return { ok: false, error_code: 'invalid-describe-request' };
-  }
+  return { ok: true, request: parsed.value };
 }
 
 export function writeBootstrapResponse(stream, response) {
@@ -931,6 +952,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from '../../src/adapter/bootstrap.js';
 import { describeAdapter } from '../../src/adapter/describe.js';
+import { validateAdapterManifest } from '../../src/adapter/manifest.js';
 
 const manifestUrl = new URL('./wowbagger-adapter.json', import.meta.url);
 
@@ -983,6 +1005,14 @@ function dynamicResult(manifest) {
 
 const [operation] = process.argv.slice(2);
 const manifest = JSON.parse(await readFile(fileURLToPath(manifestUrl), 'utf8'));
+
+// §3.1: the package's own manifest is validated before it is advertised.
+const validated = validateAdapterManifest(manifest);
+if (!validated.ok) {
+  await writeBootstrapResponse(process.stdout, { ok: false, error: { code: validated.error_code } });
+  process.exit(0);
+}
+
 const incoming = await readBootstrapRequest(process.stdin);
 
 if (!incoming.ok) {
@@ -1232,12 +1262,29 @@ const scenarioCache = new Map();
 
 async function readScenarios(directory) {
   if (!scenarioCache.has(directory)) {
-    scenarioCache.set(
-      directory,
-      parseJsonRequest(await readFile(path.join(directory, 'scenarios.json'), 'utf8')),
-    );
+    scenarioCache.set(directory, await readStrictJson(path.join(directory, 'scenarios.json')));
   }
   return scenarioCache.get(directory);
+}
+```
+
+**Note on `JsonNumber` in scenario data.** `readStrictJson` returns every number
+wrapped in `JsonNumber`. The scenario objects are passed straight into
+`describeAdapter` and `verifyCoreProbe`, which compare numbers. Unwrap before
+comparison with this helper, applied to each scenario after reading it:
+
+```js
+function unwrapNumbers(value) {
+  if (value instanceof JsonNumber) {
+    return Number(value.source);
+  }
+  if (Array.isArray(value)) {
+    return value.map(unwrapNumbers);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, unwrapNumbers(nested)]));
+  }
+  return value;
 }
 ```
 
@@ -1249,8 +1296,8 @@ committed artifacts rather than mutating scenarios:
 
 ```js
 async function evaluateCapabilityAssertion(directory, assertion) {
-  const capabilities = parseJsonRequest(
-    await readFile(path.join(directory, 'adapter-capabilities.json'), 'utf8'),
+  const capabilities = unwrapNumbers(
+    await readStrictJson(path.join(directory, 'adapter-capabilities.json')),
   );
 
   if (assertion.expect === 'claims-and-policy-false') {
@@ -1276,11 +1323,11 @@ async function evaluateCapabilityAssertion(directory, assertion) {
 }
 
 async function evaluatePlatformAssertion(directory, assertion) {
-  const packageManifest = parseJsonRequest(
-    await readFile(path.join(directory, 'package-manifest.json'), 'utf8'),
+  const packageManifest = unwrapNumbers(
+    await readStrictJson(path.join(directory, 'package-manifest.json')),
   );
-  const expected = parseJsonRequest(
-    await readFile(path.join(directory, assertion.expect), 'utf8'),
+  const expected = unwrapNumbers(
+    await readStrictJson(path.join(directory, assertion.expect)),
   );
   const interpretation = {
     supported_platforms: Object.entries(packageManifest.platforms)
