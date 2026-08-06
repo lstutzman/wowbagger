@@ -38,3 +38,24 @@ test('refuses a manifest that is not an object', () => {
   assert.equal(result.ok, false);
   assert.equal(result.error_code, 'invalid-adapter-manifest');
 });
+
+test('refuses an array as manifest', () => {
+  const result = validateAdapterManifest([]);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a string as manifest', () => {
+  const result = validateAdapterManifest('not an object');
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a number as manifest', () => {
+  const result = validateAdapterManifest(42);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
