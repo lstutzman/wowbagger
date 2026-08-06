@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { claimAcquire, claimRead } from '../src/claim-operations.js';
+import { claimAcquire, claimRead, claimRelease, claimRenew } from '../src/claim-operations.js';
 
 const NS = 'wbns_0123456789abcdef0123456789abcdef';
 const ITEM = 'wb_01Q4837BM01W70T30B184GG1R6';
@@ -99,4 +99,68 @@ test('the clock floor never moves backwards', () => {
   seeded.clock_floor = '2026-08-06T10:00:00.000Z';
   const { envelope } = claimRead(seeded, { ledger_namespace: NS, item_id: ITEM }, '2026-08-06T09:00:00.000Z');
   assert.equal(envelope.stdout.result.read_back.observed_at, '2026-08-06T10:00:00.000Z');
+});
+
+const active = (over = {}) => ({
+  owner_id: 'agent-a', epoch: '3',
+  issued_at: '2026-08-06T09:00:00.000Z', expires_at: '2026-08-06T09:05:00.000Z', ...over,
+});
+const seeded = () => {
+  const state = empty();
+  state.claims.push({ item_id: ITEM, last_epoch: '3', active: active() });
+  return state;
+};
+
+test('renew extends expiry while retaining issued_at and epoch', () => {
+  const { envelope } = claimRenew(seeded(), {
+    ledger_namespace: NS, item_id: ITEM, owner_id: 'agent-a', epoch: '3',
+    expected_expires_at: '2026-08-06T09:05:00.000Z', lease_duration_ms: 300000,
+  }, '2026-08-06T09:01:00.000Z');
+  assert.equal(envelope.exit, 0);
+  assert.deepEqual(envelope.stdout.result.claim, {
+    owner_id: 'agent-a', epoch: '3',
+    issued_at: '2026-08-06T09:00:00.000Z', expires_at: '2026-08-06T09:06:00.000Z',
+  });
+});
+
+test('renew with a mismatched tuple conflicts using the renew wording', () => {
+  const { envelope } = claimRenew(seeded(), {
+    ledger_namespace: NS, item_id: ITEM, owner_id: 'agent-b', epoch: '3',
+    expected_expires_at: '2026-08-06T09:05:00.000Z', lease_duration_ms: 300000,
+  }, '2026-08-06T09:01:00.000Z');
+  assert.equal(envelope.stdout.error.code, 'claim-conflict');
+  assert.equal(envelope.stdout.error.message, 'The active claim tuple no longer matches this request.');
+});
+
+test('renew of an exactly matching but expired tuple is claim-expired', () => {
+  const { envelope } = claimRenew(seeded(), {
+    ledger_namespace: NS, item_id: ITEM, owner_id: 'agent-a', epoch: '3',
+    expected_expires_at: '2026-08-06T09:05:00.000Z', lease_duration_ms: 300000,
+  }, '2026-08-06T09:05:00.000Z');
+  assert.equal(envelope.exit, 4);
+  assert.equal(envelope.stdout.error.code, 'claim-expired');
+  assert.equal(envelope.stdout.error.message, 'The matching claim has expired.');
+});
+
+test('release clears active and retains the high-water mark', () => {
+  const { envelope, state } = claimRelease(seeded(), {
+    ledger_namespace: NS, item_id: ITEM, owner_id: 'agent-a', epoch: '3',
+    expected_expires_at: '2026-08-06T09:05:00.000Z',
+  }, '2026-08-06T09:01:00.000Z');
+  assert.equal(envelope.exit, 0);
+  assert.equal(envelope.stdout.result.read_back.active, null);
+  assert.equal(envelope.stdout.result.read_back.last_epoch, '3');
+  assert.equal(state.claims[0].active, null);
+});
+
+test('a released item cannot be reacquired at the same epoch', () => {
+  const released = claimRelease(seeded(), {
+    ledger_namespace: NS, item_id: ITEM, owner_id: 'agent-a', epoch: '3',
+    expected_expires_at: '2026-08-06T09:05:00.000Z',
+  }, '2026-08-06T09:01:00.000Z').state;
+  const { envelope } = claimAcquire(released, {
+    ledger_namespace: NS, item_id: ITEM, owner_id: 'agent-a', lease_duration_ms: 60000,
+    expected: { last_epoch: '3', active: null },
+  }, '2026-08-06T09:02:00.000Z');
+  assert.equal(envelope.stdout.result.claim.epoch, '4');
 });

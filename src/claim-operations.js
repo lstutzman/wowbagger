@@ -99,3 +99,40 @@ export function claimAcquire(state, request, physicalNow) {
   };
   return { state: next, envelope: success('acquire', request, observedAt, record, { claim: { ...record.active } }) };
 }
+
+function tupleMatches(active, request) {
+  return active !== null
+    && active.owner_id === request.owner_id
+    && active.epoch === request.epoch
+    && active.expires_at === request.expected_expires_at;
+}
+
+function renewOrRelease(command, state, request, physicalNow, apply) {
+  const next = structuredClone(state);
+  const observedAt = advanceClockFloor(next, physicalNow);
+  const record = findOrCreateClaim(next, request.item_id);
+  if (!tupleMatches(record.active, request)) {
+    return { state: next, envelope: claimError(command, 'claim-conflict',
+      'The active claim tuple no longer matches this request.', request, observedAt, record) };
+  }
+  if (observedAt >= record.active.expires_at) {
+    return { state: next, envelope: claimError(command, 'claim-expired',
+      'The matching claim has expired.', request, observedAt, record) };
+  }
+  return apply(next, record, observedAt);
+}
+
+export function claimRenew(state, request, physicalNow) {
+  return renewOrRelease('renew', state, request, physicalNow, (next, record, observedAt) => {
+    record.active = { ...record.active, expires_at: addMilliseconds(observedAt, request.lease_duration_ms) };
+    return { state: next, envelope: success('renew', request, observedAt, record, { claim: { ...record.active } }) };
+  });
+}
+
+export function claimRelease(state, request, physicalNow) {
+  return renewOrRelease('release', state, request, physicalNow, (next, record, observedAt) => {
+    const released = { ...record.active };
+    record.active = null;
+    return { state: next, envelope: success('release', request, observedAt, record, { released_claim: released }) };
+  });
+}
