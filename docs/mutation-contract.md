@@ -195,7 +195,7 @@ semantics. Controlled core names forbidden by create are invalid-value issues.
 
 ## 4. Capabilities
 
-The local backend returns:
+The local backend, run from inside a git working copy, returns:
 
 ~~~json
 {
@@ -205,7 +205,7 @@ The local backend returns:
   "result": {
     "backend": {
       "name": "local-filesystem",
-      "coordination_scope": "same-working-copy-cooperative-writers"
+      "coordination_scope": "shared-git-directory-cooperative-writers"
     },
     "operations": {
       "inspect": {
@@ -226,8 +226,12 @@ The local backend returns:
         "cas_scope": "exact-byte-sha256"
       },
       "work_claim": {
-        "supported": false,
-        "reason": "not-implemented"
+        "supported": true,
+        "api_version": 1,
+        "mode": "advisory",
+        "claim_protected_publication": false,
+        "fencing_enforced_at": "none",
+        "safe_exclusive_dispatch": false
       }
     },
     "durability": {
@@ -239,7 +243,7 @@ The local backend returns:
     "limits": {
       "multi_item_atomicity": false,
       "cross_clone_coordination": false,
-      "cross_worktree_coordination": false,
+      "cross_worktree_coordination": true,
       "cross_machine_coordination": false,
       "noncooperating_writer_protection": false,
       "automatic_stale_lock_breaking": false
@@ -248,10 +252,29 @@ The local backend returns:
 }
 ~~~
 
-Because capabilities has no ledger argument, it cannot prove that a particular
-filesystem supports the required atomic no-clobber publication primitive.
-Create probes or attempts that primitive for the configured ledger and returns
-capability-unavailable unchanged when it is unavailable.
+Outside a git working copy, three members flip together:
+`backend.coordination_scope` becomes `"same-working-copy-cooperative-writers"`,
+`operations.work_claim.supported` becomes `false`, and
+`limits.cross_worktree_coordination` becomes `false`. Every other member of the
+envelope, including the rest of `operations.work_claim`
+(`api_version`, `mode`, `claim_protected_publication`, `fencing_enforced_at`,
+`safe_exclusive_dispatch`), is fixed regardless of git presence: work claims are
+always advisory, never fence a writer, and never advertise safe exclusive
+dispatch.
+
+`capabilities` resolves the git common directory by walking upward from the
+`--ledger` directory when given, or from the current working directory
+otherwise (see `resolveGitCommonDir` in `src/claim-store.js`); presence of a
+`.git` directory or file at or above that point is what flips the three
+members above. This is the one input to `capabilities`, so the response is
+deterministic for a given working directory but not fixed across working
+directories.
+
+Because capabilities takes no ledger content and does not write, it still
+cannot prove that a particular filesystem supports the required atomic
+no-clobber publication primitive. Create probes or attempts that primitive for
+the configured ledger and returns capability-unavailable unchanged when it is
+unavailable.
 
 Directory fsync is capability-reported best effort. Neither a successful file
 sync nor a directory sync is a universal power-loss durability guarantee.
