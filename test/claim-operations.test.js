@@ -82,6 +82,25 @@ test('acquiring an expired claim is takeover and advances the epoch', () => {
   assert.equal(envelope.stdout.result.claim.epoch, '4');
 });
 
+test('an unequal witness against an expired active claim is still a conflict, not a takeover', () => {
+  // Precedence rule 1 (unequal witness) must beat rule 4 (takeover of an expired claim) —
+  // the single ordering that separates a correct CAS from a dangerous one: a caller whose
+  // view of the claim is stale must never silently take over just because the claim it
+  // didn't know about has since expired.
+  const stale = empty();
+  stale.claims.push({ item_id: ITEM, last_epoch: '3', active: {
+    owner_id: 'agent-b', epoch: '3', issued_at: '2026-08-06T09:00:00.000Z', expires_at: '2026-08-06T09:05:00.000Z' } });
+  const { envelope, state } = claimAcquire(stale, {
+    ledger_namespace: NS, item_id: ITEM, owner_id: 'agent-a', lease_duration_ms: 60000,
+    expected: witness('7', stale.claims[0].active),
+  }, '2026-08-06T09:05:00.000Z');
+  assert.equal(envelope.exit, 4);
+  assert.equal(envelope.stdout.error.code, 'claim-conflict');
+  assert.equal(envelope.stdout.error.message, 'The observed claim state no longer matches this request.');
+  assert.deepEqual(state.claims[0].active, { owner_id: 'agent-b', epoch: '3', issued_at: '2026-08-06T09:00:00.000Z', expires_at: '2026-08-06T09:05:00.000Z' });
+  assert.equal(state.claims[0].last_epoch, '3');
+});
+
 test('an exhausted high-water mark refuses rather than wrapping', () => {
   const full = empty();
   full.claims.push({ item_id: ITEM, last_epoch: '18446744073709551615', active: null });
