@@ -6,6 +6,14 @@ import { JsonNumber, parseJsonRequest } from '../src/request.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 
+const SUPPORTED_ASSERTION_TYPES = new Set([
+  'core-baseline', 'capability', 'instruction-order', 'path-refusal',
+  'output-bound', 'approval-gate', 'resume-plan', 'platform-status',
+  'process-outcome', 'path-race', 'path-syntax', 'snapshot-identity',
+  'entrypoint-path', 'invoke-version', 'core-probe', 'negotiation',
+  'context-validation', 'approval-schema',
+]);
+
 export async function runImplementationVectors({
   fixtureRoot = defaultFixtureRoot,
   entrypoint,
@@ -29,6 +37,11 @@ export async function runImplementationVectors({
     }
     if (!manifest.targets.includes('claude-code')) {
       continue;
+    }
+    for (const assertion of manifest.assertions) {
+      if (!SUPPORTED_ASSERTION_TYPES.has(assertion.type)) {
+        throw new Error(`unknown assertion type ${assertion.type} in ${name}`);
+      }
     }
     cases.push({
       case: manifest.case,
