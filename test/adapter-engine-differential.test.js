@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { validateAdapterManifest, isSafeRelativeExecutable } from '../src/adapter/manifest.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
+import { describeAdapter } from '../src/adapter/describe.js';
+import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
+import {
+  describeAdapter as referenceDescribe,
+  referenceCoreCapabilities,
+  verifyCoreProbe as referenceVerifyCoreProbe,
+} from '../spec/adapter-reference.js';
+
+const SCENARIOS = JSON.parse(
+  await readFile('spec/fixtures/adapters/13-negotiation-mismatch/scenarios.json', 'utf8'),
+);
 
 const BASE_MANIFEST = {
   adapter_manifest_version: 1,
@@ -593,5 +604,490 @@ test('entrypoint resolution matches the reference oracle on every fixture case',
     assert.equal(mine.ok, false, input.id);
     assert.equal(mine.error_code, expected, input.id);
     assert.equal(mine.error_code, theirs.error?.code, input.id);
+  }
+});
+
+// ---- Task 6: describeAdapter and verifyCoreProbe ----
+
+test('describeAdapter accepts a fully valid describe request', () => {
+  const result = describeAdapter(
+    structuredClone(SCENARIOS.base_request),
+    structuredClone(SCENARIOS.base_manifest),
+    structuredClone(SCENARIOS.base_dynamic),
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.result, SCENARIOS.base_dynamic);
+});
+
+test('verifyCoreProbe accepts the engine\'s own core capability snapshot against the base describe result', () => {
+  const result = verifyCoreProbe(structuredClone(SCENARIOS.base_dynamic), coreCapabilities());
+
+  assert.equal(result.ok, true);
+});
+
+test('refuses a describe result advertising command execution with a shell', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.command_execution.shell = true;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+// These field-level schema checks are shadowed by later cross-field
+// invariant and identity/version checks under every scenario in
+// SCENARIOS.cases and SCENARIOS.core_probe_cases (e.g. a describe result
+// otherwise valid but for one wrong-typed field is rare in that fixture
+// set). Each covers exactly one `describeAdapter`/`verifyCoreProbe`
+// condition the negotiation-scenario sweep never isolates on its own.
+
+test('refuses a describe request whose bootstrap_wire_version is not a positive integer', () => {
+  const request = { ...structuredClone(SCENARIOS.base_request), bootstrap_wire_version: 0 };
+
+  const result = describeAdapter(request, SCENARIOS.base_manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-request');
+});
+
+test('refuses a describe request whose request_id fails the safe opaque-ID syntax', () => {
+  const request = { ...structuredClone(SCENARIOS.base_request), request_id: 'has a space' };
+
+  const result = describeAdapter(request, SCENARIOS.base_manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-request');
+});
+
+test('refuses a manifest whose adapter_manifest_version is not exactly 1', () => {
+  const manifest = { ...structuredClone(SCENARIOS.base_manifest), adapter_manifest_version: 2 };
+
+  const result = describeAdapter(SCENARIOS.base_request, manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a manifest with a non-string adapter_id', () => {
+  const manifest = { ...structuredClone(SCENARIOS.base_manifest), adapter_id: '' };
+
+  const result = describeAdapter(SCENARIOS.base_request, manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a manifest with an empty adapter_version', () => {
+  const manifest = { ...structuredClone(SCENARIOS.base_manifest), adapter_version: '' };
+
+  const result = describeAdapter(SCENARIOS.base_request, manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a manifest whose bootstrap_wire_version is not exactly 1', () => {
+  const manifest = { ...structuredClone(SCENARIOS.base_manifest), bootstrap_wire_version: 2 };
+
+  const result = describeAdapter(SCENARIOS.base_request, manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a manifest whose required_core_contract_version is not a positive integer', () => {
+  const manifest = { ...structuredClone(SCENARIOS.base_manifest), required_core_contract_version: 0 };
+
+  const result = describeAdapter(SCENARIOS.base_request, manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a manifest with an incomplete platform map', () => {
+  const manifest = structuredClone(SCENARIOS.base_manifest);
+  delete manifest.platforms.win32;
+
+  const result = describeAdapter(SCENARIOS.base_request, manifest, SCENARIOS.base_dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-adapter-manifest');
+});
+
+test('refuses a describe result whose ok member is not true', () => {
+  const dynamic = { ...structuredClone(SCENARIOS.base_dynamic), ok: false };
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose bootstrap_wire_version is not exactly 1', () => {
+  const dynamic = { ...structuredClone(SCENARIOS.base_dynamic), bootstrap_wire_version: 2 };
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result with an empty adapter_id', () => {
+  const dynamic = { ...structuredClone(SCENARIOS.base_dynamic), adapter_id: '' };
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result with an empty adapter_version', () => {
+  const dynamic = { ...structuredClone(SCENARIOS.base_dynamic), adapter_version: '' };
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose core section carries an unknown member', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.core.extra = true;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+// A malformed required_core_contract_version is a schema issue, not a
+// mismatch: it must be rejected before it ever reaches the
+// required-core-contract-version-mismatch cross-check.
+test('refuses a describe result whose required_core_contract_version is not a positive integer', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.core.required_core_contract_version = 0;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose core.commands contains an unknown command', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.core.commands = ['unknown-command'];
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose command_execution carries an unknown member', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.command_execution.extra = true;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose command_execution.supported is not a boolean', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.command_execution.supported = 'yes';
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+// The three filesystem proof flags are set to `false`, matching what the
+// §3.2 invariant would already require for any non-"guarded-relative"
+// value, so only the plain enum-membership schema check can catch this.
+test('refuses a describe result whose filesystem.workspace_selection is an unknown enum value', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.filesystem.workspace_selection = 'weird';
+  dynamic.host.filesystem.no_follow_resolution = false;
+  dynamic.host.filesystem.stable_identity = false;
+  dynamic.host.filesystem.component_walk = false;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result with an empty model_transport.protocol', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.model_transport.protocol = '';
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose instruction_input.mode is an unknown enum value', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.instruction_input.mode = 'weird';
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose handoff.persistence is not exactly explicit-only', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.handoff.persistence = 'weird';
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose integration_mechanisms member is not a boolean', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.host.integration_mechanisms.hooks = 'no';
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result whose optional_features member is not a boolean', () => {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  dynamic.optional_features.claims = 'no';
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+// Builds a dynamic describe result whose command-execution capabilities are
+// self-consistently "unsupported", so the §3.2 execution-invariant check
+// (which only inspects limits when `supported: true`) cannot itself catch a
+// malformed limit — isolating the plain schema check on `limits`.
+function unsupportedExecutionDynamic() {
+  const dynamic = structuredClone(SCENARIOS.base_dynamic);
+  const execution = dynamic.host.command_execution;
+  execution.supported = false;
+  execution.shell = false;
+  for (const flag of [
+    'arguments_array', 'stdio', 'process_tree_containment', 'orphan_detection',
+    'timeout_enforcement', 'stdout_limit', 'stderr_limit',
+  ]) {
+    execution[flag] = false;
+  }
+  dynamic.core.commands = [];
+  return dynamic;
+}
+
+test('refuses a describe result with a non-positive max_timeout_ms even when execution is unsupported', () => {
+  const dynamic = unsupportedExecutionDynamic();
+  dynamic.limits.max_timeout_ms = 0;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('refuses a describe result with a negative byte limit even when execution is unsupported', () => {
+  const dynamic = unsupportedExecutionDynamic();
+  dynamic.limits.max_request_bytes = -1;
+
+  const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-describe-result');
+});
+
+test('verifyCoreProbe refuses a probe whose ok member is not true', () => {
+  const probe = { ...coreCapabilities(), ok: false };
+
+  const result = verifyCoreProbe(structuredClone(SCENARIOS.base_dynamic), probe);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'core-protocol-error');
+});
+
+// A protocol-version-2 probe is a schema issue (this engine only speaks
+// core contract version 1) even when its number happens to equal the
+// describe result's required core contract version.
+test('verifyCoreProbe refuses a probe with a contract_version other than 1', () => {
+  const describe = structuredClone(SCENARIOS.base_dynamic);
+  describe.core.required_core_contract_version = 2;
+  const probe = { ...coreCapabilities(), contract_version: 2 };
+
+  const result = verifyCoreProbe(describe, probe);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'core-protocol-error');
+});
+
+test('verifyCoreProbe refuses a probe result with an unknown member', () => {
+  const probe = coreCapabilities();
+  probe.result.extra = true;
+
+  const result = verifyCoreProbe(structuredClone(SCENARIOS.base_dynamic), probe);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'core-protocol-error');
+});
+
+// Applies a `{ delete }` and/or `{ set: { path, value } }` fixture mutation
+// to a scenario target object, following the same dotted-path convention as
+// `spec/run-adapter-vectors.js`'s negotiation and core-probe cases.
+function applyMutation(target, scenario) {
+  if (scenario.delete) {
+    const segments = scenario.delete.split('.');
+    const parent = segments.slice(0, -1).reduce((value, key) => value[key], target);
+    delete parent[segments.at(-1)];
+  }
+  if (scenario.set) {
+    const segments = scenario.set.path.split('.');
+    const parent = segments.slice(0, -1).reduce((value, key) => value[key], target);
+    parent[segments.at(-1)] = scenario.set.value;
+  }
+}
+
+// Applies a `capability_invariant` fixture directive: each mode flips one
+// §3.2 cross-field invariant (command-execution, filesystem, or
+// instruction-input) while keeping the rest of `dynamic` self-consistent.
+function applyCapabilityInvariant(dynamic, invariant) {
+  const command = dynamic.host.command_execution;
+  const filesystem = dynamic.host.filesystem;
+  const instruction = dynamic.host.instruction_input;
+  const dependentCommandMembers = [
+    'arguments_array', 'stdio', 'process_tree_containment', 'orphan_detection',
+    'timeout_enforcement', 'stdout_limit', 'stderr_limit',
+  ];
+  switch (invariant.mode) {
+    case 'supported':
+      command[invariant.member] = invariant.value;
+      return;
+    case 'limit':
+      dynamic.limits[invariant.member] = 0;
+      return;
+    case 'guarded':
+      filesystem[invariant.member] = false;
+      return;
+    case 'unsupported':
+    case 'unsupported-invoke':
+      command.supported = false;
+      command.shell = false;
+      for (const member of dependentCommandMembers) command[member] = false;
+      dynamic.core.commands = [];
+      if (invariant.mode === 'unsupported') command[invariant.member] = true;
+      else dynamic.core.commands = ['capabilities'];
+      return;
+    case 'filesystem-none':
+      filesystem.workspace_selection = 'none';
+      filesystem.no_follow_resolution = false;
+      filesystem.stable_identity = false;
+      filesystem.component_walk = false;
+      filesystem[invariant.member] = true;
+      return;
+    case 'instruction-none':
+      instruction.mode = 'none';
+      instruction.max_sources = 0;
+      instruction.max_bytes = 0;
+      instruction[invariant.member] = 1;
+      return;
+    case 'instruction-configured':
+      instruction[invariant.member] = 0;
+      return;
+    default:
+      throw new Error(`unknown capability invariant mode: ${invariant.mode}`);
+  }
+}
+
+// Builds the (request, manifest, dynamic) triple for one `SCENARIOS.cases`
+// entry, starting from independent deep clones of the fixture's base
+// objects so mutating one scenario can never leak into the next.
+function buildNegotiationInputs(scenario) {
+  const request = { ...structuredClone(SCENARIOS.base_request), ...structuredClone(scenario.request ?? {}) };
+  const manifest = { ...structuredClone(SCENARIOS.base_manifest), ...structuredClone(scenario.manifest ?? {}) };
+  const baseDynamic = structuredClone(SCENARIOS.base_dynamic);
+  const dynamicOverride = structuredClone(scenario.dynamic ?? {});
+  const dynamic = {
+    ...baseDynamic,
+    ...dynamicOverride,
+    core: { ...baseDynamic.core, ...dynamicOverride.core },
+    platforms: dynamicOverride.platforms ?? baseDynamic.platforms,
+  };
+  if (scenario.target) {
+    const targets = { request, manifest, dynamic };
+    applyMutation(targets[scenario.target], scenario);
+  }
+  if (scenario.capability_invariant) {
+    applyCapabilityInvariant(dynamic, scenario.capability_invariant);
+  }
+  return { request, manifest, dynamic };
+}
+
+test('describeAdapter and verifyCoreProbe match the reference oracle on every negotiation scenario', async (t) => {
+  for (const scenario of SCENARIOS.cases) {
+    await t.test(scenario.id, () => {
+      if (scenario.id === 'required-core-version') {
+        // This fixture entry exercises verifyCoreProbe's required-core-version
+        // cross-check rather than describeAdapter: it supplies an
+        // already-negotiated describe result and a probed contract version
+        // directly, with no request/manifest/dynamic to build.
+        const describe = {
+          core: {
+            required_core_contract_version: scenario.required_core_contract_version,
+            commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+          },
+          optional_features: { claims: false, policy: false },
+        };
+        const mine = verifyCoreProbe(structuredClone(describe), coreCapabilities());
+        const theirs = referenceVerifyCoreProbe(structuredClone(describe), referenceCoreCapabilities());
+        assert.equal(mine.ok, theirs.ok, scenario.id);
+        assert.equal(mine.ok, false, scenario.id);
+        assert.equal(mine.error_code, scenario.expected, scenario.id);
+        assert.equal(mine.error_code, theirs.error?.code, scenario.id);
+        return;
+      }
+
+      const { request, manifest, dynamic } = buildNegotiationInputs(scenario);
+      const mine = describeAdapter(structuredClone(request), structuredClone(manifest), structuredClone(dynamic));
+      const theirs = referenceDescribe(structuredClone(request), structuredClone(manifest), structuredClone(dynamic));
+      assert.equal(mine.ok, theirs.ok, scenario.id);
+      assert.equal(mine.ok, false, scenario.id);
+      assert.equal(mine.error_code, scenario.expected, scenario.id);
+      assert.equal(mine.error_code, theirs.error?.code, scenario.id);
+    });
+  }
+});
+
+test('verifyCoreProbe matches the reference oracle on every core-probe scenario', async (t) => {
+  for (const scenario of SCENARIOS.core_probe_cases) {
+    await t.test(scenario.id, () => {
+      const targetsProbe = scenario.target === 'probe';
+
+      const mineDescribe = structuredClone(SCENARIOS.base_dynamic);
+      const mineProbe = coreCapabilities();
+      applyMutation(targetsProbe ? mineProbe : mineDescribe, scenario);
+
+      const theirsDescribe = structuredClone(SCENARIOS.base_dynamic);
+      const theirsProbe = referenceCoreCapabilities();
+      applyMutation(targetsProbe ? theirsProbe : theirsDescribe, scenario);
+
+      const mine = verifyCoreProbe(mineDescribe, mineProbe);
+      const theirs = referenceVerifyCoreProbe(theirsDescribe, theirsProbe);
+      assert.equal(mine.ok, theirs.ok, scenario.id);
+      assert.equal(mine.ok, false, scenario.id);
+      assert.equal(mine.error_code, scenario.expected, scenario.id);
+      assert.equal(mine.error_code, theirs.error?.code, scenario.id);
+    });
   }
 });

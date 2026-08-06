@@ -31,6 +31,9 @@ export function isSafeRelativeExecutable(value) {
   if (/^[A-Za-z]:/.test(value)) {
     return false;
   }
+  if (/^volume\{[^/]*\}(\/|$)/i.test(value)) {
+    return false;
+  }
   const segments = value.split('/');
   return segments.every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
