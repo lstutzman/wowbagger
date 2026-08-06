@@ -21,6 +21,37 @@ Every case names its applicable target set:
   required tools. An API-only OpenAI-compatible endpoint is a negative profile,
   not this target.
 
+## Environment requirement: run from a git checkout
+
+**Run these vectors from a real git checkout of this repository.** They are not
+reproducible from an exported tarball, an `npm pack` extraction, or a container
+build context that does not copy `.git`.
+
+The `10-capabilities-forwarding` case compares the core's `capabilities` output
+byte for byte, and three members of that output are derived from whether a
+`.git` directory can be resolved from the working directory:
+
+- `backend.coordination_scope` — `shared-git-directory-cooperative-writers`
+  with git, `same-working-copy-cooperative-writers` without
+- `operations.work_claim.supported` — `true` with git, `false` without
+- `limits.cross_worktree_coordination` — `true` with git, `false` without
+
+The committed expectation pins the git-present values. Without a `.git`
+directory the core truthfully reports the other three, the byte comparison
+fails, and **that failure is caused by the environment, not by the adapter
+under test**. Do not treat it as an adapter defect.
+
+The remaining members, including every work-claim safety member
+(`mode`, `claim_protected_publication`, `fencing_enforced_at`,
+`safe_exclusive_dispatch`), are fixed regardless of git presence.
+
+Making the vectors self-sufficient would require the harness to synthesize a
+git directory at two independent call sites — `evaluateCoreBaseline` in
+`spec/run-adapter-vectors.js`, and the standalone baseline test in
+`test/adapter-vectors.test.js` — and the manifest schema has no field for
+declaring a precondition. Documenting the requirement was chosen over changing
+the harness; see ledger item `wb_01KZBNMT39DE0F95RV0C5K0EJQ`.
+
 ## Manifest contract
 
 ```json
