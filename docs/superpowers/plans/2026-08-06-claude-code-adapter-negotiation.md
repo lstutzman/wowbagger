@@ -531,8 +531,17 @@ replacement refuses before the adapter process launches.
 - Produces: `resolveEntrypointPath({ package_root, executable, before, after }) -> { ok: true, path } | { ok: false, error_code }`
   where `error_code` is `path-rejected` for syntax, link, and missing-identity
   faults, and `path-replaced` when `before` and `after` identities differ.
-  `before` and `after` are arrays of `{ path, identity }` snapshots; a `null`
-  identity means the component could not be identified.
+  **`before` and `after` are OBJECTS keyed by relative component path**, whose
+  values are `{ kind, identity }` — verified against `entrypoint_paths` in
+  `spec/fixtures/adapters/13-negotiation-mismatch/scenarios.json`. The key `"."`
+  is the package root. `kind` is `directory`, `regular-file`, `symbolic-link`,
+  and so on, and it is what detects the link, junction, reparse-point, and
+  special-file refusals — an implementation that ignores `kind` cannot decide
+  the `entrypoint-link` scenario at all.
+
+  The oracle returns a nested `{ ok, error: { code } }`; this engine returns a
+  flat `{ ok, error_code }` consistently across `src/adapter/`. The differential
+  test unwraps the oracle's shape to compare. That is intentional.
 
 - [ ] **Step 1: Write the failing test**
 
