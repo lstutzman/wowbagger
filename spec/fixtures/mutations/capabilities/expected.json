@@ -5,7 +5,7 @@
   "result": {
     "backend": {
       "name": "local-filesystem",
-      "coordination_scope": "same-working-copy-cooperative-writers"
+      "coordination_scope": "shared-git-directory-cooperative-writers"
     },
     "operations": {
       "inspect": {
@@ -26,8 +26,12 @@
         "cas_scope": "exact-byte-sha256"
       },
       "work_claim": {
-        "supported": false,
-        "reason": "not-implemented"
+        "supported": true,
+        "api_version": 1,
+        "mode": "advisory",
+        "claim_protected_publication": false,
+        "fencing_enforced_at": "none",
+        "safe_exclusive_dispatch": false
       }
     },
     "durability": {
@@ -39,7 +43,7 @@
     "limits": {
       "multi_item_atomicity": false,
       "cross_clone_coordination": false,
-      "cross_worktree_coordination": false,
+      "cross_worktree_coordination": true,
       "cross_machine_coordination": false,
       "noncooperating_writer_protection": false,
       "automatic_stale_lock_breaking": false

@@ -535,7 +535,14 @@ export function referenceCoreCapabilities() {
           write_scope: 'single-item',
           cas_scope: 'exact-byte-sha256',
         },
-        work_claim: { supported: false, reason: 'not-implemented' },
+        work_claim: {
+          supported: false,
+          api_version: 1,
+          mode: 'advisory',
+          claim_protected_publication: false,
+          fencing_enforced_at: 'none',
+          safe_exclusive_dispatch: false,
+        },
       },
       durability: {
         temporary_file_sync: 'required-before-publication',
@@ -1240,6 +1247,8 @@ function validCommandArray(value) {
       || CORE_COMMANDS.indexOf(value[index - 1]) < CORE_COMMANDS.indexOf(command));
 }
 
+const GIT_COORDINATION_SCOPES = ['same-working-copy-cooperative-writers', 'shared-git-directory-cooperative-writers'];
+
 function coreCapabilitiesSchemaIssue(value) {
   if (!hasExactKeys(value, ['ok', 'command', 'contract_version', 'result'])) return 'members';
   if (value.ok !== true) return 'ok';
@@ -1247,9 +1256,12 @@ function coreCapabilitiesSchemaIssue(value) {
   if (value.contract_version !== 1) return 'contract_version';
   const result = value.result;
   if (!hasExactKeys(result, ['backend', 'operations', 'durability', 'limits'])) return 'result';
+  // coordination_scope is the one backend member that is genuinely environment-dependent: it
+  // names whether a shared git common directory was found for advisory cross-worktree claim
+  // coordination. Both values are legitimate; nothing else about backend may vary.
   if (!hasExactKeys(result.backend, ['name', 'coordination_scope'])
     || result.backend.name !== 'local-filesystem'
-    || result.backend.coordination_scope !== 'same-working-copy-cooperative-writers') {
+    || !GIT_COORDINATION_SCOPES.includes(result.backend.coordination_scope)) {
     return 'result.backend';
   }
   if (!hasExactKeys(result.operations, ['inspect', 'create', 'transition', 'work_claim'])) {
@@ -1275,9 +1287,22 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.operations.transition.cas_scope !== 'exact-byte-sha256') {
     return 'result.operations.transition';
   }
-  if (!hasExactKeys(result.operations.work_claim, ['supported', 'reason'])
-    || result.operations.work_claim.supported !== false
-    || result.operations.work_claim.reason !== 'not-implemented') {
+  // work_claim.supported tracks the same git-coordination-directory fact as
+  // backend.coordination_scope and limits.cross_worktree_coordination — it is the one
+  // permitted variable. Every other member of work_claim is a permanent advisory-claims
+  // invariant: claims never protect publication, never fence writers, and must never
+  // advertise safe exclusive dispatch to a caller deciding whether to skip coordination.
+  const workClaim = result.operations.work_claim;
+  if (!hasExactKeys(workClaim, [
+    'supported', 'api_version', 'mode', 'claim_protected_publication',
+    'fencing_enforced_at', 'safe_exclusive_dispatch',
+  ])
+    || typeof workClaim.supported !== 'boolean'
+    || workClaim.api_version !== 1
+    || workClaim.mode !== 'advisory'
+    || workClaim.claim_protected_publication !== false
+    || workClaim.fencing_enforced_at !== 'none'
+    || workClaim.safe_exclusive_dispatch !== false) {
     return 'result.operations.work_claim';
   }
   if (!hasExactKeys(result.durability, [
@@ -1288,11 +1313,26 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.durability.directory_sync !== 'best-effort-when-supported'
     || result.durability.post_publication_verification !== 'exact-bytes-required'
     || result.durability.power_loss_guarantee !== 'none') return 'result.durability';
-  if (!hasExactKeys(result.limits, [
+  const limits = result.limits;
+  if (!hasExactKeys(limits, [
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection',
     'automatic_stale_lock_breaking',
-  ]) || !Object.values(result.limits).every((member) => member === false)) return 'result.limits';
+  ])
+    || limits.multi_item_atomicity !== false
+    || limits.cross_clone_coordination !== false
+    || typeof limits.cross_worktree_coordination !== 'boolean'
+    || limits.cross_machine_coordination !== false
+    || limits.noncooperating_writer_protection !== false
+    || limits.automatic_stale_lock_breaking !== false) return 'result.limits';
+  // The three git-coordination-dependent members must agree: they all derive from the same
+  // "was a shared git common directory found?" fact, so a git-found state and a no-git state
+  // are each internally consistent, but no other combination is.
+  const gitCoordinationFound = result.backend.coordination_scope === 'shared-git-directory-cooperative-writers';
+  if (workClaim.supported !== gitCoordinationFound
+    || limits.cross_worktree_coordination !== gitCoordinationFound) {
+    return 'result.git-coordination-consistency';
+  }
   return null;
 }
 

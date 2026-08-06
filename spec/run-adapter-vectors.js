@@ -501,10 +501,18 @@ async function evaluateCapability(directory, assertion) {
   } else if (assertion.expect === 'claims-and-policy-false') {
     const capabilities = await json(directory, 'adapter-capabilities.json');
     assert.deepEqual(capabilities.optional_features, { claims: false, policy: false });
-  } else if (assertion.expect === 'work-claim-supported-false') {
+  } else if (assertion.expect === 'work-claim-advisory') {
+    // Advisory claims must never advertise safe exclusive dispatch — the invariant a future
+    // consumer's migration decision depends on, not the now-stale "claims aren't implemented yet" fact.
     const output = JSON.parse((await artifactBytes(directory, 'expected-core-stdout.jsonl')).toString('utf8'));
-    assert.equal(output.result.operations.work_claim.supported, false);
-    assert.equal(verifyCoreProbe(referenceRuntime().dynamic, output).ok, true);
+    assert.equal(output.result.operations.work_claim.supported, true);
+    assert.equal(output.result.operations.work_claim.mode, 'advisory');
+    assert.equal(output.result.operations.work_claim.safe_exclusive_dispatch, false);
+    const describe = referenceRuntime().dynamic;
+    assert.equal(
+      verifyCoreProbe({ ...describe, optional_features: { ...describe.optional_features, claims: true } }, output).ok,
+      true,
+    );
   } else {
     throw new Error(`unknown capability expectation: ${assertion.expect}`);
   }

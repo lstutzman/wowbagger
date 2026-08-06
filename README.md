@@ -12,8 +12,11 @@ putting a database or hosted service inside your repository.
 > local `capabilities`, `inspect`, `create`, and `transition` commands. Its
 > mutation scope is deliberately narrow: cooperative writers in one working
 > copy, one item at a time. The harness-neutral adapter boundary is documented,
-> but no adapter is shipped as a stable release. Fenced work claims are under
-> active development in this branch and are not available from the core CLI.
+> but no adapter is shipped as a stable release. The core implements advisory
+> work claims (`acquire`, `renew`, `release`, `read`), visible across the
+> worktrees of one repository. They coordinate cooperating agents but enforce
+> nothing: a non-cooperating writer still wins. Fenced work claims still
+> require a transactional coordinator and are not available from the core CLI.
 
 ## Why the name?
 
