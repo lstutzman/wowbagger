@@ -84,3 +84,31 @@ test('a request naming an unprovisioned namespace is rejected', async () => {
   assert.equal(refused.exit, 2);
   assert.equal(refused.envelope.error.code, 'ledger-namespace-unbound');
 });
+
+test('claim capabilities reports the contract-shaped envelope, distinct from top-level capabilities', async () => {
+  const root = await repository();
+  const capabilities = await capture(['claim', 'capabilities', '--ledger', path.join(root, 'ledger'), '--json']);
+  assert.equal(capabilities.exit, 0);
+  assert.deepEqual(capabilities.envelope, {
+    ok: true,
+    namespace: 'work-claim',
+    command: 'capabilities',
+    contract_version: 1,
+    result: {
+      backend: {
+        name: 'local-filesystem',
+        coordination_scope: 'shared-git-directory-cooperative-writers',
+      },
+      operations: {
+        work_claim: {
+          supported: true,
+          api_version: 1,
+          mode: 'advisory',
+          claim_protected_publication: false,
+          fencing_enforced_at: 'none',
+          safe_exclusive_dispatch: false,
+        },
+      },
+    },
+  });
+});
