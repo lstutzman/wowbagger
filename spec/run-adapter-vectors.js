@@ -712,7 +712,7 @@ function applyScenarioMutation(scenario, approval, binding) {
   mutateObject(target, scenario);
 }
 
-function mutateObject(target, scenario) {
+export function mutateObject(target, scenario) {
   if (scenario.delete) {
     const segments = scenario.delete.split('.');
     const parent = segments.slice(0, -1).reduce((value, key) => value[key], target);
@@ -725,7 +725,7 @@ function mutateObject(target, scenario) {
   }
 }
 
-function applyCapabilityInvariantScenario(dynamic, scenario) {
+export function applyCapabilityInvariantScenario(dynamic, scenario) {
   const command = dynamic.host.command_execution;
   const filesystem = dynamic.host.filesystem;
   const instruction = dynamic.host.instruction_input;

@@ -3,6 +3,14 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JsonNumber, parseJsonRequest } from '../src/request.js';
+// Scenario-shaping helpers only. The model under test is never imported from
+// spec/adapter-reference.js: an implementation runner that asked the oracle
+// whether the oracle passes its own vectors would report nothing.
+import { applyCapabilityInvariantScenario, mutateObject } from './run-adapter-vectors.js';
+import { describeAdapter } from '../src/adapter/describe.js';
+import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
+import { validateAdapterManifest } from '../src/adapter/manifest.js';
+import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 
@@ -13,6 +21,211 @@ const SUPPORTED_ASSERTION_TYPES = new Set([
   'entrypoint-path', 'invoke-version', 'core-probe', 'negotiation',
   'context-validation', 'approval-schema',
 ]);
+
+const CORE_COMMANDS = ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'];
+
+// Every assertion this plan cannot evidence carries this outcome. It is never
+// `ok`, so a case holding one can never reach `pass`.
+const UNIMPLEMENTED = Object.freeze({ ok: false, evidence: 'unimplemented' });
+
+// src/request.js boxes every parsed JSON number as a JsonNumber and builds
+// every object with a null prototype, but the engine modules compare against
+// plain JS values (the same problem src/adapter/bootstrap.js's
+// normalizeParsedJson and src/cli.js's normalizeClaimRequest solve at their
+// own call sites).
+function unwrapNumbers(value) {
+  if (value instanceof JsonNumber) {
+    return Number(value.source);
+  }
+  if (Array.isArray(value)) {
+    return value.map(unwrapNumbers);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, unwrapNumbers(nested)]));
+  }
+  return value;
+}
+
+// Fixture JSON is held to the same strict standard as the wire: a duplicate
+// member or trailing bytes is a fixture defect, not a value to guess at.
+async function readStrictJson(file) {
+  const parsed = parseJsonRequest(await readFile(file));
+  if (parsed.issues.length > 0) {
+    throw new Error(`${file}: invalid strict JSON`);
+  }
+  return unwrapNumbers(parsed.value);
+}
+
+const scenarioCache = new Map();
+
+// Every caller gets its own copy. The scenario objects handed to the engine
+// are shallow spreads of the bases, so a nested mutation such as
+// `entrypoints.invoke.executable` would otherwise reach through the spread
+// and corrupt the bases for every later assertion in the case.
+async function readScenarios(directory) {
+  if (!scenarioCache.has(directory)) {
+    scenarioCache.set(directory, await readStrictJson(path.join(directory, 'scenarios.json')));
+  }
+  return structuredClone(scenarioCache.get(directory));
+}
+
+function findScenario(scenarios, id) {
+  const scenario = scenarios?.find((entry) => entry.id === id);
+  if (!scenario) {
+    throw new Error(`unknown scenario ${id}`);
+  }
+  return scenario;
+}
+
+// The negotiation, core-probe, and entrypoint-path assertions all inject a
+// synthetic manifest or describe result. The §3.3 bootstrap wire carries only
+// the describe request, so they are evaluated against the shipped engine
+// modules imported directly rather than across the process boundary; adding a
+// test-injection seam to the entrypoint would weaken the shipped binary.
+async function evaluateNegotiationAssertion(directory, assertion) {
+  const data = await readScenarios(directory);
+
+  if (assertion.type === 'entrypoint-path') {
+    const scenario = findScenario(data.entrypoint_paths, assertion.scenario);
+    const result = resolveEntrypointPath(scenario);
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: 'src/adapter/entrypoint-path.js',
+      error_code: result.error_code,
+    };
+  }
+
+  if (assertion.type === 'core-probe') {
+    const scenario = findScenario(data.core_probe_cases, assertion.scenario);
+    const describe = structuredClone(data.base_dynamic);
+    const probe = coreCapabilities();
+    mutateObject(scenario.target === 'probe' ? probe : describe, scenario);
+    const result = verifyCoreProbe(describe, probe);
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: 'src/adapter/core-probe.js',
+      error_code: result.error_code,
+    };
+  }
+
+  const scenario = findScenario(data.cases, assertion.scenario);
+  const request = { ...data.base_request, ...scenario.request };
+  const manifest = { ...data.base_manifest, ...scenario.manifest };
+  const dynamic = {
+    ...data.base_dynamic,
+    ...scenario.dynamic,
+    core: { ...data.base_dynamic.core, ...scenario.dynamic?.core },
+    platforms: scenario.dynamic?.platforms ?? data.base_dynamic.platforms,
+  };
+  if (scenario.target) {
+    const targets = { request, manifest, dynamic };
+    if (!targets[scenario.target]) {
+      throw new Error(`unknown mutation target ${scenario.target}`);
+    }
+    mutateObject(targets[scenario.target], scenario);
+  }
+  if (scenario.capability_invariant) {
+    applyCapabilityInvariantScenario(dynamic, scenario.capability_invariant);
+  }
+  // One scenario probes the core contract version rather than the describe
+  // negotiation, so it is answered by the core-probe module.
+  const probesCore = scenario.id === 'required-core-version';
+  const result = probesCore
+    ? verifyCoreProbe(
+      {
+        core: {
+          required_core_contract_version: scenario.required_core_contract_version,
+          commands: CORE_COMMANDS,
+        },
+        optional_features: { claims: false, policy: false },
+      },
+      coreCapabilities(),
+    )
+    : describeAdapter(request, manifest, dynamic);
+  return {
+    ok: result.error_code === scenario.expected,
+    evidence: probesCore ? 'src/adapter/core-probe.js' : 'src/adapter/describe.js',
+    error_code: result.error_code,
+  };
+}
+
+// The committed capability artifact is a §3.2 describe result. Running it back
+// through the shipped negotiator is what makes `src/adapter/describe.js` an
+// honest evidence label: the accepted result, not the raw file, is what
+// declares both optional features absent.
+async function evaluateCapabilityAssertion(directory, assertion) {
+  if (assertion.expect !== 'claims-and-policy-false') {
+    // `refuse-before-core-launch` and `work-claim-advisory` both need
+    // invokeAdapter, which is Plan 2's work.
+    return UNIMPLEMENTED;
+  }
+  const capabilities = await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
+  const described = describeAdapter(
+    {
+      bootstrap_wire_version: capabilities.bootstrap_wire_version,
+      supported_adapter_contract_versions: [1],
+      request_id: assertion.id,
+    },
+    {
+      adapter_manifest_version: 1,
+      adapter_id: capabilities.adapter_id,
+      adapter_version: capabilities.adapter_version,
+      adapter_contract_versions: [1],
+      bootstrap_wire_version: capabilities.bootstrap_wire_version,
+      required_core_contract_version: capabilities.core.required_core_contract_version,
+      entrypoints: {
+        describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
+        invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
+      },
+      platforms: capabilities.platforms,
+    },
+    capabilities,
+  );
+  return {
+    ok: described.ok === true
+      && described.result.optional_features.claims === false
+      && described.result.optional_features.policy === false,
+    evidence: 'src/adapter/describe.js',
+    error_code: described.error_code,
+  };
+}
+
+// §3.1 platform statuses are evidence-based: `supported` is a claim, and no
+// manifest may make it without native common-vector evidence. The shipped
+// manifest validator is what accepts the package manifest whose platform map
+// the interpretation then reads.
+async function evaluatePlatformAssertion(directory, assertion) {
+  const packageManifest = await readStrictJson(path.join(directory, 'package-manifest.json'));
+  const expected = await readStrictJson(path.join(directory, assertion.expect));
+  const validated = validateAdapterManifest(packageManifest);
+  const interpretation = {
+    supported_platforms: Object.entries(packageManifest.platforms)
+      .filter(([, status]) => status === 'supported').map(([platform]) => platform),
+    unverified_platforms: Object.entries(packageManifest.platforms)
+      .filter(([, status]) => status === 'unverified').map(([platform]) => platform),
+    required_before_support_claim: 'native-common-vector-evidence',
+  };
+  return {
+    ok: validated.ok === true && JSON.stringify(interpretation) === JSON.stringify(expected),
+    evidence: 'src/adapter/manifest.js',
+    error_code: validated.error_code,
+  };
+}
+
+async function evaluateAssertion(directory, assertion) {
+  switch (assertion.type) {
+    case 'negotiation':
+    case 'core-probe':
+    case 'entrypoint-path':
+      return evaluateNegotiationAssertion(directory, assertion);
+    case 'capability':
+      return evaluateCapabilityAssertion(directory, assertion);
+    case 'platform-status':
+      return evaluatePlatformAssertion(directory, assertion);
+    default:
+      return UNIMPLEMENTED;
+  }
+}
 
 export async function runImplementationVectors({
   fixtureRoot = defaultFixtureRoot,
@@ -26,9 +239,8 @@ export async function runImplementationVectors({
 
   const cases = [];
   for (const name of directories) {
-    const parsed = parseJsonRequest(
-      await readFile(path.join(fixtureRoot, name, 'manifest.json')),
-    );
+    const directory = path.join(fixtureRoot, name);
+    const parsed = parseJsonRequest(await readFile(path.join(directory, 'manifest.json')));
     const manifest = parsed.value;
     const version = manifest.adapter_vector_version;
     const isVersionOne = version === 1 || (version instanceof JsonNumber && version.source === '1');
@@ -43,24 +255,49 @@ export async function runImplementationVectors({
         throw new Error(`unknown assertion type ${assertion.type} in ${name}`);
       }
     }
+
+    const evaluated = [];
+    const errorCodes = new Set();
+    let cased = true;
+    for (const assertion of manifest.assertions) {
+      const outcome = await evaluateAssertion(directory, assertion);
+      if (outcome.error_code) {
+        errorCodes.add(outcome.error_code);
+      }
+      if (!outcome.ok) {
+        cased = false;
+      }
+      evaluated.push({ id: assertion.id, evidence: outcome.evidence });
+    }
+
     cases.push({
       case: manifest.case,
-      status: 'fail',
+      status: cased ? 'pass' : 'fail',
       executed_mode: manifest.mode,
       executed_assertions: manifest.assertions.map((assertion) => assertion.id),
-      assertion_evidence: manifest.assertions.map((assertion) => ({
-        id: assertion.id,
-        evidence: 'unimplemented',
-      })),
-      observed_error_codes: [],
+      assertion_evidence: evaluated,
+      observed_error_codes: [...errorCodes].sort(),
     });
   }
 
+  const passed = cases.every((entry) => entry.status === 'pass');
   return {
-    status: 'fail',
-    implementations: { 'claude-code': 'fail' },
+    status: passed ? 'pass' : 'fail',
+    implementations: { 'claude-code': passed ? 'pass' : 'fail' },
     evidence_platform: platform,
-    observed_error_codes: [],
+    observed_error_codes: [...new Set(cases.flatMap((entry) => entry.observed_error_codes))].sort(),
     cases,
   };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    process.stdout.write(`${JSON.stringify(await runImplementationVectors({
+      entrypoint: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: [] },
+      platform: process.platform,
+    }))}\n`);
+  } catch (error) {
+    process.stderr.write(`${error.stack ?? error}\n`);
+    process.exitCode = 1;
+  }
 }
