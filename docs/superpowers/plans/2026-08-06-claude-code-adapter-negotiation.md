@@ -1436,12 +1436,23 @@ git commit -m "Drive the negotiation vectors against the real adapter entrypoint
 ## Definition of Done for Plan 1
 
 - `node spec/run-adapter-implementation.js` reports `pass` for
-  `capability-separation` and `platform-declaration`, and carries a real
-  `evidence_platform`.
-- Case `negotiation-mismatch` reports `fail` with exactly four assertions
-  outstanding, all of type `invoke-version`. Every other assertion in that case
-  carries evidence naming a `src/adapter/` module. The overall run status is
-  `fail` — 77 of 183 assertions are evidenced at the end of this plan.
+  `platform-declaration` and carries a real `evidence_platform`.
+- **79 of 183 assertions are evidenced**, and the overall run status is `fail`.
+
+  Two numbers in an earlier draft of this plan were wrong, and the fixtures are
+  authoritative:
+
+  - Case `13-negotiation-mismatch` holds **one** `invoke-version` assertion,
+    `future-invoke-version-is-refused` — not four. Its type breakdown is
+    `negotiation 66, core-probe 6, entrypoint-path 5, invoke-version 1`. The case
+    therefore ends this plan at `fail` with 77 of 78 evidenced.
+  - Case `01-capability-separation` **cannot reach `pass` in this plan**. Its
+    `api-transport-is-not-tooling` assertion expects `refuse-before-core-launch`,
+    whose `capability-unavailable` refusal has no producer in `src/adapter/` —
+    only the oracle emits it. It needs `invokeAdapter`, which is Plan 2. The case
+    ends at `fail` with 1 of 2 evidenced.
+
+  Both cases reach `pass` once Plan 2 lands `src/adapter/invoke.js`.
 - The differential tests pass against `spec/adapter-reference.js`, and
   `spec/adapter-reference.js` is unmodified. Verify with
   `git diff --stat main -- spec/adapter-reference.js` showing no changes.
