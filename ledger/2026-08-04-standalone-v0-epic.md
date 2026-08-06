@@ -5,7 +5,7 @@ title: "Deliver standalone Wowbagger v0"
 kind: epic
 status: backlog
 created: 2026-08-04
-updated: 2026-08-05
+updated: 2026-08-06
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -20,6 +20,10 @@ decisions:
     date: 2026-08-05
     summary: "PropertyCompass2 backlog item 1419 describes this same epic and is superseded here."
     rationale: "The portable-tool extraction epic is tracked once, in this ledger, so wowbagger work has a single source."
+  - action: record
+    date: 2026-08-06
+    summary: "This epic gates dogfooding: wowbagger cannot drive work from this repository until its children are complete."
+    rationale: "Tracking this repository's own backlog here is the shallow sense of dogfooding and already works. Driving work from wowbagger needs claims implemented, concurrency proven, the consumer configuration and policy seams defined, packaging shipped, and at least one harness adapter delivered."
 ---
 
 This epic contains only standalone Wowbagger work. It intentionally excludes
