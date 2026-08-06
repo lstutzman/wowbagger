@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8825RKWA4AHJKN2YX
-title: "Define and implement the work-claim protocol"
+title: "Define the work-claim protocol contract"
 kind: task
 status: done
 created: 2026-08-04
@@ -23,6 +23,10 @@ decisions:
     date: 2026-08-05
     summary: "The fenced work-claim protocol contract and executable reference model are complete."
     rationale: "The documented v1 envelopes, fail-closed fencing semantics, durable clock and outcome recovery, independent goldens, and conformance tests are implemented and verified."
+  - action: record
+    date: 2026-08-06
+    summary: "Scope corrected: this item delivered the contract and reference model only. The title previously claimed an implementation that does not exist."
+    rationale: "The core CLI exposes no claim command and the README states fenced claims are unavailable from it. Leaving the old title would let a future reader assume claims are usable. Implementation is tracked separately."
 ---
 
 Define the portable claim envelope and fail-closed resolution behaviour before
