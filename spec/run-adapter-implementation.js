@@ -47,13 +47,20 @@ function unwrapNumbers(value) {
 }
 
 // Fixture JSON is held to the same strict standard as the wire: a duplicate
-// member or trailing bytes is a fixture defect, not a value to guess at.
-async function readStrictJson(file) {
+// member or trailing bytes is a fixture defect, not a value to guess at. The
+// vector manifest keeps its numbers boxed, because `adapter_vector_version` is
+// compared against the raw source text — unwrapping first would silently
+// accept `1.0` and `1e0` as version 1.
+async function parseStrictJson(file) {
   const parsed = parseJsonRequest(await readFile(file));
   if (parsed.issues.length > 0) {
     throw new Error(`${file}: invalid strict JSON`);
   }
-  return unwrapNumbers(parsed.value);
+  return parsed.value;
+}
+
+async function readStrictJson(file) {
+  return unwrapNumbers(await parseStrictJson(file));
 }
 
 const scenarioCache = new Map();
@@ -240,15 +247,21 @@ export async function runImplementationVectors({
   const cases = [];
   for (const name of directories) {
     const directory = path.join(fixtureRoot, name);
-    const parsed = parseJsonRequest(await readFile(path.join(directory, 'manifest.json')));
-    const manifest = parsed.value;
+    const manifest = await parseStrictJson(path.join(directory, 'manifest.json'));
     const version = manifest.adapter_vector_version;
-    const isVersionOne = version === 1 || (version instanceof JsonNumber && version.source === '1');
+    // parseJsonRequest boxes every JSON number, so the version is compared
+    // against its raw source text: `1.0`, `1e0` and `"1"` are all refused.
+    const isVersionOne = version instanceof JsonNumber && version.source === '1';
     if (!isVersionOne) {
       throw new Error(`unsupported adapter_vector_version in ${name}`);
     }
     if (!manifest.targets.includes('claude-code')) {
       continue;
+    }
+    // A case that asserts nothing cannot be evidence of anything, and
+    // `cased` starts true, so it would otherwise report `pass` for free.
+    if (manifest.assertions.length === 0) {
+      throw new Error(`no assertions in ${name}`);
     }
     for (const assertion of manifest.assertions) {
       if (!SUPPORTED_ASSERTION_TYPES.has(assertion.type)) {
@@ -278,6 +291,13 @@ export async function runImplementationVectors({
       assertion_evidence: evaluated,
       observed_error_codes: [...errorCodes].sort(),
     });
+  }
+
+  // `every` is vacuously true on an empty array, so a wrong fixture root
+  // would otherwise be told the adapter conforms on the strength of no
+  // measurement at all.
+  if (cases.length === 0) {
+    throw new Error(`no claude-code cases in ${fixtureRoot}`);
   }
 
   const passed = cases.every((entry) => entry.status === 'pass');

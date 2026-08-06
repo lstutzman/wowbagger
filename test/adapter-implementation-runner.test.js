@@ -363,6 +363,90 @@ test('fails closed on a scenario naming a mutation target that does not exist', 
   );
 });
 
+test('fails closed on a fixture root holding no cases at all', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'wb-empty-'));
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: 'darwin' }),
+    /no claude-code cases/,
+  );
+});
+
+test('fails closed on a fixture root whose cases all target another adapter', async () => {
+  const root = await writeTempFixture({
+    adapter_vector_version: 1,
+    case: 'synthetic',
+    coverage: ['capabilities'],
+    targets: ['codex'],
+    mode: 'protocol',
+    assertions: [{ id: 'synthetic-1', type: 'negotiation', scenario: 'absent' }],
+    artifacts: [],
+  });
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: 'darwin' }),
+    /no claude-code cases/,
+  );
+});
+
+test('fails closed on a case that declares no assertions', async () => {
+  const root = await writeTempFixture({
+    adapter_vector_version: 1,
+    case: 'synthetic',
+    coverage: ['capabilities'],
+    targets: ['claude-code'],
+    mode: 'protocol',
+    assertions: [],
+    artifacts: [],
+  });
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: 'darwin' }),
+    /no assertions in 01-synthetic/,
+  );
+});
+
+test('fails closed on a vector manifest that is not strict JSON', async () => {
+  const { manifest, files } = syntheticEntrypointFixture('path-replaced');
+  const root = await writeTempFixture(manifest, files);
+  await writeFile(
+    path.join(root, '01-synthetic', 'manifest.json'),
+    '{"adapter_vector_version": 1, "adapter_vector_version": 2}',
+  );
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: 'darwin' }),
+    /invalid strict JSON/,
+  );
+});
+
+// `adapter_vector_version` is compared against the raw JSON source text, so a
+// numerically-equal spelling is still a different declared version.
+for (const version of ['2', '1.0', '1e0', '"1"', 'null']) {
+  test(`fails closed on adapter_vector_version ${version}`, async () => {
+    const { manifest, files } = syntheticEntrypointFixture('path-replaced');
+    const root = await writeTempFixture(manifest, files);
+    const file = path.join(root, '01-synthetic', 'manifest.json');
+    const raw = JSON.parse(await readFile(file, 'utf8'));
+    delete raw.adapter_vector_version;
+    await writeFile(file, `{"adapter_vector_version": ${version}, ${JSON.stringify(raw).slice(1)}`);
+
+    await assert.rejects(
+      () => runImplementationVectors({ fixtureRoot: root, platform: 'darwin' }),
+      /unsupported adapter_vector_version in 01-synthetic/,
+    );
+  });
+}
+
+test('accepts adapter_vector_version 1', async () => {
+  const { manifest, files } = syntheticEntrypointFixture('path-replaced');
+  const root = await writeTempFixture(manifest, files);
+
+  const result = await runImplementationVectors({ fixtureRoot: root, platform: 'darwin' });
+
+  assert.equal(result.cases.length, 1);
+});
+
 test('fails closed on an assertion naming a scenario the fixture does not define', async () => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
   manifest.assertions[0].scenario = 'absent';
