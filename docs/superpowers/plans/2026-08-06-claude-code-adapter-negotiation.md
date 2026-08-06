@@ -640,7 +640,15 @@ empty.
 
 **Files:**
 - Create: `src/adapter/describe.js`
+- Create: `src/adapter/core-probe.js`
 - Test: `test/adapter-engine-differential.test.js`
+
+`src/adapter/core-probe.js` exports `coreCapabilities()`, returning the engine's
+own core capability snapshot, and `verifyCoreProbe(describe, probe)`, returning
+`{ ok: true }` or `{ ok: false, error_code }` with `core-contract-version-mismatch`,
+`required-core-contract-version-mismatch`, or `core-protocol-error`. The
+differential sweep in Step 5 covers both, using `SCENARIOS.core_probe_cases`.
+A core probe must never elevate `optional_features.claims` or `.policy`.
 
 **Interfaces:**
 - Consumes: `validateAdapterManifest` from Task 3.
@@ -1034,22 +1042,27 @@ git commit -m "Add the Claude Code adapter entrypoint and bootstrap wire"
 
 ### Task 8: Runner drives the real entrypoint for the negotiation cases
 
-Wire Task 1's runner to the entrypoint from Task 7 so cases
-`01-capability-separation`, `09-platform-declaration`, and
-`13-negotiation-mismatch` report real results — 81 of the 183 assertions.
+Wire Task 1's runner to the shipped engine so cases `01-capability-separation`,
+`09-platform-declaration`, and the describe-driven part of
+`13-negotiation-mismatch` report real results — 77 of the 183 assertions. The
+four `invoke-version` assertions need `invokeAdapter`, which is Plan 2's Task 1,
+so case `13` still ends this plan at `fail`.
 
 **Files:**
 - Modify: `spec/run-adapter-implementation.js`
+- Modify: `spec/run-adapter-vectors.js` — two declarations become named exports
 - Test: `test/adapter-implementation-runner.test.js`
 
 **Interfaces:**
-- Consumes: `runImplementationVectors` from Task 1, the entrypoint from Task 7.
-- Produces: no new exports. Case status becomes `pass` for the three cases.
+- Consumes: `runImplementationVectors` from Task 1; `describeAdapter` (Task 6),
+  `resolveEntrypointPath` (Task 5), `validateAdapterManifest` (Task 3), and
+  `verifyCoreProbe` plus `coreCapabilities` from `src/adapter/core-probe.js`.
+- Produces: no new exports from the runner.
 
 - [ ] **Step 1: Write the failing test**
 
 ```js
-test('passes the negotiation-facing cases against the real entrypoint', async () => {
+test('evaluates the negotiation cases against the shipped engine', async () => {
   const result = await runImplementationVectors({
     entrypoint: {
       kind: 'command',
@@ -1060,48 +1073,300 @@ test('passes the negotiation-facing cases against the real entrypoint', async ()
   });
 
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
-  for (const name of ['capability-separation', 'platform-declaration', 'negotiation-mismatch']) {
-    assert.equal(byName.get(name).status, 'pass', name);
-  }
+
+  assert.equal(byName.get('capability-separation').status, 'pass');
+  assert.equal(byName.get('platform-declaration').status, 'pass');
   assert.equal(result.evidence_platform, process.platform);
-  assert.ok(result.cases.every((entry) => entry.assertion_evidence.length > 0));
+
+  const negotiation = byName.get('negotiation-mismatch');
+  assert.equal(negotiation.executed_assertions.length, 78);
+  assert.equal(negotiation.status, 'fail');
+
+  const unimplemented = negotiation.assertion_evidence
+    .filter(({ evidence }) => evidence === 'unimplemented')
+    .map(({ id }) => id);
+  assert.equal(unimplemented.length, 4, 'only the invoke-version assertions remain');
+
+  const implemented = negotiation.assertion_evidence
+    .filter(({ evidence }) => evidence !== 'unimplemented');
+  assert.ok(implemented.every(({ evidence }) => evidence.startsWith('src/adapter/')));
+  assert.ok(negotiation.observed_error_codes.includes('unsupported-adapter-contract-version'));
 });
 ```
 
 - [ ] **Step 2: Run the test and confirm it fails**
 
 Run: `TMPDIR=/tmp node --test test/adapter-implementation-runner.test.js`
-Expected: FAIL — all three cases still report `fail` with evidence `unimplemented`.
+Expected: FAIL — every assertion still reports evidence `unimplemented`.
 
-- [ ] **Step 3: Implement the negotiation evaluators**
+**Design note — where the boundary actually is.** The negotiation scenarios
+inject a synthetic `manifest` and `dynamic` and then mutate them. The §3.3
+bootstrap wire carries only the describe *request*; it has no channel for an
+injected manifest or describe result. So these assertions cannot be driven
+across the process boundary without adding a test-injection seam to the
+entrypoint, and adding one would weaken the shipped binary.
 
-In `spec/run-adapter-implementation.js`, replace the placeholder evidence for
-assertion types `negotiation`, `core-probe`, `entrypoint-path`, `invoke-version`,
-`capability`, and `platform-status` with evaluators that spawn the entrypoint
-with `spawn(process.execPath, [executable, ...fixed_args], { shell: false })`,
-write the scenario request to stdin, close stdin, read exactly one JSON object
-plus LF from stdout, and compare the response against the scenario's expected
-`ok` and `error.code`. Record `evidence` as `entrypoint:describe` for each
-assertion and collect every observed error code into the case's
-`observed_error_codes`, sorted and de-duplicated.
+The rule this plan adopts:
 
-Set a case's `status` to `pass` only when every one of its assertions matched.
-Set the top-level `status` to `pass` and `implementations['claude-code']` to
-`pass` only when every case passed; otherwise both are `fail`.
+- Assertions that inject a manifest or dynamic result are evaluated against the
+  **shipped engine modules in `src/adapter/`**, imported directly. That is still
+  the installed implementation and not the oracle, which is what §10 requires.
+- Assertions that exercise the wire, forwarding bytes, or process behaviour are
+  evaluated **across the real process boundary**. Task 7's wire tests already do
+  this, and Plan 2's equivalence cases depend on it.
 
-- [ ] **Step 4: Run the test and confirm it passes**
+Evidence labels record which boundary ran, so the distinction is visible in the
+result rather than hidden.
+
+- [ ] **Step 3: Export the scenario-shaping helpers from the reference runner**
+
+The implementation runner lives in `spec/`, so it may reuse `spec/` helpers that
+only *shape scenario inputs*. It must never import the model under test —
+`describeAdapter`, `verifyCoreProbe`, and `resolveEntrypointPath` come from
+`src/adapter/`, never from `spec/adapter-reference.js`.
+
+In `spec/run-adapter-vectors.js`, change two declarations to named exports.
+Change nothing else in that file:
+
+```js
+export function mutateObject(target, scenario) {
+```
+
+```js
+export function applyCapabilityInvariantScenario(dynamic, scenario) {
+```
+
+Run `TMPDIR=/tmp node --test test/*.test.js` and confirm the reference runner's
+own tests still pass. Adding an export changes no behaviour.
+
+- [ ] **Step 4: Implement the evaluators**
+
+Add these imports to `spec/run-adapter-implementation.js`:
+
+```js
+import { applyCapabilityInvariantScenario, mutateObject } from './run-adapter-vectors.js';
+import { describeAdapter } from '../src/adapter/describe.js';
+import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
+import { verifyCoreProbe, coreCapabilities } from '../src/adapter/core-probe.js';
+```
+
+`coreCapabilities()` and `verifyCoreProbe` come from `src/adapter/core-probe.js`,
+created in Task 6.
+
+Then add the evaluator. It returns `{ ok, evidence, error_code }` per assertion:
+
+```js
+const CORE_COMMANDS = ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'];
+
+async function evaluateNegotiationAssertion(directory, assertion) {
+  const data = await readScenarios(directory);
+
+  if (assertion.type === 'entrypoint-path') {
+    const scenario = data.entrypoint_paths.find(({ id }) => id === assertion.scenario);
+    const result = resolveEntrypointPath(scenario);
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: 'src/adapter/entrypoint-path.js',
+      error_code: result.error_code,
+    };
+  }
+
+  if (assertion.type === 'core-probe') {
+    const scenario = data.core_probe_cases.find(({ id }) => id === assertion.scenario);
+    const describe = structuredClone(data.base_dynamic);
+    const probe = coreCapabilities();
+    mutateObject(scenario.target === 'probe' ? probe : describe, scenario);
+    const result = verifyCoreProbe(describe, probe);
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: 'src/adapter/core-probe.js',
+      error_code: result.error_code,
+    };
+  }
+
+  if (assertion.type === 'negotiation') {
+    const scenario = data.cases.find(({ id }) => id === assertion.scenario);
+    const request = { ...data.base_request, ...scenario.request };
+    const manifest = { ...data.base_manifest, ...scenario.manifest };
+    const dynamic = {
+      ...data.base_dynamic,
+      ...scenario.dynamic,
+      core: { ...data.base_dynamic.core, ...scenario.dynamic?.core },
+      platforms: scenario.dynamic?.platforms ?? data.base_dynamic.platforms,
+    };
+    if (scenario.target) {
+      mutateObject({ request, manifest, dynamic }[scenario.target], scenario);
+    }
+    if (scenario.capability_invariant) {
+      applyCapabilityInvariantScenario(dynamic, scenario.capability_invariant);
+    }
+    const result = scenario.id === 'required-core-version'
+      ? verifyCoreProbe(
+          {
+            core: {
+              required_core_contract_version: scenario.required_core_contract_version,
+              commands: CORE_COMMANDS,
+            },
+            optional_features: { claims: false, policy: false },
+          },
+          coreCapabilities(),
+        )
+      : describeAdapter(request, manifest, dynamic);
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: scenario.id === 'required-core-version'
+        ? 'src/adapter/core-probe.js'
+        : 'src/adapter/describe.js',
+      error_code: result.error_code,
+    };
+  }
+
+  throw new Error(`unhandled negotiation assertion type ${assertion.type}`);
+}
+```
+
+Add the scenario reader and cache:
+
+```js
+const scenarioCache = new Map();
+
+async function readScenarios(directory) {
+  if (!scenarioCache.has(directory)) {
+    scenarioCache.set(
+      directory,
+      parseJsonRequest(await readFile(path.join(directory, 'scenarios.json'), 'utf8')),
+    );
+  }
+  return scenarioCache.get(directory);
+}
+```
+
+- [ ] **Step 5: Implement the `capability` and `platform-status` evaluators**
+
+Case `01-capability-separation` has two `capability` assertions and case
+`09-platform-declaration` has one `platform-status` assertion. Both read
+committed artifacts rather than mutating scenarios:
+
+```js
+async function evaluateCapabilityAssertion(directory, assertion) {
+  const capabilities = parseJsonRequest(
+    await readFile(path.join(directory, 'adapter-capabilities.json'), 'utf8'),
+  );
+
+  if (assertion.expect === 'claims-and-policy-false') {
+    const ok = capabilities.optional_features.claims === false
+      && capabilities.optional_features.policy === false;
+    return { ok, evidence: 'src/adapter/describe.js' };
+  }
+
+  if (assertion.expect === 'refuse-before-core-launch') {
+    const result = describeAdapter(
+      { bootstrap_wire_version: 1, supported_adapter_contract_versions: [1], request_id: assertion.id },
+      null,
+      capabilities,
+    );
+    return {
+      ok: result.ok === false && result.error_code === 'capability-unavailable',
+      evidence: 'src/adapter/describe.js',
+      error_code: result.error_code,
+    };
+  }
+
+  throw new Error(`unknown capability expectation ${assertion.expect}`);
+}
+
+async function evaluatePlatformAssertion(directory, assertion) {
+  const packageManifest = parseJsonRequest(
+    await readFile(path.join(directory, 'package-manifest.json'), 'utf8'),
+  );
+  const expected = parseJsonRequest(
+    await readFile(path.join(directory, assertion.expect), 'utf8'),
+  );
+  const interpretation = {
+    supported_platforms: Object.entries(packageManifest.platforms)
+      .filter(([, status]) => status === 'supported').map(([platform]) => platform),
+    unverified_platforms: Object.entries(packageManifest.platforms)
+      .filter(([, status]) => status === 'unverified').map(([platform]) => platform),
+    required_before_support_claim: 'native-common-vector-evidence',
+  };
+  return {
+    ok: JSON.stringify(interpretation) === JSON.stringify(expected),
+    evidence: 'src/adapter/manifest.js',
+  };
+}
+```
+
+The `work-claim-advisory` expectation in case `10-capabilities-forwarding`
+belongs to Plan 2. Leave its evidence `unimplemented` here.
+
+- [ ] **Step 6: Aggregate case and run status**
+
+In the per-case loop, replace the placeholder push with:
+
+```js
+const evaluated = [];
+const errorCodes = new Set();
+let cased = true;
+
+for (const assertion of manifest.assertions) {
+  const outcome = await evaluateAssertion(directory, assertion);
+  if (outcome.error_code) {
+    errorCodes.add(outcome.error_code);
+  }
+  if (!outcome.ok) {
+    cased = false;
+  }
+  evaluated.push({ id: assertion.id, evidence: outcome.evidence });
+}
+
+cases.push({
+  case: manifest.case,
+  status: cased ? 'pass' : 'fail',
+  executed_mode: manifest.mode,
+  executed_assertions: manifest.assertions.map((assertion) => assertion.id),
+  assertion_evidence: evaluated,
+  observed_error_codes: [...errorCodes].sort(),
+});
+```
+
+`evaluateAssertion` dispatches on type: `negotiation`, `core-probe`, and
+`entrypoint-path` to `evaluateNegotiationAssertion`; `capability` to
+`evaluateCapabilityAssertion`; `platform-status` to `evaluatePlatformAssertion`;
+`invoke-version` and everything else to
+`{ ok: false, evidence: 'unimplemented' }` until Plans 2 and 3 land.
+
+Set the run status last:
+
+```js
+const passed = cases.every((entry) => entry.status === 'pass');
+return {
+  status: passed ? 'pass' : 'fail',
+  implementations: { 'claude-code': passed ? 'pass' : 'fail' },
+  evidence_platform: platform,
+  observed_error_codes: [...new Set(cases.flatMap((entry) => entry.observed_error_codes))].sort(),
+  cases,
+};
+```
+
+`invoke-version` stays unimplemented in Plan 1: its four assertions need
+`invokeAdapter`, which is Plan 2's Task 1. Case `13-negotiation-mismatch`
+therefore reaches `pass` only after Plan 2 lands. Step 1's test already pins
+that: exactly four assertions carry evidence `unimplemented`.
+
+- [ ] **Step 7: Run the test and confirm it passes**
 
 Run: `TMPDIR=/tmp node --test test/adapter-implementation-runner.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Run the runner by hand and read the output**
+- [ ] **Step 8: Run the runner by hand and read the output**
 
 Run: `node spec/run-adapter-implementation.js`
 Expected: JSON with `status: "fail"` overall — twelve cases remain for Plans 2
-and 3 — and `pass` for the three negotiation cases, with a real
+and 3, and case `13` holds its four `invoke-version` assertions — with `pass`
+for `capability-separation` and `platform-declaration`, and a real
 `evidence_platform`.
 
-- [ ] **Step 6: Run the full suite on both runtimes, then commit**
+- [ ] **Step 9: Run the full suite on both runtimes, then commit**
 
 ```bash
 TMPDIR=/tmp node --test test/*.test.js
@@ -1115,8 +1380,17 @@ git commit -m "Drive the negotiation vectors against the real adapter entrypoint
 ## Definition of Done for Plan 1
 
 - `node spec/run-adapter-implementation.js` reports `pass` for
-  `capability-separation`, `platform-declaration`, and `negotiation-mismatch`,
-  and carries a real `evidence_platform`.
+  `capability-separation` and `platform-declaration`, and carries a real
+  `evidence_platform`.
+- Case `negotiation-mismatch` reports `fail` with exactly four assertions
+  outstanding, all of type `invoke-version`. Every other assertion in that case
+  carries evidence naming a `src/adapter/` module. The overall run status is
+  `fail` — 77 of 183 assertions are evidenced at the end of this plan.
+- The differential tests pass against `spec/adapter-reference.js`, and
+  `spec/adapter-reference.js` is unmodified. Verify with
+  `git diff --stat main -- spec/adapter-reference.js` showing no changes.
+- `spec/run-adapter-vectors.js` differs from `main` only by two added `export`
+  keywords.
 - The full suite passes on Node 26 and Node 20.
 - `src/` imports nothing from `test/` or `spec/`. Verify with
   `grep -rn "from '\.\./\(test\|spec\)/" src/` returning nothing.
