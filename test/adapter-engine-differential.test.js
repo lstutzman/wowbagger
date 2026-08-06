@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { validateAdapterManifest, isSafeRelativeExecutable } from '../src/adapter/manifest.js';
+import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 
 const BASE_MANIFEST = {
   adapter_manifest_version: 1,
@@ -243,4 +245,210 @@ test('accepts valid manifest with mixed host-tool and command entrypoints', () =
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.manifest, good);
+});
+
+// Entrypoint path resolution tests (no-follow walk with stable-identity recheck)
+
+function snapshotSet({ root, bin, adapter }) {
+  return {
+    '.': { kind: 'directory', identity: root },
+    bin: { kind: 'directory', identity: bin },
+    'bin/adapter': { kind: 'regular-file', identity: adapter },
+  };
+}
+
+test('refuses an entrypoint whose component identity changes before launch', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-2' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-replaced');
+});
+
+test('resolves an entrypoint whose components are stable between snapshots', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, '/installed/adapter/bin/adapter');
+});
+
+test('refuses an empty package_root', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '',
+    executable: 'bin/adapter',
+    before,
+    after: before,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses when before or after snapshots are not an object map', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before: null,
+    after: before,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses an unsafe executable path even when matching snapshots exist for it', () => {
+  // The snapshot keys deliberately mirror the (unsafe) executable string's
+  // own component split, so the only thing that can reject this request is
+  // the executable-syntax check itself, not a missing/mismatched lookup.
+  const before = {
+    '.': { kind: 'directory', identity: 'package-1' },
+    '': { kind: 'directory', identity: 'parent-1' },
+    '/adapter': { kind: 'regular-file', identity: 'adapter-1' },
+  };
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: '/adapter',
+    before,
+    after: before,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses a component whose portable kind does not match a link position', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  before.bin = { kind: 'symbolic-link', identity: 'bin-link' };
+  const after = structuredClone(before);
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses a snapshot missing an identity', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  delete before['bin/adapter'].identity;
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses a snapshot with a malformed identity object', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  before['.'].identity = { volume_id: 'volume-only' };
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses a snapshot with an extra member', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  before['.'].extra = true;
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses when a required component snapshot is missing entirely', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  delete before.bin;
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('resolves a nested executable through every cumulative parent component', () => {
+  const before = {
+    '.': { kind: 'directory', identity: 'package-1' },
+    a: { kind: 'directory', identity: 'a-1' },
+    'a/b': { kind: 'directory', identity: 'b-1' },
+    'a/b/adapter': { kind: 'regular-file', identity: 'adapter-1' },
+  };
+  const after = structuredClone(before);
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'a/b/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, '/installed/adapter/a/b/adapter');
+});
+
+test('entrypoint resolution matches the reference oracle on every fixture case', async () => {
+  const { resolveEntrypointPath: referenceResolve } = await import('../spec/adapter-reference.js');
+  const scenarios = JSON.parse(
+    await readFile('spec/fixtures/adapters/13-negotiation-mismatch/scenarios.json', 'utf8'),
+  );
+
+  for (const input of scenarios.entrypoint_paths) {
+    const expected = input.expected;
+    const mine = resolveEntrypointPath(structuredClone(input));
+    const theirs = referenceResolve(structuredClone(input));
+    assert.equal(mine.ok, theirs.ok, input.id);
+    assert.equal(mine.ok, false, input.id);
+    assert.equal(mine.error_code, expected, input.id);
+    assert.equal(mine.error_code, theirs.error?.code, input.id);
+  }
 });
