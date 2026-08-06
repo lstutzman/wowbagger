@@ -436,6 +436,149 @@ test('resolves a nested executable through every cumulative parent component', (
   assert.equal(result.path, '/installed/adapter/a/b/adapter');
 });
 
+test('refuses a non-string package_root', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: 42,
+    executable: 'bin/adapter',
+    before,
+    after: before,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses when after snapshots are not an object map', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after: null,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses a snapshot with a null identity', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  before['bin/adapter'].identity = null;
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses a snapshot with an array identity', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+  before['bin/adapter'].identity = ['adapter-1'];
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('resolves an entrypoint whose final identity is a matching {dev, ino} object', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: { dev: 1, ino: 12 } });
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: { dev: 1, ino: 12 } });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, '/installed/adapter/bin/adapter');
+});
+
+test('refuses a {dev, ino} identity that differs between snapshots', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: { dev: 1, ino: 12 } });
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: { dev: 1, ino: 99 } });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-replaced');
+});
+
+test('refuses a malformed {dev, ino} identity', () => {
+  const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: { dev: 1, ino: -1 } });
+  const after = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: { dev: 1, ino: -1 } });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
+test('refuses a {volume_id, file_id} identity that differs between snapshots', () => {
+  const before = snapshotSet({
+    root: 'package-1', bin: 'bin-1', adapter: { volume_id: 'vol-1', file_id: 'file-1' },
+  });
+  const after = snapshotSet({
+    root: 'package-1', bin: 'bin-1', adapter: { volume_id: 'vol-1', file_id: 'file-2' },
+  });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-replaced');
+});
+
+test('refuses a malformed {volume_id, file_id} identity', () => {
+  const before = snapshotSet({
+    root: 'package-1', bin: 'bin-1', adapter: { volume_id: 'vol-1', file_id: '' },
+  });
+  const after = snapshotSet({
+    root: 'package-1', bin: 'bin-1', adapter: { volume_id: 'vol-1', file_id: '' },
+  });
+
+  const result = resolveEntrypointPath({
+    package_root: '/installed/adapter',
+    executable: 'bin/adapter',
+    before,
+    after,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'path-rejected');
+});
+
 test('entrypoint resolution matches the reference oracle on every fixture case', async () => {
   const { resolveEntrypointPath: referenceResolve } = await import('../spec/adapter-reference.js');
   const scenarios = JSON.parse(
