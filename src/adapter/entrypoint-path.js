@@ -1,4 +1,4 @@
-import { isSafeRelativeExecutable } from './manifest.js';
+import { hasControlCharacter, isSafeRelativeExecutable } from './manifest.js';
 
 function rejected() {
   return { ok: false, error_code: 'path-rejected' };
@@ -24,16 +24,7 @@ function componentsFor(executable) {
 }
 
 function isControlFreeNonEmptyString(value) {
-  if (typeof value !== 'string' || value.length === 0) {
-    return false;
-  }
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    if (code < 32 || code === 127) {
-      return false;
-    }
-  }
-  return true;
+  return typeof value === 'string' && value.length > 0 && !hasControlCharacter(value);
 }
 
 function isIdentityMember(value) {

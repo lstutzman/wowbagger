@@ -1,26 +1,4 @@
-import { JsonNumber, parseJsonRequest } from '../request.js';
-
-// src/request.js builds every object with a null prototype and boxes every
-// bare number as a JsonNumber (see src/cli.js's normalizeClaimRequest for
-// the same problem elsewhere). describeAdapter's schema checks compare
-// against plain JS numbers, so the parsed request tree is rebuilt into
-// ordinary objects/arrays with JsonNumber unwrapped before it is handed off.
-function normalizeParsedJson(value) {
-  if (value instanceof JsonNumber) {
-    return Number(value.source);
-  }
-  if (Array.isArray(value)) {
-    return value.map(normalizeParsedJson);
-  }
-  if (value !== null && typeof value === 'object') {
-    const normalized = {};
-    for (const [key, entry] of Object.entries(value)) {
-      normalized[key] = normalizeParsedJson(entry);
-    }
-    return normalized;
-  }
-  return value;
-}
+import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
 // The bootstrap wire (contract section 3.3): exactly one strict UTF-8 JSON
 // object in on stdin, then stdin closes; exactly one strict JSON object plus
@@ -37,7 +15,7 @@ export async function readBootstrapRequest(stream) {
   if (parsed.issues.length > 0) {
     return { ok: false, error_code: 'invalid-describe-request' };
   }
-  return { ok: true, request: normalizeParsedJson(parsed.value) };
+  return { ok: true, request: normalizeJsonValue(parsed.value) };
 }
 
 // Writes exactly one JSON object plus one trailing LF, and nothing else.

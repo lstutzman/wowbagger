@@ -2,7 +2,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JsonNumber, parseJsonRequest } from '../src/request.js';
+import { JsonNumber, normalizeJsonValue, parseJsonRequest } from '../src/request.js';
 // Scenario-shaping helpers only. The model under test is never imported from
 // spec/adapter-reference.js: an implementation runner that asked the oracle
 // whether the oracle passes its own vectors would report nothing.
@@ -28,24 +28,6 @@ const CORE_COMMANDS = ['capabilities', 'create', 'inspect', 'ready', 'transition
 // `ok`, so a case holding one can never reach `pass`.
 const UNIMPLEMENTED = Object.freeze({ ok: false, evidence: 'unimplemented' });
 
-// src/request.js boxes every parsed JSON number as a JsonNumber and builds
-// every object with a null prototype, but the engine modules compare against
-// plain JS values (the same problem src/adapter/bootstrap.js's
-// normalizeParsedJson and src/cli.js's normalizeClaimRequest solve at their
-// own call sites).
-function unwrapNumbers(value) {
-  if (value instanceof JsonNumber) {
-    return Number(value.source);
-  }
-  if (Array.isArray(value)) {
-    return value.map(unwrapNumbers);
-  }
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, unwrapNumbers(nested)]));
-  }
-  return value;
-}
-
 // Fixture JSON is held to the same strict standard as the wire: a duplicate
 // member or trailing bytes is a fixture defect, not a value to guess at. The
 // vector manifest keeps its numbers boxed, because `adapter_vector_version` is
@@ -60,7 +42,7 @@ async function parseStrictJson(file) {
 }
 
 async function readStrictJson(file) {
-  return unwrapNumbers(await parseStrictJson(file));
+  return normalizeJsonValue(await parseStrictJson(file));
 }
 
 const scenarioCache = new Map();

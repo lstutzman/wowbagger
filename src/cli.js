@@ -13,7 +13,7 @@ import {
   validateTransitionRequest,
 } from './mutation.js';
 import { provisionNamespace, readNamespace } from './namespace.js';
-import { JsonNumber, parseJsonRequest, sortIssues } from './request.js';
+import { normalizeJsonValue, parseJsonRequest, sortIssues } from './request.js';
 import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
@@ -454,7 +454,13 @@ async function runClaimCommand(claimCommand, argumentsList) {
     writeClaimInvalidRequest(claimCommand, parsedRequest.issues);
     return;
   }
-  const request = normalizeClaimRequest(parsedRequest.value);
+  // normalizeJsonValue rebuilds the whole tree into plain objects/arrays with
+  // every JsonNumber unwrapped. The rebuild is load-bearing here beyond the
+  // schema check: claim-operations.js compares CAS witnesses with
+  // isDeepStrictEqual, which treats a null-prototype object as unequal to an
+  // Object.prototype one even with identical properties, so an un-rebuilt
+  // nested object silently fails every takeover comparison.
+  const request = normalizeJsonValue(parsedRequest.value);
   const validationIssues = validateClaimRequest(claimCommand, request);
   if (validationIssues.length > 0) {
     writeClaimInvalidRequest(claimCommand, validationIssues);
@@ -504,30 +510,6 @@ async function runClaimCommand(claimCommand, argumentsList) {
     }
     throw error;
   }
-}
-
-// The loose JSON parser (src/request.js) builds every object with a null prototype
-// and boxes every bare number as a JsonNumber. Both are invisible to a shallow copy:
-// claim-operations.js compares CAS witnesses with isDeepStrictEqual, which treats a
-// null-prototype object as unequal to an Object.prototype one even with identical
-// properties, so an un-rebuilt nested object silently fails every takeover comparison.
-// Rebuild the whole tree into plain objects/arrays and unwrap every JsonNumber —
-// no field-name special-casing, so this stays correct as the request shape grows.
-function normalizeClaimRequest(value) {
-  if (value instanceof JsonNumber) {
-    return Number(value.source);
-  }
-  if (Array.isArray(value)) {
-    return value.map(normalizeClaimRequest);
-  }
-  if (value !== null && typeof value === 'object') {
-    const normalized = {};
-    for (const [key, entry] of Object.entries(value)) {
-      normalized[key] = normalizeClaimRequest(entry);
-    }
-    return normalized;
-  }
-  return value;
 }
 
 function claimStoreUnavailable(command, reason) {

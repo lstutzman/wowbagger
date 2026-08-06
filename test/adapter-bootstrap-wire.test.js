@@ -91,6 +91,35 @@ test('refuses empty stdin and still exits zero', async () => {
   assert.equal(response.error.code, 'invalid-describe-request');
 });
 
+// §3.3 gives the describe request an exact member set. `__proto__` is the
+// dangerous spelling: a normalizer that rebuilds the parsed object with
+// `target[key] = value` invokes Object.prototype's `__proto__` setter, which
+// erases the member as an own key, so an exact-member check counting
+// `Object.keys` never sees the fourth member and accepts the request.
+test('refuses a describe request carrying a __proto__ member and still exits zero', async () => {
+  const protoRequest = '{"__proto__":{"polluted":true},"bootstrap_wire_version":1,'
+    + '"supported_adapter_contract_versions":[1],"request_id":"wire-test-0004"}';
+  const { code, stdout } = await spawnEntrypoint(['describe'], protoRequest);
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-describe-request');
+});
+
+test('refuses a describe request carrying an ordinary unknown member and still exits zero', async () => {
+  const unknownMemberRequest = JSON.stringify({
+    bootstrap_wire_version: 1,
+    supported_adapter_contract_versions: [1],
+    request_id: 'wire-test-0005',
+    unexpected_member: true,
+  });
+  const { code, stdout } = await spawnEntrypoint(['describe'], unknownMemberRequest);
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-describe-request');
+});
+
 test('refuses an unsupported adapter contract version and still exits zero', async () => {
   const unsupportedRequest = JSON.stringify({
     bootstrap_wire_version: 1,
@@ -222,6 +251,33 @@ test('refuses an absent manifest file with exit 0 and nothing on stderr', async 
 
 test('refuses an empty manifest file with exit 0 and nothing on stderr', async () => {
   const { code, stdout, stderr } = await withTemporaryManifest('', { stdinInput: undefined });
+  assert.equal(code, 0);
+  assert.equal(stderr.length, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-adapter-manifest');
+});
+
+// The manifest read path carries the same `__proto__` hazard as the wire
+// request: an unknown root member spelled `__proto__` must be refused as an
+// unknown root member, not silently absorbed into the object's prototype.
+const PROTO_MEMBER_MANIFEST = `{
+  "__proto__": { "polluted": true },
+  "adapter_manifest_version": 1,
+  "adapter_id": "dev.wowbagger.adapter.claude-code",
+  "adapter_version": "0.1.0",
+  "adapter_contract_versions": [1],
+  "bootstrap_wire_version": 1,
+  "required_core_contract_version": 1,
+  "entrypoints": {
+    "describe": { "kind": "command", "executable": "adapters/claude-code/entrypoint.js", "fixed_args": ["describe"] },
+    "invoke": { "kind": "command", "executable": "adapters/claude-code/entrypoint.js", "fixed_args": ["invoke"] }
+  },
+  "platforms": { "darwin": "unverified", "linux": "unverified", "win32": "unverified" }
+}`;
+
+test('refuses a manifest carrying a __proto__ root member with exit 0 and nothing on stderr', async () => {
+  const { code, stdout, stderr } = await withTemporaryManifest(PROTO_MEMBER_MANIFEST, { stdinInput: undefined });
   assert.equal(code, 0);
   assert.equal(stderr.length, 0);
   const response = assertSingleJsonObject(stdout);

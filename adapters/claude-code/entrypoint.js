@@ -4,33 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from '../../src/adapter/bootstrap.js';
 import { describeAdapter } from '../../src/adapter/describe.js';
 import { validateAdapterManifest } from '../../src/adapter/manifest.js';
-import { JsonNumber, parseJsonRequest } from '../../src/request.js';
+import { normalizeJsonValue, parseJsonRequest } from '../../src/request.js';
 
 const manifestUrl = new URL('./wowbagger-adapter.json', import.meta.url);
-
-// Mirrors src/adapter/bootstrap.js's private normalizeParsedJson (itself
-// mirroring src/cli.js's normalizeClaimRequest): parseJsonRequest boxes
-// every JSON number as a JsonNumber and builds every object with a null
-// prototype, but validateAdapterManifest/describeAdapter compare against
-// plain JS values. Kept as a local, non-exported duplicate rather than
-// importing bootstrap.js's private helper, matching the existing pattern of
-// each call site owning its own copy (see task-7-report.md, M-1).
-function normalizeManifestJson(value) {
-  if (value instanceof JsonNumber) {
-    return Number(value.source);
-  }
-  if (Array.isArray(value)) {
-    return value.map(normalizeManifestJson);
-  }
-  if (value !== null && typeof value === 'object') {
-    const normalized = {};
-    for (const [key, entry] of Object.entries(value)) {
-      normalized[key] = normalizeManifestJson(entry);
-    }
-    return normalized;
-  }
-  return value;
-}
 
 // The installed package's own manifest file is read as bytes and parsed
 // with the same strict-JSON parser used for the wire request (section 3.1
@@ -52,7 +28,7 @@ async function loadManifest() {
   if (parsed.issues.length > 0) {
     return undefined;
   }
-  return normalizeManifestJson(parsed.value);
+  return normalizeJsonValue(parsed.value);
 }
 
 function dynamicResult(manifest) {

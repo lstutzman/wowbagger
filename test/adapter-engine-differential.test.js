@@ -308,6 +308,34 @@ test('resolves an entrypoint whose components are stable between snapshots', () 
   assert.equal(result.path, '/installed/adapter/bin/adapter');
 });
 
+// An opaque identity token must be a nonempty control-free string. The
+// accepted range is U+0020 through U+007E inclusive; U+001F and U+007F are
+// both outside it. Both edges are pinned so the boundary cannot drift: this
+// is the same predicate src/adapter/manifest.js applies to `executable` and
+// `fixed_args`, so a boundary shift there would surface here too.
+for (const { name, identity, accepted } of [
+  { name: 'U+001F', identity: 'adapter\u001f1', accepted: false },
+  { name: 'U+0020', identity: 'adapter 1', accepted: true },
+  { name: 'U+007E', identity: 'adapter~1', accepted: true },
+  { name: 'U+007F', identity: 'adapter\u007f1', accepted: false },
+]) {
+  test(`${accepted ? 'accepts' : 'refuses'} an identity token containing ${name}`, () => {
+    const snapshots = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: identity });
+
+    const result = resolveEntrypointPath({
+      package_root: '/installed/adapter',
+      executable: 'bin/adapter',
+      before: snapshots,
+      after: snapshots,
+    });
+
+    assert.equal(result.ok, accepted);
+    if (!accepted) {
+      assert.equal(result.error_code, 'path-rejected');
+    }
+  });
+}
+
 test('refuses an empty package_root', () => {
   const before = snapshotSet({ root: 'package-1', bin: 'bin-1', adapter: 'adapter-1' });
 

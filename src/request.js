@@ -35,6 +35,30 @@ export class JsonNumber {
   }
 }
 
+// `parseJsonRequest` boxes every JSON number as a JsonNumber and builds every
+// object with a null prototype, but every consumer downstream of it compares
+// against plain JS values. This rebuilds the parsed tree into ordinary
+// objects and arrays with the numbers unwrapped.
+//
+// The rebuild MUST use `Object.fromEntries` (or another define-not-assign
+// path). A `normalized[key] = …` loop invokes Object.prototype's `__proto__`
+// setter for the key `__proto__`, which installs the value as the new
+// object's prototype and erases it as an own key — so a caller-supplied
+// `__proto__` member disappears from `Object.keys` and slips past every
+// exact-member schema check downstream.
+export function normalizeJsonValue(value) {
+  if (value instanceof JsonNumber) {
+    return Number(value.source);
+  }
+  if (Array.isArray(value)) {
+    return value.map(normalizeJsonValue);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizeJsonValue(entry)]));
+  }
+  return value;
+}
+
 function invalidJson(inputDiagnostic = null) {
   return {
     value: null,

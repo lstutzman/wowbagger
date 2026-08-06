@@ -182,6 +182,22 @@ test('an acquire request missing the expected member is rejected as invalid-requ
   assert.equal(refused.envelope.error.code, 'invalid-request');
 });
 
+// validateClaimRequest holds the request to an exact member set. `__proto__`
+// is the member spelling a rebuild that assigns rather than defines silently
+// erases from `Object.keys`, so the extra member would otherwise slip past
+// the exact-member check.
+test('a read request carrying a __proto__ member is rejected as invalid-request', async () => {
+  const root = await repository();
+  const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const request = path.join(root, 'read-proto-member.json');
+  await writeFile(request, `{"__proto__":{"polluted":true},"ledger_namespace":"${namespace}",`
+    + '"item_id":"wb_01Q4837BM01W70T30B184GG1R6"}');
+  const refused = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+  assert.equal(refused.exit, 2);
+  assert.equal(refused.envelope.error.code, 'invalid-request');
+});
+
 test('a read request missing item_id is rejected without persisting a junk record', async () => {
   const root = await repository();
   const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);

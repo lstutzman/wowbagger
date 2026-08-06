@@ -8,7 +8,9 @@ function refuse(detail) {
   return { ok: false, error_code: 'invalid-adapter-manifest', detail };
 }
 
-function hasControlCharacter(value) {
+// C0 controls (below U+0020) and DEL (U+007F). U+0020 and U+007E are the
+// inclusive edges of the accepted printable range; the boundary is exact.
+export function hasControlCharacter(value) {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
     if (code < 32 || code === 127) {
