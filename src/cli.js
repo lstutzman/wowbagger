@@ -238,7 +238,13 @@ export async function runCli(argumentsList, { scenario } = {}) {
   const validation = validateLedger(ledger);
 
   if (command === 'validate' || !validation.valid) {
-    process.stdout.write(`${JSON.stringify(validation)}\n`);
+    // ready without --json is the human surface, and it has to stay human at
+    // the moment it is needed most. The machine output is unchanged.
+    if (command === 'ready' && !options.json) {
+      process.stdout.write(readyRefusal(validation.errors.length));
+    } else {
+      process.stdout.write(`${JSON.stringify(validation)}\n`);
+    }
     if (!validation.valid) {
       process.exitCode = 1;
     }
@@ -259,6 +265,12 @@ export async function runCli(argumentsList, { scenario } = {}) {
   }
 
   process.stdout.write(formatReadyTable(result.ready, ledger.items));
+}
+
+function readyRefusal(errorCount) {
+  const plural = errorCount === 1 ? 'error' : 'errors';
+  return `The ledger is not valid, so no queue is shown.\n`
+    + `${errorCount} validation ${plural}. Run validate --json for the detail.\n`;
 }
 
 function formatReadyTable(readyIds, items) {

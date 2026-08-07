@@ -1,0 +1,21 @@
+{
+  "case": "patch-lock-held",
+  "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "install-held-lock-at-documented-lock-path",
+  "expected": {
+    "exit": 4,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/.wowbagger-locks/wb_01Q4G4Q3G004HMASW9NF6YY093.lock", "source_file": "held-lock.json", "sha256": "sha256:372fe9e4edf19e04b5331f85adac273d2cbdd35be8fd0212fe7a87953f0f1b18"},
+        {"path": "ledger/wb_01Q4G4Q3G004HMASW9NF6YY093.md", "source_file": "ledger/wb_01Q4G4Q3G004HMASW9NF6YY093.md", "sha256": "sha256:5b9cc05d5821ec566a9bf6c22e5b8f0bfbce5806e221fbc31ee43d85fe3be5b1"}
+      ],
+      "after": [
+        {"path": "ledger/.wowbagger-locks/wb_01Q4G4Q3G004HMASW9NF6YY093.lock", "source_file": "held-lock.json", "sha256": "sha256:372fe9e4edf19e04b5331f85adac273d2cbdd35be8fd0212fe7a87953f0f1b18"},
+        {"path": "ledger/wb_01Q4G4Q3G004HMASW9NF6YY093.md", "source_file": "ledger/wb_01Q4G4Q3G004HMASW9NF6YY093.md", "sha256": "sha256:5b9cc05d5821ec566a9bf6c22e5b8f0bfbce5806e221fbc31ee43d85fe3be5b1"}
+      ]
+    }
+  }
+}

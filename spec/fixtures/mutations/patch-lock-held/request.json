@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q4G4Q3G004HMASW9NF6YY093",
+  "expected_revision": "sha256:5b9cc05d5821ec566a9bf6c22e5b8f0bfbce5806e221fbc31ee43d85fe3be5b1",
+  "patch": {"priority": 2},
+  "date": "2030-01-16",
+  "decision": {
+    "summary": "Rank the fictional observatory repair.",
+    "rationale": "The request is valid but the existing lock must be respected."
+  }
+}

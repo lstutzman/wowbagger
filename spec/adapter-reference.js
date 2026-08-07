@@ -5,10 +5,9 @@ import { parseLedgerItemSource } from '../src/ledger.js';
 import {
   createCandidateSource,
   validateCreateRequest,
-  validatePatchRequest,
   validateTransitionRequest,
 } from '../src/mutation.js';
-import { parseJsonRequest } from '../src/request.js';
+import { JsonNumber, parseJsonRequest } from '../src/request.js';
 import { validateLedger } from '../src/validate.js';
 
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
@@ -1971,7 +1970,7 @@ function hasCanonicalMutationRequest(responseContext, command) {
     const parsed = parseJsonRequest(mutationInput);
     if (parsed.issues.length > 0 || !plainObject(parsed.value)) return false;
     if (command === 'create') return validateCreateRequest(parsed.value).length === 0;
-    if (command === 'patch') return validatePatchRequest(parsed.value).length === 0;
+    if (command === 'patch') return validPatchMutationRequest(parsed.value);
     if (command === 'transition') return validateTransitionRequest(parsed.value).length === 0;
     return false;
   }
@@ -1979,9 +1978,46 @@ function hasCanonicalMutationRequest(responseContext, command) {
   if (mutationRequest === undefined) return true;
   if (!plainObject(mutationRequest)) return false;
   if (command === 'create') return validateCreateRequest(mutationRequest).length === 0;
-  if (command === 'patch') return validatePatchRequest(mutationRequest).length === 0;
+  if (command === 'patch') return validPatchMutationRequest(mutationRequest);
   if (command === 'transition') return validateTransitionRequest(mutationRequest).length === 0;
   return false;
+}
+
+function validPatchMutationRequest(request) {
+  if (!hasExactKeys(request, ['id', 'expected_revision', 'patch', 'date', 'decision'])
+    || !WOWBAGGER_ID.test(request.id)
+    || !DIGEST.test(request.expected_revision)
+    || !isCalendarDate(request.date)
+    || !hasExactKeys(request.decision, ['summary', 'rationale'])
+    || typeof request.decision.summary !== 'string'
+    || request.decision.summary.trim().length === 0
+    || typeof request.decision.rationale !== 'string'
+    || request.decision.rationale.trim().length === 0
+    || !hasExactKeys(request.patch, [], ['priority', 'number', 'parent', 'depends_on', 'title'])
+    || Object.keys(request.patch).length === 0) {
+    return false;
+  }
+  if (Object.hasOwn(request.patch, 'priority')
+    && !validOptionalJsonInteger(request.patch.priority, 0)) return false;
+  if (Object.hasOwn(request.patch, 'number')
+    && !validOptionalJsonInteger(request.patch.number, 1)) return false;
+  if (Object.hasOwn(request.patch, 'parent') && request.patch.parent !== null
+    && (typeof request.patch.parent !== 'string' || !WOWBAGGER_ID.test(request.patch.parent))) return false;
+  if (Object.hasOwn(request.patch, 'depends_on')
+    && (!Array.isArray(request.patch.depends_on)
+      || !request.patch.depends_on.every((id) => typeof id === 'string' && WOWBAGGER_ID.test(id)))) return false;
+  return !Object.hasOwn(request.patch, 'title')
+    || (typeof request.patch.title === 'string' && request.patch.title.trim().length > 0);
+}
+
+function validOptionalJsonInteger(value, minimum) {
+  if (value === null) return true;
+  if (value instanceof JsonNumber) {
+    if (!/^-?(?:0|[1-9]\d*)$/.test(value.source)) return false;
+    const integer = Number(value.source);
+    return Number.isSafeInteger(integer) && integer >= minimum;
+  }
+  return Number.isSafeInteger(value) && value >= minimum;
 }
 
 function validMutationResultCorrelation(item, command, mutationRequest) {

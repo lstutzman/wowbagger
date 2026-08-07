@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q57A9JG020C8H248H248H247",
+  "expected_revision": "sha256:f9da9fdeda367c98bf5df94952174a74b2aace2f1494d92babec8d9530fde989",
+  "patch": {"parent": null},
+  "date": "2030-01-25",
+  "decision": {
+    "summary": "Detach the fictional observatory calibration.",
+    "rationale": "The completed epic rollup would also require replacement."
+  }
+}

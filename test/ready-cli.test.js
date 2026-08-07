@@ -273,8 +273,21 @@ test('ready --json keeps its byte-exact machine output', () => {
   ));
 });
 
-test('bare ready surfaces validation failure without a partial table', () => {
+test('bare ready refuses an invalid ledger in prose, not machine JSON', () => {
   const result = runCli('ready', '--ledger', invalidLedger, '--as-of', '2030-01-15');
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, '');
+  // The human surface must stay human at exactly the moment it is needed most.
+  assert.match(result.stdout, /not valid/);
+  assert.match(result.stdout, /validate/);
+  assert.equal(result.stdout.startsWith('{'), false);
+  // Fail-closed is unchanged: no partial queue is printed.
+  assert.equal(result.stdout.includes('priority'), false);
+});
+
+test('ready --json still reports validation failure as machine JSON', () => {
+  const result = runCli('ready', '--ledger', invalidLedger, '--as-of', '2030-01-15', '--json');
 
   assert.equal(result.status, 1);
   assert.equal(result.stderr, '');

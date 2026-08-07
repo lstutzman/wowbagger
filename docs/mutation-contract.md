@@ -863,6 +863,12 @@ lossless rules in section 8. Publication uses the same fully written and synced
 same-directory temporary file, existing-file atomic replacement, exact-byte
 read-back, and recovery mapping as transition.
 
+Before publication, the parsed candidate must exactly equal the complete
+requested successor. Every root node other than the named patch fields and the
+derived updated and decisions fields must retain identical YAML node identity.
+If a requested node carries an anchor, alias, or comment that cannot be changed
+losslessly, patch returns candidate-invalid with state unchanged.
+
 ## 9. Errors, artifacts, and recovery
 
 ### Stable error details
@@ -966,8 +972,8 @@ caller-known create identity, file/stdin equivalence, strict input, ID and path
 collision, candidate validation, body boundaries, publication limitation and
 recovery outcomes; transition revision, locking, date monotonicity, lifecycle
 edges, all three multi-item reasons, terminal referrers, combined blockers, and
-candidate validation; patch exact-field validation, required decision evidence,
-revision and lock refusal, candidate validation, and multi-item refusal;
+candidate validation; patch successful existing-value replacement, revision and
+lock refusal, and multi-item refusal;
 deterministic operation failures; and
 unchanged/committed/unknown states.
 

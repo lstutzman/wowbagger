@@ -196,6 +196,10 @@ test('contract JSON commands return deterministic invalid-request envelopes for 
     ['transition', ['--ledger', 'ledger', '--input', 'request.json', '--json', '--mystery'], [{ path: '/arguments/6', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
     ['transition', ['--ledger', 'ledger', '--input', 'one.json', '--input', 'two.json', '--json'], [{ path: '/arguments/5', code: 'repeated-argument', message: 'Argument --input must not be repeated.' }]],
     ['transition', ['--ledger', 'ledger', '--input', '--json'], [{ path: '/arguments/3', code: 'missing-argument', message: 'Argument --input requires a value.' }]],
+    ['patch', ['--ledger', 'ledger', '--json'], [{ path: '/arguments', code: 'missing-argument', message: 'Argument --input is required.' }]],
+    ['patch', ['--ledger', 'ledger', '--input', 'request.json', '--json', '--mystery'], [{ path: '/arguments/6', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
+    ['patch', ['--ledger', 'ledger', '--input', 'one.json', '--input', 'two.json', '--json'], [{ path: '/arguments/5', code: 'repeated-argument', message: 'Argument --input must not be repeated.' }]],
+    ['patch', ['--ledger', 'ledger', '--input', '--json'], [{ path: '/arguments/3', code: 'missing-argument', message: 'Argument --input requires a value.' }]],
   ];
 
   for (const [command, argumentsList, issues] of cases) {
@@ -204,7 +208,7 @@ test('contract JSON commands return deterministic invalid-request envelopes for 
       ok: false,
       command,
       contract_version: 1,
-      ...(command === 'create' || command === 'transition' ? { state: 'unchanged' } : {}),
+      ...(command === 'create' || command === 'patch' || command === 'transition' ? { state: 'unchanged' } : {}),
       error: {
         code: 'invalid-request',
         message: `The ${command} request is invalid.`,

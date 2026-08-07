@@ -1,0 +1,21 @@
+{
+  "case": "patch-multi-item-child-disposition",
+  "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 5,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q54QWVG020BQEXVQEXVQEXVP.md", "source_file": "ledger/wb_01Q54QWVG020BQEXVQEXVQEXVP.md", "sha256": "sha256:1ffe27d176e4854c10667c5c841a4bb53ba33b6071e35c19a5132251962f8734"},
+        {"path": "ledger/wb_01Q57A9JG020C8H248H248H247.md", "source_file": "ledger/wb_01Q57A9JG020C8H248H248H247.md", "sha256": "sha256:f9da9fdeda367c98bf5df94952174a74b2aace2f1494d92babec8d9530fde989"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q54QWVG020BQEXVQEXVQEXVP.md", "source_file": "ledger/wb_01Q54QWVG020BQEXVQEXVQEXVP.md", "sha256": "sha256:1ffe27d176e4854c10667c5c841a4bb53ba33b6071e35c19a5132251962f8734"},
+        {"path": "ledger/wb_01Q57A9JG020C8H248H248H247.md", "source_file": "ledger/wb_01Q57A9JG020C8H248H248H247.md", "sha256": "sha256:f9da9fdeda367c98bf5df94952174a74b2aace2f1494d92babec8d9530fde989"}
+      ]
+    }
+  }
+}

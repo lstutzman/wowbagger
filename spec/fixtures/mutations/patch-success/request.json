@@ -1,0 +1,12 @@
+{
+  "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+  "expected_revision": "sha256:79313854f813d4048d44a14fce5e808709dd16c55c87b0b9f248e2b6b2d6386a",
+  "patch": {
+    "number": 7
+  },
+  "date": "2030-01-15",
+  "decision": {
+    "summary": "Replace the fictional lighthouse number.",
+    "rationale": "The reviewed handle is seven."
+  }
+}

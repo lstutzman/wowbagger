@@ -102,6 +102,7 @@ named source and hash to the declared revision.
 | Create publication/recovery | unavailable atomic no-clobber, verified committed cleanup failure, unknown verification outcome |
 | Transition concurrency | success, stale revision, held lock, exhausted lock-closure retries, date rollback |
 | Transition lifecycle | task terminalization, archive restore, epic completion |
+| Patch | successful existing-number replacement, stale revision, held lock, multi-item refusal |
 | Multi-item refusal | dependent cleanup, dependent disposition, child disposition, terminal referrer, combined blockers |
 | Mutation states | unchanged, committed, and unknown |
 

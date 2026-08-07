@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "atomic-scope-required",
+    "message": "The requested patch requires multi-item atomicity.",
+    "details": {
+      "id": "wb_01Q57A9JG020C8H248H248H247",
+      "blockers": [
+        {
+          "code": "child-disposition",
+          "item_id": "wb_01Q54QWVG020BQEXVQEXVQEXVP",
+          "field": "parent"
+        }
+      ],
+      "precondition_issues": []
+    }
+  }
+}

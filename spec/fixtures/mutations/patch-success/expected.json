@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "committed",
+  "result": {
+    "item": {
+      "path": "wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "revision": "sha256:e753f17783423e049651ac3c74ab58827fff0cefb1c516894a1c6eb190582225",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0QVMxWTgwMjQ4SjQ4SEs2RDI0OE5BTgp0aXRsZTogIlJhbmsgdGhlIGZpY3Rpb25hbCBsaWdodGhvdXNlIHN1cnZleSIKa2luZDogdGFzawpzdGF0dXM6IGJhY2tsb2cKY3JlYXRlZDogMjAzMC0wMS0xMgp1cGRhdGVkOiAyMDMwLTAxLTE1CnByb3ZlbmFuY2U6CiAgc291cmNlOiAiZml4dHVyZS9tdXRhdGlvbnMiCiAgcmVjb3JkZWRfYXQ6ICIyMDMwLTAxLTEyVDEwOjAwOjAwWiIKZGVwZW5kc19vbjogW10KcmVsYXRlZDogW10KbnVtYmVyOiA3CmRlY2lzaW9uczoKICAtIGFjdGlvbjogcmVjb3JkCiAgICBkYXRlOiAyMDMwLTAxLTE1CiAgICBzdW1tYXJ5OiAiUmVwbGFjZSB0aGUgZmljdGlvbmFsIGxpZ2h0aG91c2UgbnVtYmVyLiIKICAgIHJhdGlvbmFsZTogIlRoZSByZXZpZXdlZCBoYW5kbGUgaXMgc2V2ZW4uIgotLS0KClRoZSBib2R5IG11c3Qgc3Vydml2ZSB0aGUgc3VjY2Vzc2Z1bCBudW1iZXIgcmVwbGFjZW1lbnQuCg==",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+        "title": "Rank the fictional lighthouse survey",
+        "kind": "task",
+        "status": "backlog",
+        "created": "2030-01-12",
+        "updated": "2030-01-15",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-12T10:00:00Z"
+        },
+        "depends_on": [],
+        "related": [],
+        "decisions": [
+          {
+            "action": "record",
+            "date": "2030-01-15",
+            "summary": "Replace the fictional lighthouse number.",
+            "rationale": "The reviewed handle is seven."
+          }
+        ]
+      },
+      "body": "\nThe body must survive the successful number replacement.\n"
+    }
+  }
+}

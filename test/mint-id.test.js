@@ -60,6 +60,32 @@ test('mintId rejects a date that is not an ISO calendar date', () => {
   assert.throws(() => mintId('yesterday'), /ISO calendar date/);
 });
 
+test('mintId accepts 1970-01-01 and refuses any earlier date', () => {
+  const id = mintId('1970-01-01');
+
+  assert.match(id, ULID_PATTERN);
+  assert.equal(dateFromId(id), '1970-01-01');
+  assert.throws(() => mintId('1969-12-31'), /range 1970-01-01 through 9999-12-31/);
+  assert.throws(() => mintId('0001-01-01'), /range 1970-01-01 through 9999-12-31/);
+});
+
+test('mintId accepts 9999-12-31 and refuses a year the calendar cannot express', () => {
+  const id = mintId('9999-12-31');
+
+  assert.match(id, ULID_PATTERN);
+  assert.equal(dateFromId(id), '9999-12-31');
+  assert.throws(() => mintId('10000-01-01'), /ISO calendar date/);
+});
+
+test('every minted ID across the accepted date range matches the canonical pattern', () => {
+  for (let year = 1970; year <= 9999; year += 1) {
+    for (const monthDay of ['01-01', '06-15', '12-31']) {
+      const date = `${String(year).padStart(4, '0')}-${monthDay}`;
+      assert.match(mintId(date), ULID_PATTERN, date);
+    }
+  }
+});
+
 test('a minted ID passes ledger validation as an item id with its encoded created date', () => {
   const id = mintId('2030-01-15');
   const validation = validateLedger({
@@ -127,4 +153,32 @@ test('wowbagger mint-id rejects unknown, repeated, and valueless arguments', () 
     assert.equal(result.stdout, '', argumentsList.join(' '));
     assert.notEqual(result.stderr, '', argumentsList.join(' '));
   }
+});
+
+test('wowbagger mint-id refuses a date before 1970-01-01 with a non-zero exit', () => {
+  const result = runCli('mint-id', '--date', '1969-12-31');
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /range 1970-01-01 through 9999-12-31/);
+});
+
+test('wowbagger mint-id accepts the first and last dates of the accepted range', () => {
+  for (const date of ['1970-01-01', '9999-12-31']) {
+    const result = runCli('mint-id', '--date', date);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    const id = result.stdout.trim();
+    assert.match(id, ULID_PATTERN);
+    assert.equal(dateFromId(id), date);
+  }
+});
+
+test('wowbagger mint-id refuses a date beyond the four-digit calendar range', () => {
+  const result = runCli('mint-id', '--date', '10000-01-01');
+
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.match(result.stderr, /--date must be an ISO calendar date/);
 });

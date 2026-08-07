@@ -11,8 +11,8 @@ The standalone core satisfies the result through its public command interfaces.
 - validation-errors is an invalid ledger whose errors demonstrate fail-closed
   validation, stable error reporting, and one repair target per affected item.
 - mutations is an executable black-box mutation-contract vector suite for
-  local capabilities, inspection revisions, creation, single-item transition,
-  stale writes, locks, and multi-item refusal.
+  local capabilities, inspection revisions, creation, single-item patch and
+  transition, stale writes, locks, and multi-item refusal.
 
 All fixture items include portable structured provenance and canonical IDs whose
 embedded UTC timestamp date matches created. The ready fixture has 16 valid

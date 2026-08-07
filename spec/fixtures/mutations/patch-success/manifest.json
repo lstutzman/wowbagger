@@ -1,0 +1,19 @@
+{
+  "case": "patch-successful-existing-number-replacement",
+  "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "source_file": "before.md", "sha256": "sha256:79313854f813d4048d44a14fce5e808709dd16c55c87b0b9f248e2b6b2d6386a"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "source_file": "expected-item.md", "sha256": "sha256:e753f17783423e049651ac3c74ab58827fff0cefb1c516894a1c6eb190582225"}
+      ]
+    }
+  }
+}
