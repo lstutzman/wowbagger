@@ -1,0 +1,19 @@
+{
+  "case": "patch-invalid-request-field-and-decision-evidence",
+  "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "sha256": "sha256:ad22946039aff9754565a4f6c6b1a55bd39fce7f4548d206426098f4fe164753"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "sha256": "sha256:ad22946039aff9754565a4f6c6b1a55bd39fce7f4548d206426098f4fe164753"}
+      ]
+    }
+  }
+}

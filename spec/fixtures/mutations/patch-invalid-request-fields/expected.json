@@ -1,0 +1,24 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The patch request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "/decision",
+          "code": "missing-member",
+          "message": "Required member decision is missing."
+        },
+        {
+          "path": "/patch/status",
+          "code": "unknown-member",
+          "message": "Patch member status is not allowed."
+        }
+      ]
+    }
+  }
+}

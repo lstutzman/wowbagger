@@ -1,0 +1,19 @@
+{
+  "case": "patch-candidate-invalid-commented-frontmatter",
+  "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "sha256": "sha256:435bf5a3e5eb3c982bd9cdf50fae1af32c95a567c4f92ca34a5306f5e58d8e36"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "sha256": "sha256:435bf5a3e5eb3c982bd9cdf50fae1af32c95a567c4f92ca34a5306f5e58d8e36"}
+      ]
+    }
+  }
+}

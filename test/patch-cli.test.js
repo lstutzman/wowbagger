@@ -3,6 +3,8 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { parseDocument } from 'yaml';
+import { mapProcessOutcome } from '../spec/adapter-reference.js';
+import { validatePatchRequest } from '../src/mutation.js';
 import { runCli, withLedger } from './support.js';
 
 test('patch changes priority and records why under a guarded replacement', async () => {
@@ -44,6 +46,33 @@ test('patch changes priority and records why under a guarded replacement', async
     assert.equal(Object.hasOwn(output.result.item, 'priority'), false);
     assert.equal(Object.hasOwn(output.result.item.core, 'priority'), false);
     assert.deepEqual(await readdir(path.join(ledger, '.wowbagger-locks')), []);
+  });
+});
+
+test('patch commits when optional related is absent without adding it', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id).replace('related: []\n', '');
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-without-related.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { priority: 3 },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Rank the fictional survey.',
+        rationale: 'An omitted optional relation list must not block the patch.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(parseDocument(frontmatter(rewritten), { schema: 'core' }).has('related'), false);
   });
 });
 
@@ -113,6 +142,42 @@ test('patch refuses removal when the field carries an operator comment', async (
   });
 });
 
+test('patch refuses a document-level trailing comment and leaves bytes unchanged', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id).replace(
+    'related: []\n',
+    'related: []\n# trailing note that matters to a human\n',
+  );
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-document-comment.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { title: 'Survey the fictional southern lights' },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Correct the fictional survey title.',
+        rationale: 'The human note must stay in its original location.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.error.code, 'candidate-invalid');
+    assert.equal(
+      output.error.details.validation_errors[0].message,
+      'The item carries YAML that patch will not rewrite; hand-edit the field instead.',
+    );
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+  });
+});
+
 test('patch refuses when serialized bytes change an unpatched extension value', async () => {
   const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
   const source = itemSource(id)
@@ -141,6 +206,75 @@ test('patch refuses when serialized bytes change an unpatched extension value', 
     assert.equal(output.state, 'unchanged');
     assert.equal(output.error.code, 'candidate-invalid');
     assert.equal(output.error.details.validation_errors[0].code, 'mutation-successor-mismatch');
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+  });
+});
+
+test('patch preserves the YAML identity of a plain unpatched extension', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id, '', ['operator_note: stable']);
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-plain-extension.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { priority: 5 },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Rank the fictional survey.',
+        rationale: 'The operator extension is outside the requested patch.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.ok(rewritten.includes('operator_note: stable\n'), rewritten);
+  });
+});
+
+test('patch returns an unchanged envelope for an anchor nested in a patched sequence', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const oldDependencyId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const newDependencyId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id)
+    .replace('depends_on: []', `depends_on:\n  - &dep ${oldDependencyId}`)
+    .replace('related: []', 'related: []\noperator_watch: *dep');
+
+  await withLedger({
+    [`${id}.md`]: source,
+    [`${oldDependencyId}.md`]: itemSource(oldDependencyId),
+    [`${newDependencyId}.md`]: itemSource(newDependencyId),
+  }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-nested-anchor.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { depends_on: [newDependencyId] },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Replace the fictional dependency.',
+        rationale: 'The anchored dependency must not escape the patch refusal.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.notEqual(result.stdout, '', `missing JSON envelope; stderr: ${result.stderr}`);
+    const output = JSON.parse(result.stdout);
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.error.code, 'candidate-invalid');
+    assert.equal(
+      output.error.message,
+      'The item carries YAML that patch will not rewrite; hand-edit the field instead.',
+    );
     assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
   });
 });
@@ -178,6 +312,38 @@ test('patch inserts an absent scalar before the decisions history', async () => 
   });
 });
 
+test('patch inserts parent after identity when related is absent', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const parentId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id).replace('related: []\n', '');
+
+  await withLedger({
+    [`${id}.md`]: source,
+    [`${parentId}.md`]: itemSource(parentId, '', [], 'epic'),
+  }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-parent-without-related.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { parent: parentId },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Attach the fictional survey to its epic.',
+        rationale: 'The parent must be inserted after the item identity.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.ok(rewritten.startsWith(`---\nschema_version: 1\nid: ${id}\n`), rewritten);
+    assert.ok(rewritten.includes(`depends_on: []\nparent: ${parentId}\ndecisions:\n`), rewritten);
+  });
+});
+
 test('patch rejects non-integer JSON spellings that coerce to integers', async () => {
   for (const literal of ['7.0', '1e2']) {
     const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
@@ -212,6 +378,203 @@ test('patch rejects non-integer JSON spellings that coerce to integers', async (
       assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
     });
   }
+});
+
+test('patch rejects negative zero instead of writing it to the ledger', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id);
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-negative-zero.json');
+    await writeFile(requestPath, `{
+  "id": ${JSON.stringify(id)},
+  "expected_revision": ${JSON.stringify(revision)},
+  "patch": {"priority": -0},
+  "date": "2030-01-16",
+  "decision": {
+    "summary": "Set the fictional survey priority.",
+    "rationale": "Negative zero is not a canonical non-negative integer token."
+  }
+}`);
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.error.code, 'invalid-request');
+    assert.deepEqual(output.error.details.issues, [{
+      path: '/patch/priority',
+      code: 'invalid-type',
+      message: 'Patch member priority must be null or a non-negative integer.',
+    }]);
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+  });
+});
+
+test('patch request validation rejects programmatic numeric negative zero', () => {
+  const issues = validatePatchRequest({
+    id: 'wb_01Q4EVGR000000000000000000',
+    expected_revision: `sha256:${'a'.repeat(64)}`,
+    patch: { priority: -0 },
+    date: '2030-01-16',
+    decision: {
+      summary: 'Set the fictional survey priority.',
+      rationale: 'Numeric negative zero is outside the patch contract.',
+    },
+  });
+
+  assert.deepEqual(issues, [{
+    path: '/patch/priority',
+    code: 'invalid-type',
+    message: 'Patch member priority must be null or a non-negative integer.',
+  }]);
+});
+
+test('adapter oracle accepts invalid-request for a patch carrying negative zero', () => {
+  const id = 'wb_01Q4EVGR000000000000000000';
+  const revision = `sha256:${'a'.repeat(64)}`;
+  const requestSource = `{
+  "id": ${JSON.stringify(id)},
+  "expected_revision": ${JSON.stringify(revision)},
+  "patch": {"priority": -0},
+  "date": "2030-01-16",
+  "decision": {
+    "summary": "Set the fictional survey priority.",
+    "rationale": "Negative zero is outside the patch contract."
+  }
+}`;
+  const envelope = {
+    ok: false,
+    command: 'patch',
+    contract_version: 1,
+    state: 'unchanged',
+    error: {
+      code: 'invalid-request',
+      message: 'The patch request is invalid.',
+      details: {
+        issues: [{
+          path: '/patch/priority',
+          code: 'invalid-type',
+          message: 'Patch member priority must be null or a non-negative integer.',
+        }],
+      },
+    },
+  };
+  const result = mapProcessOutcome({
+    adapter_contract_version: 1,
+    request_id: 'patch-negative-zero-oracle-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_input: Buffer.from(requestSource),
+    item_id: id,
+    expected_revision: revision,
+    process: {
+      started: true,
+      process_tree_contained: true,
+      orphaned: false,
+      exit_code: 2,
+      signal: null,
+      timed_out: false,
+      stdout_complete: true,
+      stderr_complete: true,
+      stdout_base64: Buffer.from(`${JSON.stringify(envelope)}\n`).toString('base64'),
+      stderr_base64: '',
+    },
+  });
+  const programmaticResult = mapProcessOutcome({
+    adapter_contract_version: 1,
+    request_id: 'patch-numeric-negative-zero-oracle-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_request: {
+      id,
+      expected_revision: revision,
+      patch: { priority: -0 },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Set the fictional survey priority.',
+        rationale: 'Numeric negative zero is outside the patch contract.',
+      },
+    },
+    item_id: id,
+    expected_revision: revision,
+    process: {
+      started: true,
+      process_tree_contained: true,
+      orphaned: false,
+      exit_code: 2,
+      signal: null,
+      timed_out: false,
+      stdout_complete: true,
+      stderr_complete: true,
+      stdout_base64: Buffer.from(`${JSON.stringify(envelope)}\n`).toString('base64'),
+      stderr_base64: '',
+    },
+  });
+
+  assert.equal(result, null);
+  assert.equal(programmaticResult, null);
+});
+
+test('adapter oracle accepts the permanent patch candidate refusal message', () => {
+  const id = 'wb_01Q4EVGR000000000000000000';
+  const revision = `sha256:${'a'.repeat(64)}`;
+  const request = {
+    id,
+    expected_revision: revision,
+    patch: { title: 'Rank the fictional harbor survey' },
+    date: '2030-01-16',
+    decision: {
+      summary: 'Replace the fictional survey title.',
+      rationale: 'The source carries YAML that patch must not rewrite.',
+    },
+  };
+  const message = 'The item carries YAML that patch will not rewrite; hand-edit the field instead.';
+  const envelope = {
+    ok: false,
+    command: 'patch',
+    contract_version: 1,
+    state: 'unchanged',
+    error: {
+      code: 'candidate-invalid',
+      message,
+      details: {
+        id,
+        validation_errors: [{
+          path: `ledger/${id}.md`,
+          field: 'frontmatter',
+          code: 'mutation-successor-mismatch',
+          message,
+        }],
+      },
+    },
+  };
+  const result = mapProcessOutcome({
+    adapter_contract_version: 1,
+    request_id: 'patch-permanent-refusal-oracle-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_input: Buffer.from(JSON.stringify(request)),
+    item_id: id,
+    expected_revision: revision,
+    process: {
+      started: true,
+      process_tree_contained: true,
+      orphaned: false,
+      exit_code: 2,
+      signal: null,
+      timed_out: false,
+      stdout_complete: true,
+      stderr_complete: true,
+      stdout_base64: Buffer.from(`${JSON.stringify(envelope)}\n`).toString('base64'),
+      stderr_base64: '',
+    },
+  });
+
+  assert.equal(result, null);
 });
 
 test('patch replaces existing values for every patchable field', async () => {
@@ -565,7 +928,10 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
 
   assert.deepEqual(outcomes.sort(), [
     'atomic-scope-required',
+    'candidate-invalid',
     'committed',
+    'invalid-request',
+    'invalid-request',
     'lock-held',
     'revision-conflict',
   ]);

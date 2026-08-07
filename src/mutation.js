@@ -36,6 +36,7 @@ const CONTROLLED_ITEM_FIELDS = new Set([
 const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const ULID_PATTERN = /^wb_([0-7][0-9A-HJKMNP-TV-Z]{25})$/;
 const MAX_LOCK_CLOSURE_RETRIES = 3;
+const PATCH_UNSUPPORTED_YAML_MESSAGE = 'The item carries YAML that patch will not rewrite; hand-edit the field instead.';
 
 export async function inspectItem(ledgerDirectory, id) {
   const ledger = await loadLedger(ledgerDirectory);
@@ -609,20 +610,31 @@ async function replaceItem(ledgerDirectory, request, operation, scenario) {
             precondition_issues: [],
           }));
         }
-        const sourceConflicts = patchSourceConflicts(lockedTarget.source, request.patch);
-        if (sourceConflicts.length > 0) {
-          return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
+        if (patchSourceHasUnsupportedYaml(lockedTarget.source)) {
+          return await finishUncommitted(mutationError('candidate-invalid', PATCH_UNSUPPORTED_YAML_MESSAGE, 'unchanged', 2, {
             id,
-            validation_errors: sourceConflicts.map((field) => ({
+            validation_errors: [{
               path: lockedTarget.path,
-              field,
+              field: 'frontmatter',
               code: 'mutation-successor-mismatch',
-              message: 'Serialized frontmatter does not exactly match the requested successor.',
-            })),
+              message: PATCH_UNSUPPORTED_YAML_MESSAGE,
+            }],
           }));
         }
         successor = patchData(lockedTarget.data, request);
-        bytes = Buffer.from(serializePatch(lockedTarget.source, successor, request.patch), 'utf8');
+        try {
+          bytes = Buffer.from(serializePatch(lockedTarget.source, successor, request.patch), 'utf8');
+        } catch {
+          return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
+            id,
+            validation_errors: [{
+              path: lockedTarget.path,
+              field: 'frontmatter',
+              code: 'mutation-successor-mismatch',
+              message: 'Patch serialization could not produce the requested successor.',
+            }],
+          }));
+        }
       }
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
@@ -850,44 +862,46 @@ function patchData(data, request) {
   return successor;
 }
 
-function patchSourceConflicts(source, patch) {
-  const bounds = frontmatterBounds(source);
-  const document = parseDocument(source.slice(bounds.start, bounds.end), {
-    keepSourceTokens: true,
-    prettyErrors: false,
-    schema: 'core',
-    uniqueKeys: true,
-  });
-  if (document.errors.length > 0 || !isMap(document.contents)) {
-    return [];
-  }
-  return Object.keys(patch).filter((field) => {
-    const pair = document.contents.items.find((entry) => entry.key?.value === field);
-    const node = pair?.value;
-    return isAlias(node) || node?.anchor !== undefined || nodeHasComment(pair);
-  }).sort(compareText);
-}
-
-function nodeHasComment(node) {
-  if (node?.commentBefore !== undefined || node?.comment !== undefined) {
-    return true;
-  }
-  if (node && Object.hasOwn(node, 'key') && Object.hasOwn(node, 'value')) {
-    return nodeHasComment(node.key) || nodeHasComment(node.value);
-  }
-  return (isMap(node) || isSeq(node)) && node.items.some(nodeHasComment);
-}
-
-function serializePatch(source, successor, patch) {
+function parseFrontmatterDocument(source, options = {}) {
   const bounds = frontmatterBounds(source);
   const frontmatter = source.slice(bounds.start, bounds.end);
   const document = parseDocument(frontmatter, {
-    intAsBigInt: true,
     keepSourceTokens: true,
     prettyErrors: false,
     schema: 'core',
     uniqueKeys: true,
+    ...options,
   });
+  return { bounds, document, frontmatter };
+}
+
+function patchSourceHasUnsupportedYaml(source) {
+  const { document } = parseFrontmatterDocument(source);
+  if (document.errors.length > 0 || !isMap(document.contents)) {
+    return true;
+  }
+  const pending = [document];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (typeof node?.commentBefore === 'string' || typeof node?.comment === 'string'
+      || isAlias(node) || typeof node?.anchor === 'string') {
+      return true;
+    }
+    if (node && Object.hasOwn(node, 'key') && Object.hasOwn(node, 'value')) {
+      pending.push(node.key, node.value);
+    } else if (isMap(node) || isSeq(node)) {
+      for (const item of node.items) {
+        pending.push(item);
+      }
+    } else if (node === Object(node) && Object.hasOwn(node, 'contents')) {
+      pending.push(node.contents);
+    }
+  }
+  return false;
+}
+
+function serializePatch(source, successor, patch) {
+  const { bounds, document, frontmatter } = parseFrontmatterDocument(source, { intAsBigInt: true });
   if (document.errors.length > 0 || !isMap(document.contents)) {
     throw new Error('Unable to mutate malformed frontmatter.');
   }
@@ -1054,15 +1068,7 @@ function transitionData(data, request, edge, ledger) {
 }
 
 function serializeTransition(source, successor, edge) {
-  const bounds = frontmatterBounds(source);
-  const frontmatter = source.slice(bounds.start, bounds.end);
-  const document = parseDocument(frontmatter, {
-    intAsBigInt: true,
-    keepSourceTokens: true,
-    prettyErrors: false,
-    schema: 'core',
-    uniqueKeys: true,
-  });
+  const { bounds, document, frontmatter } = parseFrontmatterDocument(source, { intAsBigInt: true });
   if (document.errors.length > 0 || !isMap(document.contents)) {
     throw new Error('Unable to mutate malformed frontmatter.');
   }
@@ -1103,7 +1109,16 @@ function setOrInsertRootScalar(document, afterKeys, key, value) {
     return;
   }
   const afterKey = afterKeys.find((candidate) => document.has(candidate));
+  if (afterKey === undefined) {
+    insertRootBefore(document, 'decisions', key, value);
+    return;
+  }
   insertRootAfter(document, afterKey, key, value);
+}
+
+function insertRootBefore(document, beforeKey, key, value) {
+  const index = document.contents.items.findIndex((pair) => pair.key?.value === beforeKey);
+  document.contents.items.splice(index < 0 ? document.contents.items.length : index, 0, document.createPair(key, value));
 }
 
 function insertRootAfter(document, afterKey, key, value) {
@@ -1200,7 +1215,7 @@ function validateSerializedCandidate(
     || isDeepStrictEqual(coreView(parsed.data), coreView(expectedData));
   const patchMatches = parsed.error || patch === null || !expectedData || !expectedSource
     || serializedPatchMatches(source, expectedSource, parsed.data, expectedData, patch);
-  const extensionsMatch = parsed.error || !expectedSource
+  const extensionsMatch = parsed.error || patch !== null || !expectedSource
     || isDeepStrictEqual(
       extensionNodeIdentity(source),
       extensionNodeIdentity(expectedSource),
@@ -1228,7 +1243,7 @@ function validateSerializedCandidate(
 }
 
 function serializedPatchMatches(source, expectedSource, data, expectedData, patch) {
-  if (!isDeepStrictEqual(data, expectedData)) {
+  if (!isDeepStrictEqual(patchDataView(data), patchDataView(expectedData))) {
     return false;
   }
   const allowedChanges = new Set([...Object.keys(patch), 'updated', 'decisions']);
@@ -1238,14 +1253,16 @@ function serializedPatchMatches(source, expectedSource, data, expectedData, patc
   );
 }
 
+function patchDataView(data) {
+  return {
+    ...data,
+    depends_on: data.depends_on ?? [],
+    related: data.related ?? [],
+  };
+}
+
 function unchangedRootNodeIdentity(source, allowedChanges) {
-  const bounds = frontmatterBounds(source);
-  const document = parseDocument(source.slice(bounds.start, bounds.end), {
-    keepSourceTokens: true,
-    prettyErrors: false,
-    schema: 'core',
-    uniqueKeys: true,
-  });
+  const { document } = parseFrontmatterDocument(source);
   if (document.errors.length > 0 || !isMap(document.contents)) {
     return null;
   }
@@ -1255,13 +1272,7 @@ function unchangedRootNodeIdentity(source, allowedChanges) {
 }
 
 function extensionNodeIdentity(source) {
-  const bounds = frontmatterBounds(source);
-  const document = parseDocument(source.slice(bounds.start, bounds.end), {
-    keepSourceTokens: true,
-    prettyErrors: false,
-    schema: 'core',
-    uniqueKeys: true,
-  });
+  const { document } = parseFrontmatterDocument(source);
   if (document.errors.length > 0 || !isMap(document.contents)) {
     return null;
   }
@@ -2060,11 +2071,11 @@ function validOptionalInteger(value, minimum) {
   if (value === null) {
     return true;
   }
-  if (value instanceof JsonNumber && !/^-?(?:0|[1-9]\d*)$/.test(value.source)) {
+  if (value instanceof JsonNumber && !/^(?:0|[1-9]\d*)$/.test(value.source)) {
     return false;
   }
   const integer = jsonIntegerValue(value);
-  return Number.isSafeInteger(integer) && integer >= minimum;
+  return !Object.is(integer, -0) && Number.isSafeInteger(integer) && integer >= minimum;
 }
 
 function hasOwn(value, key) {

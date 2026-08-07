@@ -1,0 +1,12 @@
+{
+  "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+  "expected_revision": "sha256:435bf5a3e5eb3c982bd9cdf50fae1af32c95a567c4f92ca34a5306f5e58d8e36",
+  "patch": {
+    "title": "Rank the fictional harbor survey"
+  },
+  "date": "2030-01-15",
+  "decision": {
+    "summary": "Replace the fictional lighthouse title.",
+    "rationale": "The operator note makes this a permanent patch refusal."
+  }
+}

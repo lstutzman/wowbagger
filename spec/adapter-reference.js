@@ -1825,6 +1825,10 @@ function validCoreErrorAtExit(value, command, exitCode, responseContext) {
 }
 
 function coreErrorMessageMatches(code, command, message) {
+  if (code === 'candidate-invalid' && command === 'patch') {
+    return message === 'The proposed item would make the ledger invalid.'
+      || message === 'The item carries YAML that patch will not rewrite; hand-edit the field instead.';
+  }
   const expected = {
     'item-not-found': 'The requested item was not found.',
     'ledger-invalid': 'The configured ledger is invalid.',
@@ -2013,11 +2017,12 @@ function validPatchMutationRequest(request) {
 function validOptionalJsonInteger(value, minimum) {
   if (value === null) return true;
   if (value instanceof JsonNumber) {
-    if (!/^-?(?:0|[1-9]\d*)$/.test(value.source)) return false;
     const integer = Number(value.source);
-    return Number.isSafeInteger(integer) && integer >= minimum;
+    return String(integer) === value.source
+      && Number.isSafeInteger(integer)
+      && integer >= minimum;
   }
-  return Number.isSafeInteger(value) && value >= minimum;
+  return !Object.is(value, -0) && Number.isSafeInteger(value) && value >= minimum;
 }
 
 function validMutationResultCorrelation(item, command, mutationRequest) {

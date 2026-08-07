@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The patch request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "/patch/number",
+          "code": "invalid-type",
+          "message": "Patch member number must be null or a positive integer."
+        }
+      ]
+    }
+  }
+}

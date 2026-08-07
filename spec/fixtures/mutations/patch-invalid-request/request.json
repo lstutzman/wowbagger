@@ -1,0 +1,12 @@
+{
+  "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+  "expected_revision": "sha256:ad22946039aff9754565a4f6c6b1a55bd39fce7f4548d206426098f4fe164753",
+  "patch": {
+    "number": 7.0
+  },
+  "date": "2030-01-15",
+  "decision": {
+    "summary": "Replace the fictional lighthouse number.",
+    "rationale": "A non-integer token must be refused before mutation."
+  }
+}

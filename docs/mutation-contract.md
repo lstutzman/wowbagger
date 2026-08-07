@@ -830,6 +830,10 @@ and `title`:
 | depends_on | A complete replacement array of canonical item IDs; an empty array clears it. |
 | title | A non-empty string. |
 
+The JSON spellings `-0`, fractional forms such as `7.0`, and exponent forms
+such as `1e2` are not integer patch values, even when JavaScript converts them
+to an integer-valued Number.
+
 The set is deliberately narrow. Patch does not accept `id`, `schema_version`,
 or `created`, because they define identity, schema interpretation, and creation
 history. It does not accept `status` or terminal dates, which belong to
@@ -866,8 +870,16 @@ read-back, and recovery mapping as transition.
 Before publication, the parsed candidate must exactly equal the complete
 requested successor. Every root node other than the named patch fields and the
 derived updated and decisions fields must retain identical YAML node identity.
-If a requested node carries an anchor, alias, or comment that cannot be changed
-losslessly, patch returns candidate-invalid with state unchanged.
+
+Before any patch serialization, Wowbagger walks the complete parsed
+frontmatter document at every depth, including document metadata, mapping keys,
+mapping values, and sequence items. If any node carries a comment or anchor, or
+any node is an alias, patch returns candidate-invalid with state unchanged and
+does not serialize. This is a total precondition even when the YAML is outside
+the requested field or could be rewritten losslessly. Its refusal message says
+that the item carries YAML patch will not rewrite and that the field must be
+hand-edited. This permanent refusal is distinct from a retryable candidate
+validation failure.
 
 ## 9. Errors, artifacts, and recovery
 
@@ -973,7 +985,9 @@ collision, candidate validation, body boundaries, publication limitation and
 recovery outcomes; transition revision, locking, date monotonicity, lifecycle
 edges, all three multi-item reasons, terminal referrers, combined blockers, and
 candidate validation; patch successful existing-value replacement, revision and
-lock refusal, and multi-item refusal;
+lock refusal, multi-item refusal, exact-field validation, required decision
+evidence, non-canonical integer-token refusal, and candidate validation,
+including the total YAML rewrite precondition;
 deterministic operation failures; and
 unchanged/committed/unknown states.
 

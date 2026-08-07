@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "candidate-invalid",
+    "message": "The item carries YAML that patch will not rewrite; hand-edit the field instead.",
+    "details": {
+      "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+      "validation_errors": [
+        {
+          "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+          "field": "frontmatter",
+          "code": "mutation-successor-mismatch",
+          "message": "The item carries YAML that patch will not rewrite; hand-edit the field instead."
+        }
+      ]
+    }
+  }
+}
