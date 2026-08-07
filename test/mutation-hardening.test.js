@@ -77,6 +77,36 @@ test('create retains an extension JSON number without JavaScript precision coerc
   });
 });
 
+test('create writes caller-supplied priority and number', async () => {
+  await withLedger({}, async (ledger) => {
+    const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      item: {
+        title: 'Keep caller planning metadata',
+        kind: 'task',
+        provenance: {
+          source: 'test/mutation-hardening',
+          recorded_at: '2030-01-10T12:34:56.789Z',
+        },
+        depends_on: [],
+        priority: 3,
+        number: 7,
+      },
+      body: '',
+    }));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+    const source = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+    const data = parseDocument(source.split('\n---\n', 1)[0].replace(/^---\n/, '')).toJS();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(data.priority, 3);
+    assert.equal(data.number, 7);
+  });
+});
+
 test('transition preserves CRLF extension comments and every body byte', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
   const body = '\r\nA CRLF body stays byte-for-byte intact.\r\n';

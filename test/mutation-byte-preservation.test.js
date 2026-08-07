@@ -49,7 +49,7 @@ test('patch and transition preserve every byte outside changed frontmatter field
 });
 
 test('byte corpus covers field insertion, removal, idempotent clear, and terminal dates', async (t) => {
-  await t.test('patch inserts, removes, then clears an already-absent field', async () => {
+  await t.test('patch inserts, removes, then leaves an already-absent field unchanged', async () => {
     const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
     const marker = '# after patch hard paths\n';
     const source = item([
@@ -72,6 +72,7 @@ test('byte corpus covers field insertion, removal, idempotent clear, and termina
       {
         date: '2030-01-16',
         patch: { priority: 3 },
+        state: 'committed',
         summary: 'Insert the absent priority.',
         rationale: 'The insertion path must preserve every other byte.',
         updateExpected(expected) {
@@ -88,6 +89,7 @@ test('byte corpus covers field insertion, removal, idempotent clear, and termina
       {
         date: '2030-01-17',
         patch: { priority: null },
+        state: 'committed',
         summary: 'Remove the present priority.',
         rationale: 'The removal path must preserve every other byte.',
         updateExpected(expected) {
@@ -104,16 +106,11 @@ test('byte corpus covers field insertion, removal, idempotent clear, and termina
       {
         date: '2030-01-18',
         patch: { number: null },
+        state: 'unchanged',
         summary: 'Clear the already-absent number.',
         rationale: 'The idempotent clear path must preserve every other byte.',
         updateExpected(expected) {
-          expected = replaceLine(expected, 'updated: 2030-01-17', 'updated: 2030-01-18', '\n');
-          return expected.replace(marker, `${decisionItem({
-            action: 'record',
-            date: this.date,
-            summary: this.summary,
-            rationale: this.rationale,
-          }, '  ', '\n')}${marker}`);
+          return expected;
         },
       },
     ];
@@ -133,8 +130,15 @@ test('byte corpus covers field insertion, removal, idempotent clear, and termina
         }));
 
         const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+        const output = JSON.parse(result.stdout);
         expected = step.updateExpected(expected);
         assert.equal(result.status, 0, `${step.date}: ${result.stderr}\n${result.stdout}`);
+        assert.equal(output.state, step.state, step.date);
+        if (step.state === 'unchanged') {
+          assert.equal(output.result.item.revision, revision, step.date);
+        } else {
+          assert.notEqual(output.result.item.revision, revision, step.date);
+        }
         assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), expected, step.date);
       }
     });

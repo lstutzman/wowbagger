@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { runCli, withLedger } from './support.js';
 
 const runner = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
+const candidateFaultLoader = fileURLToPath(new URL('./candidate-fault-loader.js', import.meta.url));
 const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
 
 test('patch reports a serializer programming error as operation-failed', async () => {
@@ -102,7 +103,7 @@ test('patch and transition refuse a serialized candidate that rewrites extension
         : transitionRequest(revision);
       await writeFile(requestPath, JSON.stringify(request));
 
-      const result = runScenario('candidate-rewrites-extension',
+      const result = runCandidateFault('candidate-rewrites-extension',
         command, '--ledger', ledger, '--input', requestPath, '--json');
       const output = JSON.parse(result.stdout);
 
@@ -144,10 +145,139 @@ test('candidate guard rejects a provenance extension rewrite in a misclassified 
   }
 });
 
+test('candidate guard rejects a changed leading comment outside a provenance extension pair slice', async () => {
+  const source = triageSource().replace(
+    '  recorded_at: "2030-01-14T12:00:00Z"',
+    [
+      '  recorded_at: "2030-01-14T12:00:00Z"',
+      '  # operator comment: stable',
+      '  operator_detail: "stable"',
+    ].join('\n'),
+  );
+  await assertCandidateGuardRefusal(
+    'candidate-rewrites-provenance-leading-comment',
+    source,
+    'patch',
+  );
+});
+
 test('candidate guard rejects bytes changed outside every YAML node range', async () => {
   const source = triageSource().replace('related: []\n---', 'related: []\n\n---');
   for (const command of ['patch', 'transition']) {
     await assertCandidateGuardRefusal('candidate-rewrites-unclaimed-bytes', source, command);
+  }
+});
+
+test('candidate guard refuses a replacement when the serializer edit list is missing', async () => {
+  await assertCandidateGuardRefusal(
+    'missing-edit-list',
+    triageSource(),
+    'patch',
+    runCandidateFault,
+  );
+});
+
+test('candidate guard refuses edit evidence whose replacement bytes are false', async () => {
+  await assertCandidateGuardRefusal(
+    'candidate-edit-replacement-mismatch',
+    triageSource().replace('related: []', 'related: [ ]'),
+    'patch',
+  );
+});
+
+test('candidate guard refuses when candidate and source identity parses both fail', async () => {
+  await assertCandidateGuardRefusal(
+    'identity-parse-failures',
+    triageSource(),
+    'patch',
+  );
+});
+
+test('candidate validation parses candidate and source frontmatter once each', async () => {
+  const source = triageSource();
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'identity-two-parse-budget.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { title: 'Parse each identity document once' },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Share each identity parse.',
+        rationale: 'Both identity comparisons consume the same parsed documents.',
+      },
+    }));
+
+    const result = runCandidateFault(
+      'identity-two-parse-budget',
+      'patch', '--ledger', ledger, '--input', requestPath, '--json',
+    );
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(JSON.parse(result.stdout).state, 'committed');
+  });
+});
+
+test('transition uses one field set for safety and serialized identity checks', async () => {
+  const source = triageSource();
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'transition-field-set.json');
+    await writeFile(requestPath, JSON.stringify(transitionRequest(revision)));
+
+    const result = runCandidateFault(
+      'transition-second-field-list-drift',
+      'transition', '--ledger', ledger, '--input', requestPath, '--json',
+    );
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(JSON.parse(result.stdout).state, 'committed');
+  });
+});
+
+test('candidate-corruption scenario names cannot alter the production replacement path', async () => {
+  const scenarios = [
+    'candidate-rewrites-extension',
+    'candidate-wrong-successor-data',
+    'candidate-rewrites-unchanged-root',
+    'candidate-rewrites-provenance-extension',
+    'candidate-rewrites-unclaimed-bytes',
+  ];
+  const source = triageSource()
+    .replace('  recorded_at: "2030-01-14T12:00:00Z"', [
+      '  recorded_at: "2030-01-14T12:00:00Z"',
+      '  operator_detail: "stable"',
+    ].join('\n'))
+    .replace('related: []\n---', 'related: [ ]\noperator_note: "stable"\n\n---');
+
+  for (const scenario of scenarios) {
+    await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+      const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+      const revision = JSON.parse(inspected.stdout).result.item.revision;
+      const requestPath = path.join(path.dirname(ledger), `${scenario}.json`);
+      await writeFile(requestPath, JSON.stringify({
+        id,
+        expected_revision: revision,
+        patch: { title: 'Production ignores test-owned corruption names' },
+        date: '2030-01-16',
+        decision: {
+          summary: 'Use the production replacement path.',
+          rationale: 'Test-only fault names must not change shipped control flow.',
+        },
+      }));
+
+      const result = runScenario(
+        scenario,
+        'patch', '--ledger', ledger, '--input', requestPath, '--json',
+      );
+      const output = JSON.parse(result.stdout);
+
+      assert.equal(result.status, 0, `${scenario}: ${result.stderr}\n${result.stdout}`);
+      assert.equal(output.state, 'committed', scenario);
+    });
   }
 });
 
@@ -283,7 +413,20 @@ function runScenario(scenario, ...argumentsList) {
   });
 }
 
-async function assertCandidateGuardRefusal(scenario, source, command) {
+function runCandidateFault(fault, ...argumentsList) {
+  return spawnSync(process.execPath, [
+    '--no-warnings',
+    '--experimental-loader',
+    candidateFaultLoader,
+    runner,
+    ...argumentsList,
+  ], {
+    encoding: 'utf8',
+    env: { ...process.env, WOWBAGGER_CANDIDATE_FAULT: fault },
+  });
+}
+
+async function assertCandidateGuardRefusal(scenario, source, command, execute = runCandidateFault) {
   await withLedger({ [`${id}.md`]: source }, async (ledger) => {
     const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
     const revision = JSON.parse(inspected.stdout).result.item.revision;
@@ -302,7 +445,7 @@ async function assertCandidateGuardRefusal(scenario, source, command) {
       : transitionRequest(revision);
     await writeFile(requestPath, JSON.stringify(request));
 
-    const result = runScenario(scenario,
+    const result = execute(scenario,
       command, '--ledger', ledger, '--input', requestPath, '--json');
     const output = JSON.parse(result.stdout);
 

@@ -896,7 +896,7 @@ test('patch removes optional priority, number, and parent with null', async () =
   });
 });
 
-test('patch succeeds when clearing an optional field that is already absent', async () => {
+test('patch leaves bytes and revision unchanged when clearing an absent field', async () => {
   const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
   const source = itemSource(targetId);
 
@@ -916,13 +916,14 @@ test('patch succeeds when clearing an optional field that is already absent', as
     }));
 
     const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
     const rewritten = await readFile(path.join(ledger, `${targetId}.md`), 'utf8');
-    const data = parseDocument(frontmatter(rewritten), { schema: 'core' }).toJS();
 
     assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
-    assert.equal(Object.hasOwn(data, 'number'), false);
-    assert.equal(data.updated, '2030-01-18');
-    assert.equal(data.decisions.at(-1).summary, 'Confirm the item has no number.');
+    assert.equal(output.ok, true);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.result.item.revision, revision);
+    assert.equal(rewritten, source);
   });
 });
 

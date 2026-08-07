@@ -90,7 +90,8 @@ A successful read-only command has exactly:
 }
 ~~~
 
-A successful create, patch, or transition adds state:
+A successful create or transition has state committed. A successful patch has
+state committed or unchanged and adds state:
 
 ~~~json
 {
@@ -150,7 +151,7 @@ presence is reported separately as bounded recovery_artifacts.
 
 | Exit | Condition | Error codes |
 |---:|---|---|
-| 0 | Successful command; a mutation is state committed. | none |
+| 0 | Successful command; mutation state is committed or unchanged. | none |
 | 2 | Argument, request, lookup, candidate/lifecycle-precondition, or unsafe YAML mutation failure. | invalid-request, item-not-found, transition-precondition-failed, candidate-invalid, unsafe-yaml-mutation |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
@@ -455,6 +456,8 @@ Create accepts exactly:
 | item.related | No | Valid relation list; omitted means empty. |
 | item.parent | No | Valid epic ID. |
 | item.snoozed_until | No | Valid ISO calendar date. |
+| item.priority | No | Non-negative integer supplied by caller policy. |
+| item.number | No | Positive integer unique within the ledger. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
@@ -673,7 +676,13 @@ revision-conflict, exit 4, and unchanged:
 ~~~
 
 For a matching revision, the backend builds the one-item proposed ledger and
-validates it completely before publication.
+validates it completely before publication. The parsed candidate must exactly
+equal the complete requested successor, including operator and provenance
+extension members. Unchanged root nodes and all extension nodes must retain
+exact source identity. Every byte outside the serializer's declared edit
+ranges must equal the source, including prior decisions and the body. Missing
+or invalid edit-range evidence is a candidate-validation failure; it never
+disables the byte comparison.
 
 Every item whose depends_on contains the target is considered when the target
 would become done, killed, or archived, regardless of the referring item's own
@@ -857,6 +866,14 @@ rationale. Complete-ledger validation remains authoritative, including date
 invariants. In particular, because patch does not alter terminal dates, a
 terminal item can only be patched with a date that keeps its terminal date and
 updated valid.
+
+After the locked revision check, if every requested patchable field already has
+the requested value, patch returns success with `state: "unchanged"` and the
+existing inspect item. This includes clearing an optional field that is already
+absent. It does not publish bytes, change the revision or `updated`, or append
+the supplied decision. The decision is validated as part of the request but is
+not evidence of a change, so it is not recorded. A patch that changes at least
+one patchable field follows the committed-success rules above.
 
 ### Refusal and publication
 

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const cli = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
+const candidateFaultLoader = fileURLToPath(new URL('./candidate-fault-loader.js', import.meta.url));
 const fixtureRoot = fileURLToPath(new URL('../spec/fixtures/mutations/', import.meta.url));
 
 for (const vector of await loadVectors()) {
@@ -23,14 +24,20 @@ for (const vector of await loadVectors()) {
 
       const argumentsList = materializeArguments(vector.manifest.argv, sandbox);
       const input = await inputBytes(vector.manifest, sandbox);
-      const result = spawnSync(process.execPath, [cli, ...argumentsList], {
+      const candidateFault = vector.manifest.scenario?.startsWith('candidate-');
+      const environment = { ...process.env, NODE_ENV: 'test' };
+      const processArguments = candidateFault
+        ? ['--no-warnings', '--experimental-loader', candidateFaultLoader, cli, ...argumentsList]
+        : [cli, ...argumentsList];
+      if (candidateFault) {
+        environment.WOWBAGGER_CANDIDATE_FAULT = vector.manifest.scenario;
+      } else if (vector.manifest.scenario) {
+        environment.WOWBAGGER_TEST_SCENARIO = vector.manifest.scenario;
+      }
+      const result = spawnSync(process.execPath, processArguments, {
         cwd: projectRoot,
         encoding: 'utf8',
-        env: {
-          ...process.env,
-          NODE_ENV: 'test',
-          WOWBAGGER_TEST_SCENARIO: vector.manifest.scenario,
-        },
+        env: environment,
         input,
       });
 
