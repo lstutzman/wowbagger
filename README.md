@@ -11,12 +11,39 @@ putting a database or hosted service inside your repository.
 > Markdown ledger, selects deterministic ready tasks, and implements guarded
 > local `capabilities`, `inspect`, `create`, and `transition` commands. Its
 > mutation scope is deliberately narrow: cooperative writers in one working
-> copy, one item at a time. The harness-neutral adapter boundary is documented,
-> but no adapter is shipped as a stable release. The core implements advisory
-> work claims (`acquire`, `renew`, `release`, `read`), visible across the
-> worktrees of one repository. They coordinate cooperating agents but enforce
-> nothing: a non-cooperating writer still wins. Fenced work claims still
-> require a transactional coordinator and are not available from the core CLI.
+> copy, one item at a time. A Claude Code adapter and plugin ship from this
+> repository; the adapter answers the negotiation surface of the harness-neutral
+> contract and evidences 79 of its 183 conformance assertions, so no platform is
+> claimed `supported` yet. The core implements advisory work claims (`acquire`,
+> `renew`, `release`, `read`), visible across the worktrees of one repository.
+> They coordinate cooperating agents but enforce nothing: a non-cooperating
+> writer still wins. Fenced work claims still require a transactional
+> coordinator and are not available from the core CLI.
+
+## Start here
+
+Install the core, then the plugin:
+
+```sh
+npm install -g github:lstutzman/wowbagger
+wowbagger capabilities --json
+```
+
+In Claude Code:
+
+```
+/plugin marketplace add lstutzman/wowbagger
+/plugin install wowbagger@wowbagger
+```
+
+The plugin drives the installed core rather than bundling one, so a version
+mismatch is detectable instead of silent: it reads `contract_version` from
+`capabilities` and refuses when the core is absent or reports anything it does
+not support. It will not fall back to editing ledger files by hand, because that
+would bypass validation and atomic publication.
+
+To use the core directly from a clone instead, see
+[Core commands](#core-commands).
 
 ## Why the name?
 
@@ -73,8 +100,16 @@ The documented compatibility targets are:
 An OpenAI-compatible API describes model transport; it does not by itself
 provide agent tools. The [adapter contract](docs/adapter-contract.md) records
 the required host capabilities and refusal rules. It does not claim that API
-compatibility alone makes a harness compatible, and this checkout does not ship
-Claude, Codex, Kimi, or OpenAI-hosted adapters.
+compatibility alone makes a harness compatible.
+
+This checkout ships one adapter, for Claude Code, in
+[`adapters/claude-code/`](adapters/claude-code/). It answers the section 3.3
+bootstrap wire and the negotiation surface, and evidences 79 of the contract's
+183 conformance assertions — run `node spec/run-adapter-implementation.js` to
+see exactly which. Invocation forwarding, path and limit guards, and the
+approval and context surfaces are not yet evidenced, so section 10's status
+table still records every platform as `unverified`. The Codex, Kimi, and
+OpenAI-compatible harness adapters are not written.
 
 ## Core commands
 
@@ -121,23 +156,11 @@ JSON request, response, recovery, and scope details. A lock is never a work
 claim. See [the fenced work-claim contract](docs/work-claim-contract.md) for
 the separate future claim protocol and its strict backend boundary.
 
-## Install
-
-The Claude Code plugin drives an installed core rather than bundling one, so a
-version mismatch is detectable instead of silent. Install the executable from
-the repository:
-
-```sh
-npm install -g github:lstutzman/wowbagger
-wowbagger capabilities --json
-```
-
-The `contract_version` in that result is what an adapter or plugin declares it
-requires. A consumer pairing a plugin with a core that reports a different
-contract version gets a refusal, not a guess.
-
-Direct checkout use — `./bin/wowbagger.js` from a clone — remains supported and
-is what this repository's own ledger uses.
+The `contract_version` reported by `capabilities` is what an adapter or plugin
+declares it requires. A consumer pairing one with a core that reports a
+different contract version gets a refusal, not a guess. Direct checkout use —
+`./bin/wowbagger.js` from a clone — remains supported and is what this
+repository's own ledger uses.
 
 ## Verify a checkout
 
@@ -160,11 +183,12 @@ in-progress protocol until merged and implemented by a supported backend.
 ## This repository's ledger
 
 Wowbagger dogfoods its own draft format in the repository-local
-[`ledger/`](ledger/) directory. Its standalone epic and current ready work track
-only remaining standalone Wowbagger delivery. The ledger also contains a
-separate, parentless, triage-only item recording possible future PropertyCompass
-adoption as a deferred consumer decision. From a checkout, query it with the
-current UTC date in place of `YYYY-MM-DD`:
+[`ledger/`](ledger/) directory. Two epics divide the work, and the boundary is
+clean: if it changes what the core does it belongs to standalone v0; if it
+changes how the core reaches a consumer it belongs to productization. A
+separate, triage-only item records a possible future PropertyCompass backlog
+migration as a deferred consumer decision, gated on fenced claims. From a
+checkout, query the ledger with the current UTC date in place of `YYYY-MM-DD`:
 
 ```sh
 ./bin/wowbagger.js validate --ledger ledger --json
@@ -190,17 +214,24 @@ rules and the limits of the local mutation runtime.
 6. **The implementation remains auditable.** Coordination tooling should be
    small enough for a human to understand and repair.
 
-## Planned repository shape
+## Repository shape
 
 ```text
-adapters/       Harness-specific packaging and instructions
-docs/           Integration and operating guidance
-scripts/        Harness-neutral commands
-skills/         Portable agent workflows
-spec/           Backlog schema, lifecycle contract, and synthetic fixtures
-templates/      Backlog item templates
-tests/          Shared black-box compatibility fixtures
+src/            The core, and the shared adapter engine in src/adapter/
+bin/            The wowbagger executable
+adapters/       Harness packaging — currently adapters/claude-code/ only
+skills/         Portable agent workflows shipped by the plugin
+spec/           Ledger schema, the adapter reference model, and normative fixtures
+test/           The test suite
+docs/           Contracts, integration guidance, and handoffs
+ledger/         This repository's own backlog, managed by wowbagger itself
 ```
+
+`spec/adapter-reference.js` is an independent oracle. `src/adapter/`
+deliberately re-implements it rather than importing it, and a differential test
+holds the two together — the same arrangement `src/claim-request.js` has with
+`test/work-claim-reference.js`. Collapsing either pair into a shared
+implementation would make its conformance tests prove nothing.
 
 The layout may change before the first release. The separation between the core
 and its adapters will not.
@@ -229,7 +260,9 @@ It is the durable work ledger beneath those systems.
   pre-alpha and intentionally local in scope.**
 - Separate optional reusable mechanisms from consumer-specific policy.
 - Stabilize the machine-readable command contract and compatibility evidence.
-- Ship Claude Code and Codex adapters.
+- Ship Claude Code and Codex adapters. **The Claude Code adapter answers
+  negotiation and is installable as a plugin; 79 of 183 conformance assertions
+  are evidenced. Codex is not started.**
 - Document the generic tool contract for other agent harnesses.
 - Complete and review the separate portable claim and resolution contract;
   local mutation locks are not claims. **In progress on the claim branch; not
