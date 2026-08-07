@@ -19,6 +19,24 @@ release yet, so everything below is unreleased.
 
 ### Added
 
+- `patch`, a guarded single-item frontmatter replacement. It changes exactly
+  `priority`, `number`, `parent`, `depends_on`, and `title`, under the same
+  per-ID lock, exact-byte revision compare-and-swap, candidate validation, and
+  atomic publication that `transition` uses. It requires an `expected_revision`
+  and a decision with a summary and rationale; a silent priority change is the
+  failure [ADR 0006](docs/adr/0006-priority-is-a-contract-field.md) records.
+  `status` stays with `transition`, so no second path can bypass the decision
+  record that transition appends. Request shape in
+  `docs/mutation-contract.md` section 8A (`286ca74`).
+- `mint-id`, and an exported `mintId()` in `src/mint-id.js`, which produce a
+  canonical contract-valid ID. `--date` pins the encoded timestamp to the start
+  of that UTC day so the ID agrees with the item's `created`. Both reuse the
+  validator's own Crockford alphabet and calendar-date rule rather than copying
+  them. Before this, every consumer wrote their own base32 encoder before they
+  could file anything (`286ca74`).
+- `ready` with no `--json` prints a human table of number, priority, and title
+  in the existing ready order. `ready --json` is unchanged (`286ca74`).
+
 - `priority` validation. `priority` MUST be a non-negative integer. An invalid
   value is now the validation error `invalid-priority`. Before this,
   `priority: high` validated clean and the ordering ignored it silently
@@ -40,6 +58,28 @@ release yet, so everything below is unreleased.
   verified by anyone other than its author (`84ed5b2`).
 
 ### Changed
+
+- **Breaking.** `inspect` and every successful mutation result no longer return
+  `item.id`. No frontmatter field is promoted to the item level; read
+  identity from `item.core.id`. The promoted member duplicated `item.core.id`
+  and earned nothing, while making a caller who had just used `item.id`
+  reasonably expect `item.title` to work — it never did. Note that `item.core`
+  is a fixed view rather than the whole frontmatter: it does not carry
+  `priority` or `number`, which remain recoverable from `source_base64`
+  (`286ca74`).
+- **Breaking.** The adapter command list gained `patch`, across `capabilities`,
+  the core probe, the Claude Code entrypoint, the independent adapter oracle,
+  and the byte-compared capabilities and negotiation fixtures. A core that does
+  not offer `patch` is now refused during negotiation rather than accepted.
+  Recorded as a deliberate contract widening in
+  [ADR 0008](docs/adr/0008-guarded-frontmatter-patch.md); nothing in the wild
+  depended on the list, since section 10 reads `Unverified` for every platform
+  (`286ca74`).
+- The refusal for a caller-supplied `status` on `create` now names the assigned
+  status and the accepting step: "Create assigns triage; call transition to
+  accept the item into backlog." It previously said only that the member was
+  controlled, which left a consumer to discover the rule from an empty `ready`
+  result (`286ca74`).
 
 - **Behaviour change.** A claim request carrying an own `__proto__` member is
   now refused as `invalid-request`. Previously the request was accepted and the
