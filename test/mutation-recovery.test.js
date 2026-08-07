@@ -128,6 +128,14 @@ test('candidate guard rejects wrong successor data for patch and transition', as
   }
 });
 
+// The byte guards cannot see this one: the written bytes and the edit record
+// that claims them agree. Only the successor-data comparison catches a
+// serializer that wrote a value the request never asked for. Disabling
+// completeDataMatches must fail this test and nothing else does.
+test('candidate guard rejects successor data the request never asked for', async () => {
+  await assertCandidateGuardRefusal('candidate-consistent-wrong-successor-data', triageSource(), 'patch');
+});
+
 test('candidate guard rejects an unchanged controlled-field presentation rewrite', async () => {
   const source = triageSource().replace('related: []', 'related: [ ]');
   for (const command of ['patch', 'transition']) {
@@ -220,23 +228,13 @@ test('candidate validation parses candidate and source frontmatter once each', a
   });
 });
 
-test('transition uses one field set for safety and serialized identity checks', async () => {
-  const source = triageSource();
-  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
-    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
-    const revision = JSON.parse(inspected.stdout).result.item.revision;
-    const requestPath = path.join(path.dirname(ledger), 'transition-field-set.json');
-    await writeFile(requestPath, JSON.stringify(transitionRequest(revision)));
-
-    const result = runCandidateFault(
-      'transition-second-field-list-drift',
-      'transition', '--ledger', ledger, '--input', requestPath, '--json',
-    );
-
-    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
-    assert.equal(JSON.parse(result.stdout).state, 'committed');
-  });
-});
+// 'transition uses one field set for safety and serialized identity checks' was
+// removed: its fault fired on a second call to transitionMutationFields that the
+// code never makes, so it passed whether or not the field sets agreed. The
+// behaviour it aimed at — the safety check and the identity check considering
+// the same fields — is covered by the transition unsafe-YAML refusal tests in
+// test/mutation-hardening.test.js, which fail if a mutated field escapes the
+// safety list.
 
 test('candidate-corruption scenario names cannot alter the production replacement path', async () => {
   const scenarios = [

@@ -8,29 +8,26 @@ export async function load(url, context, nextLoad) {
   }
 
   const source = loaded.source.toString();
-  if (fault === 'transition-second-field-list-drift') {
-    const functionStart = 'function transitionMutationFields(edge) {\n';
-    const returnStatement = '  return fields;\n}';
-    if (!source.includes(functionStart) || !source.includes(returnStatement)) {
-      throw new Error('Transition field-set injection point was not found.');
-    }
-    return {
-      ...loaded,
-      source: source
-        .replace(functionStart, `${functionStart}  transitionMutationFieldCalls += 1;\n`)
-        .replace(
-          returnStatement,
-          "  return transitionMutationFieldCalls === 2\n    ? fields.filter((field) => field !== 'decisions')\n    : fields;\n}",
-        )
-        .replace(functionStart, `let transitionMutationFieldCalls = 0;\n${functionStart}`),
-    };
-  }
 
-  const marker = '      const candidateValidation = validateSerializedCandidate(\n';
-  const injectionOffset = source.lastIndexOf(marker);
-  if (injectionOffset < 0) {
-    throw new Error('Candidate-validation injection point was not found.');
+  // The marker must identify exactly one site. lastIndexOf silently retargets
+  // the injection if the call sites are ever reordered, which would leave every
+  // fault test green while exercising a different code path.
+  // Anchored on the replacement call's own argument list: create passes null as
+  // the second argument, replaceItem passes id. Matching the bare call name hits
+  // both sites, so a reorder would silently retarget every fault test.
+  const marker = [
+    '      const candidateValidation = validateSerializedCandidate(',
+    '        current.ledger,',
+    '        id,',
+    '',
+  ].join('\n');
+  const occurrences = source.split(marker).length - 1;
+  if (occurrences !== 1) {
+    throw new Error(
+      `Candidate-validation injection point matched ${occurrences} sites; it must match exactly one.`,
+    );
   }
+  const injectionOffset = source.indexOf(marker);
   const injections = {
     'missing-edit-list': '      serializedEdits = undefined;\n',
     'identity-parse-failures': [
@@ -63,6 +60,26 @@ export async function load(url, context, nextLoad) {
       '        /^title: "([^"]*)"$/m,',
       '        (_line, value) => `title: "${\'x\'.repeat(value.length)}"`,',
       '      ), \'utf8\');',
+      '',
+    ].join('\n'),
+    // Rewrites the patched field in the bytes AND in the edit record that
+    // claims them, so the two agree with each other and disagree with the
+    // request. Every byte-level guard passes; only the successor-data
+    // comparison can catch a serializer that wrote a value nobody asked for.
+    'candidate-consistent-wrong-successor-data': [
+      '      {',
+      '        const wrote = bytes.toString(\'utf8\');',
+      '        const line = /^title: "([^"]*)"$/m.exec(wrote);',
+      '        if (line) {',
+      '          const forged = `title: "${\'x\'.repeat(line[1].length)}"`;',
+      '          bytes = Buffer.from(wrote.replace(line[0], forged), \'utf8\');',
+      '          serializedEdits = serializedEdits.map((edit) => (',
+      '            edit.replacement === line[0]',
+      '              ? { ...edit, replacement: forged }',
+      '              : edit',
+      '          ));',
+      '        }',
+      '      }',
       '',
     ].join('\n'),
     'candidate-rewrites-unchanged-root': [
