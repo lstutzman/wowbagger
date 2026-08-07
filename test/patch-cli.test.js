@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { parseDocument } from 'yaml';
 import { mapProcessOutcome } from '../spec/adapter-reference.js';
 import { validatePatchRequest } from '../src/mutation.js';
@@ -528,6 +529,75 @@ test('patch request validation rejects programmatic numeric negative zero', () =
   }]);
 });
 
+// A backend that silently discards every patch can return exactly the envelope
+// an honest no-op returns. The only thing separating them is whether the
+// requested values are actually in effect, so the oracle must check that or it
+// certifies the discarding backend as conformant.
+test('adapter oracle refuses an unchanged patch whose requested value is not in effect', () => {
+  const id = 'wb_01Q4EVGR000000000000000000';
+  const source = ['---', 'schema_version: 1', `id: ${id}`, 'title: "Ranked survey"',
+    'kind: task', 'status: backlog', 'created: 2030-01-14', 'updated: 2030-01-14',
+    'provenance:', '  source: "fixture"', '  recorded_at: "2030-01-14T10:00:00Z"',
+    'depends_on: []', 'related: []', 'number: 12', '---', '', 'Body.', ''].join('\n');
+  const revision = `sha256:${createHash('sha256').update(source).digest('hex')}`;
+  const item = {
+    path: `ledger/${id}.md`,
+    revision,
+    source_encoding: 'base64',
+    source_media_type: 'text/markdown; charset=utf-8',
+    source_base64: Buffer.from(source).toString('base64'),
+    core: {
+      schema_version: 1,
+      id,
+      title: 'Ranked survey',
+      kind: 'task',
+      status: 'backlog',
+      created: '2030-01-14',
+      updated: '2030-01-14',
+      provenance: { source: 'fixture', recorded_at: '2030-01-14T10:00:00Z' },
+      depends_on: [],
+      related: [],
+    },
+    body: '\nBody.\n',
+  };
+  const envelope = {
+    ok: true, command: 'patch', contract_version: 1, state: 'unchanged', result: { item },
+  };
+
+  const judge = (requestedNumber) => mapProcessOutcome({
+    adapter_contract_version: 1,
+    request_id: 'patch-unchanged-oracle-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_input: Buffer.from(JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { number: requestedNumber },
+      date: '2030-01-16',
+      decision: { summary: 'Confirm the rank.', rationale: 'The value may already hold.' },
+    })),
+    item_id: id,
+    expected_revision: revision,
+    process: {
+      started: true,
+      process_tree_contained: true,
+      orphaned: false,
+      exit_code: 0,
+      signal: null,
+      timed_out: false,
+      stdout_complete: true,
+      stderr_complete: true,
+      stdout_base64: Buffer.from(`${JSON.stringify(envelope)}\n`).toString('base64'),
+      stderr_base64: '',
+    },
+  });
+
+  // 12 is genuinely already in effect, so the unchanged envelope is honest.
+  assert.equal(judge(12), null);
+  // 99 is not: the same envelope now describes a patch that was dropped.
+  assert.equal(judge(99)?.error?.code, 'mutation-outcome-unknown');
+});
+
 test('adapter oracle accepts invalid-request for a patch carrying negative zero', () => {
   const id = 'wb_01Q4EVGR000000000000000000';
   const revision = `sha256:${'a'.repeat(64)}`;
@@ -896,10 +966,9 @@ test('patch removes optional priority, number, and parent with null', async () =
   });
 });
 
-// The no-op success this file used to assert is gone; clearing an absent field
-// now refuses. Its bytes-unchanged and revision-unchanged assertions live on in
-// 'patch refuses a request that would change nothing, without touching the item',
-// which drives the same request and additionally pins the exit code and error.
+// The no-op case is asserted by 'patch returns an unchanged success when every
+// requested value is in effect' above, which drives the same request and pins
+// the revision, the bytes, and the absence of an appended decision.
 
 test('patch refuses an invalid proposed ledger and leaves target bytes unchanged', async () => {
   const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
@@ -1128,6 +1197,10 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
     'invalid-request',
     'lock-held',
     'revision-conflict',
+    // Without this the oracle's whole unchanged-patch branch is unreachable
+    // from the vector suite, so another implementation could never be measured
+    // against it.
+    'unchanged',
     'unsafe-yaml-mutation',
   ]);
   assert.deepEqual(candidateValidationCodes.sort(), [

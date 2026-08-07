@@ -50,17 +50,28 @@ MUTATIONS = [
 
 
 def run_suite():
-    """Return (passed, summarised) — summarised is False if the run produced no
-    test summary at all, which must never be scored as a caught mutation."""
+    """Return (passed, assertions_ran).
+
+    A mutation must be caught by an ASSERTION, not by breaking the build. A
+    syntax error or a module that fails to load also produces a non-zero exit,
+    and scoring that as 'caught' would certify a guard nothing actually tests.
+    So we require a summary AND that the reported test total is unchanged from
+    the baseline: if the mutation stopped tests from running, that is a broken
+    harness, not a proven guard."""
     run = subprocess.run(
         ['node', '--test'] + sorted(glob.glob(os.path.join(ROOT, 'test', '*.test.js'))),
         capture_output=True, text=True, cwd=ROOT,
         env={**os.environ, 'TMPDIR': '/tmp'})
     out = run.stdout
-    if '\n# fail ' not in out and '\nℹ fail ' not in out:
-        return (False, False)
+    total = None
+    for marker in ('\nℹ tests ', '\n# tests '):
+        if marker in out:
+            total = out.split(marker, 1)[1].split('\n', 1)[0].strip()
+            break
+    if total is None:
+        return (False, None)
     failed = ('\nℹ fail 0\n' not in out) and ('\n# fail 0\n' not in out)
-    return (not failed, True)
+    return (not failed, total)
 
 
 def main():
@@ -70,8 +81,8 @@ def main():
     shutil.copy(TARGET, backup)
 
     # A red baseline makes every mutation look caught. Refuse to score anything.
-    baseline_green, baseline_ran = run_suite()
-    if not baseline_ran:
+    baseline_green, baseline_total = run_suite()
+    if baseline_total is None:
         print('The suite produced no summary. Fix the runner before scoring guards.')
         return 2
     if not baseline_green:
@@ -88,9 +99,12 @@ def main():
                 continue
             with open(TARGET, 'w', encoding='utf-8') as target:
                 target.write(original.replace(needle, replacement))
-            green, ran = run_suite()
-            if not ran:
+            green, total = run_suite()
+            if total is None:
                 verdict = 'NO SUMMARY — the mutated tree did not run'
+            elif total != baseline_total:
+                verdict = (f'BROKE THE HARNESS — {total} tests ran, baseline {baseline_total}; '
+                           'the mutation stopped tests rather than failing one')
             elif green:
                 verdict = 'NOT CAUGHT — no test covers this guard'
             else:

@@ -635,7 +635,10 @@ The adapter validates core version 1 field domains and rejects an extra,
 missing, source-inconsistent, or semantically invalid item as a protocol
 failure.
 For `create`, `patch`, and `transition`, the same checks also require the exact mutation
-state: success is `state: "committed"` with `result` and exit 0; an error has
+state: success is `state: "committed"` with `result` and exit 0, except that a
+successful `patch` whose requested values are all already in effect is
+`state: "unchanged"` with `result` and exit 0, publishing nothing and keeping
+the supplied revision; an error has
 `error` and its documented `unchanged`, `committed`, or `unknown` state and
 exit. A declared `unknown` state is an adapter
 `mutation-outcome-unknown`, not a completed mutation result. Any malformed,

@@ -1,0 +1,13 @@
+{
+  "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+  "expected_revision": "sha256:79313854f813d4048d44a14fce5e808709dd16c55c87b0b9f248e2b6b2d6386a",
+  "patch": {
+    "number": 12,
+    "priority": null
+  },
+  "date": "2030-01-16",
+  "decision": {
+    "summary": "Confirm the fictional survey ranking is already correct.",
+    "rationale": "A patch whose requested values are already in effect publishes nothing."
+  }
+}

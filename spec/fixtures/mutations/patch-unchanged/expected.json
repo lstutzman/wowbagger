@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "unchanged",
+  "result": {
+    "item": {
+      "path": "wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "revision": "sha256:79313854f813d4048d44a14fce5e808709dd16c55c87b0b9f248e2b6b2d6386a",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0QVMxWTgwMjQ4SjQ4SEs2RDI0OE5BTgp0aXRsZTogIlJhbmsgdGhlIGZpY3Rpb25hbCBsaWdodGhvdXNlIHN1cnZleSIKa2luZDogdGFzawpzdGF0dXM6IGJhY2tsb2cKY3JlYXRlZDogMjAzMC0wMS0xMgp1cGRhdGVkOiAyMDMwLTAxLTEyCnByb3ZlbmFuY2U6CiAgc291cmNlOiAiZml4dHVyZS9tdXRhdGlvbnMiCiAgcmVjb3JkZWRfYXQ6ICIyMDMwLTAxLTEyVDEwOjAwOjAwWiIKZGVwZW5kc19vbjogW10KcmVsYXRlZDogW10KbnVtYmVyOiAxMgotLS0KClRoZSBib2R5IG11c3Qgc3Vydml2ZSB0aGUgc3VjY2Vzc2Z1bCBudW1iZXIgcmVwbGFjZW1lbnQuCg==",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+        "title": "Rank the fictional lighthouse survey",
+        "kind": "task",
+        "status": "backlog",
+        "created": "2030-01-12",
+        "updated": "2030-01-12",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-12T10:00:00Z"
+        },
+        "depends_on": [],
+        "related": []
+      },
+      "body": "\nThe body must survive the successful number replacement.\n"
+    }
+  }
+}

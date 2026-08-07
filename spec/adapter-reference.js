@@ -4,7 +4,6 @@ import path from 'node:path';
 import { parseLedgerItemSource } from '../src/ledger.js';
 import {
   createCandidateSource,
-  validateCreateRequest,
   validateTransitionRequest,
 } from '../src/mutation.js';
 import { JsonNumber, parseJsonRequest } from '../src/request.js';
@@ -1985,7 +1984,7 @@ function hasCanonicalMutationRequest(responseContext, command) {
     if (mutationInput === null) return false;
     const parsed = parseJsonRequest(mutationInput);
     if (parsed.issues.length > 0 || !plainObject(parsed.value)) return false;
-    if (command === 'create') return validateCreateRequest(parsed.value).length === 0;
+    if (command === 'create') return validCreateMutationRequest(parsed.value);
     if (command === 'patch') return validPatchMutationRequest(parsed.value);
     if (command === 'transition') return validateTransitionRequest(parsed.value).length === 0;
     return false;
@@ -1993,10 +1992,43 @@ function hasCanonicalMutationRequest(responseContext, command) {
   const mutationRequest = responseMutationRequest(responseContext, command);
   if (mutationRequest === undefined) return true;
   if (!plainObject(mutationRequest)) return false;
-  if (command === 'create') return validateCreateRequest(mutationRequest).length === 0;
+  if (command === 'create') return validCreateMutationRequest(mutationRequest);
   if (command === 'patch') return validPatchMutationRequest(mutationRequest);
   if (command === 'transition') return validateTransitionRequest(mutationRequest).length === 0;
   return false;
+}
+
+// Stated here rather than imported from src/mutation.js. An oracle that asks
+// the subject whether the subject's input is valid proves nothing: reverting
+// the controlled-member list in src would move this rule with it and every
+// conformance test would stay green.
+const CREATE_CONTROLLED_MEMBERS = [
+  'schema_version', 'id', 'status', 'created', 'updated', 'completed',
+  'killed', 'archived', 'decisions', 'body', 'priority', 'number',
+];
+
+function validCreateMutationRequest(request) {
+  if (!plainObject(request)
+    || !hasExactKeys(request, ['id', 'item', 'body'])
+    || !WOWBAGGER_ID.test(request.id)
+    || typeof request.body !== 'string'
+    || !plainObject(request.item)) return false;
+  const item = request.item;
+  if (CREATE_CONTROLLED_MEMBERS.some((member) => Object.hasOwn(item, member))) return false;
+  if (typeof item.title !== 'string' || item.title.trim().length === 0) return false;
+  if (item.kind !== 'task' && item.kind !== 'epic') return false;
+  if (!plainObject(item.provenance)
+    || typeof item.provenance.source !== 'string'
+    || item.provenance.source.trim().length === 0
+    || typeof item.provenance.recorded_at !== 'string') return false;
+  if (!Array.isArray(item.depends_on)
+    || !item.depends_on.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry))) return false;
+  if (Object.hasOwn(item, 'related')
+    && (!Array.isArray(item.related)
+      || !item.related.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry)))) return false;
+  if (Object.hasOwn(item, 'parent') && !WOWBAGGER_ID.test(item.parent)) return false;
+  if (Object.hasOwn(item, 'snoozed_until') && !isCalendarDate(item.snoozed_until)) return false;
+  return true;
 }
 
 function validPatchMutationRequest(request) {
@@ -2070,29 +2102,28 @@ function validCreateResultCorrelation(item, request) {
   }
 }
 
-// The inverse of validPatchResultCorrelation: nothing was published, so the
-// revision must still be the one the caller supplied and updated must NOT have
-// moved to the request date. Stated independently rather than as a negation of
-// the committed rule, so a backend cannot satisfy it by publishing and lying.
+// An unchanged patch asserts two things, and the first is the one that matters:
+// every requested value is ALREADY in effect — that is what makes it a no-op —
+// and nothing was published, so the revision is still the caller's.
+//
+// Checking the values is what stops a backend that silently discards every
+// patch from certifying conformant. It shares patchValuesInEffect with the
+// committed rule deliberately: both outcomes promise the same end state and
+// only the publication differs. `updated` is NOT compared against the request
+// date — a same-day no-op retry is the case this outcome exists to make safe,
+// and such a comparison would be the committed rule negated, not an
+// independent statement.
 function validUnchangedPatchCorrelation(item, request) {
   return plainObject(request) && plainObject(request.patch)
     && item.core.id === request.id
     && item.revision === request.expected_revision
-    && item.core.updated !== request.date;
+    && patchValuesInEffect(item, request);
 }
 
-function validPatchResultCorrelation(item, request) {
-  if (!plainObject(request) || !plainObject(request.patch)
-    || item.core.id !== request.id
-    || item.revision === request.expected_revision
-    || item.core.updated !== request.date
-    || !Array.isArray(item.core.decisions)) return false;
-  const decision = item.core.decisions.at(-1);
-  if (!plainObject(decision)
-    || decision.action !== 'record'
-    || decision.date !== request.date
-    || decision.summary !== request.decision?.summary
-    || decision.rationale !== request.decision?.rationale) return false;
+// Every patchable field the request named holds the requested value on the
+// returned item. priority and number are read from the item's own bytes,
+// because the core view does not carry them.
+function patchValuesInEffect(item, request) {
   if (Object.hasOwn(request.patch, 'title') && item.core.title !== request.patch.title) return false;
   if (Object.hasOwn(request.patch, 'depends_on')
     && !sameJson(item.core.depends_on, request.patch.depends_on)) return false;
@@ -2114,6 +2145,21 @@ function validPatchResultCorrelation(item, request) {
     } else if (parsed.data[field] !== expected) return false;
   }
   return true;
+}
+
+function validPatchResultCorrelation(item, request) {
+  if (!plainObject(request) || !plainObject(request.patch)
+    || item.core.id !== request.id
+    || item.revision === request.expected_revision
+    || item.core.updated !== request.date
+    || !Array.isArray(item.core.decisions)) return false;
+  const decision = item.core.decisions.at(-1);
+  if (!plainObject(decision)
+    || decision.action !== 'record'
+    || decision.date !== request.date
+    || decision.summary !== request.decision?.summary
+    || decision.rationale !== request.decision?.rationale) return false;
+  return patchValuesInEffect(item, request);
 }
 
 function validTransitionResultCorrelation(item, request) {
