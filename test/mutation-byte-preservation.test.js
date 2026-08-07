@@ -41,16 +41,205 @@ test('patch and transition preserve every byte outside changed frontmatter field
 
           const rewritten = await readFile(path.join(ledger, `${targetId}.md`), 'utf8');
           const expected = expectedSource(source, shape, command);
-          assert.deepEqual(
-            changedLines(source, rewritten),
-            changedLines(source, expected),
-            `${shape.name}: bytes changed outside the mutation ranges`,
-          );
           assert.equal(rewritten, expected, `${shape.name}: unexpected output bytes`);
         });
       });
     }
   }
+});
+
+test('byte corpus covers field insertion, removal, idempotent clear, and terminal dates', async (t) => {
+  await t.test('patch inserts, removes, then clears an already-absent field', async () => {
+    const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+    const marker = '# after patch hard paths\n';
+    const source = item([
+      'schema_version: 1',
+      `id: ${targetId}`,
+      'operator_early: "stay above title"',
+      'title: Exercise patch hard paths',
+      'kind: task',
+      'status: backlog',
+      'created: 2030-01-14',
+      'updated: 2030-01-14',
+      'provenance:',
+      '  source: byte-corpus',
+      '  recorded_at: "2030-01-14T12:00:00Z"',
+      'depends_on: []',
+      'related: []',
+      marker.trimEnd(),
+    ], '\n', 'Patch hard-path body stays exact.\n');
+    const steps = [
+      {
+        date: '2030-01-16',
+        patch: { priority: 3 },
+        summary: 'Insert the absent priority.',
+        rationale: 'The insertion path must preserve every other byte.',
+        updateExpected(expected) {
+          expected = replaceLine(expected, 'updated: 2030-01-14', 'updated: 2030-01-16', '\n');
+          return expected.replace(marker,
+            `priority: 3\ndecisions:\n${decisionItem({
+              action: 'record',
+              date: this.date,
+              summary: this.summary,
+              rationale: this.rationale,
+            }, '  ', '\n')}${marker}`);
+        },
+      },
+      {
+        date: '2030-01-17',
+        patch: { priority: null },
+        summary: 'Remove the present priority.',
+        rationale: 'The removal path must preserve every other byte.',
+        updateExpected(expected) {
+          expected = replaceLine(expected, 'updated: 2030-01-16', 'updated: 2030-01-17', '\n');
+          expected = expected.replace('priority: 3\n', '');
+          return expected.replace(marker, `${decisionItem({
+            action: 'record',
+            date: this.date,
+            summary: this.summary,
+            rationale: this.rationale,
+          }, '  ', '\n')}${marker}`);
+        },
+      },
+      {
+        date: '2030-01-18',
+        patch: { number: null },
+        summary: 'Clear the already-absent number.',
+        rationale: 'The idempotent clear path must preserve every other byte.',
+        updateExpected(expected) {
+          expected = replaceLine(expected, 'updated: 2030-01-17', 'updated: 2030-01-18', '\n');
+          return expected.replace(marker, `${decisionItem({
+            action: 'record',
+            date: this.date,
+            summary: this.summary,
+            rationale: this.rationale,
+          }, '  ', '\n')}${marker}`);
+        },
+      },
+    ];
+
+    await withLedger({ [`${targetId}.md`]: source }, async (ledger) => {
+      let expected = source;
+      for (const step of steps) {
+        const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+        const revision = JSON.parse(inspected.stdout).result.item.revision;
+        const requestPath = path.join(path.dirname(ledger), `patch-${step.date}.json`);
+        await writeFile(requestPath, JSON.stringify({
+          id: targetId,
+          expected_revision: revision,
+          patch: step.patch,
+          date: step.date,
+          decision: { summary: step.summary, rationale: step.rationale },
+        }));
+
+        const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+        expected = step.updateExpected(expected);
+        assert.equal(result.status, 0, `${step.date}: ${result.stderr}\n${result.stdout}`);
+        assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), expected, step.date);
+      }
+    });
+  });
+
+  await t.test('transition inserts a terminal date into an absent field', async () => {
+    const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+    const marker = 'operator_late: "stay after decisions"\n';
+    const source = item([
+      'schema_version: 1',
+      `id: ${targetId}`,
+      'operator_early: "stay above title"',
+      'title: Exercise terminal insertion',
+      'kind: task',
+      'status: in-progress',
+      'created: 2030-01-14',
+      'updated: 2030-01-14',
+      'provenance:',
+      '  source: byte-corpus',
+      '  recorded_at: "2030-01-14T12:00:00Z"',
+      'depends_on: []',
+      'related: []',
+      marker.trimEnd(),
+    ], '\n', 'Terminal insertion body stays exact.\n');
+    const summary = 'Complete the terminal insertion item.';
+    const rationale = 'The completed date must be the only new terminal field.';
+
+    await withLedger({ [`${targetId}.md`]: source }, async (ledger) => {
+      const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+      const revision = JSON.parse(inspected.stdout).result.item.revision;
+      const requestPath = path.join(path.dirname(ledger), 'transition-terminal.json');
+      await writeFile(requestPath, JSON.stringify({
+        id: targetId,
+        expected_revision: revision,
+        to_status: 'done',
+        date: MUTATION_DATE,
+        decision: { summary, rationale },
+      }));
+
+      const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+      let expected = replaceLine(source, 'status: in-progress', 'status: done', '\n');
+      expected = replaceLine(expected, 'updated: 2030-01-14',
+        `updated: ${MUTATION_DATE}\ncompleted: ${MUTATION_DATE}`.trimEnd(), '\n');
+      expected = expected.replace(marker,
+        `decisions:\n${decisionItem({ action: 'complete', summary, rationale }, '  ', '\n')}${marker}`);
+
+      assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+      assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), expected);
+    });
+  });
+
+  await t.test('transition restore removes the present archived date', async () => {
+    const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+    const marker = '# after four-space decisions\n';
+    const source = item([
+      'schema_version: 1',
+      `id: ${targetId}`,
+      'title: Exercise terminal removal',
+      'kind: task',
+      'status: archived',
+      'created: 2030-01-14',
+      'updated: 2030-01-16',
+      'archived: 2030-01-16',
+      'provenance:',
+      '  source: byte-corpus',
+      '  recorded_at: "2030-01-14T12:00:00Z"',
+      'depends_on: []',
+      'related: []',
+      'decisions:',
+      '    - action: archive',
+      '      date: 2030-01-16',
+      '      summary: "Keep the first archive record."',
+      '      rationale: "Its bytes are append-only."',
+      '    - action: archive',
+      '      date: 2030-01-16',
+      '      summary: "Keep the second archive record."',
+      '      rationale: "Its bytes are append-only too."',
+      marker.trimEnd(),
+    ], '\n', 'Terminal removal body stays exact.\n');
+    const summary = 'Restore the archived item.';
+    const rationale = 'Restore must remove only the archived date.';
+
+    await withLedger({ [`${targetId}.md`]: source }, async (ledger) => {
+      const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+      const revision = JSON.parse(inspected.stdout).result.item.revision;
+      const requestPath = path.join(path.dirname(ledger), 'transition-restore.json');
+      await writeFile(requestPath, JSON.stringify({
+        id: targetId,
+        expected_revision: revision,
+        to_status: 'backlog',
+        date: '2030-01-18',
+        decision: { summary, rationale },
+      }));
+
+      const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+      let expected = replaceLine(source, 'status: archived', 'status: backlog', '\n');
+      expected = replaceLine(expected, 'updated: 2030-01-16', 'updated: 2030-01-18', '\n');
+      expected = expected.replace('archived: 2030-01-16\n', '');
+      expected = expected.replace(marker,
+        `${decisionItem({ action: 'restore', date: '2030-01-18', summary, rationale }, '    ', '\n')}${marker}`);
+
+      assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+      assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), expected);
+    });
+  });
 });
 
 function corpus() {
@@ -181,8 +370,75 @@ function corpus() {
         '    date: 2030-01-14',
         '    summary: "Keep the CRLF record."',
         '    rationale: "Its line terminators are durable."',
+        '  - action: record',
+        '    date: 2030-01-14',
+        '    summary: "Keep the second CRLF record."',
+        '    rationale: "Its two-space indentation is durable."',
         '# CRLF final frontmatter comment',
       ], '\r\n', '\r\nCRLF body stays exact.\r\n'),
+    },
+    {
+      name: 'zero-indent-multi-record-decisions',
+      newline: '\n',
+      oldTitle: 'title: Keep zero-indent decisions',
+      newTitle: `title: ${PATCH_TITLE}`,
+      decisionMarker: '# after zero-indent decisions',
+      decisionIndent: '',
+      source: ({ targetId }) => item([
+        'schema_version: 1',
+        `id: ${targetId}`,
+        'title: Keep zero-indent decisions',
+        'kind: task',
+        'status: triage',
+        'created: 2030-01-14',
+        'updated: 2030-01-14',
+        'provenance:',
+        '  source: byte-corpus',
+        '  recorded_at: "2030-01-14T12:00:00Z"',
+        'depends_on: []',
+        'decisions:',
+        '- action: record',
+        '  date: 2030-01-14',
+        '  summary: "Keep the first zero-indent record."',
+        '  rationale: "Its bytes are append-only."',
+        '- action: record',
+        '  date: 2030-01-14',
+        '  summary: "Keep the second zero-indent record."',
+        '  rationale: "Its bytes are append-only too."',
+        '# after zero-indent decisions',
+      ], '\n', 'Zero-indent decisions stay exact.\n'),
+    },
+    {
+      name: 'early-extension-with-two-space-decisions',
+      newline: '\n',
+      oldTitle: 'title: Keep early extension placement',
+      newTitle: `title: ${PATCH_TITLE}`,
+      decisionMarker: '# after two-space decisions',
+      decisionIndent: '  ',
+      source: ({ targetId }) => item([
+        'schema_version: 1',
+        `id: ${targetId}`,
+        'operator_early: "stay above title"',
+        'title: Keep early extension placement',
+        'kind: task',
+        'status: triage',
+        'created: 2030-01-14',
+        'updated: 2030-01-14',
+        'provenance:',
+        '  source: byte-corpus',
+        '  recorded_at: "2030-01-14T12:00:00Z"',
+        'depends_on: []',
+        'decisions:',
+        '  - action: record',
+        '    date: 2030-01-14',
+        '    summary: "Keep the first two-space record."',
+        '    rationale: "Its bytes are append-only."',
+        '  - action: record',
+        '    date: 2030-01-14',
+        '    summary: "Keep the second two-space record."',
+        '    rationale: "Its bytes are append-only too."',
+        '# after two-space decisions',
+      ], '\n', 'Early extension placement stays exact.\n'),
     },
   ];
 }
@@ -218,7 +474,7 @@ function expectedSource(source, shape, command) {
 
   const marker = `${shape.decisionMarker}${newline}`;
   const decision = DECISIONS[command];
-  const insertion = shape.decisionIndent
+  const insertion = Object.hasOwn(shape, 'decisionIndent')
     ? decisionItem(decision, shape.decisionIndent, newline)
     : `decisions:${newline}${decisionItem(decision, '  ', newline)}`;
   assert.equal(expected.includes(marker), true, `${shape.name}: missing decision marker`);
@@ -229,7 +485,7 @@ function decisionItem(decision, indent, newline) {
   const fieldIndent = `${indent}  `;
   return [
     `${indent}- action: ${decision.action}`,
-    `${fieldIndent}date: ${MUTATION_DATE}`,
+    `${fieldIndent}date: ${decision.date ?? MUTATION_DATE}`,
     `${fieldIndent}summary: "${decision.summary}"`,
     `${fieldIndent}rationale: "${decision.rationale}"`,
     '',
@@ -260,39 +516,4 @@ function supportItem(id, kind) {
     '  recorded_at: "2030-01-14T12:00:00Z"',
     'depends_on: []',
   ], '\n', '');
-}
-
-function changedLines(before, after) {
-  const left = linesWithTerminators(before);
-  const right = linesWithTerminators(after);
-  const lengths = Array.from({ length: left.length + 1 }, () => new Uint16Array(right.length + 1));
-  for (let leftIndex = left.length - 1; leftIndex >= 0; leftIndex -= 1) {
-    for (let rightIndex = right.length - 1; rightIndex >= 0; rightIndex -= 1) {
-      lengths[leftIndex][rightIndex] = left[leftIndex] === right[rightIndex]
-        ? lengths[leftIndex + 1][rightIndex + 1] + 1
-        : Math.max(lengths[leftIndex + 1][rightIndex], lengths[leftIndex][rightIndex + 1]);
-    }
-  }
-
-  const changes = [];
-  let leftIndex = 0;
-  let rightIndex = 0;
-  while (leftIndex < left.length || rightIndex < right.length) {
-    if (left[leftIndex] === right[rightIndex]) {
-      leftIndex += 1;
-      rightIndex += 1;
-    } else if (rightIndex === right.length
-      || (leftIndex < left.length && lengths[leftIndex + 1][rightIndex] >= lengths[leftIndex][rightIndex + 1])) {
-      changes.push({ operation: 'delete', bytes: left[leftIndex] });
-      leftIndex += 1;
-    } else {
-      changes.push({ operation: 'insert', bytes: right[rightIndex] });
-      rightIndex += 1;
-    }
-  }
-  return changes;
-}
-
-function linesWithTerminators(source) {
-  return source.match(/[^\r\n]*(?:\r\n|\n)|[^\r\n]+$/g) ?? [];
 }

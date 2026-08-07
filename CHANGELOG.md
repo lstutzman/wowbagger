@@ -59,6 +59,21 @@ release yet, so everything below is unreleased.
 
 ### Fixed
 
+- The byte-range frontmatter writer refused valid zero-indent `decisions`
+  sequences, threw when `patch` cleared an already-absent optional field, and
+  inserted new controlled fields above later controlled fields when an
+  extension appeared early. Both mutation commands now append zero-, two-, and
+  four-space decision sequences, idempotent clears produce no removal edit,
+  and insertion order accounts for controlled fields after an early extension.
+- Post-serialization validation again protects both `patch` and `transition`.
+  It compares the complete parsed successor, unchanged root-node identity,
+  operator and provenance extension identity, and every byte outside the
+  declared edit ranges. A mismatch returns `candidate-invalid` with
+  `mutation-successor-mismatch` and publishes nothing.
+- Anchors declared on a changed field's key now receive the permanent
+  `unsafe-yaml-mutation` refusal when another field aliases them. The
+  classifier previously inspected only the changed pair's value.
+
 - `patch` could write bytes the caller never requested and report success.
   Patching an anchored field wrote through the YAML anchor and silently
   changed an aliasing field the request never named; removing a field that
@@ -86,6 +101,13 @@ release yet, so everything below is unreleased.
   `ready --json` is unchanged (`dab4252`).
 
 ### Changed
+
+- **Breaking.** `transition` now refuses `unsafe-yaml-mutation` when a changed
+  field participates in cross-field anchor or alias semantics. It previously
+  accepted those items, while `patch` refused the same shape. The refusal
+  message now gives the recovery path: hand-edit the item named by
+  `details.path` to remove the cross-field anchor or alias, run `validate`,
+  then retry the mutation.
 
 - **Breaking.** `inspect` and every successful mutation result no longer return
   `item.id`. No frontmatter field is promoted to the item level; read

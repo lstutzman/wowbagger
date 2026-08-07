@@ -106,8 +106,46 @@ test('patch refuses an anchored scalar and leaves aliased fields unchanged', asy
     assert.equal(output.error.code, 'unsafe-yaml-mutation');
     assert.equal(
       output.error.message,
-      'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.',
+      'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range. '
+      + 'Hand-edit the item at details.path to remove the cross-field anchor or alias, run validate, then retry.',
     );
+    assert.deepEqual(output.error.details, {
+      id,
+      path: `ledger/${id}.md`,
+      field: 'priority',
+      reason: 'anchor-referenced-outside-field',
+    });
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+  });
+});
+
+test('patch classifies an anchor on a changed field key as unsafe YAML', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id, '', [
+    '&rank_key priority: 3',
+    'operator_key: *rank_key',
+  ]);
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-key-anchor.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { priority: 5 },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Raise the key-anchored priority.',
+        rationale: 'The refusal class must identify a permanent YAML shape.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.error.code, 'unsafe-yaml-mutation');
     assert.deepEqual(output.error.details, {
       id,
       path: `ledger/${id}.md`,
@@ -288,7 +326,8 @@ test('patch returns an unchanged envelope for an anchor nested in a patched sequ
     assert.equal(output.error.code, 'unsafe-yaml-mutation');
     assert.equal(
       output.error.message,
-      'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.',
+      'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range. '
+      + 'Hand-edit the item at details.path to remove the cross-field anchor or alias, run validate, then retry.',
     );
     assert.deepEqual(output.error.details, {
       id,
@@ -362,6 +401,41 @@ test('patch inserts parent after identity when related is absent', async () => {
     assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
     assert.ok(rewritten.startsWith(`---\nschema_version: 1\nid: ${id}\n`), rewritten);
     assert.ok(rewritten.includes(`depends_on: []\nparent: ${parentId}\ndecisions:\n`), rewritten);
+  });
+});
+
+test('patch inserts absent fields after later controlled fields when an extension appears early', async () => {
+  const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(id).replace(
+    `id: ${id}\n`,
+    `id: ${id}\noperator_x: keep this early\n`,
+  );
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-early-extension.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { priority: 3 },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Rank the early-extension item.',
+        rationale: 'Controlled insertion order must ignore extension placement.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.ok(
+      rewritten.indexOf('operator_x: keep this early\n') < rewritten.indexOf('title:'),
+      rewritten,
+    );
+    assert.ok(rewritten.indexOf('related: []\n') < rewritten.indexOf('priority: 3\n'), rewritten);
+    assert.ok(rewritten.indexOf('priority: 3\n') < rewritten.indexOf('decisions:\n'), rewritten);
   });
 });
 
@@ -553,7 +627,8 @@ test('adapter oracle accepts the permanent unsafe YAML refusal code', () => {
       rationale: 'The source carries YAML that patch must not rewrite.',
     },
   };
-  const message = 'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.';
+  const message = 'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range. '
+    + 'Hand-edit the item at details.path to remove the cross-field anchor or alias, run validate, then retry.';
   const envelope = {
     ok: false,
     command: 'patch',
@@ -821,6 +896,36 @@ test('patch removes optional priority, number, and parent with null', async () =
   });
 });
 
+test('patch succeeds when clearing an optional field that is already absent', async () => {
+  const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const source = itemSource(targetId);
+
+  await withLedger({ [`${targetId}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-clear-absent.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: revision,
+      patch: { number: null },
+      date: '2030-01-18',
+      decision: {
+        summary: 'Confirm the item has no number.',
+        rationale: 'Retrying an already-applied clear must remain safe.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const rewritten = await readFile(path.join(ledger, `${targetId}.md`), 'utf8');
+    const data = parseDocument(frontmatter(rewritten), { schema: 'core' }).toJS();
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(Object.hasOwn(data, 'number'), false);
+    assert.equal(data.updated, '2030-01-18');
+    assert.equal(data.decisions.at(-1).summary, 'Confirm the item has no number.');
+  });
+});
+
 test('patch refuses an invalid proposed ledger and leaves target bytes unchanged', async () => {
   const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
   const missingParentId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
@@ -1019,6 +1124,7 @@ test('patch rejects a frontmatter field outside the exact patchable set', async 
 test('mutation vectors cover committed patch and required guarded refusals', async () => {
   const fixtureRoot = new URL('../spec/fixtures/mutations/', import.meta.url);
   const outcomes = [];
+  const candidateValidationCodes = [];
   for (const directory of await readdir(fixtureRoot, { withFileTypes: true })) {
     if (!directory.isDirectory()) continue;
     const directoryUrl = new URL(`${directory.name}/`, fixtureRoot);
@@ -1031,11 +1137,16 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
         'utf8',
       ));
       outcomes.push(expected.ok ? expected.state : expected.error.code);
+      if (expected.error?.code === 'candidate-invalid') {
+        candidateValidationCodes.push(...expected.error.details.validation_errors
+          .map((error) => error.code));
+      }
     }
   }
 
   assert.deepEqual(outcomes.sort(), [
     'atomic-scope-required',
+    'candidate-invalid',
     'candidate-invalid',
     'committed',
     'invalid-request',
@@ -1043,6 +1154,10 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
     'lock-held',
     'revision-conflict',
     'unsafe-yaml-mutation',
+  ]);
+  assert.deepEqual(candidateValidationCodes.sort(), [
+    'mutation-successor-mismatch',
+    'unresolved-parent',
   ]);
 });
 

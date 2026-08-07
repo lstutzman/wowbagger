@@ -5,7 +5,7 @@
   "state": "unchanged",
   "error": {
     "code": "unsafe-yaml-mutation",
-    "message": "The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.",
+    "message": "The mutation cannot safely edit YAML whose alias semantics cross an edited byte range. Hand-edit the item at details.path to remove the cross-field anchor or alias, run validate, then retry.",
     "details": {
       "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
       "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",

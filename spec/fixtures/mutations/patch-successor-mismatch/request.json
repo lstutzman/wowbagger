@@ -1,0 +1,12 @@
+{
+  "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+  "expected_revision": "sha256:e242ef665bef2cdc787200ec68eadfa25b614e6f39f07afd879143adb2ed274c",
+  "patch": {
+    "title": "Rank the fictional harbor survey"
+  },
+  "date": "2030-01-15",
+  "decision": {
+    "summary": "Replace the fictional lighthouse title.",
+    "rationale": "A corrupted serialized candidate must never reach publication."
+  }
+}

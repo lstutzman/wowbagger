@@ -1831,7 +1831,7 @@ function coreErrorMessageMatches(code, command, message) {
     'ledger-invalid': 'The configured ledger is invalid.',
     'transition-precondition-failed': 'The requested lifecycle transition failed its preconditions.',
     'candidate-invalid': 'The proposed item would make the ledger invalid.',
-    'unsafe-yaml-mutation': 'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.',
+    'unsafe-yaml-mutation': 'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range. Hand-edit the item at details.path to remove the cross-field anchor or alias, run validate, then retry.',
     'revision-conflict': 'The item changed after it was inspected.',
     'lock-held': 'The item is locked by another cooperative Wowbagger writer.',
     'id-collision': 'The requested item ID already exists.',

@@ -306,6 +306,12 @@ test('transition refuses changing controlled anchors referenced by extension ali
       const output = JSON.parse(result.stdout);
       assert.equal(result.status, 2, `${scenario.name}: ${result.stderr}\n${result.stdout}`);
       assert.equal(output.error.code, 'unsafe-yaml-mutation', scenario.name);
+      assert.equal(
+        output.error.message,
+        'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range. '
+        + 'Hand-edit the item at details.path to remove the cross-field anchor or alias, run validate, then retry.',
+        scenario.name,
+      );
       assert.deepEqual(output.error.details, {
         id,
         path: `ledger/${id}.md`,
@@ -330,7 +336,6 @@ test('transition appends to direct decisions but refuses an aliased decisions se
       name: 'direct sequence',
       decisionSource: ['decisions:', ...priorDecision],
       refusal: false,
-      assertExtensions() {},
     },
     {
       name: 'alias to extension sequence',
@@ -341,16 +346,6 @@ test('transition appends to direct decisions but refuses an aliased decisions se
         'decisions: *shared_decisions',
       ],
       refusal: true,
-      assertExtensions(document, data) {
-        const shared = document.get('shared_decisions', true);
-        const sharedAlias = document.get('shared_decisions_alias', true);
-        assert.equal(shared.anchor, 'shared_decisions');
-        assert.equal(isSeq(shared), true);
-        assert.equal(shared.items.length, 1);
-        assert.equal(isAlias(sharedAlias), true);
-        assert.equal(sharedAlias.source, 'shared_decisions');
-        assert.deepEqual(data.shared_decisions_alias, data.shared_decisions);
-      },
     },
   ];
 
@@ -413,7 +408,6 @@ test('transition appends to direct decisions but refuses an aliased decisions se
       assert.equal(decisions.items.length, 2, scenario.name);
       assert.equal(data.decisions.at(-1).summary, 'Append only to controlled decisions.', scenario.name);
       assert.ok(rewritten.includes(priorDecision.join('\n')), rewritten);
-      scenario.assertExtensions(document, data);
     });
   }
 });

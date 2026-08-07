@@ -643,8 +643,10 @@ for the fields listed in section 8A.
 Transition locates each changed root key/value pair from the parsed YAML source
 ranges and splices only those byte ranges. A removed field loses its complete
 pair range and line terminator. A new terminal field is inserted after updated.
-A missing decisions block is inserted before the first extension field. Every
-byte outside those edits is copied from the original source without
+A missing decisions block is inserted at its schema slot relative to
+controlled fields, before any extension that already follows that slot. An
+extension that appears early keeps its existing position. Every byte outside
+those edits is copied from the original source without
 serialization. This includes comments, tags, anchors, aliases, blank lines,
 flow spacing, indentation, key order, scalar spelling, extension data, and the
 body.
@@ -652,7 +654,7 @@ body.
 Appending a decision inserts one newly serialized sequence item after the last
 existing item. It does not serialize any prior decision item. Existing decision
 bytes are therefore append-only evidence. A missing decisions field inserts a
-new block at the controlled-metadata boundary before the first extension field.
+new block at the controlled-metadata boundary without moving extension fields.
 
 The successful response exposes the new complete source_base64 and revision, so
 the caller can verify the exact rewritten bytes.
@@ -872,13 +874,19 @@ Patch never silently updates another item.
 Patch uses the same source-range splice rules as transition. It replaces only
 the named patch field pairs, the derived updated pair, and the new decision
 insertion. A removed pair includes its line terminator. A newly present patch
-field is inserted in schema field order before decisions and before the first
-extension field. Every other source byte is copied verbatim. Publication uses the same fully written and synced
+field is inserted at its schema slot relative to controlled fields, before
+decisions and before any extension that already follows that slot. An extension
+that appears early keeps its existing position. Every other source byte is
+copied verbatim. Publication uses the same fully written and synced
 same-directory temporary file, existing-file atomic replacement, exact-byte
 read-back, and recovery mapping as transition.
 
 Before publication, the parsed candidate must exactly equal the complete
-requested successor and the complete proposed ledger must validate.
+requested successor, including operator and provenance extension members.
+Unchanged root nodes and all extension nodes must retain exact source identity.
+Every byte outside the serializer's declared edit ranges must equal the source,
+including prior decisions and the body. The complete proposed ledger must also
+validate.
 
 Patch and transition return unsafe-yaml-mutation, exit 2, and unchanged when a
 changed field contains an anchor that an alias outside that field references.
@@ -886,7 +894,9 @@ Changing only the pair bytes would otherwise change the decoded value of an
 unmodified field. They also return this error when decisions is an alias,
 because detaching it would copy or rewrite prior decision evidence. The exact
 message is "The mutation cannot safely edit YAML whose alias semantics cross an
-edited byte range." Details contain exactly id, path, field, and reason.
+edited byte range. Hand-edit the item at details.path to remove the cross-field
+anchor or alias, run validate, then retry." Details contain exactly id, path,
+field, and reason.
 reason is anchor-referenced-outside-field or decisions-alias. Comments, tags,
 unrelated anchors and aliases, and unreferenced anchors do not cause refusal.
 

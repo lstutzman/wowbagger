@@ -81,6 +81,76 @@ test('transition reports a serializer programming error as operation-failed', as
   });
 });
 
+test('patch and transition refuse a serialized candidate that rewrites extension bytes', async () => {
+  for (const command of ['patch', 'transition']) {
+    const source = triageSource().replace('related: []\n', 'related: []\noperator_note: "stable"\n');
+    await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+      const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+      const revision = JSON.parse(inspected.stdout).result.item.revision;
+      const requestPath = path.join(path.dirname(ledger), `${command}.json`);
+      const request = command === 'patch'
+        ? {
+            id,
+            expected_revision: revision,
+            patch: { title: 'Keep extension bytes exact' },
+            date: '2030-01-16',
+            decision: {
+              summary: 'Exercise the patch candidate guard.',
+              rationale: 'A presentation-only extension rewrite must refuse publication.',
+            },
+          }
+        : transitionRequest(revision);
+      await writeFile(requestPath, JSON.stringify(request));
+
+      const result = runScenario('candidate-rewrites-extension',
+        command, '--ledger', ledger, '--input', requestPath, '--json');
+      const output = JSON.parse(result.stdout);
+
+      assert.equal(result.status, 2, `${command}: ${result.stderr}\n${result.stdout}`);
+      assert.equal(output.state, 'unchanged', command);
+      assert.equal(output.error.code, 'candidate-invalid', command);
+      assert.deepEqual(output.error.details.validation_errors, [{
+        path: `ledger/${id}.md`,
+        field: 'frontmatter',
+        code: 'mutation-successor-mismatch',
+        message: 'Serialized frontmatter does not exactly match the requested successor.',
+      }], command);
+      assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source, command);
+      await assertNoMutationArtifacts(ledger);
+    });
+  }
+});
+
+test('candidate guard rejects wrong successor data for patch and transition', async () => {
+  for (const command of ['patch', 'transition']) {
+    await assertCandidateGuardRefusal('candidate-wrong-successor-data', triageSource(), command);
+  }
+});
+
+test('candidate guard rejects an unchanged controlled-field presentation rewrite', async () => {
+  const source = triageSource().replace('related: []', 'related: [ ]');
+  for (const command of ['patch', 'transition']) {
+    await assertCandidateGuardRefusal('candidate-rewrites-unchanged-root', source, command);
+  }
+});
+
+test('candidate guard rejects a provenance extension rewrite in a misclassified range', async () => {
+  const source = triageSource().replace(
+    '  recorded_at: "2030-01-14T12:00:00Z"',
+    '  recorded_at: "2030-01-14T12:00:00Z"\n  operator_detail: "stable"',
+  );
+  for (const command of ['patch', 'transition']) {
+    await assertCandidateGuardRefusal('candidate-rewrites-provenance-extension', source, command);
+  }
+});
+
+test('candidate guard rejects bytes changed outside every YAML node range', async () => {
+  const source = triageSource().replace('related: []\n---', 'related: []\n\n---');
+  for (const command of ['patch', 'transition']) {
+    await assertCandidateGuardRefusal('candidate-rewrites-unclaimed-bytes', source, command);
+  }
+});
+
 test('create classifies an applied-then-error link from the final bytes', async () => {
   await withLedger({}, async (ledger) => {
     const requestPath = await writeCreateRequest(ledger);
@@ -210,6 +280,38 @@ function runScenario(scenario, ...argumentsList) {
   return spawnSync(process.execPath, [runner, ...argumentsList], {
     encoding: 'utf8',
     env: { ...process.env, WOWBAGGER_TEST_SCENARIO: scenario },
+  });
+}
+
+async function assertCandidateGuardRefusal(scenario, source, command) {
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), `${scenario}-${command}.json`);
+    const request = command === 'patch'
+      ? {
+          id,
+          expected_revision: revision,
+          patch: { title: 'Guard target title' },
+          date: '2030-01-16',
+          decision: {
+            summary: 'Exercise the candidate guard.',
+            rationale: 'A corrupted serialized candidate must remain unpublished.',
+          },
+        }
+      : transitionRequest(revision);
+    await writeFile(requestPath, JSON.stringify(request));
+
+    const result = runScenario(scenario,
+      command, '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, `${command}: ${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'unchanged', command);
+    assert.equal(output.error.code, 'candidate-invalid', command);
+    assert.equal(output.error.details.validation_errors[0].code, 'mutation-successor-mismatch', command);
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source, command);
+    await assertNoMutationArtifacts(ledger);
   });
 }
 

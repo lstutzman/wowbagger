@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "candidate-invalid",
+    "message": "The proposed item would make the ledger invalid.",
+    "details": {
+      "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+      "validation_errors": [
+        {
+          "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+          "field": "frontmatter",
+          "code": "mutation-successor-mismatch",
+          "message": "Serialized frontmatter does not exactly match the requested successor."
+        }
+      ]
+    }
+  }
+}

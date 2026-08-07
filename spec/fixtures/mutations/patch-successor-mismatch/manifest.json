@@ -1,0 +1,19 @@
+{
+  "case": "patch-candidate-invalid-successor-mismatch",
+  "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "candidate-rewrites-extension",
+  "expected": {
+    "exit": 2,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "sha256": "sha256:e242ef665bef2cdc787200ec68eadfa25b614e6f39f07afd879143adb2ed274c"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "sha256": "sha256:e242ef665bef2cdc787200ec68eadfa25b614e6f39f07afd879143adb2ed274c"}
+      ]
+    }
+  }
+}
