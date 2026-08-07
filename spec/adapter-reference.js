@@ -596,7 +596,7 @@ export function validateInstructionInput(input, limits) {
       || !SAFE_ID.test(source.source_id)
       || !ORIGIN_PRECEDENCE.has(source.origin)
       || source.content_encoding !== 'base64'
-      || !DIGEST.test(source.sha256)
+      || !isDigestToken(source.sha256)
       || !Number.isSafeInteger(source.byte_length)
       || source.byte_length < 0
       || ('logical_path' in source && !isSafeLogicalPath(source.logical_path))) {
@@ -650,7 +650,7 @@ export function validateHandoffCarrier(carrier, options) {
     || carrier.content_encoding !== 'base64'
     || !Number.isSafeInteger(carrier.byte_length)
     || carrier.byte_length < 0
-    || !DIGEST.test(carrier.sha256)) {
+    || !isDigestToken(carrier.sha256)) {
     return refusal('invalid-handoff-carrier', {});
   }
   if (carrier.workspace_id !== options.workspace_id) {
@@ -658,9 +658,9 @@ export function validateHandoffCarrier(carrier, options) {
   }
   if (!hasExactKeys(carrier.resume_request,
     ['item_id', 'expected_revision', 'instruction_set_digest'])
-    || !WOWBAGGER_ID.test(carrier.resume_request.item_id)
-    || !DIGEST.test(carrier.resume_request.expected_revision)
-    || !DIGEST.test(carrier.resume_request.instruction_set_digest)) {
+    || !isCanonicalId(carrier.resume_request.item_id)
+    || !isDigestToken(carrier.resume_request.expected_revision)
+    || !isDigestToken(carrier.resume_request.instruction_set_digest)) {
     return refusal('invalid-handoff-resume-request', {});
   }
   const bytes = decodeCanonicalBase64(carrier.content_base64);
@@ -674,10 +674,10 @@ export function validateHandoffCarrier(carrier, options) {
   if (!hasExactKeys(handoff,
     ['handoff_version', 'workspace_id', 'instruction_set_digest', 'item'])
     || handoff.handoff_version !== 1
-    || !DIGEST.test(handoff.instruction_set_digest)
+    || !isDigestToken(handoff.instruction_set_digest)
     || !hasExactKeys(handoff.item, ['id', 'revision'])
-    || !WOWBAGGER_ID.test(handoff.item.id)
-    || !DIGEST.test(handoff.item.revision)) {
+    || !isCanonicalId(handoff.item.id)
+    || !isDigestToken(handoff.item.revision)) {
     return refusal('invalid-handoff-object', {});
   }
   if (handoff.workspace_id !== options.workspace_id
@@ -914,8 +914,8 @@ export async function invokeAdapter(requestBytes, runtime) {
     core_request: request.core_request,
     mutation_request: mutationRequest,
     mutation_input: coreInput,
-    item_id: WOWBAGGER_ID.test(mutationRequest?.id) ? mutationRequest.id : null,
-    expected_revision: DIGEST.test(mutationRequest?.expected_revision)
+    item_id: isCanonicalId(mutationRequest?.id) ? mutationRequest.id : null,
+    expected_revision: isDigestToken(mutationRequest?.expected_revision)
       ? mutationRequest.expected_revision
       : null,
     stdout_limit_bytes: request.limits.stdout_bytes,
@@ -948,7 +948,7 @@ export function validateHandoffResume({
 }) {
   if (handoffBytes.length > maxBytes) return refusal('handoff-limit-exceeded', {});
   if (sha256(handoffBytes) !== handoffDigest) return refusal('handoff-digest-mismatch', {});
-  if (!WOWBAGGER_ID.test(resumeRequest?.item_id)) {
+  if (!isCanonicalId(resumeRequest?.item_id)) {
     return refusal('invalid-handoff-resume-request', {});
   }
   if (resumeRequest.instruction_set_digest !== current.instruction_set_digest) {
@@ -1010,7 +1010,7 @@ function coreRequestSchemaIssue(value) {
         ? null : 'core_request';
     case 'inspect':
       return hasExactKeys(value, ['command', 'ledger', 'id'])
-        && isSafeLogicalPath(value.ledger) && WOWBAGGER_ID.test(value.id)
+        && isSafeLogicalPath(value.ledger) && isCanonicalId(value.id)
         ? null : 'core_request';
     case 'create':
     case 'patch':
@@ -1406,7 +1406,7 @@ function validInvocationBinding(value) {
     || !Number.isSafeInteger(value.adapter.contract_version)) return false;
   if (!hasExactKeys(value.core,
     ['executable_identity', 'contract_version', 'argv', 'input_base64'])
-    || !DIGEST.test(value.core.executable_identity)
+    || !isDigestToken(value.core.executable_identity)
     || !Number.isSafeInteger(value.core.contract_version)
     || !Array.isArray(value.core.argv)
     || !value.core.argv.every((argument) => typeof argument === 'string')
@@ -1416,8 +1416,8 @@ function validInvocationBinding(value) {
   if (!hasExactKeys(value.limits, ['context_bytes', 'stdout_bytes', 'stderr_bytes', 'timeout_ms'])
     || !Object.values(value.limits).every((member) => Number.isSafeInteger(member) && member >= 0)
     || value.limits.timeout_ms < 1) return false;
-  return DIGEST.test(value.instruction_set_digest)
-    && (value.handoff_digest === null || DIGEST.test(value.handoff_digest));
+  return isDigestToken(value.instruction_set_digest)
+    && (value.handoff_digest === null || isDigestToken(value.handoff_digest));
 }
 
 function approvalSchemaError(value) {
@@ -1427,7 +1427,7 @@ function approvalSchemaError(value) {
   if (value.approval_version !== 1) return 'approval_version';
   if (typeof value.source !== 'string') return 'source';
   if (!NONCE.test(value.nonce)) return 'nonce';
-  if (!DIGEST.test(value.invocation_digest)) return 'invocation_digest';
+  if (!isDigestToken(value.invocation_digest)) return 'invocation_digest';
   if (!RFC3339.test(value.issued_at) || !validCanonicalTime(value.issued_at)) return 'issued_at';
   if (!RFC3339.test(value.expires_at) || !validCanonicalTime(value.expires_at)) return 'expires_at';
   return null;
@@ -1533,7 +1533,7 @@ function validCoreItemShape(value) {
     'parent', 'snoozed_until', 'completed', 'killed', 'archived', 'decisions',
   ])) return false;
   if (!isSafeLedgerDisplayPath(value.path)
-    || !DIGEST.test(value.revision)
+    || !isDigestToken(value.revision)
     || value.source_encoding !== 'base64'
     || value.source_media_type !== 'text/markdown; charset=utf-8'
     || typeof value.body !== 'string'
@@ -1553,7 +1553,7 @@ function validCoreItemShape(value) {
 function validCoreView(value) {
   if (!plainObject(value)
     || value.schema_version !== 1
-    || !WOWBAGGER_ID.test(value.id)
+    || !isCanonicalId(value.id)
     || !nonEmptyTrimmedString(value.title)
     || !new Set(['task', 'epic']).has(value.kind)
     || !new Set(['triage', 'backlog', 'in-progress', 'done', 'killed', 'archived']).has(value.status)
@@ -1567,7 +1567,7 @@ function validCoreView(value) {
     || !validCoreRelationList(value.related)) return false;
 
   for (const field of ['parent']) {
-    if (Object.hasOwn(value, field) && !WOWBAGGER_ID.test(value[field])) return false;
+    if (Object.hasOwn(value, field) && !isCanonicalId(value[field])) return false;
   }
   for (const field of ['snoozed_until', 'completed', 'killed', 'archived']) {
     if (Object.hasOwn(value, field) && !isCalendarDate(value[field])) return false;
@@ -1578,7 +1578,7 @@ function validCoreView(value) {
 
 function validCoreRelationList(value) {
   return Array.isArray(value)
-    && value.every((id) => WOWBAGGER_ID.test(id))
+    && value.every((id) => isCanonicalId(id))
     && new Set(value).size === value.length;
 }
 
@@ -1605,7 +1605,7 @@ function validCoreDecisions(value) {
     if (!Object.hasOwn(decision, 'rollup')) return true;
     return Array.isArray(decision.rollup)
       && decision.rollup.every((entry) => hasExactKeys(entry, ['id', 'status'])
-        && WOWBAGGER_ID.test(entry.id)
+        && isCanonicalId(entry.id)
         && new Set(['done', 'killed']).has(entry.status));
   });
 }
@@ -1864,45 +1864,45 @@ function validCoreErrorDetails(code, details, command, responseContext) {
     case 'invalid-request': return !hasCanonicalMutationRequest(responseContext, command)
       && validInvalidRequestDetails(details);
     case 'item-not-found': return hasExactKeys(details, ['id'])
-      && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id);
+      && isCanonicalId(details.id) && matchesItemId(details.id);
     case 'ledger-invalid': return hasExactKeys(details, ['validation_errors'])
       && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
     case 'transition-precondition-failed': return hasExactKeys(details, ['id', 'issues'])
-      && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+      && isCanonicalId(details.id) && matchesItemId(details.id)
       && validTransitionIssues(details.issues) && details.issues.length > 0;
     case 'candidate-invalid': return hasExactKeys(details, ['id', 'validation_errors'])
-      && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+      && isCanonicalId(details.id) && matchesItemId(details.id)
       && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
     case 'unsafe-yaml-mutation': return hasExactKeys(details, ['id', 'path', 'field', 'reason'])
-      && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+      && isCanonicalId(details.id) && matchesItemId(details.id)
       && isSafeLedgerDisplayPath(details.path)
       && ['status', 'updated', 'completed', 'killed', 'archived', 'decisions',
         'priority', 'number', 'parent', 'depends_on', 'title'].includes(details.field)
       && ['anchor-referenced-outside-field', 'decisions-alias'].includes(details.reason);
     case 'revision-conflict': return hasExactKeys(details, [
       'id', 'expected_revision', 'actual_revision',
-    ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
-      && DIGEST.test(details.expected_revision) && DIGEST.test(details.actual_revision)
+    ]) && isCanonicalId(details.id) && matchesItemId(details.id)
+      && isDigestToken(details.expected_revision) && isDigestToken(details.actual_revision)
       && details.actual_revision !== details.expected_revision
       && (expectedRevision === undefined || details.expected_revision === expectedRevision);
     case 'lock-held': return validLockHeldDetails(details) && matchesItemId(details.id);
     case 'id-collision': return hasExactKeys(details, ['id', 'path', 'actual_revision'])
-      && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+      && isCanonicalId(details.id) && matchesItemId(details.id)
       && isSafeLedgerDisplayPath(details.path)
-      && DIGEST.test(details.actual_revision);
+      && isDigestToken(details.actual_revision);
     case 'path-collision': return validPathCollisionDetails(details) && matchesItemId(details.id)
       && (command !== 'create' || expectedItemId === undefined
         || details.path === `${expectedItemId}.md`);
     case 'atomic-scope-required': return hasExactKeys(details, [
       'id', 'blockers', 'precondition_issues',
-    ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+    ]) && isCanonicalId(details.id) && matchesItemId(details.id)
       && validTransitionBlockers(details.blockers)
       && validTransitionIssues(details.precondition_issues);
     case 'capability-unavailable': return validCapabilityUnavailableDetails(details);
     case 'operation-failed': return validOperationFailedDetails(details) && matchesItemId(details.id);
     case 'post-commit-recovery-required': return hasExactKeys(details, [
       'id', 'revision', 'recovery_artifacts', 'recovery_artifacts_truncated',
-    ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id) && DIGEST.test(details.revision)
+    ]) && isCanonicalId(details.id) && matchesItemId(details.id) && isDigestToken(details.revision)
       && (command !== 'create' || expectedCreateRevision === undefined
         || details.revision === expectedCreateRevision)
       && ((command !== 'patch' && command !== 'transition')
@@ -1910,7 +1910,7 @@ function validCoreErrorDetails(code, details, command, responseContext) {
       && validRecoveryArtifacts(details.recovery_artifacts, details.recovery_artifacts_truncated);
     case 'write-outcome-unknown': return hasExactKeys(details, [
       'id', 'recovery_artifacts', 'recovery_artifacts_truncated',
-    ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+    ]) && isCanonicalId(details.id) && matchesItemId(details.id)
       && validRecoveryArtifacts(details.recovery_artifacts, details.recovery_artifacts_truncated);
     default: return false;
   }
@@ -1951,17 +1951,17 @@ function responseItemId(responseContext, command) {
   if (command === 'inspect') {
     const coreRequest = responseCoreRequest(responseContext, command);
     if (coreRequest === undefined) return undefined;
-    return WOWBAGGER_ID.test(coreRequest?.id) ? coreRequest.id : null;
+    return isCanonicalId(coreRequest?.id) ? coreRequest.id : null;
   }
   const mutationRequest = responseMutationRequest(responseContext, command);
   if (mutationRequest === undefined) return undefined;
-  return WOWBAGGER_ID.test(mutationRequest?.id) ? mutationRequest.id : null;
+  return isCanonicalId(mutationRequest?.id) ? mutationRequest.id : null;
 }
 
 function responseExpectedRevision(responseContext, command) {
   const mutationRequest = responseMutationRequest(responseContext, command);
   if (mutationRequest === undefined) return undefined;
-  return (command === 'patch' || command === 'transition') && DIGEST.test(mutationRequest?.expected_revision)
+  return (command === 'patch' || command === 'transition') && isDigestToken(mutationRequest?.expected_revision)
     ? mutationRequest.expected_revision
     : null;
 }
@@ -2013,10 +2013,22 @@ const CREATE_CONTROLLED_MEMBERS = [
   'killed', 'archived', 'decisions', 'body', 'priority', 'number',
 ];
 
+// RegExp.test coerces its argument, so a one-element array stringifies to its
+// element and passes an anchored pattern. Every id and digest here is read from
+// caller-supplied JSON, so the type check belongs inside the predicate rather
+// than at each call site — one of these was missed twice in consecutive rounds.
+function isCanonicalId(value) {
+  return typeof value === 'string' && WOWBAGGER_ID.test(value);
+}
+
+function isDigestToken(value) {
+  return typeof value === 'string' && DIGEST.test(value);
+}
+
 function validCreateMutationRequest(request) {
   if (!plainObject(request)
     || !hasExactKeys(request, ['id', 'item', 'body'])
-    || typeof request.id !== 'string' || !WOWBAGGER_ID.test(request.id)
+    || !isCanonicalId(request.id)
     || typeof request.body !== 'string'
     || !plainObject(request.item)) return false;
   const item = request.item;
@@ -2028,20 +2040,19 @@ function validCreateMutationRequest(request) {
     || item.provenance.source.trim().length === 0
     || !isCoreRfc3339Utc(item.provenance.recorded_at)) return false;
   if (!Array.isArray(item.depends_on)
-    || !item.depends_on.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry))) return false;
+    || !item.depends_on.every((entry) => typeof entry === 'string' && isCanonicalId(entry))) return false;
   if (Object.hasOwn(item, 'related')
     && (!Array.isArray(item.related)
-      || !item.related.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry)))) return false;
-  if (Object.hasOwn(item, 'parent')
-    && (typeof item.parent !== 'string' || !WOWBAGGER_ID.test(item.parent))) return false;
+      || !item.related.every((entry) => typeof entry === 'string' && isCanonicalId(entry)))) return false;
+  if (Object.hasOwn(item, 'parent') && !isCanonicalId(item.parent)) return false;
   if (Object.hasOwn(item, 'snoozed_until') && !isCalendarDate(item.snoozed_until)) return false;
   return true;
 }
 
 function validPatchMutationRequest(request) {
   if (!hasExactKeys(request, ['id', 'expected_revision', 'patch', 'date', 'decision'])
-    || !WOWBAGGER_ID.test(request.id)
-    || !DIGEST.test(request.expected_revision)
+    || !isCanonicalId(request.id)
+    || !isDigestToken(request.expected_revision)
     || !isCalendarDate(request.date)
     || !hasExactKeys(request.decision, ['summary', 'rationale'])
     || typeof request.decision.summary !== 'string'
@@ -2057,10 +2068,10 @@ function validPatchMutationRequest(request) {
   if (Object.hasOwn(request.patch, 'number')
     && !validOptionalJsonInteger(request.patch.number, 1)) return false;
   if (Object.hasOwn(request.patch, 'parent') && request.patch.parent !== null
-    && (typeof request.patch.parent !== 'string' || !WOWBAGGER_ID.test(request.patch.parent))) return false;
+    && (typeof request.patch.parent !== 'string' || !isCanonicalId(request.patch.parent))) return false;
   if (Object.hasOwn(request.patch, 'depends_on')
     && (!Array.isArray(request.patch.depends_on)
-      || !request.patch.depends_on.every((id) => typeof id === 'string' && WOWBAGGER_ID.test(id)))) return false;
+      || !request.patch.depends_on.every((id) => typeof id === 'string' && isCanonicalId(id)))) return false;
   return !Object.hasOwn(request.patch, 'title')
     || (typeof request.patch.title === 'string' && request.patch.title.trim().length > 0);
 }
@@ -2227,7 +2238,7 @@ function validTransitionBlockers(value) {
   for (const [index, blocker] of value.entries()) {
     if (!hasExactKeys(blocker, ['code', 'item_id', 'field'])
       || !Object.hasOwn(TRANSITION_BLOCKER_FIELDS, blocker.code)
-      || !WOWBAGGER_ID.test(blocker.item_id)
+      || !isCanonicalId(blocker.item_id)
       || blocker.field !== TRANSITION_BLOCKER_FIELDS[blocker.code]
       || (index > 0 && compareTransitionBlockers(value[index - 1], blocker) > 0)) return false;
     const key = `${blocker.code}\0${blocker.item_id}\0${blocker.field}`;
@@ -2245,7 +2256,7 @@ function compareTransitionBlockers(left, right) {
 
 function validLockHeldDetails(value) {
   if (!hasExactKeys(value, ['id', 'lock_path', 'owner', 'owner_diagnostic'])
-    || !WOWBAGGER_ID.test(value.id)
+    || !isCanonicalId(value.id)
     || value.lock_path !== `.wowbagger-locks/${value.id}.lock`) return false;
   const diagnostics = new Set(['too-large', 'invalid-utf8', 'duplicate-key', 'invalid-json', 'invalid-shape']);
   if (value.owner === null) return diagnostics.has(value.owner_diagnostic);
@@ -2261,11 +2272,11 @@ function validLockHeldDetails(value) {
 
 function validPathCollisionDetails(value) {
   if (!hasExactKeys(value, ['id', 'path', 'occupant_kind'], ['occupying_id'])
-    || !WOWBAGGER_ID.test(value.id)
+    || !isCanonicalId(value.id)
     || !isSafeLedgerDisplayPath(value.path)
     || !new Set(['item', 'directory']).has(value.occupant_kind)) return false;
   return value.occupant_kind === 'item'
-    ? Object.hasOwn(value, 'occupying_id') && WOWBAGGER_ID.test(value.occupying_id)
+    ? Object.hasOwn(value, 'occupying_id') && isCanonicalId(value.occupying_id)
     : !Object.hasOwn(value, 'occupying_id');
 }
 
@@ -2280,7 +2291,7 @@ function validCapabilityUnavailableDetails(value) {
 function validOperationFailedDetails(value) {
   if (!hasExactKeys(value, [
     'id', 'operation', 'reason', 'recovery_artifacts', 'recovery_artifacts_truncated',
-  ]) || !WOWBAGGER_ID.test(value.id)
+  ]) || !isCanonicalId(value.id)
     || !new Set([
       'lock-closure', 'prepare-temporary', 'sync-temporary', 'publish',
       'verify-publication', 'cleanup', 'serialize-candidate',
@@ -2301,7 +2312,7 @@ function validRecoveryArtifacts(value, truncated) {
     if (!hasExactKeys(artifact, ['path', 'kind', 'sha256', 'size_bytes'])
       || !isSafeArtifactPath(artifact.path)
       || !new Set(['temporary-file', 'lock-file', 'final-item']).has(artifact.kind)) return false;
-    const readable = DIGEST.test(artifact.sha256) && nonNegativeSafeInteger(artifact.size_bytes);
+    const readable = isDigestToken(artifact.sha256) && nonNegativeSafeInteger(artifact.size_bytes);
     if (!readable && !(artifact.sha256 === null && artifact.size_bytes === null)) return false;
     const key = artifact.path;
     if (seen.has(key)) return false;
@@ -2316,7 +2327,7 @@ function compareRecoveryArtifacts(left, right) {
 
 function validSortedUniqueIds(value) {
   return Array.isArray(value)
-    && value.every((id) => WOWBAGGER_ID.test(id))
+    && value.every((id) => isCanonicalId(id))
     && new Set(value).size === value.length
     && value.every((id, index) => index === 0 || value[index - 1] < id);
 }

@@ -52,12 +52,9 @@ MUTATIONS = [
 def run_suite():
     """Return (passed, assertions_ran).
 
-    A mutation must be caught by an ASSERTION, not by breaking the build. A
-    syntax error or a module that fails to load also produces a non-zero exit,
-    and scoring that as 'caught' would certify a guard nothing actually tests.
-    So we require a summary AND that the reported test total is unchanged from
-    the baseline: if the mutation stopped tests from running, that is a broken
-    harness, not a proven guard."""
+    Both the test total and the fail count must be reported. A run that gives
+    neither has not told us whether anything failed, and guessing would score a
+    guard on nothing."""
     run = subprocess.run(
         ['node', '--test'] + sorted(glob.glob(os.path.join(ROOT, 'test', '*.test.js'))),
         capture_output=True, text=True, cwd=ROOT,
@@ -105,18 +102,22 @@ def main():
                 continue
             with open(TARGET, 'w', encoding='utf-8') as target:
                 target.write(original.replace(needle, replacement))
+            # A mutation must be caught by an ASSERTION, never by breaking the
+            # build: a file that will not parse also fails the suite, and
+            # scoring that as caught certifies a guard nothing tests. Checking
+            # the syntax first rules that out by construction, so any failure
+            # after it came from a test.
+            parses = subprocess.run(['node', '--check', TARGET],
+                                    capture_output=True, text=True, cwd=ROOT).returncode == 0
             green, total = run_suite()
-            if total is None:
+            if not parses:
+                verdict = 'INVALID MUTATION — the mutated source does not parse'
+            elif total is None:
                 verdict = 'NO SUMMARY — the mutated tree did not run'
-            elif green and total != baseline_total:
-                # Green but a different total means tests vanished without any
-                # failing — the mutation broke the harness rather than tripping
-                # a guard. A caught mutation may legitimately lower the total,
-                # because a failing subtest can stop its siblings from running.
-                verdict = (f'BROKE THE HARNESS — {total} tests ran, baseline {baseline_total}, '
-                           'and nothing failed')
             elif green:
                 verdict = 'NOT CAUGHT — no test covers this guard'
+            elif total == '0':
+                verdict = 'NO TESTS RAN — the mutation stopped the suite'
             else:
                 verdict = 'caught'
             results.append((label, verdict))
