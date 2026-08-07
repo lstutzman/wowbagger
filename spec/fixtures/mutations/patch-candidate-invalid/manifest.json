@@ -1,5 +1,5 @@
 {
-  "case": "patch-candidate-invalid-commented-frontmatter",
+  "case": "patch-candidate-invalid-unresolved-parent",
   "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
   "input": {"transport": "file", "path": "request.json"},
   "scenario": "normal",

@@ -244,7 +244,7 @@ test('transition preserves extension comments, anchors, aliases, and hostile key
   });
 });
 
-test('transition preserves aliases to changing controlled anchors without changing independent extensions', async () => {
+test('transition refuses changing controlled anchors referenced by extension aliases', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
   const cases = [
     {
@@ -252,16 +252,14 @@ test('transition preserves aliases to changing controlled anchors without changi
       status: 'status: &workflow_status triage',
       updated: 'updated: 2030-01-14',
       alias: 'status_mirror: *workflow_status',
-      aliasField: 'status_mirror',
-      expected: 'backlog',
+      field: 'status',
     },
     {
       name: 'updated anchor',
       status: 'status: triage',
       updated: 'updated: &workflow_updated 2030-01-14',
       alias: 'updated_mirror: *workflow_updated',
-      aliasField: 'updated_mirror',
-      expected: '2030-01-16',
+      field: 'updated',
     },
   ];
 
@@ -305,21 +303,21 @@ test('transition preserves aliases to changing controlled anchors without changi
       }));
 
       const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
-      assert.equal(result.status, 0, `${scenario.name}: ${result.stderr}\n${result.stdout}`);
-      const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
-      const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
-      const data = document.toJS();
-      assert.match(rewritten, new RegExp(`\\*workflow_${scenario.aliasField.replace('_mirror', '')}`));
-      assert.equal(data[scenario.aliasField], scenario.expected, scenario.name);
-      assert.equal(document.get('extension_anchor', true).anchor, 'independent');
-      assert.equal(document.get('extension_alias', true).source, 'independent');
-      assert.deepEqual(data.extension_anchor, { label: 'stable' });
-      assert.deepEqual(data.extension_alias, { label: 'stable' });
+      const output = JSON.parse(result.stdout);
+      assert.equal(result.status, 2, `${scenario.name}: ${result.stderr}\n${result.stdout}`);
+      assert.equal(output.error.code, 'unsafe-yaml-mutation', scenario.name);
+      assert.deepEqual(output.error.details, {
+        id,
+        path: `ledger/${id}.md`,
+        field: scenario.field,
+        reason: 'anchor-referenced-outside-field',
+      });
+      assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source, scenario.name);
     });
   }
 });
 
-test('transition appends to direct and aliased controlled decision sequences without mutating extensions', async () => {
+test('transition appends to direct decisions but refuses an aliased decisions sequence', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
   const priorDecision = [
     '  - action: accept',
@@ -331,6 +329,7 @@ test('transition appends to direct and aliased controlled decision sequences wit
     {
       name: 'direct sequence',
       decisionSource: ['decisions:', ...priorDecision],
+      refusal: false,
       assertExtensions() {},
     },
     {
@@ -341,6 +340,7 @@ test('transition appends to direct and aliased controlled decision sequences wit
         'shared_decisions_alias: *shared_decisions',
         'decisions: *shared_decisions',
       ],
+      refusal: true,
       assertExtensions(document, data) {
         const shared = document.get('shared_decisions', true);
         const sharedAlias = document.get('shared_decisions_alias', true);
@@ -390,8 +390,21 @@ test('transition appends to direct and aliased controlled decision sequences wit
       }));
 
       const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
-      assert.equal(result.status, 0, `${scenario.name}: ${result.stderr}\n${result.stdout}`);
       const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+      if (scenario.refusal) {
+        const output = JSON.parse(result.stdout);
+        assert.equal(result.status, 2, `${scenario.name}: ${result.stderr}\n${result.stdout}`);
+        assert.equal(output.error.code, 'unsafe-yaml-mutation');
+        assert.deepEqual(output.error.details, {
+          id,
+          path: `ledger/${id}.md`,
+          field: 'decisions',
+          reason: 'decisions-alias',
+        });
+        assert.equal(rewritten, source);
+        return;
+      }
+      assert.equal(result.status, 0, `${scenario.name}: ${result.stderr}\n${result.stdout}`);
       const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
       const data = document.toJS();
       const decisions = document.get('decisions', true);
@@ -399,6 +412,7 @@ test('transition appends to direct and aliased controlled decision sequences wit
       assert.equal(isSeq(decisions), true, scenario.name);
       assert.equal(decisions.items.length, 2, scenario.name);
       assert.equal(data.decisions.at(-1).summary, 'Append only to controlled decisions.', scenario.name);
+      assert.ok(rewritten.includes(priorDecision.join('\n')), rewritten);
       scenario.assertExtensions(document, data);
     });
   }

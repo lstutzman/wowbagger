@@ -12,13 +12,13 @@ provenance:
   recorded_at: "2030-01-14T12:00:00Z"
 depends_on: []
 related: []
-fictional_extension:
-  exact_integer: 900719925474099399999
 decisions:
   - action: complete
     date: 2030-01-16
     summary: "Complete the fictional aurora index."
     rationale: "The isolated fictional acceptance evidence is complete."
+fictional_extension:
+  exact_integer: 900719925474099399999
 ---
 
 The task can finish without changing another item.

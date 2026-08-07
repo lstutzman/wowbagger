@@ -151,7 +151,7 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or candidate/lifecycle-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, candidate-invalid |
+| 2 | Argument, request, lookup, candidate/lifecycle-precondition, or unsafe YAML mutation failure. | invalid-request, item-not-found, transition-precondition-failed, candidate-invalid, unsafe-yaml-mutation |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
@@ -640,12 +640,19 @@ for the fields listed in section 8A.
 
 ### Lossless preservation
 
-Transition preserves body bytes exactly. It preserves every permitted extension
-YAML node, including tags, aliases, mapping structure, scalar precision, and
-extra provenance members, without coercing it through the normalized core JSON
-view. The implementation may reserialize controlled core frontmatter, but must
-retain extension semantics and must not drop extension nodes or comments
-attached to them.
+Transition locates each changed root key/value pair from the parsed YAML source
+ranges and splices only those byte ranges. A removed field loses its complete
+pair range and line terminator. A new terminal field is inserted after updated.
+A missing decisions block is inserted before the first extension field. Every
+byte outside those edits is copied from the original source without
+serialization. This includes comments, tags, anchors, aliases, blank lines,
+flow spacing, indentation, key order, scalar spelling, extension data, and the
+body.
+
+Appending a decision inserts one newly serialized sequence item after the last
+existing item. It does not serialize any prior decision item. Existing decision
+bytes are therefore append-only evidence. A missing decisions field inserts a
+new block at the controlled-metadata boundary before the first extension field.
 
 The successful response exposes the new complete source_base64 and revision, so
 the caller can verify the exact rewritten bytes.
@@ -862,24 +869,26 @@ atomic-scope-required, exit 5, and unchanged, with a `child-disposition`
 blocker for each affected done epic and an empty precondition_issues array.
 Patch never silently updates another item.
 
-Patch preserves body bytes and every unpatched frontmatter field under the
-lossless rules in section 8. Publication uses the same fully written and synced
+Patch uses the same source-range splice rules as transition. It replaces only
+the named patch field pairs, the derived updated pair, and the new decision
+insertion. A removed pair includes its line terminator. A newly present patch
+field is inserted in schema field order before decisions and before the first
+extension field. Every other source byte is copied verbatim. Publication uses the same fully written and synced
 same-directory temporary file, existing-file atomic replacement, exact-byte
 read-back, and recovery mapping as transition.
 
 Before publication, the parsed candidate must exactly equal the complete
-requested successor. Every root node other than the named patch fields and the
-derived updated and decisions fields must retain identical YAML node identity.
+requested successor and the complete proposed ledger must validate.
 
-Before any patch serialization, Wowbagger walks the complete parsed
-frontmatter document at every depth, including document metadata, mapping keys,
-mapping values, and sequence items. If any node carries a comment or anchor, or
-any node is an alias, patch returns candidate-invalid with state unchanged and
-does not serialize. This is a total precondition even when the YAML is outside
-the requested field or could be rewritten losslessly. Its refusal message says
-that the item carries YAML patch will not rewrite and that the field must be
-hand-edited. This permanent refusal is distinct from a retryable candidate
-validation failure.
+Patch and transition return unsafe-yaml-mutation, exit 2, and unchanged when a
+changed field contains an anchor that an alias outside that field references.
+Changing only the pair bytes would otherwise change the decoded value of an
+unmodified field. They also return this error when decisions is an alias,
+because detaching it would copy or rewrite prior decision evidence. The exact
+message is "The mutation cannot safely edit YAML whose alias semantics cross an
+edited byte range." Details contain exactly id, path, field, and reason.
+reason is anchor-referenced-outside-field or decisions-alias. Comments, tags,
+unrelated anchors and aliases, and unreferenced anchors do not cause refusal.
 
 ## 9. Errors, artifacts, and recovery
 
@@ -892,6 +901,7 @@ validation failure.
 | ledger-invalid | validation_errors |
 | transition-precondition-failed | id, issues |
 | candidate-invalid | id, validation_errors |
+| unsafe-yaml-mutation | id, path, field, reason |
 | revision-conflict | id, expected_revision, actual_revision |
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
@@ -904,8 +914,11 @@ validation failure.
 
 ledger-invalid and candidate-invalid validation_errors are exactly the
 deterministic SPEC.md error sequence for the current or proposed ledger,
-respectively. Error messages are stable human summaries; automation branches
-on code, mutation state, and documented details.
+respectively. candidate-invalid always has the exact message "The proposed item
+would make the ledger invalid." unsafe-yaml-mutation is the permanent source
+representation refusal above and never uses validation_errors. Error messages
+are stable human summaries; automation branches on code, mutation state, and
+documented details.
 
 ### Recovery artifact shape
 
@@ -938,15 +951,21 @@ operation-failed is a mutation-only error. operation is exactly one of:
 - sync-temporary;
 - publish;
 - verify-publication; or
-- cleanup.
+- cleanup; or
+- serialize-candidate.
 
-reason is exactly retry-limit-exhausted, io-error, or verification-failed.
+reason is exactly retry-limit-exhausted, io-error, verification-failed, or
+internal-error.
 retry-limit-exhausted is used only with lock-closure. verification-failed is
 used only when verification proves the expected publication is absent for
 create or proves the original bytes remain for patch or transition. All other handled
 filesystem failures use io-error. Platform exception text, errno names,
 numeric OS error codes, and absolute paths are not members of the normative
 JSON envelope and cannot alter operation or reason.
+
+internal-error is used only with serialize-candidate. It reports an unexpected
+serializer or range-writer defect as operation-failed instead of blaming item
+data. The envelope does not include exception text.
 
 Before a publication attempt, lock-closure, prepare-temporary, sync-temporary,
 or cleanup failure returns operation-failed with state unchanged. After a
@@ -987,7 +1006,7 @@ edges, all three multi-item reasons, terminal referrers, combined blockers, and
 candidate validation; patch successful existing-value replacement, revision and
 lock refusal, multi-item refusal, exact-field validation, required decision
 evidence, non-canonical integer-token refusal, and candidate validation,
-including the total YAML rewrite precondition;
+plus the permanent unsafe-yaml-mutation refusal;
 deterministic operation failures; and
 unchanged/committed/unknown states.
 

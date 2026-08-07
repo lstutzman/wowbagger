@@ -1,0 +1,19 @@
+{
+  "case": "patch-unsafe-yaml-referenced-anchor",
+  "argv": ["patch", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {"json_file": "expected.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "source_file": "before.md", "sha256": "sha256:07c26d3917e43a053ec983d224b633bd991686a8e952bb5cb40ba960ed3bc959"}
+      ],
+      "after": [
+        {"path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md", "source_file": "before.md", "sha256": "sha256:07c26d3917e43a053ec983d224b633bd991686a8e952bb5cb40ba960ed3bc959"}
+      ]
+    }
+  }
+}

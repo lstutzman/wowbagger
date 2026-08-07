@@ -9,6 +9,78 @@ import { runCli, withLedger } from './support.js';
 const runner = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
 const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
 
+test('patch reports a serializer programming error as operation-failed', async () => {
+  const source = triageSource();
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      patch: { title: 'Exercise the serializer failure boundary' },
+      date: '2030-01-16',
+      decision: {
+        summary: 'Exercise the serializer failure boundary.',
+        rationale: 'Programming errors must not be reported as ledger data defects.',
+      },
+    }));
+
+    const result = runScenario('patch-serialization-fails',
+      'patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 6, result.stderr);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.error.code, 'operation-failed');
+    assert.deepEqual(output.error.details, {
+      id,
+      operation: 'serialize-candidate',
+      reason: 'internal-error',
+      recovery_artifacts: [],
+      recovery_artifacts_truncated: false,
+    });
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+    await assertNoMutationArtifacts(ledger);
+  });
+});
+
+test('transition reports a serializer programming error as operation-failed', async () => {
+  const source = triageSource();
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      to_status: 'backlog',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Exercise the transition serializer failure boundary.',
+        rationale: 'Programming errors must not be reported as ledger data defects.',
+      },
+    }));
+
+    const result = runScenario('transition-serialization-fails',
+      'transition', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 6, result.stderr);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.error.code, 'operation-failed');
+    assert.deepEqual(output.error.details, {
+      id,
+      operation: 'serialize-candidate',
+      reason: 'internal-error',
+      recovery_artifacts: [],
+      recovery_artifacts_truncated: false,
+    });
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+    await assertNoMutationArtifacts(ledger);
+  });
+});
+
 test('create classifies an applied-then-error link from the final bytes', async () => {
   await withLedger({}, async (ledger) => {
     const requestPath = await writeCreateRequest(ledger);

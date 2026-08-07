@@ -1,0 +1,16 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "unsafe-yaml-mutation",
+    "message": "The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.",
+    "details": {
+      "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+      "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "field": "priority",
+      "reason": "anchor-referenced-outside-field"
+    }
+  }
+}

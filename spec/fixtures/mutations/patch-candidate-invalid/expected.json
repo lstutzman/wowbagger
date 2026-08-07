@@ -5,15 +5,15 @@
   "state": "unchanged",
   "error": {
     "code": "candidate-invalid",
-    "message": "The item carries YAML that patch will not rewrite; hand-edit the field instead.",
+    "message": "The proposed item would make the ledger invalid.",
     "details": {
       "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
       "validation_errors": [
         {
           "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
-          "field": "frontmatter",
-          "code": "mutation-successor-mismatch",
-          "message": "The item carries YAML that patch will not rewrite; hand-edit the field instead."
+          "field": "parent",
+          "code": "unresolved-parent",
+          "message": "Parent wb_01Q4AS1Y80248J48HK6D248NAP does not resolve to an item in the configured ledger."
         }
       ]
     }

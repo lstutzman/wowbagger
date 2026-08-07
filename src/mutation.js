@@ -36,7 +36,7 @@ const CONTROLLED_ITEM_FIELDS = new Set([
 const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const ULID_PATTERN = /^wb_([0-7][0-9A-HJKMNP-TV-Z]{25})$/;
 const MAX_LOCK_CLOSURE_RETRIES = 3;
-const PATCH_UNSUPPORTED_YAML_MESSAGE = 'The item carries YAML that patch will not rewrite; hand-edit the field instead.';
+const UNSAFE_YAML_MUTATION_MESSAGE = 'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.';
 
 export async function inspectItem(ledgerDirectory, id) {
   const ledger = await loadLedger(ledgerDirectory);
@@ -599,8 +599,22 @@ async function replaceItem(ledgerDirectory, request, operation, scenario) {
         if (!edge.requiresDecision && hasOwn(request, 'decision')) {
           return await finishUncommitted(invalidTransitionDecision());
         }
+        const unsafeYaml = unsafeYamlMutation(
+          lockedTarget.source,
+          transitionChangedFields(lockedTarget.data, edge),
+        );
+        if (unsafeYaml) {
+          return await finishUncommitted(unsafeYamlMutationError(id, lockedTarget.path, unsafeYaml));
+        }
         successor = transitionData(lockedTarget.data, request, edge, current.ledger);
-        bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
+        try {
+          if (scenarioName(scenario) === 'transition-serialization-fails') {
+            throw new Error('fixture transition serialization failure');
+          }
+          bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
+        } catch {
+          return await finishUncommitted(operationFailed(id, 'serialize-candidate', 'internal-error'));
+        }
       } else {
         const blockers = patchBlockers(lockedTarget, current.ledger, request.patch);
         if (blockers.length > 0) {
@@ -610,30 +624,21 @@ async function replaceItem(ledgerDirectory, request, operation, scenario) {
             precondition_issues: [],
           }));
         }
-        if (patchSourceHasUnsupportedYaml(lockedTarget.source)) {
-          return await finishUncommitted(mutationError('candidate-invalid', PATCH_UNSUPPORTED_YAML_MESSAGE, 'unchanged', 2, {
-            id,
-            validation_errors: [{
-              path: lockedTarget.path,
-              field: 'frontmatter',
-              code: 'mutation-successor-mismatch',
-              message: PATCH_UNSUPPORTED_YAML_MESSAGE,
-            }],
-          }));
+        const unsafeYaml = unsafeYamlMutation(
+          lockedTarget.source,
+          [...Object.keys(request.patch), 'updated', 'decisions'],
+        );
+        if (unsafeYaml) {
+          return await finishUncommitted(unsafeYamlMutationError(id, lockedTarget.path, unsafeYaml));
         }
         successor = patchData(lockedTarget.data, request);
         try {
+          if (scenarioName(scenario) === 'patch-serialization-fails') {
+            throw new Error('fixture patch serialization failure');
+          }
           bytes = Buffer.from(serializePatch(lockedTarget.source, successor, request.patch), 'utf8');
         } catch {
-          return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
-            id,
-            validation_errors: [{
-              path: lockedTarget.path,
-              field: 'frontmatter',
-              code: 'mutation-successor-mismatch',
-              message: 'Patch serialization could not produce the requested successor.',
-            }],
-          }));
+          return await finishUncommitted(operationFailed(id, 'serialize-candidate', 'internal-error'));
         }
       }
       const candidateValidation = validateSerializedCandidate(
@@ -643,8 +648,7 @@ async function replaceItem(ledgerDirectory, request, operation, scenario) {
         lockedTarget.path,
         lockedTarget.file,
         successor,
-        lockedTarget.source,
-        operation === 'patch' ? request.patch : null,
+        operation === 'patch',
       );
       if (!candidateValidation.valid) {
         return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
@@ -875,73 +879,123 @@ function parseFrontmatterDocument(source, options = {}) {
   return { bounds, document, frontmatter };
 }
 
-function patchSourceHasUnsupportedYaml(source) {
+function transitionChangedFields(data, edge) {
+  const fields = ['status', 'updated'];
+  for (const terminal of ['completed', 'killed', 'archived']) {
+    if (hasOwn(data, terminal)) {
+      fields.push(terminal);
+    }
+  }
+  if (edge.requiresDecision) {
+    fields.push('decisions');
+  }
+  return fields;
+}
+
+function unsafeYamlMutation(source, changedFields) {
   const { document } = parseFrontmatterDocument(source);
   if (document.errors.length > 0 || !isMap(document.contents)) {
-    return true;
+    return null;
   }
-  const pending = [document];
-  while (pending.length > 0) {
-    const node = pending.pop();
-    if (typeof node?.commentBefore === 'string' || typeof node?.comment === 'string'
-      || isAlias(node) || typeof node?.anchor === 'string') {
-      return true;
+  for (const field of changedFields) {
+    const pair = document.contents.items.find(
+      (candidate) => isScalar(candidate.key) && candidate.key.value === field,
+    );
+    if (!pair) {
+      continue;
     }
-    if (node && Object.hasOwn(node, 'key') && Object.hasOwn(node, 'value')) {
-      pending.push(node.key, node.value);
-    } else if (isMap(node) || isSeq(node)) {
-      for (const item of node.items) {
-        pending.push(item);
+    if (field === 'decisions' && isAlias(pair.value)) {
+      return { field, reason: 'decisions-alias' };
+    }
+    const anchors = new Set();
+    walkYamlNode(pair.value, (node) => {
+      if (typeof node?.anchor === 'string') {
+        anchors.add(node.anchor);
       }
-    } else if (node === Object(node) && Object.hasOwn(node, 'contents')) {
-      pending.push(node.contents);
+    });
+    if (anchors.size === 0) {
+      continue;
+    }
+    for (const otherPair of document.contents.items) {
+      if (otherPair === pair) {
+        continue;
+      }
+      let referenced = false;
+      walkYamlNode(otherPair, (node) => {
+        if (isAlias(node) && anchors.has(node.source)) {
+          referenced = true;
+        }
+      });
+      if (referenced) {
+        return { field, reason: 'anchor-referenced-outside-field' };
+      }
     }
   }
-  return false;
+  return null;
+}
+
+function walkYamlNode(node, visit) {
+  if (!node) {
+    return;
+  }
+  visit(node);
+  if (Object.hasOwn(node, 'key') && Object.hasOwn(node, 'value')) {
+    walkYamlNode(node.key, visit);
+    walkYamlNode(node.value, visit);
+    return;
+  }
+  if (isMap(node) || isSeq(node)) {
+    for (const item of node.items) {
+      walkYamlNode(item, visit);
+    }
+  }
+}
+
+function unsafeYamlMutationError(id, itemPath, issue) {
+  return mutationError('unsafe-yaml-mutation', UNSAFE_YAML_MUTATION_MESSAGE, 'unchanged', 2, {
+    id,
+    path: itemPath,
+    field: issue.field,
+    reason: issue.reason,
+  });
 }
 
 function serializePatch(source, successor, patch) {
-  const { bounds, document, frontmatter } = parseFrontmatterDocument(source, { intAsBigInt: true });
+  const parsed = parseFrontmatterDocument(source, { intAsBigInt: true });
+  const { document } = parsed;
   if (document.errors.length > 0 || !isMap(document.contents)) {
     throw new Error('Unable to mutate malformed frontmatter.');
   }
-  setRootScalar(document, 'updated', successor.updated);
+  const edits = [replaceRootPair(document, 'updated', successor.updated, true)];
   if (hasOwn(patch, 'parent')) {
     if (patch.parent === null) {
-      document.delete('parent');
+      edits.push(removeRootPair(document, 'parent'));
     } else {
-      setOrInsertRootScalar(document, ['related'], 'parent', successor.parent);
+      edits.push(replaceOrInsertRootPair(document, 'parent', successor.parent, true));
     }
   }
   if (hasOwn(patch, 'priority')) {
     if (patch.priority === null) {
-      document.delete('priority');
+      edits.push(removeRootPair(document, 'priority'));
     } else {
-      setOrInsertRootScalar(document, ['snoozed_until', 'parent', 'related'], 'priority', successor.priority);
+      edits.push(replaceOrInsertRootPair(document, 'priority', successor.priority, true));
     }
   }
   if (hasOwn(patch, 'number')) {
     if (patch.number === null) {
-      document.delete('number');
+      edits.push(removeRootPair(document, 'number'));
     } else {
-      setOrInsertRootScalar(document, ['priority', 'snoozed_until', 'parent', 'related'], 'number', successor.number);
+      edits.push(replaceOrInsertRootPair(document, 'number', successor.number, true));
     }
   }
   if (hasOwn(patch, 'depends_on')) {
-    document.set('depends_on', successor.depends_on);
+    edits.push(replaceRootPair(document, 'depends_on', successor.depends_on));
   }
   if (hasOwn(patch, 'title')) {
-    setRootScalar(document, 'title', successor.title);
+    edits.push(replaceRootPair(document, 'title', successor.title, true));
   }
-  appendDecisionNode(document, successor.decisions.at(-1));
-  let serialized = document.toString({ lineWidth: 0 });
-  if (bounds.newline === '\r\n') {
-    serialized = serialized.replaceAll('\n', '\r\n');
-  }
-  if (!frontmatter.endsWith(bounds.newline)) {
-    serialized = serialized.slice(0, -bounds.newline.length);
-  }
-  return `${source.slice(0, bounds.start)}${serialized}${source.slice(bounds.end)}`;
+  edits.push(appendDecisionEdit(parsed, successor.decisions.at(-1)));
+  return spliceFrontmatter(source, parsed, edits);
 }
 
 function transitionEdge(kind, from, to) {
@@ -1068,30 +1122,248 @@ function transitionData(data, request, edge, ledger) {
 }
 
 function serializeTransition(source, successor, edge) {
-  const { bounds, document, frontmatter } = parseFrontmatterDocument(source, { intAsBigInt: true });
+  const parsed = parseFrontmatterDocument(source, { intAsBigInt: true });
+  const { document } = parsed;
   if (document.errors.length > 0 || !isMap(document.contents)) {
     throw new Error('Unable to mutate malformed frontmatter.');
   }
-  setRootScalar(document, 'status', successor.status);
-  setRootScalar(document, 'updated', successor.updated);
-  document.delete('completed');
-  document.delete('killed');
-  document.delete('archived');
+  const edits = [
+    replaceRootPair(document, 'status', successor.status, true),
+    replaceRootPair(document, 'updated', successor.updated, true),
+  ];
+  for (const field of ['completed', 'killed', 'archived']) {
+    if (document.has(field)) {
+      edits.push(removeRootPair(document, field));
+    }
+  }
   const terminal = terminalField(successor.status);
   if (terminal) {
-    insertRootAfter(document, 'updated', terminal, successor[terminal]);
+    edits.push(insertRootPairAfter(document, 'updated', terminal, successor[terminal], true));
   }
   if (edge.requiresDecision) {
-    appendDecisionNode(document, successor.decisions.at(-1));
+    edits.push(appendDecisionEdit(parsed, successor.decisions.at(-1)));
   }
-  let serialized = document.toString({ lineWidth: 0 });
-  if (bounds.newline === '\r\n') {
-    serialized = serialized.replaceAll('\n', '\r\n');
+  return spliceFrontmatter(source, parsed, edits);
+}
+
+function replaceOrInsertRootPair(document, key, value, scalar = false) {
+  return document.has(key)
+    ? replaceRootPair(document, key, value, scalar)
+    : insertRootPair(document, key, value, scalar);
+}
+
+function replaceRootPair(document, key, value, scalar = false) {
+  const pair = rootPair(document, key);
+  const range = rootPairRange(pair);
+  return {
+    start: range.start,
+    end: range.end,
+    replacement: serializedRootPair(document, key, value, scalar),
+  };
+}
+
+function removeRootPair(document, key) {
+  const pair = rootPair(document, key);
+  const range = rootPairRemovalRange(document, pair);
+  return { start: range.start, end: range.end, replacement: '' };
+}
+
+function insertRootPair(document, key, value, scalar = false) {
+  const offset = controlledInsertionOffset(document, key);
+  const pair = serializedRootPair(document, key, value, scalar);
+  return {
+    start: offset,
+    end: offset,
+    replacement: document.contents.flow ? `, ${pair}` : pair,
+  };
+}
+
+function insertRootPairAfter(document, afterKey, key, value, scalar = false) {
+  const offset = rootPairRange(rootPair(document, afterKey)).end;
+  const pair = serializedRootPair(document, key, value, scalar);
+  return {
+    start: offset,
+    end: offset,
+    replacement: document.contents.flow ? `, ${pair}` : pair,
+  };
+}
+
+function serializedRootPair(document, key, value, scalar) {
+  const copy = document.clone();
+  if (scalar && copy.has(key)) {
+    setRootScalar(copy, key, value);
+  } else {
+    copy.set(key, value);
   }
-  if (!frontmatter.endsWith(bounds.newline)) {
-    serialized = serialized.slice(0, -bounds.newline.length);
+  const serialized = copy.toString({ lineWidth: 0 });
+  const reparsed = parseDocument(serialized, {
+    keepSourceTokens: true,
+    prettyErrors: false,
+    schema: 'core',
+    uniqueKeys: true,
+  });
+  if (reparsed.errors.length > 0 || !isMap(reparsed.contents)) {
+    throw new Error(`Unable to serialize frontmatter field ${key}.`);
   }
-  return `${source.slice(0, bounds.start)}${serialized}${source.slice(bounds.end)}`;
+  const range = rootPairRange(rootPair(reparsed, key));
+  return serialized.slice(range.start, range.end);
+}
+
+function appendDecisionEdit(parsed, decision) {
+  const { document, frontmatter, bounds } = parsed;
+  const existing = document.get('decisions', true);
+  if (!existing) {
+    const offset = controlledInsertionOffset(document, 'decisions');
+    if (document.contents.flow) {
+      return {
+        start: offset,
+        end: offset,
+        replacement: `, decisions: [ ${serializeFlowDecision(decision)} ]`,
+      };
+    }
+    return {
+      start: offset,
+      end: offset,
+      replacement: `decisions:${bounds.newline}${serializeDecisionItem(decision, 2, bounds.newline)}`,
+    };
+  }
+  if (!isSeq(existing)) {
+    throw new Error('Unable to append to a non-sequence decisions field.');
+  }
+  if (existing.flow) {
+    const closing = existing.srcToken?.end?.find((token) => token.type === 'flow-seq-end')?.offset;
+    if (!Number.isInteger(closing)) {
+      throw new Error('Unable to locate the flow decisions insertion range.');
+    }
+    return {
+      start: closing,
+      end: closing,
+      replacement: `${existing.items.length > 0 ? ', ' : ''}${serializeFlowDecision(decision)}`,
+    };
+  }
+  const last = existing.items.at(-1);
+  const offset = last?.range?.[2] ?? existing.range[2];
+  const indent = existing.srcToken?.indent;
+  if (!Number.isInteger(indent) || indent < 1 || offset > frontmatter.length) {
+    throw new Error('Unable to locate the decisions insertion range.');
+  }
+  return {
+    start: offset,
+    end: offset,
+    replacement: serializeDecisionItem(decision, indent, bounds.newline),
+  };
+}
+
+function serializeFlowDecision(decision) {
+  const document = parseDocument('{}', { schema: 'core' });
+  document.contents = document.createNode(decision);
+  document.contents.flow = true;
+  document.get('summary', true).type = Scalar.QUOTE_DOUBLE;
+  document.get('rationale', true).type = Scalar.QUOTE_DOUBLE;
+  return document.toString({ lineWidth: 0 }).trimEnd();
+}
+
+function serializeDecisionItem(decision, indent, newline) {
+  const document = parseDocument('{}', { schema: 'core' });
+  document.contents = document.createNode(decision);
+  document.get('summary', true).type = Scalar.QUOTE_DOUBLE;
+  document.get('rationale', true).type = Scalar.QUOTE_DOUBLE;
+  const lines = document.toString({ lineWidth: 0 }).trimEnd().split('\n');
+  const [first, ...rest] = lines;
+  return [
+    `${' '.repeat(indent)}- ${first}`,
+    ...rest.map((line) => `${' '.repeat(indent + 2)}${line}`),
+    '',
+  ].join(newline);
+}
+
+function spliceFrontmatter(source, parsed, edits) {
+  const ordered = edits
+    .filter(Boolean)
+    .map((edit) => ({
+      ...edit,
+      replacement: parsed.bounds.newline === '\r\n'
+        ? edit.replacement.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n')
+        : edit.replacement,
+    }))
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  let previousEnd = 0;
+  for (const edit of ordered) {
+    if (edit.start < previousEnd || edit.end < edit.start || edit.end > parsed.frontmatter.length) {
+      throw new Error('Frontmatter mutation ranges overlap or escape the document.');
+    }
+    previousEnd = edit.end;
+  }
+  let frontmatter = parsed.frontmatter;
+  for (const edit of ordered.toReversed()) {
+    frontmatter = `${frontmatter.slice(0, edit.start)}${edit.replacement}${frontmatter.slice(edit.end)}`;
+  }
+  return `${source.slice(0, parsed.bounds.start)}${frontmatter}${source.slice(parsed.bounds.end)}`;
+}
+
+function rootPair(document, key) {
+  const pair = document.contents.items.find((candidate) => isScalar(candidate.key) && candidate.key.value === key);
+  if (!pair) {
+    throw new Error(`Frontmatter field ${key} is absent.`);
+  }
+  return pair;
+}
+
+function rootPairRange(pair) {
+  const start = pair.key?.range?.[0];
+  const end = pair.value?.range?.[2] ?? pair.key?.range?.[2];
+  if (!Number.isInteger(start) || !Number.isInteger(end) || end < start) {
+    throw new Error('Unable to locate a root frontmatter pair.');
+  }
+  return { start, end };
+}
+
+function rootPairRemovalRange(document, pair) {
+  if (!document.contents.flow) {
+    return rootPairRange(pair);
+  }
+  const index = document.contents.items.indexOf(pair);
+  const leading = pair.srcToken?.start?.[0];
+  if (index > 0 && leading?.type === 'comma' && Number.isInteger(leading.offset)) {
+    return { start: leading.offset, end: rootPairRange(pair).end };
+  }
+  const next = document.contents.items[index + 1];
+  return {
+    start: rootPairRange(pair).start,
+    end: next ? rootPairRange(next).start : rootPairRange(pair).end,
+  };
+}
+
+function controlledInsertionOffset(document, key) {
+  const order = [
+    'schema_version', 'id', 'title', 'kind', 'status', 'created', 'updated',
+    'completed', 'killed', 'archived', 'provenance', 'depends_on', 'related',
+    'parent', 'snoozed_until', 'priority', 'number', 'decisions',
+  ];
+  const desired = order.indexOf(key);
+  for (const pair of document.contents.items) {
+    const pairKey = isScalar(pair.key) ? pair.key.value : undefined;
+    const pairOrder = order.indexOf(pairKey);
+    if (pairOrder === -1 || pairOrder > desired) {
+      return pairStartWithLeadingTrivia(pair);
+    }
+  }
+  const last = document.contents.items.at(-1);
+  if (!last) {
+    return document.contents.flow ? document.contents.srcToken.start.offset + 1 : 0;
+  }
+  if (document.contents.flow) {
+    const closing = document.contents.srcToken?.end?.find((token) => token.type === 'flow-map-end')?.offset;
+    if (Number.isInteger(closing)) {
+      return closing;
+    }
+  }
+  return rootPairRange(last).end;
+}
+
+function pairStartWithLeadingTrivia(pair) {
+  const first = pair.srcToken?.start?.[0]?.offset;
+  return Number.isInteger(first) ? first : rootPairRange(pair).start;
 }
 
 function setRootScalar(document, key, value) {
@@ -1101,58 +1373,6 @@ function setRootScalar(document, key, value) {
     return;
   }
   document.set(key, value);
-}
-
-function setOrInsertRootScalar(document, afterKeys, key, value) {
-  if (document.has(key)) {
-    setRootScalar(document, key, value);
-    return;
-  }
-  const afterKey = afterKeys.find((candidate) => document.has(candidate));
-  if (afterKey === undefined) {
-    insertRootBefore(document, 'decisions', key, value);
-    return;
-  }
-  insertRootAfter(document, afterKey, key, value);
-}
-
-function insertRootBefore(document, beforeKey, key, value) {
-  const index = document.contents.items.findIndex((pair) => pair.key?.value === beforeKey);
-  document.contents.items.splice(index < 0 ? document.contents.items.length : index, 0, document.createPair(key, value));
-}
-
-function insertRootAfter(document, afterKey, key, value) {
-  const existing = document.contents.items.findIndex((pair) => pair.key?.value === key);
-  if (existing >= 0) {
-    document.contents.items.splice(existing, 1);
-  }
-  const index = document.contents.items.findIndex((pair) => pair.key?.value === afterKey);
-  document.contents.items.splice(index + 1, 0, document.createPair(key, value));
-}
-
-function appendDecisionNode(document, decision) {
-  const existing = document.get('decisions', true);
-  let decisions = existing;
-  if (isAlias(existing)) {
-    const resolved = existing.resolve(document);
-    if (isSeq(resolved)) {
-      decisions = resolved.clone(document.schema);
-      decisions.anchor = undefined;
-      document.set('decisions', decisions);
-    }
-  }
-  const node = document.createNode(decision);
-  node.flow = false;
-  node.get('summary', true).type = Scalar.QUOTE_DOUBLE;
-  node.get('rationale', true).type = Scalar.QUOTE_DOUBLE;
-  if (isSeq(decisions)) {
-    decisions.add(node);
-    return;
-  }
-  const sequence = document.createNode([]);
-  sequence.flow = false;
-  sequence.add(node);
-  document.set('decisions', sequence);
 }
 
 function frontmatterBounds(source) {
@@ -1205,22 +1425,16 @@ function validateSerializedCandidate(
   displayPath,
   file,
   expectedData,
-  expectedSource,
-  patch = null,
+  compareCompleteData = false,
 ) {
   const source = bytes.toString('utf8');
   const parsed = parseLedgerItemSource(source);
   const errors = parsed.error ? [{ path: displayPath, ...parsed.error }] : [];
   const coreMatches = parsed.error || !expectedData
     || isDeepStrictEqual(coreView(parsed.data), coreView(expectedData));
-  const patchMatches = parsed.error || patch === null || !expectedData || !expectedSource
-    || serializedPatchMatches(source, expectedSource, parsed.data, expectedData, patch);
-  const extensionsMatch = parsed.error || patch !== null || !expectedSource
-    || isDeepStrictEqual(
-      extensionNodeIdentity(source),
-      extensionNodeIdentity(expectedSource),
-    );
-  if (!parsed.error && (!coreMatches || !patchMatches || (patch === null && !extensionsMatch))) {
+  const completeDataMatches = parsed.error || !compareCompleteData || !expectedData
+    || isDeepStrictEqual(patchDataView(parsed.data), patchDataView(expectedData));
+  if (!parsed.error && (!coreMatches || !completeDataMatches)) {
     errors.push({
       path: displayPath,
       field: 'frontmatter',
@@ -1242,76 +1456,12 @@ function validateSerializedCandidate(
   return validateLedger({ items: items.filter(Boolean), errors });
 }
 
-function serializedPatchMatches(source, expectedSource, data, expectedData, patch) {
-  if (!isDeepStrictEqual(patchDataView(data), patchDataView(expectedData))) {
-    return false;
-  }
-  const allowedChanges = new Set([...Object.keys(patch), 'updated', 'decisions']);
-  return isDeepStrictEqual(
-    unchangedRootNodeIdentity(source, allowedChanges),
-    unchangedRootNodeIdentity(expectedSource, allowedChanges),
-  );
-}
-
 function patchDataView(data) {
   return {
     ...data,
     depends_on: data.depends_on ?? [],
     related: data.related ?? [],
   };
-}
-
-function unchangedRootNodeIdentity(source, allowedChanges) {
-  const { document } = parseFrontmatterDocument(source);
-  if (document.errors.length > 0 || !isMap(document.contents)) {
-    return null;
-  }
-  return document.contents.items
-    .filter((pair) => !allowedChanges.has(isScalar(pair.key) ? pair.key.value : undefined))
-    .map(sourceNodeIdentity);
-}
-
-function extensionNodeIdentity(source) {
-  const { document } = parseFrontmatterDocument(source);
-  if (document.errors.length > 0 || !isMap(document.contents)) {
-    return null;
-  }
-
-  const identity = [];
-  for (const pair of document.contents.items) {
-    const key = isScalar(pair.key) ? pair.key.value : undefined;
-    if (!CONTROLLED_ITEM_FIELDS.has(key)) {
-      identity.push(['item', sourceNodeIdentity(pair)]);
-      continue;
-    }
-    if (key !== 'provenance' || !isMap(pair.value)) {
-      continue;
-    }
-    for (const provenancePair of pair.value.items) {
-      const provenanceKey = isScalar(provenancePair.key) ? provenancePair.key.value : undefined;
-      if (provenanceKey !== 'source' && provenanceKey !== 'recorded_at') {
-        identity.push(['provenance', sourceNodeIdentity(provenancePair)]);
-      }
-    }
-  }
-  return identity;
-}
-
-function sourceNodeIdentity(node) {
-  if (node && Object.hasOwn(node, 'key') && Object.hasOwn(node, 'value')) {
-    return ['pair', sourceNodeIdentity(node.key), sourceNodeIdentity(node.value)];
-  }
-  const presentation = [node?.tag ?? null, node?.anchor ?? null, node?.commentBefore ?? null, node?.comment ?? null, node?.spaceBefore ?? false];
-  if (isAlias(node)) {
-    return ['alias', node.source, ...presentation];
-  }
-  if (isScalar(node)) {
-    return ['scalar', node.source ?? String(node.value), node.type ?? null, ...presentation];
-  }
-  if (isMap(node) || isSeq(node)) {
-    return [isMap(node) ? 'map' : 'sequence', node.flow ?? false, ...presentation, node.items.map(sourceNodeIdentity)];
-  }
-  return ['absent'];
 }
 
 function lockIdsForCreate(request, ledger) {

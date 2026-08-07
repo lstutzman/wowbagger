@@ -23,6 +23,7 @@ const CORE_ERROR_EXIT_CODES = new Map([
   ['item-not-found', 2],
   ['transition-precondition-failed', 2],
   ['candidate-invalid', 2],
+  ['unsafe-yaml-mutation', 2],
   ['ledger-invalid', 3],
   ['revision-conflict', 4],
   ['lock-held', 4],
@@ -47,13 +48,13 @@ const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
   ]),
   patch: new Set([
     'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
-    'revision-conflict', 'atomic-scope-required', 'candidate-invalid',
+    'revision-conflict', 'atomic-scope-required', 'candidate-invalid', 'unsafe-yaml-mutation',
     'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
   ]),
   transition: new Set([
     'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
     'revision-conflict', 'atomic-scope-required', 'transition-precondition-failed',
-    'candidate-invalid', 'operation-failed', 'post-commit-recovery-required',
+    'candidate-invalid', 'unsafe-yaml-mutation', 'operation-failed', 'post-commit-recovery-required',
     'write-outcome-unknown',
   ]),
 });
@@ -1825,15 +1826,12 @@ function validCoreErrorAtExit(value, command, exitCode, responseContext) {
 }
 
 function coreErrorMessageMatches(code, command, message) {
-  if (code === 'candidate-invalid' && command === 'patch') {
-    return message === 'The proposed item would make the ledger invalid.'
-      || message === 'The item carries YAML that patch will not rewrite; hand-edit the field instead.';
-  }
   const expected = {
     'item-not-found': 'The requested item was not found.',
     'ledger-invalid': 'The configured ledger is invalid.',
     'transition-precondition-failed': 'The requested lifecycle transition failed its preconditions.',
     'candidate-invalid': 'The proposed item would make the ledger invalid.',
+    'unsafe-yaml-mutation': 'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.',
     'revision-conflict': 'The item changed after it was inspected.',
     'lock-held': 'The item is locked by another cooperative Wowbagger writer.',
     'id-collision': 'The requested item ID already exists.',
@@ -1868,6 +1866,12 @@ function validCoreErrorDetails(code, details, command, responseContext) {
     case 'candidate-invalid': return hasExactKeys(details, ['id', 'validation_errors'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
+    case 'unsafe-yaml-mutation': return hasExactKeys(details, ['id', 'path', 'field', 'reason'])
+      && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+      && isSafeLedgerDisplayPath(details.path)
+      && ['status', 'updated', 'completed', 'killed', 'archived', 'decisions',
+        'priority', 'number', 'parent', 'depends_on', 'title'].includes(details.field)
+      && ['anchor-referenced-outside-field', 'decisions-alias'].includes(details.reason);
     case 'revision-conflict': return hasExactKeys(details, [
       'id', 'expected_revision', 'actual_revision',
     ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
@@ -2203,11 +2207,12 @@ function validOperationFailedDetails(value) {
   ]) || !WOWBAGGER_ID.test(value.id)
     || !new Set([
       'lock-closure', 'prepare-temporary', 'sync-temporary', 'publish',
-      'verify-publication', 'cleanup',
+      'verify-publication', 'cleanup', 'serialize-candidate',
     ]).has(value.operation)
-    || !new Set(['retry-limit-exhausted', 'io-error', 'verification-failed']).has(value.reason)
+    || !new Set(['retry-limit-exhausted', 'io-error', 'verification-failed', 'internal-error']).has(value.reason)
     || !validRecoveryArtifacts(value.recovery_artifacts, value.recovery_artifacts_truncated)) return false;
   return (value.reason !== 'retry-limit-exhausted' || value.operation === 'lock-closure')
+    && (value.reason !== 'internal-error' || value.operation === 'serialize-candidate')
     && (value.reason !== 'verification-failed'
       || value.operation === 'publish' || value.operation === 'verify-publication');
 }

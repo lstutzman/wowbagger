@@ -103,17 +103,26 @@ test('patch refuses an anchored scalar and leaves aliased fields unchanged', asy
 
     assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
     assert.equal(output.state, 'unchanged');
-    assert.equal(output.error.code, 'candidate-invalid');
-    assert.equal(output.error.details.validation_errors[0].code, 'mutation-successor-mismatch');
+    assert.equal(output.error.code, 'unsafe-yaml-mutation');
+    assert.equal(
+      output.error.message,
+      'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.',
+    );
+    assert.deepEqual(output.error.details, {
+      id,
+      path: `ledger/${id}.md`,
+      field: 'priority',
+      reason: 'anchor-referenced-outside-field',
+    });
     assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
   });
 });
 
-test('patch refuses removal when the field carries an operator comment', async () => {
+test('patch removes a field without moving or deleting its preceding operator comment', async () => {
   const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
   const source = itemSource(id, '', [
     '# operator note: keep this ranked above the rest',
-    'priority: 3',
+    'priority: 3 # removed with its field',
   ]);
 
   await withLedger({ [`${id}.md`]: source }, async (ledger) => {
@@ -132,17 +141,20 @@ test('patch refuses removal when the field carries an operator comment', async (
     }));
 
     const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
-    const output = JSON.parse(result.stdout);
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
 
-    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
-    assert.equal(output.state, 'unchanged');
-    assert.equal(output.error.code, 'candidate-invalid');
-    assert.equal(output.error.details.validation_errors[0].code, 'mutation-successor-mismatch');
-    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(rewritten.includes('# operator note: keep this ranked above the rest\n'), true);
+    assert.ok(rewritten.includes(
+      '# operator note: keep this ranked above the rest\ndecisions:\n',
+    ), rewritten);
+    assert.equal(rewritten.includes('# removed with its field'), false, rewritten);
+    assert.equal(parseDocument(frontmatter(rewritten), { schema: 'core' }).has('priority'), false);
+    assert.equal(rewritten.endsWith('---\n'), true);
   });
 });
 
-test('patch refuses a document-level trailing comment and leaves bytes unchanged', async () => {
+test('patch preserves a document-level trailing comment at the end of frontmatter', async () => {
   const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
   const source = itemSource(id).replace(
     'related: []\n',
@@ -165,20 +177,18 @@ test('patch refuses a document-level trailing comment and leaves bytes unchanged
     }));
 
     const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
-    const output = JSON.parse(result.stdout);
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
 
-    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
-    assert.equal(output.state, 'unchanged');
-    assert.equal(output.error.code, 'candidate-invalid');
-    assert.equal(
-      output.error.details.validation_errors[0].message,
-      'The item carries YAML that patch will not rewrite; hand-edit the field instead.',
-    );
-    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(parseDocument(frontmatter(rewritten), { schema: 'core' }).get('title'), 'Survey the fictional southern lights');
+    assert.ok(rewritten.includes(
+      '    rationale: "The human note must stay in its original location."\n'
+      + '# trailing note that matters to a human\n---\n',
+    ), rewritten);
   });
 });
 
-test('patch refuses when serialized bytes change an unpatched extension value', async () => {
+test('patch refuses when derived updated is anchored into an extension value', async () => {
   const id = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
   const source = itemSource(id)
     .replace('updated: 2030-01-14', 'updated: &original_date 2030-01-14')
@@ -204,8 +214,13 @@ test('patch refuses when serialized bytes change an unpatched extension value', 
 
     assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
     assert.equal(output.state, 'unchanged');
-    assert.equal(output.error.code, 'candidate-invalid');
-    assert.equal(output.error.details.validation_errors[0].code, 'mutation-successor-mismatch');
+    assert.equal(output.error.code, 'unsafe-yaml-mutation');
+    assert.deepEqual(output.error.details, {
+      id,
+      path: `ledger/${id}.md`,
+      field: 'updated',
+      reason: 'anchor-referenced-outside-field',
+    });
     assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
   });
 });
@@ -270,11 +285,17 @@ test('patch returns an unchanged envelope for an anchor nested in a patched sequ
     const output = JSON.parse(result.stdout);
     assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
     assert.equal(output.state, 'unchanged');
-    assert.equal(output.error.code, 'candidate-invalid');
+    assert.equal(output.error.code, 'unsafe-yaml-mutation');
     assert.equal(
       output.error.message,
-      'The item carries YAML that patch will not rewrite; hand-edit the field instead.',
+      'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.',
     );
+    assert.deepEqual(output.error.details, {
+      id,
+      path: `ledger/${id}.md`,
+      field: 'depends_on',
+      reason: 'anchor-referenced-outside-field',
+    });
     assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
   });
 });
@@ -519,7 +540,7 @@ test('adapter oracle accepts invalid-request for a patch carrying negative zero'
   assert.equal(programmaticResult, null);
 });
 
-test('adapter oracle accepts the permanent patch candidate refusal message', () => {
+test('adapter oracle accepts the permanent unsafe YAML refusal code', () => {
   const id = 'wb_01Q4EVGR000000000000000000';
   const revision = `sha256:${'a'.repeat(64)}`;
   const request = {
@@ -532,23 +553,20 @@ test('adapter oracle accepts the permanent patch candidate refusal message', () 
       rationale: 'The source carries YAML that patch must not rewrite.',
     },
   };
-  const message = 'The item carries YAML that patch will not rewrite; hand-edit the field instead.';
+  const message = 'The mutation cannot safely edit YAML whose alias semantics cross an edited byte range.';
   const envelope = {
     ok: false,
     command: 'patch',
     contract_version: 1,
     state: 'unchanged',
     error: {
-      code: 'candidate-invalid',
+      code: 'unsafe-yaml-mutation',
       message,
       details: {
         id,
-        validation_errors: [{
-          path: `ledger/${id}.md`,
-          field: 'frontmatter',
-          code: 'mutation-successor-mismatch',
-          message,
-        }],
+        path: `ledger/${id}.md`,
+        field: 'title',
+        reason: 'anchor-referenced-outside-field',
       },
     },
   };
@@ -565,6 +583,96 @@ test('adapter oracle accepts the permanent patch candidate refusal message', () 
       process_tree_contained: true,
       orphaned: false,
       exit_code: 2,
+      signal: null,
+      timed_out: false,
+      stdout_complete: true,
+      stderr_complete: true,
+      stdout_base64: Buffer.from(`${JSON.stringify(envelope)}\n`).toString('base64'),
+      stderr_base64: '',
+    },
+  });
+
+  assert.equal(result, null);
+
+  const miscoded = structuredClone(envelope);
+  miscoded.error.code = 'candidate-invalid';
+  miscoded.error.details = {
+    id,
+    validation_errors: [{
+      path: `ledger/${id}.md`,
+      field: 'parent',
+      code: 'unresolved-parent',
+      message: `Parent ${id} does not resolve to an item in the configured ledger.`,
+    }],
+  };
+  const rejected = mapProcessOutcome({
+    adapter_contract_version: 1,
+    request_id: 'patch-miscoded-permanent-refusal-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_input: Buffer.from(JSON.stringify(request)),
+    item_id: id,
+    expected_revision: revision,
+    process: {
+      started: true,
+      process_tree_contained: true,
+      orphaned: false,
+      exit_code: 2,
+      signal: null,
+      timed_out: false,
+      stdout_complete: true,
+      stderr_complete: true,
+      stdout_base64: Buffer.from(`${JSON.stringify(miscoded)}\n`).toString('base64'),
+      stderr_base64: '',
+    },
+  });
+  assert.notEqual(rejected, null);
+});
+
+test('adapter oracle accepts an internal serializer operation failure', () => {
+  const id = 'wb_01Q4EVGR000000000000000000';
+  const revision = `sha256:${'a'.repeat(64)}`;
+  const request = {
+    id,
+    expected_revision: revision,
+    patch: { title: 'Exercise the serializer boundary' },
+    date: '2030-01-16',
+    decision: {
+      summary: 'Exercise the serializer boundary.',
+      rationale: 'An internal failure is not invalid item data.',
+    },
+  };
+  const envelope = {
+    ok: false,
+    command: 'patch',
+    contract_version: 1,
+    state: 'unchanged',
+    error: {
+      code: 'operation-failed',
+      message: 'The mutation operation failed before a commit was established.',
+      details: {
+        id,
+        operation: 'serialize-candidate',
+        reason: 'internal-error',
+        recovery_artifacts: [],
+        recovery_artifacts_truncated: false,
+      },
+    },
+  };
+
+  const result = mapProcessOutcome({
+    adapter_contract_version: 1,
+    request_id: 'patch-serializer-failure-oracle-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_input: Buffer.from(JSON.stringify(request)),
+    item_id: id,
+    expected_revision: revision,
+    process: {
+      started: true,
+      process_tree_contained: true,
+      orphaned: false,
+      exit_code: 6,
       signal: null,
       timed_out: false,
       stdout_complete: true,
@@ -934,6 +1042,7 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
     'invalid-request',
     'lock-held',
     'revision-conflict',
+    'unsafe-yaml-mutation',
   ]);
 });
 

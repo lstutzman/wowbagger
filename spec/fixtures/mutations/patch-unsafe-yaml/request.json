@@ -1,0 +1,12 @@
+{
+  "id": "wb_01Q4AS1Y80248J48HK6D248NAN",
+  "expected_revision": "sha256:07c26d3917e43a053ec983d224b633bd991686a8e952bb5cb40ba960ed3bc959",
+  "patch": {
+    "priority": 5
+  },
+  "date": "2030-01-15",
+  "decision": {
+    "summary": "Raise only the fictional lighthouse priority.",
+    "rationale": "The aliased number is outside the edited field."
+  }
+}
