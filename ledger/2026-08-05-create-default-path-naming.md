@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZA5VGVR0W5ZJMV6G8K5F77P
+number: 15
 title: "Reconcile create's default item path with repository naming"
 kind: task
 status: backlog

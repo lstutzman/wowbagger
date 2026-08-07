@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZBMBEZKPE7D15HKW9Q3GSZV
+number: 17
 title: "Implement fenced work claims with a transactional coordinator"
 kind: task
 status: backlog

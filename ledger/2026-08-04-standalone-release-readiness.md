@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8R8C26CEJPJKHVPBT
+number: 10
 title: "Prepare a versioned standalone Wowbagger release"
 kind: task
 status: backlog

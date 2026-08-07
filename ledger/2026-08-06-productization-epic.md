@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZBT435CG4HMTP0H6F3CTTNA
+number: 21
 title: "Deliver wowbagger as a consumable product"
 kind: epic
 status: backlog

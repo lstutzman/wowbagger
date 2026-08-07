@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW81FXZVAWQ8WT4KDCJ
+number: 1
 title: "Deliver the Codex adapter"
 kind: task
 status: backlog

@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8A25Q593G7RTX7TAH
+number: 5
 title: "Define the optional policy-input contract"
 kind: task
 status: backlog

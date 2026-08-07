@@ -78,6 +78,7 @@ The following frontmatter fields are part of schema version 1.
 | parent | No | ID of an epic containing this item. |
 | snoozed_until | No | ISO calendar date. A future date temporarily removes a backlog task from readiness. |
 | priority | No | Non-negative integer supplied by a consumer policy. Lower values sort first; Wowbagger core does not calculate it. |
+| number | No | Positive integer, unique within one ledger. A short handle for humans. It is not identity: the immutable ID remains what publication, references, and the filename use. Two worktrees may allocate the same number concurrently; that is a duplicate-number validation error resolved at merge, not an identity collision. |
 | completed | Conditional | ISO calendar date required only when status is done. |
 | killed | Conditional | ISO calendar date required only when status is killed. |
 | archived | Conditional | ISO calendar date required only when status is archived. |

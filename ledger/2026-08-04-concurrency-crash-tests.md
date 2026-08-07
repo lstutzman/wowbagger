@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8CXZRZ8JH2ADYZWH3
+number: 7
 title: "Test mutation concurrency and crash recovery"
 kind: task
 status: backlog

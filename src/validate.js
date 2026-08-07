@@ -37,6 +37,7 @@ export function validateLedger(ledger) {
   const index = buildIdentityIndex(facts);
 
   validateDuplicateIds(index, context);
+  validateDuplicateNumbers(facts, context);
 
   for (const fact of facts) {
     validateRelationLists(fact, context);
@@ -98,6 +99,7 @@ function inspectItem(item, context) {
   fact.parent = inspectParent(fact, context);
   inspectOptionalDate(fact, 'snoozed_until', context);
   inspectOptionalPriority(fact, context);
+  fact.number = inspectOptionalNumber(fact, context);
 
   for (const field of TERMINAL_DATE_FIELDS) {
     inspectOptionalDate(fact, field, context);
@@ -209,6 +211,28 @@ function inspectRequiredDate(fact, field, context) {
   }
 
   return inspectDate(fact, field, context);
+}
+
+// number is a short human handle. The immutable ULID remains the identity used
+// for publication, references, and the filename; number exists so a person can
+// say "item 12" instead of reading out twenty-six characters.
+function inspectOptionalNumber(fact, context) {
+  if (!hasOwn(fact.data, 'number')) {
+    return null;
+  }
+
+  const value = fact.data.number;
+  if (!Number.isSafeInteger(value) || value < 1) {
+    addError(
+      fact,
+      'number',
+      'invalid-number',
+      'Field number must be a positive integer.',
+      context,
+    );
+    return null;
+  }
+  return value;
 }
 
 // priority is supplied by a consumer policy. The core validates its form and
@@ -462,6 +486,35 @@ function validateDuplicateIds(index, context) {
         'id',
         'duplicate-id',
         `ID ${id} is used by more than one ledger item.`,
+        context,
+      );
+    }
+  }
+}
+
+// A duplicate number is recoverable — the ULID still distinguishes the items —
+// but it must be surfaced so a merge resolves it rather than a reader guessing.
+function validateDuplicateNumbers(facts, context) {
+  const byNumber = new Map();
+  for (const fact of facts) {
+    if (fact.number === null || fact.number === undefined) {
+      continue;
+    }
+    const members = byNumber.get(fact.number) ?? [];
+    members.push(fact);
+    byNumber.set(fact.number, members);
+  }
+
+  for (const [number, members] of byNumber) {
+    if (members.length < 2) {
+      continue;
+    }
+    for (const fact of members) {
+      addError(
+        fact,
+        'number',
+        'duplicate-number',
+        `Number ${number} is used by more than one ledger item.`,
         context,
       );
     }

@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8P89118K6D6FSBFX2
+number: 8
 title: "Complete the mutation and compare-and-set contract"
 kind: task
 status: done

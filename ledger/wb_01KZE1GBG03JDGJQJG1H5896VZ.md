@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZE1GBG03JDGJQJG1H5896VZ
+number: 26
 title: "Tell the caller that a created item lands in triage"
 kind: task
 priority: 10

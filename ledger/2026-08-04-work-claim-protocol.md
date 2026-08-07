@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8825RKWA4AHJKN2YX
+number: 4
 title: "Define the work-claim protocol contract"
 kind: task
 status: done

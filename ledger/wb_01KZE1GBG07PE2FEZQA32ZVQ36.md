@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZE1GBG07PE2FEZQA32ZVQ36
+number: 28
 title: "Give every item a short human-readable handle"
 kind: task
 priority: 20

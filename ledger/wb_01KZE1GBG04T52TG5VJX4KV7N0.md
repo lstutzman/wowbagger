@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZE1GBG04T52TG5VJX4KV7N0
+number: 27
 title: "Remove the ULID generator as a prerequisite for first use"
 kind: task
 priority: 20

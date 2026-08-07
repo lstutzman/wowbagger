@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZE1GBG0ZMPKHSYCGY4E5KXM
+number: 30
 title: "Give the ledger a way to express priority"
 kind: task
 priority: 1

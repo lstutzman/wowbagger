@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZBNMT2G2RTSEAGCH6PYFGWC
+number: 18
 title: "Return contract exits when the claim store cannot be written or read"
 kind: task
 status: backlog

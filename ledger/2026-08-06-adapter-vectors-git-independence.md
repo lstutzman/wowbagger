@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZBNMT39DE0F95RV0C5K0EJQ
+number: 20
 title: "Document the git-checkout requirement for adapter conformance vectors"
 kind: task
 status: done

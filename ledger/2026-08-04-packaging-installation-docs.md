@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8TWW2KWJANZ2TC837
+number: 11
 title: "Package Wowbagger and document installation"
 kind: task
 status: backlog

@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8ZP1289HFMN2ECNXD
+number: 13
 title: "Deliver the Claude Code adapter"
 kind: task
 status: backlog

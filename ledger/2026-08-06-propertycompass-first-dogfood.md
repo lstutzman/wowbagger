@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZBT447HVZ9798DXV1NTT515
+number: 23
 title: "Run wowbagger inside PropertyCompass from the installed skill"
 kind: task
 status: backlog

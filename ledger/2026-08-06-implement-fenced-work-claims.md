@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZAZW75CWEG3R4BH4MZJAA7G
+number: 16
 title: "Implement advisory work claims in the core CLI"
 kind: task
 status: done

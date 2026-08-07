@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZBNMT2WWV2BWM2QEJX18RX2
+number: 19
 title: "Reconcile the publish-claimed refusal with its normative transcript"
 kind: task
 status: backlog

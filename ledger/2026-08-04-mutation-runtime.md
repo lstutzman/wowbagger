@@ -1,6 +1,7 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW876B92APQN8Q8NK6X
+number: 3
 title: "Implement the standalone mutation runtime"
 kind: task
 status: done
