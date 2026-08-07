@@ -21,54 +21,44 @@ decisions:
     rationale: "Raised while reading a ready queue printed as sixteen bare ULIDs, which is the tool's primary human-facing surface. The canonical ULID stays; what is missing is a short handle beside it. Integers were requested but cannot be allocated without the coordination the ULID exists to avoid, so the item recommends a Git-style resolved short prefix and says plainly that this is not what was asked for."
 ---
 
-Nobody will say "let's do item wb_01KZ77NSW81FXZVAWQ8WT4KDCJ". A 26-character
-ULID is unspeakable, unmemorable, and impossible to type without copying. It is
-the right identifier for a file and the wrong one for a conversation.
+Nobody will say "let's do item wb_01KZ77NSW81FXZVAWQ8WT4KDCJ". **The `number`
+field shipped at `eac8954`**: a positive integer, unique within one ledger,
+validated, backfilled across all thirty existing items.
 
-This was raised while reading a `ready` queue printed as sixteen ULIDs. That
-output is the tool's primary human-facing surface and it is unreadable — a
-maintainer cannot point at a row without copying twenty-six characters, and an
-agent relaying the queue produces a wall of noise.
+The first version of this item argued that integers could not be had cheaply,
+because allocating a sequence reintroduces the coordination the ULID exists to
+avoid. That reasoning was wrong and is recorded here so it is not repeated.
 
-The ULID must stay canonical. It is what `create` requires, what `inspect`
-keys on, what the filename encodes, and what makes atomic no-clobber
-publication work without coordination. Nothing here proposes replacing it.
+It conflated two different collisions. A ULID collision breaks identity and
+atomic publication, so it must be impossible. A duplicate `number` is
+recoverable — the ULID still distinguishes the items — so it is a validation
+error that a merge resolves, like any other conflicting edit. Both duplicates
+are flagged as `duplicate-number`, so a reader never silently gets the wrong
+item.
 
-What is proposed is a second, shorter handle for humans, and the design
-question is what it is derived from — because design principle 3 says derived
-state stays derived, and a stored sequence number is not derived.
+`number` is explicitly not identity. Publication, references, and the filename
+still use the immutable ID.
 
-Options:
+What is still open: **the human display surface.**
 
-- A stored per-ledger sequence (`#1`, `#2`). Reads best and is what the
-  request asked for. But it must be allocated, which reintroduces exactly the
-  coordination the ULID exists to avoid: two worktrees filing concurrently
-  both take the next integer and collide, and the ledger has no transactional
-  coordinator to arbitrate. This is the same wall the fenced-claims item hits.
-- A short prefix of the ULID, resolved like a Git short hash — `wb_01KZE1G`,
-  lengthened only when ambiguous. Derived, needs no allocation, no collision
-  risk, and every developer already understands the idiom. Loses the
-  "integer" quality of the request.
-- A slug from the title (`give-every-item-a-short-handle`). Readable and
-  memorable, but not stable — retitling changes it, so it cannot be an
-  identifier, only a display aid.
+`ready --json` deliberately did not change. Its result is byte-compared by the
+adapter conformance vectors, and a display concern does not belong in a
+machine contract. So the field exists and the queue still prints bare ULIDs —
+a reader has to render the numbers themselves, which is what happened when
+this item was filed.
 
-The short-prefix option is the only one that is both derived and
-collision-free without coordination, so it is the recommendation. It is worth
-stating plainly that it does not give the integers that were asked for, and
-that integers cannot be had cheaply while concurrent worktrees can file items.
-
-Whichever is chosen, the surface that matters most is `ready`: a queue a human
-reads should show the handle and the title, not a bare ULID list.
+The remaining work is a human-readable `ready` that shows number, priority and
+title. That means either making `--json` optional or adding an explicit format
+flag, which is a CLI contract change and should be decided rather than
+assumed.
 
 Acceptance:
 
-- an item can be referred to by a short handle in conversation and on the
-  command line, wherever an ID is accepted;
-- the handle resolves to exactly one item or fails loudly, never silently
-  picking one;
-- the canonical ULID is unchanged and remains what the file and the contract
-  use; and
-- `ready` output is legible to a human without copying identifiers.
+- every item carries a short handle — **done at `eac8954`**;
+- a duplicate handle is refused with both participants flagged — **done**;
+- the canonical ULID is unchanged — **done**; and
+- `ready` has a human surface that shows the handle, so reading the queue does
+  not require rendering it by hand.
 
-Raised 2026-08-07 by the maintainer while reading a sixteen-ULID ready queue.
+Raised 2026-08-07 by the maintainer while reading a sixteen-ULID ready queue,
+and again after the first answer declined to give integers.

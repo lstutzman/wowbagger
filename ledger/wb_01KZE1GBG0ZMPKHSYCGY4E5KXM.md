@@ -21,62 +21,52 @@ decisions:
     rationale: "Surfaced by a request that could not be satisfied — prioritise the dogfood issues. ready sorts by created ascending, so the two friction items landed at 15 and 16 of 16, furthest from the attention they were filed to attract. A priority extension member validates clean and steers nothing, so stamping one would be decoration that reads as data. Accepting the question, not a chosen answer: refusing priority outright is a legitimate outcome provided the refusal is written down."
 ---
 
-Wowbagger has no concept of priority, and the gap is not cosmetic: it blocks
-the workflow the tool exists to serve.
+Priority existed, was fully specified, and was deleted without a decision
+record. **Restored at `b0ee411`.** What remains is the question the deletion
+never answered.
 
-The request that surfaced it was ordinary — "issues filed from dogfooding
-should get high priority". It cannot be satisfied. `ready` sorts by `created`
-ascending, then by `id`:
+`73245c1` specified it:
 
-    .sort((left, right) => {
-      const created = compareText(left.data.created, right.data.created);
-      return created === 0 ? compareText(left.data.id, right.data.id) : created;
-    })
+    | priority | No | Non-negative integer supplied by a consumer policy.
+                  Lower values sort first; Wowbagger core does not calculate it. |
 
-So the newest item is always last. The two friction items filed from the
-tinydancer dogfood landed at positions 15 and 16 of 16 — the furthest possible
-from the attention they were filed to attract. Every future consumer report
-will do the same, and the more responsive the project is about filing them,
-the deeper they sink.
+    The ready result sorts by:
+    1. items with priority before items without priority;
+    2. ascending priority;
+    3. ascending created date;
+    4. ascending immutable ID.
 
-An extension member does not solve it. `priority: high` in the frontmatter
-validates clean — verified — and changes nothing, because no code reads it.
-Stamping it would produce data that looks authoritative and steers nothing,
-which is worse than the absence.
+Four hours later `1058b8c`, "docs: tighten standalone ledger invariants",
+removed it from the README, SPEC, ADR-0001, the standalone plan, and every
+ready-selection fixture, replacing the ordering with creation order alone. No
+ADR records it. The commit message does not mention it. The only surviving
+trace is ADR-0001, where "priority positions are optional consumer views"
+became "display positions".
 
-The honest workarounds are both wrong. `depends_on` can starve the queue until
-chosen work is done, but a dependency is a statement about order of
-possibility, not importance, and overloading it corrupts the one signal
-`ready` currently computes correctly. Backdating is impossible: `created` is
-derived from the ULID timestamp and `date` cannot move `updated` backwards.
+A consumer hit the hole three days later, and it had buried every dogfood
+finding at the bottom of the ready queue.
 
-This is a core question, not a packaging one, which is why it sits in the
-standalone epic. It also runs straight into design principle 3 — derived state
-stays derived. Priority is not derivable; it is a human judgement that must be
-stored. That does not make it wrong to add, but it does mean the contract has
-to say what priority is, who may set it, and whether `ready` orders by it or
-merely reports it.
+The restoration puts back the original four-step rule verbatim and adds the
+validation the original never had: `priority` must be a non-negative integer.
+Before that, `priority: high` validated clean, so a restored ordering would
+have silently ignored it.
 
-Options, deliberately not chosen here:
+What is still open:
 
-- an ordered enum in the frontmatter that `ready` sorts by before `created`;
-- an explicit rank the consumer maintains, with `ready` reporting it and
-  leaving the ordering to the reader; or
-- no priority at all, stated as a deliberate refusal, with the project
-  accepting that a queue is chronological and importance lives elsewhere.
-
-The third is a legitimate answer. What is not legitimate is the current state,
-where the concept is absent, undiscussed, and silently defaulted to "oldest
-first".
+- **Ownership was deleted in the same commit, the same way.** The original
+  line read "YAML metadata for lifecycle, priority, dependencies, and
+  ownership". Priority is back; ownership is not, and nobody has decided
+  whether it should be. It is tracked separately.
+- **Why the removal happened.** It may have been deliberate — an editor
+  narrowing v0 scope — or accidental. Nothing records which. That is worth
+  knowing before the same tidying pass removes something else.
 
 Acceptance:
 
-- the contract states whether Wowbagger has a priority concept, and if it does,
-  what values it takes and who may set it;
-- if priority exists, `ready` either orders by it or documents why it does not;
-- if priority is refused, the refusal is written down with its reasoning so the
-  question is not reopened by every consumer; and
-- either way, a consumer can tell from the documentation what happens to an
-  urgent item, without reading `src/ready.js`.
+- priority is restored and validated — **done at `b0ee411`**;
+- the reason for its removal is recorded, or recorded as unknown, so the
+  question is not reopened; and
+- the ADR discipline that would have caught this is stated: a contract field
+  is not removed in a documentation commit.
 
-Surfaced 2026-08-07 while trying to prioritise the tinydancer dogfood items.
+Reported from the tinydancer dogfood, 2026-08-07. Restored the same day.
