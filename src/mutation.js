@@ -49,24 +49,23 @@ export async function inspectItem(ledgerDirectory, id) {
     return { item: null };
   }
 
-  return { item: inspectedItem(id, displayItemPath(item.path), item.bytes, item.data, item.body) };
+  return { item: inspectedItem(displayItemPath(item.path), item.bytes, item.data, item.body) };
 }
 
 export function revisionFor(bytes) {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
-function inspectedPublishedItem(id, displayPath, bytes) {
+function inspectedPublishedItem(displayPath, bytes) {
   const parsed = parseLedgerItemSource(bytes.toString('utf8'));
   if (parsed.error) {
     throw new Error('Published bytes could not be parsed.');
   }
-  return inspectedItem(id, displayPath, bytes, parsed.data, parsed.body);
+  return inspectedItem(displayPath, bytes, parsed.data, parsed.body);
 }
 
-function inspectedItem(id, displayPath, bytes, data, body) {
+function inspectedItem(displayPath, bytes, data, body) {
   return {
-    id,
     path: displayPath,
     revision: revisionFor(bytes),
     source_encoding: 'base64',
@@ -116,7 +115,9 @@ export function validateCreateRequest(request, parseIssues = []) {
   ]);
   for (const field of Object.keys(item)) {
     if (controlled.has(field)) {
-      issues.push(issue(pointer(['item', field]), 'invalid-value', `Item member ${field} is controlled by Wowbagger.`));
+      issues.push(issue(pointer(['item', field]), 'invalid-value', field === 'status'
+        ? 'Item member status is controlled by Wowbagger. Create assigns triage; call transition to accept the item into backlog.'
+        : `Item member ${field} is controlled by Wowbagger.`));
     }
   }
   if (hasOwn(item, 'title') && (typeof item.title !== 'string' || item.title.trim().length === 0)) {
@@ -344,7 +345,7 @@ export async function createItem(ledgerDirectory, request, scenario) {
         return await finishCommittedRecovery(bytes);
       }
 
-      const result = inspectedPublishedItem(id, `${id}.md`, evidence.bytes);
+      const result = inspectedPublishedItem(`${id}.md`, evidence.bytes);
       const failedLocks = await releaseLocks(locks, scenario);
       locks = failedLocks;
       if (failedLocks.length > 0) {
@@ -406,7 +407,92 @@ export function validateTransitionRequest(request, parseIssues = []) {
   return sortIssues(issues);
 }
 
+export function validatePatchRequest(request, parseIssues = []) {
+  const issues = [...parseIssues];
+  if (issues.some((entry) => entry.code === 'invalid-json')) {
+    return sortIssues(issues);
+  }
+  if (!isMapping(request)) {
+    return [issue('', 'invalid-type', 'Request input must be a JSON object.')];
+  }
+  validateObjectMembers(request, [], ['id', 'expected_revision', 'patch', 'date', 'decision'], issues, 'Request member');
+  for (const field of ['id', 'expected_revision', 'patch', 'date', 'decision']) {
+    validateRequiredMember(request, [], field, issues);
+  }
+  if (hasOwn(request, 'id') && (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id))) {
+    issues.push(issue('/id', 'invalid-value', 'Member id must be a canonical Wowbagger item ID.'));
+  }
+  if (hasOwn(request, 'expected_revision') && (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision))) {
+    issues.push(issue('/expected_revision', 'invalid-value', 'Member expected_revision must be a lowercase SHA-256 revision token.'));
+  }
+  if (hasOwn(request, 'date') && (typeof request.date !== 'string' || !isCalendarDate(request.date))) {
+    issues.push(issue('/date', 'invalid-value', 'Member date must be an ISO calendar date.'));
+  }
+  if (!isMapping(request.patch)) {
+    if (hasOwn(request, 'patch')) {
+      issues.push(issue('/patch', 'invalid-type', 'Member patch must be an object.'));
+    }
+  } else {
+    validateObjectMembers(
+      request.patch,
+      ['patch'],
+      ['priority', 'number', 'parent', 'depends_on', 'title'],
+      issues,
+      'Patch member',
+    );
+    if (Object.keys(request.patch).length === 0) {
+      issues.push(issue('/patch', 'invalid-value', 'Member patch must contain at least one patchable field.'));
+    }
+    if (hasOwn(request.patch, 'priority') && !validOptionalInteger(request.patch.priority, 0)) {
+      issues.push(issue('/patch/priority', 'invalid-type', 'Patch member priority must be null or a non-negative integer.'));
+    }
+    if (hasOwn(request.patch, 'number') && !validOptionalInteger(request.patch.number, 1)) {
+      issues.push(issue('/patch/number', 'invalid-type', 'Patch member number must be null or a positive integer.'));
+    }
+    if (hasOwn(request.patch, 'parent') && request.patch.parent !== null
+      && (typeof request.patch.parent !== 'string' || !ULID_PATTERN.test(request.patch.parent))) {
+      issues.push(issue('/patch/parent', 'invalid-value', 'Patch member parent must be null or a canonical Wowbagger item ID.'));
+    }
+    if (hasOwn(request.patch, 'depends_on') && !Array.isArray(request.patch.depends_on)) {
+      issues.push(issue('/patch/depends_on', 'invalid-type', 'Patch member depends_on must be an array.'));
+    } else if (Array.isArray(request.patch.depends_on)) {
+      validatePatchRelationEntries(request.patch.depends_on, 'depends_on', issues);
+    }
+    if (hasOwn(request.patch, 'title')
+      && (typeof request.patch.title !== 'string' || request.patch.title.trim().length === 0)) {
+      issues.push(issue('/patch/title', 'invalid-type', 'Patch member title must be a non-empty string.'));
+    }
+  }
+  validatePatchDecision(request.decision, issues);
+  return sortIssues(issues);
+}
+
+function validatePatchDecision(decision, issues) {
+  if (!isMapping(decision)) {
+    if (decision !== undefined) {
+      issues.push(issue('/decision', 'invalid-type', 'Member decision must be an object.'));
+    }
+    return;
+  }
+  validateObjectMembers(decision, ['decision'], ['summary', 'rationale'], issues, 'Decision member');
+  for (const field of ['summary', 'rationale']) {
+    if (!hasOwn(decision, field)) {
+      issues.push(issue(pointer(['decision', field]), 'missing-member', `Decision member ${field} is missing.`));
+    } else if (typeof decision[field] !== 'string' || decision[field].trim().length === 0) {
+      issues.push(issue(pointer(['decision', field]), 'invalid-type', `Decision member ${field} must be a non-empty string.`));
+    }
+  }
+}
+
 export async function transitionItem(ledgerDirectory, request, scenario) {
+  return replaceItem(ledgerDirectory, request, 'transition', scenario);
+}
+
+export async function patchItem(ledgerDirectory, request, scenario) {
+  return replaceItem(ledgerDirectory, request, 'patch', scenario);
+}
+
+async function replaceItem(ledgerDirectory, request, operation, scenario) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
 
@@ -419,13 +505,15 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
     if (!target) {
       return mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id });
     }
-    const nextIds = lockIdsForTransition(target, initial.ledger);
+    const nextIds = operation === 'transition'
+      ? lockIdsForTransition(target, initial.ledger)
+      : lockIdsForPatch(target, request);
     if (scenario === 'expand-lock-closure-through-bounded-retry-limit') {
       return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
     }
     let locks;
     try {
-      locks = await acquireLocks(root, nextIds, 'transition', scenario);
+      locks = await acquireLocks(root, nextIds, operation, scenario);
     } catch (error) {
       if (error instanceof ResourceFailure) {
         return operationFailed(id, error.operation, 'io-error', await artifactsForLocks(error.locks, root));
@@ -465,7 +553,9 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
       if (!lockedTarget) {
         return await finishUncommitted(mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id }));
       }
-      const stableIds = lockIdsForTransition(lockedTarget, current.ledger);
+      const stableIds = operation === 'transition'
+        ? lockIdsForTransition(lockedTarget, current.ledger)
+        : lockIdsForPatch(lockedTarget, request);
       if (!sameIds(nextIds, stableIds)) {
         const cleanupFailure = await finishUncommitted(null);
         if (cleanupFailure) {
@@ -483,31 +573,45 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
         }));
       }
 
-      const edge = transitionEdge(lockedTarget.data.kind, lockedTarget.data.status, request.to_status);
-      const issues = transitionPreconditions(lockedTarget, current.ledger, request, edge);
-      const blockers = transitionBlockers(lockedTarget, current.ledger, request.to_status);
-      if (blockers.length > 0) {
-        return await finishUncommitted(mutationError('atomic-scope-required', 'The requested transition requires multi-item atomicity.', 'unchanged', 5, {
-          id,
-          blockers,
-          precondition_issues: issues,
-        }));
+      let successor;
+      let bytes;
+      if (operation === 'transition') {
+        const edge = transitionEdge(lockedTarget.data.kind, lockedTarget.data.status, request.to_status);
+        const issues = transitionPreconditions(lockedTarget, current.ledger, request, edge);
+        const blockers = transitionBlockers(lockedTarget, current.ledger, request.to_status);
+        if (blockers.length > 0) {
+          return await finishUncommitted(mutationError('atomic-scope-required', 'The requested transition requires multi-item atomicity.', 'unchanged', 5, {
+            id,
+            blockers,
+            precondition_issues: issues,
+          }));
+        }
+        if (issues.length > 0) {
+          return await finishUncommitted(mutationError('transition-precondition-failed', 'The requested lifecycle transition failed its preconditions.', 'unchanged', 2, {
+            id,
+            issues,
+          }));
+        }
+        if (edge.requiresDecision && !isMapping(request.decision)) {
+          return await finishUncommitted(invalidTransitionDecision());
+        }
+        if (!edge.requiresDecision && hasOwn(request, 'decision')) {
+          return await finishUncommitted(invalidTransitionDecision());
+        }
+        successor = transitionData(lockedTarget.data, request, edge, current.ledger);
+        bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
+      } else {
+        const blockers = patchBlockers(lockedTarget, current.ledger, request.patch);
+        if (blockers.length > 0) {
+          return await finishUncommitted(mutationError('atomic-scope-required', 'The requested patch requires multi-item atomicity.', 'unchanged', 5, {
+            id,
+            blockers,
+            precondition_issues: [],
+          }));
+        }
+        successor = patchData(lockedTarget.data, request);
+        bytes = Buffer.from(serializePatch(lockedTarget.source, successor, request.patch), 'utf8');
       }
-      if (issues.length > 0) {
-        return await finishUncommitted(mutationError('transition-precondition-failed', 'The requested lifecycle transition failed its preconditions.', 'unchanged', 2, {
-          id,
-          issues,
-        }));
-      }
-      if (edge.requiresDecision && !isMapping(request.decision)) {
-        return await finishUncommitted(invalidTransitionDecision());
-      }
-      if (!edge.requiresDecision && hasOwn(request, 'decision')) {
-        return await finishUncommitted(invalidTransitionDecision());
-      }
-
-      const successor = transitionData(lockedTarget.data, request, edge, current.ledger);
-      const bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         id,
@@ -516,6 +620,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
         lockedTarget.file,
         successor,
         lockedTarget.source,
+        operation === 'patch' ? Object.keys(request.patch) : [],
       );
       if (!candidateValidation.valid) {
         return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
@@ -562,7 +667,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
             return await finishUncommitted(operationFailed(id, 'publish', 'verification-failed', artifacts), artifacts);
           }
           return await finishUnknown(unknownPublication(
-            'transition',
+            operation,
             id,
             displayItemPath(lockedTarget.path),
             evidence.bytes,
@@ -575,7 +680,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
       try {
         published = await readRegularFile(lockedTarget.file);
       } catch {
-        return await finishUnknown(mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', `The ${operation} publication outcome could not be verified.`, 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: displayItemPath(lockedTarget.path),
@@ -587,7 +692,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
         }));
       }
       if (!published.equals(bytes)) {
-        return await finishUnknown(mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', `The ${operation} publication outcome could not be verified.`, 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: displayItemPath(lockedTarget.path),
@@ -610,7 +715,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
       } catch {
         return await finishCommittedRecovery(bytes);
       }
-      const result = inspectedPublishedItem(id, displayItemPath(lockedTarget.path), published);
+      const result = inspectedPublishedItem(displayItemPath(lockedTarget.path), published);
       const failedLocks = await releaseLocks(locks, scenario);
       locks = failedLocks;
       if (failedLocks.length > 0) {
@@ -657,6 +762,132 @@ function lockIdsForTransition(target, ledger) {
     }
   }
   return [...new Set(ids)].sort(compareText);
+}
+
+function lockIdsForPatch(target, request) {
+  const ids = [target.data.id];
+  if (target.data.parent) {
+    ids.push(target.data.parent);
+  }
+  ids.push(...(target.data.depends_on ?? []));
+  if (typeof request.patch.parent === 'string') {
+    ids.push(request.patch.parent);
+  }
+  if (Array.isArray(request.patch.depends_on)) {
+    ids.push(...request.patch.depends_on);
+  }
+  return [...new Set(ids)].sort(compareText);
+}
+
+function patchBlockers(target, ledger, patch) {
+  if (!hasOwn(patch, 'parent')) {
+    return [];
+  }
+  const oldParent = target.data.parent ?? null;
+  const newParent = patch.parent;
+  if (oldParent === newParent) {
+    return [];
+  }
+  return [...new Set([oldParent, newParent].filter(Boolean))]
+    .filter((id) => findItem(ledger, id)?.data.status === 'done')
+    .map((id) => ({ code: 'child-disposition', item_id: id, field: 'parent' }))
+    .sort((left, right) => compareText(left.item_id, right.item_id));
+}
+
+function patchData(data, request) {
+  const successor = {
+    ...data,
+    provenance: { ...data.provenance },
+    depends_on: [...(data.depends_on ?? [])],
+    related: [...(data.related ?? [])],
+    updated: request.date,
+    decisions: [...(data.decisions ?? []), {
+      action: 'record',
+      date: request.date,
+      summary: request.decision.summary,
+      rationale: request.decision.rationale,
+    }],
+  };
+  if (hasOwn(request.patch, 'priority')) {
+    if (request.patch.priority === null) {
+      delete successor.priority;
+    } else {
+      successor.priority = jsonIntegerValue(request.patch.priority);
+    }
+  }
+  if (hasOwn(request.patch, 'number')) {
+    if (request.patch.number === null) {
+      delete successor.number;
+    } else {
+      successor.number = jsonIntegerValue(request.patch.number);
+    }
+  }
+  if (hasOwn(request.patch, 'parent')) {
+    if (request.patch.parent === null) {
+      delete successor.parent;
+    } else {
+      successor.parent = request.patch.parent;
+    }
+  }
+  if (hasOwn(request.patch, 'depends_on')) {
+    successor.depends_on = [...request.patch.depends_on];
+  }
+  if (hasOwn(request.patch, 'title')) {
+    successor.title = request.patch.title;
+  }
+  return successor;
+}
+
+function serializePatch(source, successor, patch) {
+  const bounds = frontmatterBounds(source);
+  const frontmatter = source.slice(bounds.start, bounds.end);
+  const document = parseDocument(frontmatter, {
+    intAsBigInt: true,
+    keepSourceTokens: true,
+    prettyErrors: false,
+    schema: 'core',
+    uniqueKeys: true,
+  });
+  if (document.errors.length > 0 || !isMap(document.contents)) {
+    throw new Error('Unable to mutate malformed frontmatter.');
+  }
+  setRootScalar(document, 'updated', successor.updated);
+  if (hasOwn(patch, 'priority')) {
+    if (patch.priority === null) {
+      document.delete('priority');
+    } else {
+      setRootScalar(document, 'priority', successor.priority);
+    }
+  }
+  if (hasOwn(patch, 'number')) {
+    if (patch.number === null) {
+      document.delete('number');
+    } else {
+      setRootScalar(document, 'number', successor.number);
+    }
+  }
+  if (hasOwn(patch, 'parent')) {
+    if (patch.parent === null) {
+      document.delete('parent');
+    } else {
+      setRootScalar(document, 'parent', successor.parent);
+    }
+  }
+  if (hasOwn(patch, 'depends_on')) {
+    document.set('depends_on', successor.depends_on);
+  }
+  if (hasOwn(patch, 'title')) {
+    setRootScalar(document, 'title', successor.title);
+  }
+  appendDecisionNode(document, successor.decisions.at(-1));
+  let serialized = document.toString({ lineWidth: 0 });
+  if (bounds.newline === '\r\n') {
+    serialized = serialized.replaceAll('\n', '\r\n');
+  }
+  if (!frontmatter.endsWith(bounds.newline)) {
+    serialized = serialized.slice(0, -bounds.newline.length);
+  }
+  return `${source.slice(0, bounds.start)}${serialized}${source.slice(bounds.end)}`;
 }
 
 function transitionEdge(kind, from, to) {
@@ -903,14 +1134,26 @@ async function loadedValidLedger(root) {
   return { ledger, validation, valid: validation.valid };
 }
 
-function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file, expectedData, expectedSource) {
+function validateSerializedCandidate(
+  ledger,
+  replacementId,
+  bytes,
+  displayPath,
+  file,
+  expectedData,
+  expectedSource,
+  changedSourceFields = [],
+) {
   const source = bytes.toString('utf8');
   const parsed = parseLedgerItemSource(source);
   const errors = parsed.error ? [{ path: displayPath, ...parsed.error }] : [];
   const coreMatches = parsed.error || !expectedData
     || isDeepStrictEqual(coreView(parsed.data), coreView(expectedData));
   const extensionsMatch = parsed.error || !expectedSource
-    || isDeepStrictEqual(extensionNodeIdentity(source), extensionNodeIdentity(expectedSource));
+    || isDeepStrictEqual(
+      extensionNodeIdentity(source, changedSourceFields),
+      extensionNodeIdentity(expectedSource, changedSourceFields),
+    );
   if (!parsed.error && (!coreMatches || !extensionsMatch)) {
     errors.push({
       path: displayPath,
@@ -933,7 +1176,7 @@ function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, 
   return validateLedger({ items: items.filter(Boolean), errors });
 }
 
-function extensionNodeIdentity(source) {
+function extensionNodeIdentity(source, ignoredFields = []) {
   const bounds = frontmatterBounds(source);
   const document = parseDocument(source.slice(bounds.start, bounds.end), {
     keepSourceTokens: true,
@@ -948,6 +1191,9 @@ function extensionNodeIdentity(source) {
   const identity = [];
   for (const pair of document.contents.items) {
     const key = isScalar(pair.key) ? pair.key.value : undefined;
+    if (ignoredFields.includes(key)) {
+      continue;
+    }
     if (!CONTROLLED_ITEM_FIELDS.has(key)) {
       identity.push(['item', sourceNodeIdentity(pair)]);
       continue;
@@ -1182,6 +1428,19 @@ function validateRelationEntries(references, field, issues) {
   }
 }
 
+function validatePatchRelationEntries(references, field, issues) {
+  for (let index = 0; index < references.length; index += 1) {
+    const reference = references[index];
+    if (typeof reference !== 'string' || !ULID_PATTERN.test(reference)) {
+      issues.push(issue(
+        `/patch/${field}/${index}`,
+        'invalid-value',
+        `Patch member ${field} entries must be canonical Wowbagger item IDs.`,
+      ));
+    }
+  }
+}
+
 function validateObjectMembers(value, location, allowed, issues, noun) {
   const allowedMembers = new Set(allowed);
   for (const member of Object.keys(value)) {
@@ -1293,7 +1552,7 @@ function validLockOwner(owner, file) {
   }
   return isJsonInteger(owner.lock_version, 1)
     && owner.item_id === expectedId
-    && (owner.operation === 'create' || owner.operation === 'transition')
+    && (owner.operation === 'create' || owner.operation === 'patch' || owner.operation === 'transition')
     && typeof owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(owner.writer_id)
     && isRfc3339Utc(owner.started_at);
@@ -1716,6 +1975,18 @@ function isMapping(value) {
 
 function isJsonInteger(value, expected) {
   return value === expected || (value instanceof JsonNumber && value.source === String(expected));
+}
+
+function jsonIntegerValue(value) {
+  return value instanceof JsonNumber ? Number(value.source) : value;
+}
+
+function validOptionalInteger(value, minimum) {
+  if (value === null) {
+    return true;
+  }
+  const integer = jsonIntegerValue(value);
+  return Number.isSafeInteger(integer) && integer >= minimum;
 }
 
 function hasOwn(value, key) {

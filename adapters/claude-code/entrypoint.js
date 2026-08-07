@@ -40,7 +40,7 @@ function dynamicResult(manifest) {
     adapter_version: manifest.adapter_version,
     core: {
       required_core_contract_version: 1,
-      commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+      commands: ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'],
     },
     host: {
       command_execution: {

@@ -33,7 +33,7 @@ export function dynamicDescribe(overrides = {}) {
     adapter_version: '1.0.0',
     core: {
       required_core_contract_version: 1,
-      commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+      commands: ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'],
     },
     host: {
       command_execution: {

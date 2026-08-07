@@ -121,6 +121,7 @@ npm ci
 ./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15 --json
 ./bin/wowbagger.js capabilities --json
 ./bin/wowbagger.js inspect --ledger path/to/ledger --id wb_... --json
+./bin/wowbagger.js mint-id --date 2030-01-15
 ./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js transition --ledger path/to/ledger --input request.json --json
 ```
@@ -132,15 +133,25 @@ returns:
 {"valid":true,"errors":[]}
 ```
 
-`ready` validates first, then returns only the normative ready result:
+`ready` validates first, then returns only the normative ready result. With
+`--json` the result is the machine contract, byte-stable for adapters:
 
 ```json
 {"as_of":"2030-01-15","valid":true,"ready":["wb_..."]}
 ```
 
-`validate` and `ready` require `--ledger` and `--json`; `ready` also requires
-an ISO calendar `--as-of` date. Invalid ledgers return the validation JSON and
-exit nonzero. The core rejects invalid UTF-8, symbolic-link entries, unreadable
+Without `--json`, `ready` prints the same queue for people — number, priority,
+and title in ready order, with `-` where an item carries no value:
+
+```text
+number  priority  title
+12      1         Fix the flaking cache test
+7       -         Repatriate the satellite docs
+```
+
+`validate` requires `--ledger` and `--json`; `ready` requires `--ledger` and
+an ISO calendar `--as-of` date, with `--json` selecting the machine result.
+Invalid ledgers return the validation JSON and exit nonzero. The core rejects invalid UTF-8, symbolic-link entries, unreadable
 paths, and `.md` special files rather than returning a partial view. Real
 directories ending in `.md` remain containers and are traversed. These checks
 provide deterministic read hygiene; they are not a sandbox against a privileged
@@ -148,10 +159,14 @@ process racing filesystem changes.
 
 `inspect` returns a lossless raw-byte snapshot and its SHA-256 revision.
 `create` publishes only a caller-supplied canonical ID through atomic
-no-clobber publication. `transition` compares the inspected revision while
-cooperative per-ID locks are held, then changes one lifecycle item or refuses
-the request if dependent cleanup or child disposition would require changing
-another item. See [the mutation contract](docs/mutation-contract.md) for the
+no-clobber publication. `mint-id` prints such an ID — canonical form,
+Crockford alphabet, 80 bits of entropy — encoding the current UTC instant, or
+the `--date YYYY-MM-DD` the item's `created` will carry, so the create request
+validates on first publication. An adapter or plugin can import `mintId` from
+`src/mint-id.js` instead of shelling out. `transition` compares the inspected
+revision while cooperative per-ID locks are held, then changes one lifecycle
+item or refuses the request if dependent cleanup or child disposition would
+require changing another item. See [the mutation contract](docs/mutation-contract.md) for the
 JSON request, response, recovery, and scope details. A lock is never a work
 claim. See [the fenced work-claim contract](docs/work-claim-contract.md) for
 the separate future claim protocol and its strict backend boundary.

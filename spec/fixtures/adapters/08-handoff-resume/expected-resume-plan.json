@@ -13,6 +13,7 @@
     "create",
     "git-commit",
     "git-push",
+    "patch",
     "transition"
   ]
 }

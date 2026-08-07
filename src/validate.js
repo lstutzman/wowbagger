@@ -24,8 +24,8 @@ const DECISION_ACTIONS = new Set([
   'reparent',
   'record',
 ]);
-const ULID_PATTERN = /^wb_([0-7][0-9A-HJKMNP-TV-Z]{25})$/;
-const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+export const ULID_PATTERN = /^wb_([0-7][0-9A-HJKMNP-TV-Z]{25})$/;
+export const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const NON_TERMINAL_STATUSES = new Set(['triage', 'backlog', 'in-progress']);
 
 export function validateLedger(ledger) {
@@ -1108,7 +1108,7 @@ function isLeapYear(year) {
   return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 }
 
-function dateFromId(id) {
+export function dateFromId(id) {
   const ulid = ULID_PATTERN.exec(id)?.[1];
   let milliseconds = 0;
   for (const character of ulid.slice(0, 10)) {

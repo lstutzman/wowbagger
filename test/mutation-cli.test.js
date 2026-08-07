@@ -38,6 +38,30 @@ test('inspect returns one lossless validated item from a single byte snapshot', 
   );
 });
 
+test('inspect keeps every frontmatter field under item core', () => {
+  const result = runCli(
+    'inspect',
+    '--ledger',
+    fileURLToPath(new URL('ledger', inspectFixture)),
+    '--id',
+    'wb_01Q4837BM01W70T30B184GG1R6',
+    '--json',
+  );
+  const item = JSON.parse(result.stdout).result.item;
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(Object.keys(item).sort(), [
+    'body',
+    'core',
+    'path',
+    'revision',
+    'source_base64',
+    'source_encoding',
+    'source_media_type',
+  ]);
+  assert.equal(item.core.id, 'wb_01Q4837BM01W70T30B184GG1R6');
+});
+
 test('inspect refuses an absent ID without returning a partial item', () => {
   const fixture = new URL('../spec/fixtures/mutations/inspect/', import.meta.url);
   const result = runCli(
@@ -94,6 +118,40 @@ test('create atomically publishes the canonical caller-identified triage item', 
       await readFile(path.join(ledger, 'wb_01Q45X474N28T5CY4GNF6YY4HM.md'), 'utf8'),
       readFileSync(fileURLToPath(new URL('expected-item.md', fixture)), 'utf8'),
     );
+  });
+});
+
+test('create reports the triage status it assigned without promoting it onto item', async () => {
+  const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, readFileSync(fileURLToPath(new URL('request.json', fixture))));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(output.result.item.core.status, 'triage');
+    assert.equal(Object.hasOwn(output.result.item, 'assigned_status'), false);
+    assert.equal(Object.hasOwn(output.result.item, 'status'), false);
+  });
+});
+
+test('create refusing a caller-supplied status names triage and the accepting transition', async () => {
+  const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+  await withLedger({}, async (ledger) => {
+    const request = JSON.parse(readFileSync(fileURLToPath(new URL('request.json', fixture)), 'utf8'));
+    request.item.status = 'backlog';
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify(request));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+    const statusIssue = output.error.details.issues.find((entry) => entry.path === '/item/status');
+
+    assert.equal(result.status, 2);
+    assert.match(statusIssue.message, /triage/);
+    assert.match(statusIssue.message, /transition/);
   });
 });
 

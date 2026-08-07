@@ -336,7 +336,7 @@ async function evaluateAssertion(directory, caseName, assertion) {
             {
               core: {
                 required_core_contract_version: scenario.required_core_contract_version,
-                commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+                commands: ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'],
               },
               optional_features: { claims: false, policy: false },
             },
@@ -552,7 +552,7 @@ function referenceRuntime(overrides = {}) {
     adapter_version: '1.0.0',
     core: {
       required_core_contract_version: 1,
-      commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+      commands: ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'],
     },
     host: {
       command_execution: {

@@ -18,7 +18,7 @@ test('create classifies an applied-then-error link from the final bytes', async 
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(output.state, 'committed');
-    assert.equal(output.result.item.id, id);
+    assert.equal(output.result.item.core.id, id);
     assert.equal(await exists(path.join(ledger, '.wowbagger-test-publication-fault')), true);
     assert.deepEqual((await readdir(ledger)).filter((entry) => entry.startsWith('.wowbagger-tmp-')), []);
   });

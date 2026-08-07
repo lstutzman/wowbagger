@@ -5,6 +5,7 @@ import { parseLedgerItemSource } from '../src/ledger.js';
 import {
   createCandidateSource,
   validateCreateRequest,
+  validatePatchRequest,
   validateTransitionRequest,
 } from '../src/mutation.js';
 import { parseJsonRequest } from '../src/request.js';
@@ -45,6 +46,11 @@ const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
     'candidate-invalid', 'capability-unavailable', 'operation-failed',
     'post-commit-recovery-required', 'write-outcome-unknown',
   ]),
+  patch: new Set([
+    'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
+    'revision-conflict', 'atomic-scope-required', 'candidate-invalid',
+    'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
+  ]),
   transition: new Set([
     'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
     'revision-conflict', 'atomic-scope-required', 'transition-precondition-failed',
@@ -76,7 +82,7 @@ const TRANSITION_BLOCKER_FIELDS = Object.freeze({
   'child-disposition': 'parent',
 });
 export const CORE_COMMANDS = Object.freeze([
-  'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate',
+  'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
 const SUPPORTED_ADAPTER_CONTRACT_VERSIONS = Object.freeze([1]);
 const INSTRUCTION_MODES = new Set(['none', 'host-provided', 'configured-relative-paths']);
@@ -216,7 +222,7 @@ export function verifyTrustedApproval({
 }
 
 export function verifyMutationAuthority({ command, approval, approvalOptions }) {
-  if (command !== 'create' && command !== 'transition') {
+  if (command !== 'create' && command !== 'patch' && command !== 'transition') {
     return { ok: true, authority: [] };
   }
   if (approval === null || approval === undefined) {
@@ -316,7 +322,7 @@ export function mapProcessOutcome({
     adapter_contract_version: adapterContractVersion,
     request_id: requestId,
   };
-  const mutation = command === 'create' || command === 'transition';
+  const mutation = command === 'create' || command === 'patch' || command === 'transition';
   const responseContext = coreRequest === null
     ? null
     : {
@@ -530,6 +536,11 @@ export function referenceCoreCapabilities() {
           publication_visibility: 'atomic-no-clobber-or-fail',
           publication_probe: 'per-ledger-operation',
         },
+        patch: {
+          supported: true,
+          write_scope: 'single-item',
+          cas_scope: 'exact-byte-sha256',
+        },
         transition: {
           supported: true,
           write_scope: 'single-item',
@@ -698,7 +709,7 @@ export function buildResumePlan(carrier, options) {
     ok: true,
     must_invoke: ['describe', 'validate', 'inspect'],
     must_compare: ['instruction-set-digest', 'item-revision'],
-    forbidden_automatic_actions: ['claim-renewal', 'create', 'git-commit', 'git-push', 'transition'],
+    forbidden_automatic_actions: ['claim-renewal', 'create', 'git-commit', 'git-push', 'patch', 'transition'],
   };
 }
 
@@ -772,7 +783,7 @@ export async function invokeAdapter(requestBytes, runtime) {
     });
   }
   const command = request.core_request.command;
-  const mutation = command === 'create' || command === 'transition';
+  const mutation = command === 'create' || command === 'patch' || command === 'transition';
   const requiredCapabilities = ['command-execution'];
   if (command !== 'capabilities') requiredCapabilities.push('guarded-filesystem');
   if (mutation) requiredCapabilities.push('trusted-approval');
@@ -1003,6 +1014,7 @@ function coreRequestSchemaIssue(value) {
         && isSafeLogicalPath(value.ledger) && WOWBAGGER_ID.test(value.id)
         ? null : 'core_request';
     case 'create':
+    case 'patch':
     case 'transition':
       return hasExactKeys(value, ['command', 'ledger', 'input_base64'])
         && isSafeLogicalPath(value.ledger)
@@ -1014,7 +1026,8 @@ function coreRequestSchemaIssue(value) {
 }
 
 function mutationInput(coreRequest) {
-  if (coreRequest.command !== 'create' && coreRequest.command !== 'transition') return Buffer.alloc(0);
+  if (coreRequest.command !== 'create' && coreRequest.command !== 'patch'
+    && coreRequest.command !== 'transition') return Buffer.alloc(0);
   return decodeCanonicalBase64(coreRequest.input_base64);
 }
 
@@ -1025,6 +1038,7 @@ function coreArgumentVector(coreRequest, ledger) {
     case 'ready': return ['ready', '--ledger', ledger, '--as-of', coreRequest.as_of, '--json'];
     case 'inspect': return ['inspect', '--ledger', ledger, '--id', coreRequest.id, '--json'];
     case 'create': return ['create', '--ledger', ledger, '--input', '-', '--json'];
+    case 'patch': return ['patch', '--ledger', ledger, '--input', '-', '--json'];
     case 'transition': return ['transition', '--ledger', ledger, '--input', '-', '--json'];
     default: throw new TypeError('unsupported core command');
   }
@@ -1264,7 +1278,7 @@ function coreCapabilitiesSchemaIssue(value) {
     || !GIT_COORDINATION_SCOPES.includes(result.backend.coordination_scope)) {
     return 'result.backend';
   }
-  if (!hasExactKeys(result.operations, ['inspect', 'create', 'transition', 'work_claim'])) {
+  if (!hasExactKeys(result.operations, ['inspect', 'create', 'patch', 'transition', 'work_claim'])) {
     return 'result.operations';
   }
   if (!hasExactKeys(result.operations.inspect, ['supported', 'write_scope', 'cas_scope'])
@@ -1280,6 +1294,12 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.operations.create.publication_visibility !== 'atomic-no-clobber-or-fail'
     || result.operations.create.publication_probe !== 'per-ledger-operation') {
     return 'result.operations.create';
+  }
+  if (!hasExactKeys(result.operations.patch, ['supported', 'write_scope', 'cas_scope'])
+    || result.operations.patch.supported !== true
+    || result.operations.patch.write_scope !== 'single-item'
+    || result.operations.patch.cas_scope !== 'exact-byte-sha256') {
+    return 'result.operations.patch';
   }
   if (!hasExactKeys(result.operations.transition, ['supported', 'write_scope', 'cas_scope'])
     || result.operations.transition.supported !== true
@@ -1446,7 +1466,7 @@ function envelopeState(process, command = null, responseContext = null) {
   return {
     present: bytes.length > 0,
     valid,
-    mutation_state: valid && (command === 'create' || command === 'transition')
+    mutation_state: valid && (command === 'create' || command === 'patch' || command === 'transition')
       ? value.state
       : null,
   };
@@ -1479,7 +1499,7 @@ function validCoreCommandEnvelope(value, command, exitCode, responseContext) {
   if (command === 'ready') return validCoreReadyEnvelope(value, exitCode, responseContext);
   if (command === 'capabilities') return coreCapabilitiesSchemaIssue(value) === null && exitCode === 0;
   if (command === 'inspect') return validCoreReadEnvelope(value, command, exitCode, responseContext);
-  if (command === 'create' || command === 'transition') {
+  if (command === 'create' || command === 'patch' || command === 'transition') {
     return validCoreMutationEnvelope(value, command, exitCode, responseContext);
   }
   return false;
@@ -1494,7 +1514,7 @@ function validCoreReadEnvelope(value, command, exitCode, responseContext) {
     return hasExactKeys(value, ['ok', 'command', 'contract_version', 'result'])
       && hasExactKeys(value.result, ['item'])
       && validCoreItemShape(value.result.item)
-      && (coreRequest === undefined || value.result.item.id === coreRequest.id)
+      && (coreRequest === undefined || value.result.item.core.id === coreRequest.id)
       && exitCode === 0;
   }
   return value.ok === false
@@ -1504,7 +1524,7 @@ function validCoreReadEnvelope(value, command, exitCode, responseContext) {
 
 function validCoreItemShape(value) {
   if (!hasExactKeys(value, [
-    'id', 'path', 'revision', 'source_encoding', 'source_media_type',
+    'path', 'revision', 'source_encoding', 'source_media_type',
     'source_base64', 'core', 'body',
   ])) return false;
   if (!hasExactKeys(value.core, [
@@ -1513,8 +1533,7 @@ function validCoreItemShape(value) {
   ], [
     'parent', 'snoozed_until', 'completed', 'killed', 'archived', 'decisions',
   ])) return false;
-  if (!WOWBAGGER_ID.test(value.id)
-    || !isSafeLedgerDisplayPath(value.path)
+  if (!isSafeLedgerDisplayPath(value.path)
     || !DIGEST.test(value.revision)
     || value.source_encoding !== 'base64'
     || value.source_media_type !== 'text/markdown; charset=utf-8'
@@ -1527,7 +1546,6 @@ function validCoreItemShape(value) {
   const parsed = parseLedgerItemSource(sourceText);
   const sourceCore = parsed.error ? null : sourceCoreView(parsed.data);
   return sourceCore !== null
-    && value.id === value.core.id
     && value.body === parsed.body
     && sameJson(value.core, sourceCore)
     && validReturnedItemSemantics(value.path, parsed.data);
@@ -1817,7 +1835,7 @@ function coreErrorMessageMatches(code, command, message) {
     'lock-held': 'The item is locked by another cooperative Wowbagger writer.',
     'id-collision': 'The requested item ID already exists.',
     'path-collision': 'The default item path is occupied by a different item.',
-    'atomic-scope-required': 'The requested transition requires multi-item atomicity.',
+    'atomic-scope-required': `The requested ${command} requires multi-item atomicity.`,
     'capability-unavailable': 'Atomic no-clobber publication is unavailable for this ledger.',
     'operation-failed': 'The mutation operation failed before a commit was established.',
     'post-commit-recovery-required': 'The item was committed, but cleanup requires recovery.',
@@ -1873,7 +1891,8 @@ function validCoreErrorDetails(code, details, command, responseContext) {
     ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id) && DIGEST.test(details.revision)
       && (command !== 'create' || expectedCreateRevision === undefined
         || details.revision === expectedCreateRevision)
-      && (command !== 'transition' || expectedRevision === undefined || details.revision !== expectedRevision)
+      && ((command !== 'patch' && command !== 'transition')
+        || expectedRevision === undefined || details.revision !== expectedRevision)
       && validRecoveryArtifacts(details.recovery_artifacts, details.recovery_artifacts_truncated);
     case 'write-outcome-unknown': return hasExactKeys(details, [
       'id', 'recovery_artifacts', 'recovery_artifacts_truncated',
@@ -1892,7 +1911,8 @@ function responseCoreRequest(responseContext, command) {
 function responseMutationRequest(responseContext, command) {
   const coreRequest = responseCoreRequest(responseContext, command);
   if (coreRequest === undefined) return undefined;
-  if (coreRequest === null || (command !== 'create' && command !== 'transition')) return null;
+  if (coreRequest === null || (command !== 'create' && command !== 'patch'
+    && command !== 'transition')) return null;
   const mutationInput = responseMutationInput(responseContext, command);
   if (mutationInput !== undefined) {
     if (mutationInput === null) return null;
@@ -1905,7 +1925,8 @@ function responseMutationRequest(responseContext, command) {
 function responseMutationInput(responseContext, command) {
   const coreRequest = responseCoreRequest(responseContext, command);
   if (coreRequest === undefined) return undefined;
-  if (coreRequest === null || (command !== 'create' && command !== 'transition')) return null;
+  if (coreRequest === null || (command !== 'create' && command !== 'patch'
+    && command !== 'transition')) return null;
   if (!Object.hasOwn(responseContext, 'mutation_input')) return undefined;
   return responseContext.mutation_input instanceof Uint8Array
     ? responseContext.mutation_input
@@ -1926,7 +1947,7 @@ function responseItemId(responseContext, command) {
 function responseExpectedRevision(responseContext, command) {
   const mutationRequest = responseMutationRequest(responseContext, command);
   if (mutationRequest === undefined) return undefined;
-  return command === 'transition' && DIGEST.test(mutationRequest?.expected_revision)
+  return (command === 'patch' || command === 'transition') && DIGEST.test(mutationRequest?.expected_revision)
     ? mutationRequest.expected_revision
     : null;
 }
@@ -1950,6 +1971,7 @@ function hasCanonicalMutationRequest(responseContext, command) {
     const parsed = parseJsonRequest(mutationInput);
     if (parsed.issues.length > 0 || !plainObject(parsed.value)) return false;
     if (command === 'create') return validateCreateRequest(parsed.value).length === 0;
+    if (command === 'patch') return validatePatchRequest(parsed.value).length === 0;
     if (command === 'transition') return validateTransitionRequest(parsed.value).length === 0;
     return false;
   }
@@ -1957,6 +1979,7 @@ function hasCanonicalMutationRequest(responseContext, command) {
   if (mutationRequest === undefined) return true;
   if (!plainObject(mutationRequest)) return false;
   if (command === 'create') return validateCreateRequest(mutationRequest).length === 0;
+  if (command === 'patch') return validatePatchRequest(mutationRequest).length === 0;
   if (command === 'transition') return validateTransitionRequest(mutationRequest).length === 0;
   return false;
 }
@@ -1964,12 +1987,13 @@ function hasCanonicalMutationRequest(responseContext, command) {
 function validMutationResultCorrelation(item, command, mutationRequest) {
   if (mutationRequest === undefined) return true;
   if (command === 'create') return validCreateResultCorrelation(item, mutationRequest);
+  if (command === 'patch') return validPatchResultCorrelation(item, mutationRequest);
   return validTransitionResultCorrelation(item, mutationRequest);
 }
 
 function validCreateResultCorrelation(item, request) {
   if (!plainObject(request) || !plainObject(request.item)
-    || item.id !== request.id || item.path !== `${request.id}.md` || item.body !== request.body
+    || item.core.id !== request.id || item.path !== `${request.id}.md` || item.body !== request.body
     || item.core.schema_version !== 1 || item.core.status !== 'triage'
     || item.core.title !== request.item.title || item.core.kind !== request.item.kind
     || !sameJson(item.core.provenance, {
@@ -1993,9 +2017,44 @@ function validCreateResultCorrelation(item, request) {
   }
 }
 
+function validPatchResultCorrelation(item, request) {
+  if (!plainObject(request) || !plainObject(request.patch)
+    || item.core.id !== request.id
+    || item.revision === request.expected_revision
+    || item.core.updated !== request.date
+    || !Array.isArray(item.core.decisions)) return false;
+  const decision = item.core.decisions.at(-1);
+  if (!plainObject(decision)
+    || decision.action !== 'record'
+    || decision.date !== request.date
+    || decision.summary !== request.decision?.summary
+    || decision.rationale !== request.decision?.rationale) return false;
+  if (Object.hasOwn(request.patch, 'title') && item.core.title !== request.patch.title) return false;
+  if (Object.hasOwn(request.patch, 'depends_on')
+    && !sameJson(item.core.depends_on, request.patch.depends_on)) return false;
+  if (Object.hasOwn(request.patch, 'parent')) {
+    if (request.patch.parent === null) {
+      if (Object.hasOwn(item.core, 'parent')) return false;
+    } else if (item.core.parent !== request.patch.parent) return false;
+  }
+  const source = decodeCanonicalBase64(item.source_base64);
+  const parsed = source === null ? null : parseLedgerItemSource(decodeUtf8(source));
+  if (parsed === null || parsed.error) return false;
+  for (const field of ['priority', 'number']) {
+    if (!Object.hasOwn(request.patch, field)) continue;
+    const expected = request.patch[field] === null
+      ? null
+      : Number(request.patch[field]?.source ?? request.patch[field]);
+    if (expected === null) {
+      if (Object.hasOwn(parsed.data, field)) return false;
+    } else if (parsed.data[field] !== expected) return false;
+  }
+  return true;
+}
+
 function validTransitionResultCorrelation(item, request) {
   if (!plainObject(request)
-    || item.id !== request.id
+    || item.core.id !== request.id
     || item.revision === request.expected_revision
     || item.core.status !== request.to_status
     || item.core.updated !== request.date) return false;
@@ -2073,7 +2132,7 @@ function validLockHeldDetails(value) {
     && hasExactKeys(value.owner, ['lock_version', 'item_id', 'operation', 'writer_id', 'started_at'])
     && value.owner.lock_version === 1
     && value.owner.item_id === value.id
-    && new Set(['create', 'transition']).has(value.owner.operation)
+    && new Set(['create', 'patch', 'transition']).has(value.owner.operation)
     && typeof value.owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(value.owner.writer_id)
     && isCoreRfc3339Utc(value.owner.started_at);

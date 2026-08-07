@@ -13,11 +13,13 @@ backend can provide a particular write guarantee.
 
 ## 1. Scope
 
-The contract keeps four concerns separate:
+The contract keeps five concerns separate:
 
 - capabilities describes guarantees and limitations;
 - inspect reads one item and returns a revision from the same bytes it exposes;
-- create publishes one caller-identified triage item; and
+- create publishes one caller-identified triage item;
+- patch changes a narrow set of frontmatter fields under a guarded replacement;
+  and
 - transition changes one existing item through a guarded lifecycle edge.
 
 Work claiming is unsupported. A write lock protects a short mutation attempt;
@@ -26,11 +28,11 @@ work-claim contract](work-claim-contract.md) defines a future backend protocol;
 it does not add a member or guarantee to these version 1 requests.
 
 If a future backend advertises safely fenced claims while retaining these
-legacy entry points, it must run them through the same coordinator: transition
-refuses an active claimed `(ledger_namespace, item_id)` and create refuses an
-identity with claim history. Until then, the local runtime's unsupported
-capability is authoritative; callers cannot combine this API with an external
-claim hint and infer fencing.
+legacy entry points, it must run them through the same coordinator: patch and
+transition refuse an active claimed `(ledger_namespace, item_id)` and create
+refuses an identity with claim history. Until then, the local runtime's
+unsupported capability is authoritative; callers cannot combine this API with
+an external claim hint and infer fencing.
 
 The first backend coordinates only cooperative Wowbagger writers using the same
 ledger directory in one working copy. It does not coordinate clones, worktrees,
@@ -48,6 +50,7 @@ The local commands are:
 wowbagger capabilities --json
 wowbagger inspect --ledger <dir> --id <id> --json
 wowbagger create --ledger <dir> --input <json-file|-> --json
+wowbagger patch --ledger <dir> --input <json-file|-> --json
 wowbagger transition --ledger <dir> --input <json-file|-> --json
 ~~~
 
@@ -56,8 +59,8 @@ identical semantics. Request bytes must be valid UTF-8 JSON with one top-level
 object and no duplicate member names at any depth. Duplicate members are
 invalid; a parser must not apply last-member-wins behaviour.
 
-Unknown, missing, and repeated command arguments are invalid-request. Create
-and transition use JSON input rather than parallel field flags.
+Unknown, missing, and repeated command arguments are invalid-request. Create,
+patch, and transition use JSON input rather than parallel field flags.
 
 ### Standard output and standard error
 
@@ -87,7 +90,7 @@ A successful read-only command has exactly:
 }
 ~~~
 
-A successful create or transition adds state:
+A successful create, patch, or transition adds state:
 
 ~~~json
 {
@@ -114,7 +117,7 @@ A read-only error has exactly:
 }
 ~~~
 
-Every create or transition error has a state member:
+Every create, patch, or transition error has a state member:
 
 ~~~json
 {
@@ -155,7 +158,7 @@ presence is reported separately as bounded recovery_artifacts.
 | 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown |
 
 Only exit 0 is normal completion. A client must inspect mutation state on every
-nonzero create or transition result.
+nonzero create, patch, or transition result.
 
 ## 3. Deterministic invalid-request issues
 
@@ -219,6 +222,11 @@ The local backend, run from inside a git working copy, returns:
         "cas_scope": "requested-id-lock",
         "publication_visibility": "atomic-no-clobber-or-fail",
         "publication_probe": "per-ledger-operation"
+      },
+      "patch": {
+        "supported": true,
+        "write_scope": "single-item",
+        "cas_scope": "exact-byte-sha256"
       },
       "transition": {
         "supported": true,
@@ -298,7 +306,6 @@ The successful item shape is:
 
 ~~~json
 {
-  "id": "wb_...",
   "path": "wb_....md",
   "revision": "sha256:<lowercase hex digest>",
   "source_encoding": "base64",
@@ -308,6 +315,16 @@ The successful item shape is:
   "body": "exact decoded body suffix"
 }
 ~~~
+
+No frontmatter field is promoted to the item level. Every frontmatter field
+that core carries is read from item.core, including id, title, and status. The
+item-level path, revision, body, source_base64, source_encoding, and
+source_media_type members describe the file envelope rather than its
+frontmatter.
+
+core is a fixed normalized view, not the whole frontmatter. The member list
+below is exhaustive. A frontmatter field outside that list, including priority
+and number, is absent from core and is recoverable only from source_base64.
 
 path is a forward-slash, ledger-relative display path and is not identity.
 Decoding source_base64 recovers every original byte. The decoded bytes must
@@ -344,6 +361,7 @@ Per-ID locks live at:
     <ledger>/.wowbagger-locks/<item-id>.lock
 
 Create locks its requested new ID and every existing parent or dependency ID.
+Patch locks the target and the old and proposed parent and dependency IDs.
 Transition locks the target, its referenced parent and dependency items, every
 item whose depends_on contains the target, and every direct child when the
 target is an epic. IDs are unique and acquired in ascending immutable-ID order.
@@ -366,11 +384,12 @@ published during terminalization.
 After the stable lock set is held, the backend re-reads, re-parses, revalidates,
 and re-hashes the target and every relevant referenced or referring item from
 their validated file handles. It then validates the complete current ledger.
-Transition compares expected_revision only after this locked re-read.
+Patch and transition compare expected_revision only after this locked re-read.
 
-A transition constructs an in-memory complete ledger with exactly the proposed
-target bytes substituted, then runs complete-ledger validation again before
-publication. If another item would need mutation, the target is not published.
+Patch and transition construct an in-memory complete ledger with exactly the
+proposed target bytes substituted, then run complete-ledger validation again
+before publication. If another item would need mutation, the target is not
+published.
 
 ### Lock metadata
 
@@ -388,8 +407,8 @@ A writer creates the lock file exclusively as valid UTF-8 JSON no larger than
 ~~~
 
 writer_id is an opaque ASCII string of 1 through 128 characters. operation is
-create or transition. The remaining values must match their schema and lock
-path. Metadata contains no credentials, user name, host name, or command
+create, patch, or transition. The remaining values must match their schema and
+lock path. Metadata contains no credentials, user name, host name, or command
 arguments.
 
 A reader reads at most 4097 bytes. A lock larger than 4096 bytes, invalid UTF-8,
@@ -440,9 +459,9 @@ Create accepts exactly:
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
 If a file named by `--input` cannot be read before a request ID is known,
-create or transition returns `invalid-request` with one `invalid-value` issue at
-`/input`, the stable message `Request input could not be read.`, and mutation
-state `unchanged`.
+create, patch, or transition returns `invalid-request` with one `invalid-value`
+issue at `/input`, the stable message `Request input could not be read.`, and
+mutation state `unchanged`.
 
 The caller generates id with the timestamp for the intended creation instant
 and at least 80 bits of collision-resistant entropy. Create validates its
@@ -453,6 +472,10 @@ item must not supply schema_version, id, status, created, updated, completed,
 killed, archived, decisions, or body. Create inserts schema_version 1, status
 triage, created and updated equal to the UTC date encoded by id, and related []
 when omitted. It adds no terminal date or decision.
+
+The refusal for a supplied status states the assigned status and the accepting
+step, so a caller who tries to set it learns the rule from the refusal rather
+than from an empty ready result.
 
 The candidate complete ledger must validate before publication. After the
 requested-ID lock and locked revalidation, create applies this collision
@@ -540,7 +563,17 @@ artifact has been handled under the audited recovery procedure. The atomic
 no-clobber publication still protects an intervening creator.
 
 Successful create returns state committed and the inspect item shape from
-section 5.
+section 5, with no additional members.
+
+The status create assigned is reported at item.core.status, which is always
+triage. A triage item is not eligible for ready. To accept it, call transition
+with to_status backlog and the required accept decision. A caller that reads
+only the returned JSON therefore learns both the assigned status and why the
+new item is absent from ready, without decoding source_base64.
+
+Create does not repeat the status at the item level. Per section 5 no
+frontmatter field is promoted, and a member whose only possible value is triage
+would carry no information.
 
 ## 8. Transition
 
@@ -602,8 +635,8 @@ appended. Epic complete rollup is generated from every direct child, each of
 which must already be done or killed, ordered by immutable ID.
 
 No other edge is supported. Epics never enter in-progress; done and killed
-items do not reopen; and transition cannot edit identity, title, relations,
-parent, snooze, body, or extension fields.
+items do not reopen. Transition cannot supply a frontmatter patch. Use patch
+for the fields listed in section 8A.
 
 ### Lossless preservation
 
@@ -710,7 +743,7 @@ Only an empty set of both proceeds to the candidate validator.
 ### Candidate-validation refusal and precedence
 
 The candidate complete-ledger validator is the final authority. When it rejects
-a proposed single-item create or transition for a reason not already
+a proposed single-item create, patch, or transition for a reason not already
 represented by a more specific collision, multi-item blocker, or transition
 precondition, the command returns candidate-invalid, exit 2, and unchanged:
 
@@ -747,6 +780,88 @@ Transition publication uses a fully written and synced same-directory
 temporary file followed by the platform's existing-file atomic replacement
 primitive. It then re-reads exact final bytes. This remains a local filesystem
 operation without universal crash durability or hostile-writer protection.
+
+## 8A. Patch
+
+Patch is a guarded single-item frontmatter replacement. It uses the same
+per-ID lock closure, locked complete-ledger re-read, exact-byte revision
+compare-and-swap, candidate validation, atomic replacement, and publication
+verification as transition.
+
+### Request
+
+Patch accepts exactly:
+
+~~~json
+{
+  "id": "wb_...",
+  "expected_revision": "sha256:<64 lowercase hexadecimal characters>",
+  "patch": {
+    "priority": 3
+  },
+  "date": "2030-01-11",
+  "decision": {
+    "summary": "Raise the survey priority.",
+    "rationale": "The survey now blocks the next planning pass."
+  }
+}
+~~~
+
+| Member | Required | Rules |
+|---|---:|---|
+| id | Yes | Canonical existing item ID. |
+| expected_revision | Yes | Exact lowercase SHA-256 token returned by inspect. |
+| patch | Yes | Nonempty object containing only the patchable fields below. |
+| date | Yes | ISO calendar date used for updated and the appended decision. |
+| decision | Yes | Object containing exactly summary and rationale. |
+| decision.summary | Yes | Non-empty string. |
+| decision.rationale | Yes | Non-empty string. |
+
+### Exact patchable field set
+
+The patchable fields are exactly `priority`, `number`, `parent`, `depends_on`,
+and `title`:
+
+| Field | Patch value |
+|---|---|
+| priority | A non-negative integer; null removes the field. |
+| number | A positive integer; null removes the field. |
+| parent | A canonical item ID; null removes the field. |
+| depends_on | A complete replacement array of canonical item IDs; an empty array clears it. |
+| title | A non-empty string. |
+
+The set is deliberately narrow. Patch does not accept `id`, `schema_version`,
+or `created`, because they define identity, schema interpretation, and creation
+history. It does not accept `status` or terminal dates, which belong to
+transition; `updated`, which is derived from request.date; or `decisions`, which
+is append-only and generated by this operation. It does not accept provenance,
+kind, related, snoozed_until, extension fields, or body in this first contract.
+Unknown patch members are invalid-request; they are not ignored.
+
+Every successful patch sets updated to request.date and appends exactly one
+decision with action `record`, date request.date, and the supplied summary and
+rationale. Complete-ledger validation remains authoritative, including date
+invariants. In particular, because patch does not alter terminal dates, a
+terminal item can only be patched with a date that keeps its terminal date and
+updated valid.
+
+### Refusal and publication
+
+After locked revalidation, a revision mismatch returns revision-conflict,
+exit 4, and unchanged. Missing relation targets, dependency cycles, duplicate
+numbers, date violations, and other invalid complete-ledger proposals return
+candidate-invalid, exit 2, and unchanged with the exact validator errors.
+
+Changing a child's parent into or out of a done epic would also require
+changing that epic's recorded completion rollup. Patch therefore returns
+atomic-scope-required, exit 5, and unchanged, with a `child-disposition`
+blocker for each affected done epic and an empty precondition_issues array.
+Patch never silently updates another item.
+
+Patch preserves body bytes and every unpatched frontmatter field under the
+lossless rules in section 8. Publication uses the same fully written and synced
+same-directory temporary file, existing-file atomic replacement, exact-byte
+read-back, and recovery mapping as transition.
 
 ## 9. Errors, artifacts, and recovery
 
@@ -810,7 +925,7 @@ operation-failed is a mutation-only error. operation is exactly one of:
 reason is exactly retry-limit-exhausted, io-error, or verification-failed.
 retry-limit-exhausted is used only with lock-closure. verification-failed is
 used only when verification proves the expected publication is absent for
-create or proves the original bytes remain for transition. All other handled
+create or proves the original bytes remain for patch or transition. All other handled
 filesystem failures use io-error. Platform exception text, errno names,
 numeric OS error codes, and absolute paths are not members of the normative
 JSON envelope and cannot alter operation or reason.
@@ -822,7 +937,7 @@ response:
 
 - exact expected final bytes produce state committed; a remaining verify or
   cleanup problem is post-commit-recovery-required;
-- proven absence for create or exact original bytes for transition produce
+- proven absence for create or exact original bytes for patch or transition produce
   operation-failed with state unchanged, operation publish or
   verify-publication as applicable, and reason io-error or
   verification-failed as applicable; and
@@ -850,8 +965,10 @@ The matrix covers capability honesty; lossless inspect and failure envelopes;
 caller-known create identity, file/stdin equivalence, strict input, ID and path
 collision, candidate validation, body boundaries, publication limitation and
 recovery outcomes; transition revision, locking, date monotonicity, lifecycle
-edges, all three multi-item reasons, terminal referrers, combined blockers,
-candidate validation, deterministic operation failures, and
+edges, all three multi-item reasons, terminal referrers, combined blockers, and
+candidate validation; patch exact-field validation, required decision evidence,
+revision and lock refusal, candidate validation, and multi-item refusal;
+deterministic operation failures; and
 unchanged/committed/unknown states.
 
 The runtime executes every vector as a black-box CLI test, including exact

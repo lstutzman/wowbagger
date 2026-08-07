@@ -27,7 +27,7 @@ request into a documented Wowbagger core command. It is not a second core.
 | Instruction input | Bounded text that the harness explicitly supplies for a session. It is not discovered by guessing a filename. |
 
 Version 1 covers only these core commands: `validate`, `ready`, `capabilities`,
-`inspect`, `create`, and `transition`. An adapter MUST use their documented
+`inspect`, `create`, `patch`, and `transition`. An adapter MUST use their documented
 `--json` forms. It MUST NOT create an alternate interpretation of lifecycle,
 readiness, revisions, locks, error codes, or mutation state.
 
@@ -110,7 +110,7 @@ only when the matching static and dynamic platform value is exactly
 
 The adapter MUST preserve the core `capabilities` result as core output. The
 probe is the exact successful version 1 core `capabilities --json` envelope:
-its root, backend, operations (`inspect`, `create`, `transition`, and
+its root, backend, operations (`inspect`, `create`, `patch`, `transition`, and
 `work_claim`), durability, and limits objects accept no missing or additional
 members and every fixed value must match the published core contract. A
 missing, extra, malformed, wrong-command, or wrong-contract probe is refused.
@@ -201,7 +201,7 @@ these members and no undocumented root members:
   "adapter_version": "1.0.0",
   "core": {
     "required_core_contract_version": 1,
-    "commands": ["capabilities", "create", "inspect", "ready", "transition", "validate"]
+    "commands": ["capabilities", "create", "inspect", "patch", "ready", "transition", "validate"]
   },
   "host": {
     "command_execution": {
@@ -281,7 +281,7 @@ When present, version 1 trusted approval has exactly one authority label:
 `trusted_approval.sources` MUST equal `["consumer"]`. Model, agent, system,
 tool, harness, and additional source labels are invalid describe results; they
 cannot become trusted through configuration. `trusted_approval.supported` MUST
-be `true` for `create` or `transition`. A false or absent member makes those
+be `true` for `create`, `patch`, or `transition`. A false or absent member makes those
 commands unavailable before an approval is validated or redeemed. Read-only
 commands remain available.
 
@@ -495,7 +495,7 @@ replaced by guessed files or prior-session memory.
 
 ### 5.1 Consumer authority
 
-`create` and `transition` require an explicit consumer approval event for that
+`create`, `patch`, and `transition` require an explicit consumer approval event for that
 invocation and `trusted_approval.supported: true` in describe. The event may be
 represented to the adapter by a trusted host mechanism, but a model-supplied
 Boolean is not approval. If approval is absent, the adapter returns
@@ -634,7 +634,7 @@ normalized core/body view that agrees with those decoded UTF-8 source bytes.
 The adapter validates core version 1 field domains and rejects an extra,
 missing, source-inconsistent, or semantically invalid item as a protocol
 failure.
-For `create` and `transition`, the same checks also require the exact mutation
+For `create`, `patch`, and `transition`, the same checks also require the exact mutation
 state: success is `state: "committed"` with `result` and exit 0; an error has
 `error` and its documented `unchanged`, `committed`, or `unknown` state and
 exit. A declared `unknown` state is an adapter

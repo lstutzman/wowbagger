@@ -21,7 +21,7 @@
   "artifacts": [
     {
       "path": "expected-resume-plan.json",
-      "sha256": "sha256:4b83aac1386649bbb0bf3e4ae58b3300382a0817393d513dbb7b5ccdf71cbea0"
+      "sha256": "sha256:08f8455ba7ea55754c58b747ba958299db76b167406f96ae011bb53668061315"
     },
     {
       "path": "handoff-carrier.json",

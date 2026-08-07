@@ -5,11 +5,14 @@ import { claimAcquire, claimRead, claimRelease, claimRenew } from './claim-opera
 import { validateClaimRequest } from './claim-request.js';
 import { claimStorePath, readClaimState, resolveGitCommonDir, withClaimLock, writeClaimState } from './claim-store.js';
 import { loadLedger } from './ledger.js';
+import { mintId } from './mint-id.js';
 import {
   createItem,
   inspectItem,
+  patchItem,
   transitionItem,
   validateCreateRequest,
+  validatePatchRequest,
   validateTransitionRequest,
 } from './mutation.js';
 import { provisionNamespace, readNamespace } from './namespace.js';
@@ -123,6 +126,29 @@ export async function runCli(argumentsList, { scenario } = {}) {
     return;
   }
 
+  if (command === 'patch') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeInvalidRequest(command, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    const issues = validatePatchRequest(parsedRequest.value, parsedRequest.issues);
+    if (issues.length > 0) {
+      writeInvalidRequest(command, issues);
+      return;
+    }
+    writeMutation(command, await patchItem(parsedOptions.options.ledger, parsedRequest.value, scenario));
+    return;
+  }
+
   if (command === 'publish-claimed') {
     process.stdout.write(`${JSON.stringify({
       ok: false,
@@ -197,6 +223,12 @@ export async function runCli(argumentsList, { scenario } = {}) {
     throw new Error(usage());
   }
 
+  if (command === 'mint-id') {
+    const options = parseOptions(command, argumentsList.slice(1));
+    process.stdout.write(`${mintId(options.date)}\n`);
+    return;
+  }
+
   if (command !== 'validate' && command !== 'ready') {
     throw new Error(usage());
   }
@@ -219,7 +251,35 @@ export async function runCli(argumentsList, { scenario } = {}) {
     ready: selectReady(ledger.items, options.asOf),
   };
 
-  process.stdout.write(`${JSON.stringify(result)}\n`);
+  // --json is the machine contract and its bytes are adapter-compared; the
+  // bare command is the human surface and prints the handles instead.
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    return;
+  }
+
+  process.stdout.write(formatReadyTable(result.ready, ledger.items));
+}
+
+function formatReadyTable(readyIds, items) {
+  const byId = new Map(items.map((item) => [item.data.id, item.data]));
+  const header = ['number', 'priority', 'title'];
+  const rows = readyIds.map((id) => {
+    const data = byId.get(id);
+    return [formatHandleCell(data.number), formatHandleCell(data.priority), data.title];
+  });
+  const widths = [0, 1].map((column) => Math.max(
+    header[column].length,
+    ...rows.map((row) => row[column].length),
+  ));
+
+  return `${[header, ...rows]
+    .map((row) => `${row[0].padEnd(widths[0])}  ${row[1].padEnd(widths[1])}  ${row[2]}`)
+    .join('\n')}\n`;
+}
+
+function formatHandleCell(value) {
+  return typeof value === 'number' ? String(value) : '-';
 }
 
 async function capabilities(ledger) {
@@ -245,6 +305,11 @@ async function capabilities(ledger) {
           cas_scope: 'requested-id-lock',
           publication_visibility: 'atomic-no-clobber-or-fail',
           publication_probe: 'per-ledger-operation',
+        },
+        patch: {
+          supported: true,
+          write_scope: 'single-item',
+          cas_scope: 'exact-byte-sha256',
         },
         transition: {
           supported: true,
@@ -276,7 +341,7 @@ function parseOptions(command, argumentsList) {
 
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
-    if (argument === '--ledger') {
+    if (argument === '--ledger' && command !== 'mint-id') {
       if (options.ledger) {
         throw new Error(usage(command));
       }
@@ -300,7 +365,13 @@ function parseOptions(command, argumentsList) {
       }
       options.input = readOptionValue(command, argument, argumentsList, index);
       index += 1;
-    } else if (argument === '--json') {
+    } else if (argument === '--date' && command === 'mint-id') {
+      if (options.date) {
+        throw new Error(usage(command));
+      }
+      options.date = readOptionValue(command, argument, argumentsList, index);
+      index += 1;
+    } else if (argument === '--json' && command !== 'mint-id') {
       if (options.json) {
         throw new Error(usage(command));
       }
@@ -310,7 +381,14 @@ function parseOptions(command, argumentsList) {
     }
   }
 
-  if (!options.ledger || !options.json
+  if (command === 'mint-id') {
+    if (options.date && !isCalendarDate(options.date)) {
+      throw new Error('--date must be an ISO calendar date.');
+    }
+    return options;
+  }
+
+  if (!options.ledger || (command === 'validate' && !options.json)
     || (command === 'inspect' && !options.id)
     || (command === 'create' && !options.input)
     || (command === 'ready' && !options.asOf)) {
@@ -330,7 +408,7 @@ function parseContractOptions(command, argumentsList) {
   const seen = new Set();
   const valueFlags = command === 'inspect'
     ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
-    : command === 'create' || command === 'transition'
+    : command === 'create' || command === 'patch' || command === 'transition'
       || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew' || command === 'claim-release'
       ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
       : command === 'provision' || command === 'claim-capabilities'
@@ -398,7 +476,7 @@ function writeInvalidRequest(command, issues) {
       details: { issues },
     },
   };
-  if (command === 'create' || command === 'transition') {
+  if (command === 'create' || command === 'patch' || command === 'transition') {
     writeMutation(command, outcome);
     return;
   }
@@ -574,11 +652,19 @@ function usage(command) {
     return 'Usage: wowbagger create --ledger <dir> --input <json-file|-> --json';
   }
 
+  if (command === 'mint-id') {
+    return 'Usage: wowbagger mint-id [--date YYYY-MM-DD]';
+  }
+
   if (command === 'transition') {
     return 'Usage: wowbagger transition --ledger <dir> --input <json-file|-> --json';
   }
 
-  return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD --json';
+  if (command === 'patch') {
+    return 'Usage: wowbagger patch --ledger <dir> --input <json-file|-> --json';
+  }
+
+  return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD [--json]';
 }
 
 async function requestSource(input) {

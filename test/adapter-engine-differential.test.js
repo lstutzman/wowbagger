@@ -1006,6 +1006,15 @@ test('verifyCoreProbe refuses (does not throw) when describe.core.commands is ab
   assert.equal(result.error_code, 'core-contract-version-mismatch');
 });
 
+test('reference oracle refuses an adapter command list that omits patch', () => {
+  const describe = structuredClone(SCENARIOS.base_dynamic);
+  describe.core.commands = describe.core.commands.filter((command) => command !== 'patch');
+  const result = referenceVerifyCoreProbe(describe, referenceCoreCapabilities());
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'core-contract-version-mismatch');
+});
+
 test('refuses a describe request whose supported_adapter_contract_versions is not sorted ascending', () => {
   const request = { ...structuredClone(SCENARIOS.base_request), supported_adapter_contract_versions: [2, 1] };
 
@@ -1017,7 +1026,7 @@ test('refuses a describe request whose supported_adapter_contract_versions is no
 
 test('refuses a describe result whose core.commands is out of the required order', () => {
   const dynamic = structuredClone(SCENARIOS.base_dynamic);
-  dynamic.core.commands = ['create', 'capabilities', 'inspect', 'ready', 'transition', 'validate'];
+  dynamic.core.commands = ['create', 'capabilities', 'inspect', 'patch', 'ready', 'transition', 'validate'];
 
   const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
 
@@ -1037,7 +1046,7 @@ test('refuses a describe result whose core.commands is out of the required order
 // refusal itself needs a test, and why the check stays.
 test('refuses a describe result whose core.commands repeats a command', () => {
   const dynamic = structuredClone(SCENARIOS.base_dynamic);
-  dynamic.core.commands = ['capabilities', 'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'];
+  dynamic.core.commands = ['capabilities', 'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'];
 
   const result = describeAdapter(SCENARIOS.base_request, SCENARIOS.base_manifest, dynamic);
 
@@ -1197,7 +1206,7 @@ test('describeAdapter and verifyCoreProbe match the reference oracle on every ne
         const describe = {
           core: {
             required_core_contract_version: scenario.required_core_contract_version,
-            commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+            commands: ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'],
           },
           optional_features: { claims: false, policy: false },
         };

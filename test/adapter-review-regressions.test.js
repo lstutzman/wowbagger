@@ -1465,7 +1465,6 @@ function validCoreItem() {
   const body = '\nPlot a fictional route from Brindle Station to Lumen Reef.\n';
   const source = Buffer.from(`---\nschema_version: 1\nid: ${id}\ntitle: Map a fictional moon route\nkind: task\nstatus: triage\ncreated: 2030-01-10\nupdated: 2030-01-10\nprovenance:\n  source: fixture/mutations\n  recorded_at: 2030-01-10T12:34:56.789Z\ndepends_on: []\nrelated: []\n---\n${body}`);
   return {
-    id,
     path: `${id}.md`,
     revision: digest(source),
     source_encoding: 'base64',
@@ -1496,7 +1495,6 @@ function coreItemWithId(item, id) {
   const bytes = Buffer.from(source);
   return {
     ...item,
-    id,
     revision: digest(bytes),
     source_base64: bytes.toString('base64'),
     core: { ...item.core, id },

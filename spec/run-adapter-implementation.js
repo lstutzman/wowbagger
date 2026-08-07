@@ -22,7 +22,7 @@ const SUPPORTED_ASSERTION_TYPES = new Set([
   'context-validation', 'approval-schema',
 ]);
 
-const CORE_COMMANDS = ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'];
+const CORE_COMMANDS = ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'];
 
 // Every assertion this plan cannot evidence carries this outcome. It is never
 // `ok`, so a case holding one can never reach `pass`.

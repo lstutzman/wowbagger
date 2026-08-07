@@ -41,6 +41,9 @@ meaning, flag the collision rather than resolving it silently.
 
 ## Mutation
 
+- **patch** — the guarded operation that changes exactly `priority`, `number`,
+  `parent`, `depends_on`, or `title`, appends a record decision, and uses the
+  transition lock and revision compare-and-swap path.
 - **transition** — the guarded operation that changes an item's status and appends
   a decision. Holds a per-ID lock and a revision compare-and-swap.
 - **compare-and-swap (CAS)** — the revision check that makes a concurrent write
