@@ -74,8 +74,10 @@ export async function load(url, context, nextLoad) {
       '          const forged = `title: "${\'x\'.repeat(line[1].length)}"`;',
       '          bytes = Buffer.from(wrote.replace(line[0], forged), \'utf8\');',
       '          serializedEdits = serializedEdits.map((edit) => (',
-      '            edit.replacement === line[0]',
-      '              ? { ...edit, replacement: forged }',
+      // The record keeps its line terminator; forging the same length keeps
+      // every later edit offset valid, so only the value differs.
+      '            edit.replacement.startsWith(\'title: \')',
+      '              ? { ...edit, replacement: `${forged}\\n` }',
       '              : edit',
       '          ));',
       '        }',

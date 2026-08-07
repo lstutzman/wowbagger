@@ -24,9 +24,14 @@ MUTATIONS = [
     ('unchangedBytesMatch (byte-range preservation)',
      'const unchangedBytesMatch = replacementId === null',
      'const unchangedBytesMatch = true || replacementId === null'),
+    # Both branches call unsafeYamlMutation; anchor on each one's own argument
+    # so a single ambiguous match cannot silently disable the wrong path.
     ('unsafeYamlMutation refusal (patch)',
-     "        if (unsafeYaml) {\n          return await finishUncommitted(unsafeYamlMutationError(id, lockedTarget.path, unsafeYaml));",
-     "        if (false && unsafeYaml) {\n          return await finishUncommitted(unsafeYamlMutationError(id, lockedTarget.path, unsafeYaml));"),
+     "          [...Object.keys(request.patch), 'updated', 'decisions'],\n        );",
+     "          [],\n        );"),
+    ('unsafeYamlMutation refusal (transition)',
+     '          mutationFields,\n        );',
+     '          [],\n        );'),
     ('no-op patch refusal',
      '        if (!patchChangesData(lockedTarget.data, request.patch)) {',
      '        if (false && !patchChangesData(lockedTarget.data, request.patch)) {'),
