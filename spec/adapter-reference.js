@@ -195,7 +195,7 @@ export function verifyTrustedApproval({
     || approval.source !== 'consumer') {
     return refusal('approval-source-untrusted', { source: approval.source });
   }
-  if (!RFC3339.test(now) || !validCanonicalTime(now)) {
+  if (!isRfc3339Token(now) || !validCanonicalTime(now)) {
     return refusal('invalid-approval-time', { member: 'now' });
   }
   const issued = Date.parse(approval.issued_at);
@@ -593,7 +593,7 @@ export function validateInstructionInput(input, limits) {
     if (!hasExactKeys(source,
       ['source_id', 'origin', 'content_encoding', 'content_base64', 'sha256', 'byte_length'],
       ['logical_path'])
-      || !SAFE_ID.test(source.source_id)
+      || !isSafeId(source.source_id)
       || !ORIGIN_PRECEDENCE.has(source.origin)
       || source.content_encoding !== 'base64'
       || !isDigestToken(source.sha256)
@@ -757,7 +757,7 @@ export async function invokeAdapter(requestBytes, runtime) {
   }
   const request = JSON.parse(Buffer.from(requestBytes).toString('utf8'));
   const requestIssue = invocationRequestSchemaIssue(request);
-  const requestId = SAFE_ID.test(request?.request_id) ? request.request_id : null;
+  const requestId = isSafeId(request?.request_id) ? request.request_id : null;
   if (requestIssue) return invokeRefusal(wireVersion, requestId, 'invalid-invocation', { member: requestIssue });
 
   const described = describeAdapter(runtime.describe_request, runtime.manifest, runtime.dynamic);
@@ -971,7 +971,7 @@ function describeRequestSchemaError(value) {
   if (!validVersionArray(value.supported_adapter_contract_versions)) {
     return 'supported_adapter_contract_versions';
   }
-  if (!SAFE_ID.test(value.request_id)) return 'request_id';
+  if (!isSafeId(value.request_id)) return 'request_id';
   return null;
 }
 
@@ -981,7 +981,7 @@ function invocationRequestSchemaIssue(value) {
     'handoff_carrier', 'limits',
   ], ['workspace'])) return 'members';
   if (!positiveSafeInteger(value.adapter_contract_version)) return 'adapter_contract_version';
-  if (!SAFE_ID.test(value.request_id)) return 'request_id';
+  if (!isSafeId(value.request_id)) return 'request_id';
   if (!hasExactKeys(value.limits, ['context_bytes', 'stdout_bytes', 'stderr_bytes', 'timeout_ms'])) {
     return 'limits';
   }
@@ -989,7 +989,7 @@ function invocationRequestSchemaIssue(value) {
   if (command === 'capabilities') {
     if (Object.hasOwn(value, 'workspace')) return 'workspace';
   } else if (!hasExactKeys(value.workspace, ['workspace_id'], ['cwd'])
-    || !SAFE_ID.test(value.workspace.workspace_id)
+    || !isSafeId(value.workspace.workspace_id)
     || (Object.hasOwn(value.workspace, 'cwd') && !isSafeLogicalPath(value.workspace.cwd))) {
     return 'workspace';
   }
@@ -1006,7 +1006,7 @@ function coreRequestSchemaIssue(value) {
         ? null : 'core_request';
     case 'ready':
       return hasExactKeys(value, ['command', 'ledger', 'as_of'])
-        && isSafeLogicalPath(value.ledger) && /^\d{4}-\d{2}-\d{2}$/.test(value.as_of)
+        && isSafeLogicalPath(value.ledger) && isCalendarDateToken(value.as_of)
         ? null : 'core_request';
     case 'inspect':
       return hasExactKeys(value, ['command', 'ledger', 'id'])
@@ -1399,7 +1399,7 @@ function validInvocationBinding(value) {
   if (!hasExactKeys(value, [
     'request_id', 'adapter', 'core', 'workspace', 'limits',
     'instruction_set_digest', 'handoff_digest',
-  ]) || !SAFE_ID.test(value.request_id)) return false;
+  ]) || !isSafeId(value.request_id)) return false;
   if (!hasExactKeys(value.adapter, ['id', 'version', 'contract_version'])
     || typeof value.adapter.id !== 'string'
     || typeof value.adapter.version !== 'string'
@@ -1426,10 +1426,10 @@ function approvalSchemaError(value) {
   ])) return 'members';
   if (value.approval_version !== 1) return 'approval_version';
   if (typeof value.source !== 'string') return 'source';
-  if (!NONCE.test(value.nonce)) return 'nonce';
+  if (!isNonceToken(value.nonce)) return 'nonce';
   if (!isDigestToken(value.invocation_digest)) return 'invocation_digest';
-  if (!RFC3339.test(value.issued_at) || !validCanonicalTime(value.issued_at)) return 'issued_at';
-  if (!RFC3339.test(value.expires_at) || !validCanonicalTime(value.expires_at)) return 'expires_at';
+  if (!isRfc3339Token(value.issued_at) || !validCanonicalTime(value.issued_at)) return 'issued_at';
+  if (!isRfc3339Token(value.expires_at) || !validCanonicalTime(value.expires_at)) return 'expires_at';
   return null;
 }
 
@@ -2017,12 +2017,32 @@ const CREATE_CONTROLLED_MEMBERS = [
 // element and passes an anchored pattern. Every id and digest here is read from
 // caller-supplied JSON, so the type check belongs inside the predicate rather
 // than at each call site — one of these was missed twice in consecutive rounds.
+function matchesPattern(pattern, value) {
+  return typeof value === 'string' && pattern.test(value);
+}
+
 function isCanonicalId(value) {
-  return typeof value === 'string' && WOWBAGGER_ID.test(value);
+  return matchesPattern(WOWBAGGER_ID, value);
 }
 
 function isDigestToken(value) {
-  return typeof value === 'string' && DIGEST.test(value);
+  return matchesPattern(DIGEST, value);
+}
+
+function isSafeId(value) {
+  return matchesPattern(SAFE_ID, value);
+}
+
+function isNonceToken(value) {
+  return matchesPattern(NONCE, value);
+}
+
+function isRfc3339Token(value) {
+  return matchesPattern(RFC3339, value);
+}
+
+function isCalendarDateToken(value) {
+  return matchesPattern(/^\d{4}-\d{2}-\d{2}$/, value);
 }
 
 function validCreateMutationRequest(request) {
