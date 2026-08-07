@@ -106,9 +106,9 @@ test('byte corpus covers field insertion, removal, idempotent clear, and termina
       {
         date: '2030-01-18',
         patch: { number: null },
-        refuses: true,
+        state: 'unchanged',
         summary: 'Clear the already-absent number.',
-        rationale: 'A patch that would change nothing is refused, and writes no byte.',
+        rationale: 'A patch that changes nothing publishes nothing and writes no byte.',
         updateExpected(expected) {
           return expected;
         },
@@ -132,16 +132,12 @@ test('byte corpus covers field insertion, removal, idempotent clear, and termina
         const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
         const output = JSON.parse(result.stdout);
         expected = step.updateExpected(expected);
-        if (step.refuses) {
-          // A refused patch must be indistinguishable from one never sent.
-          assert.equal(result.status, 2, `${step.date}: ${result.stderr}\n${result.stdout}`);
-          assert.equal(output.ok, false, step.date);
-          assert.equal(output.state, 'unchanged', step.date);
-          const after = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
-          assert.equal(JSON.parse(after.stdout).result.item.revision, revision, step.date);
+        assert.equal(result.status, 0, `${step.date}: ${result.stderr}\n${result.stdout}`);
+        assert.equal(output.state, step.state, step.date);
+        if (step.state === 'unchanged') {
+          // A no-op must be indistinguishable from a request never sent.
+          assert.equal(output.result.item.revision, revision, step.date);
         } else {
-          assert.equal(result.status, 0, `${step.date}: ${result.stderr}\n${result.stdout}`);
-          assert.equal(output.state, step.state, step.date);
           assert.notEqual(output.result.item.revision, revision, step.date);
         }
         assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), expected, step.date);

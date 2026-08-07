@@ -1,14 +1,22 @@
+#!/usr/bin/env python3
 """Break each guard, confirm a test goes red, restore it.
 
 A guard nothing proves is a guard nobody knows works. Every mutation below
-disables one guard by forcing it true; the suite MUST fail. If it stays green,
-that guard has no coverage regardless of how many tests exist.
-"""
-import shutil, subprocess, sys, os
+disables one guard; the suite MUST then fail. If it stays green, that guard has
+no coverage regardless of how many tests exist.
 
-os.chdir('/Users/leestutzman/Documents/GitHub/wowbagger/.claude/worktrees/compressed-skipping-dongarra')
-TARGET = 'src/mutation.js'
-BACKUP = '/tmp/mutation-pass-backup.js'
+Run from the repository root:  python3 scripts/mutation-pass.py
+Exits 0 only when every guard is proven.
+"""
+import glob
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TARGET = os.path.join(ROOT, 'src', 'mutation.js')
 
 # (label, exact source substring, replacement that disables the guard)
 MUTATIONS = [
@@ -28,11 +36,11 @@ MUTATIONS = [
     # so a single ambiguous match cannot silently disable the wrong path.
     ('unsafeYamlMutation refusal (patch)',
      "          [...Object.keys(request.patch), 'updated', 'decisions'],\n        );",
-     "          [],\n        );"),
+     '          [],\n        );'),
     ('unsafeYamlMutation refusal (transition)',
      '          mutationFields,\n        );',
      '          [],\n        );'),
-    ('no-op patch refusal',
+    ('no-op patch detection',
      '        if (!patchChangesData(lockedTarget.data, request.patch)) {',
      '        if (false && !patchChangesData(lockedTarget.data, request.patch)) {'),
     ('create controlled-member refusal',
@@ -40,29 +48,71 @@ MUTATIONS = [
      "    'killed', 'archived', 'decisions', 'body',"),
 ]
 
-shutil.copy(TARGET, BACKUP)
-original = open(TARGET).read()
-results = []
 
-try:
-    for label, needle, replacement in MUTATIONS:
-        count = original.count(needle)
-        if count != 1:
-            results.append((label, f'SKIPPED — anchor matched {count} sites'))
-            continue
-        open(TARGET, 'w').write(original.replace(needle, replacement))
-        run = subprocess.run(['node', '--test'] + __import__('glob').glob('test/*.test.js'),
-                             capture_output=True, text=True,
-                             env={**os.environ, 'TMPDIR': '/tmp'})
-        failed = '\nℹ fail 0\n' not in run.stdout
-        results.append((label, 'caught' if failed else 'NOT CAUGHT — no test covers this guard'))
-        open(TARGET, 'w').write(original)
-finally:
-    shutil.copy(BACKUP, TARGET)
+def run_suite():
+    """Return (passed, summarised) — summarised is False if the run produced no
+    test summary at all, which must never be scored as a caught mutation."""
+    run = subprocess.run(
+        ['node', '--test'] + sorted(glob.glob(os.path.join(ROOT, 'test', '*.test.js'))),
+        capture_output=True, text=True, cwd=ROOT,
+        env={**os.environ, 'TMPDIR': '/tmp'})
+    out = run.stdout
+    if '\n# fail ' not in out and '\nℹ fail ' not in out:
+        return (False, False)
+    failed = ('\nℹ fail 0\n' not in out) and ('\n# fail 0\n' not in out)
+    return (not failed, True)
 
-print(f'{"guard":<48} verdict')
-print('-' * 78)
-for label, verdict in results:
-    mark = 'OK ' if verdict == 'caught' else '!! '
-    print(f'{mark}{label:<45} {verdict}')
-sys.exit(0 if all(v == 'caught' for _, v in results) else 1)
+
+def main():
+    original = open(TARGET, encoding='utf-8').read()
+    handle, backup = tempfile.mkstemp(prefix='mutation-pass-', suffix='.js')
+    os.close(handle)
+    shutil.copy(TARGET, backup)
+
+    # A red baseline makes every mutation look caught. Refuse to score anything.
+    baseline_green, baseline_ran = run_suite()
+    if not baseline_ran:
+        print('The suite produced no summary. Fix the runner before scoring guards.')
+        return 2
+    if not baseline_green:
+        print('The suite is already failing. A red baseline scores every guard as '
+              'proven, so nothing is measured until it is green.')
+        return 2
+
+    results = []
+    try:
+        for label, needle, replacement in MUTATIONS:
+            count = original.count(needle)
+            if count != 1:
+                results.append((label, f'ANCHOR DRIFT — matched {count} sites, expected 1'))
+                continue
+            with open(TARGET, 'w', encoding='utf-8') as target:
+                target.write(original.replace(needle, replacement))
+            green, ran = run_suite()
+            if not ran:
+                verdict = 'NO SUMMARY — the mutated tree did not run'
+            elif green:
+                verdict = 'NOT CAUGHT — no test covers this guard'
+            else:
+                verdict = 'caught'
+            results.append((label, verdict))
+            with open(TARGET, 'w', encoding='utf-8') as target:
+                target.write(original)
+    finally:
+        # Restore unconditionally, then prove it: an interrupted run must never
+        # leave a disabled guard in tracked source. Raise rather than return —
+        # a return here would discard whatever exception brought us in.
+        shutil.copy(backup, TARGET)
+        if open(TARGET, encoding='utf-8').read() != original:
+            raise RuntimeError(f'Restore failed. Original source is at {backup}')
+        os.unlink(backup)
+
+    print(f'{"guard":<48} verdict')
+    print('-' * 78)
+    for label, verdict in results:
+        print(f'{"OK " if verdict == "caught" else "!! "}{label:<45} {verdict}')
+    return 0 if all(verdict == 'caught' for _, verdict in results) else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -642,14 +642,19 @@ async function replaceItem(ledgerDirectory, request, operation, scenario) {
         if (unsafeYaml) {
           return await finishUncommitted(unsafeYamlMutationError(id, lockedTarget.path, unsafeYaml));
         }
-        // Checked last, so a request that is wrong for a stronger reason reports
-        // that reason. There is one success exit; a patch that would change
-        // nothing must not reach it and append a decision for a change that
-        // never happened.
+        // Checked last, after every refusal, so a request that is wrong for a
+        // stronger reason reports that reason instead of a bland success. A
+        // no-op cannot be invalid-request: the adapter contract accepts that
+        // code only for bytes that did not form a canonical request, and this
+        // request is canonical. It publishes nothing, keeps the revision, and
+        // appends no decision, so nothing records a change that did not happen.
         if (!patchChangesData(lockedTarget.data, request.patch)) {
-          return await finishUncommitted(mutationError('invalid-request', 'The patch request is invalid.', 'unchanged', 2, {
-            issues: [issue('/patch', 'invalid-value', 'The patch would not change the item; every requested value is already in effect.')],
-          }));
+          return await finishUncommitted(mutationUnchanged(inspectedItem(
+            displayItemPath(lockedTarget.path),
+            lockedTarget.bytes,
+            lockedTarget.data,
+            lockedTarget.body,
+          )));
         }
         successor = patchData(lockedTarget.data, request);
         try {

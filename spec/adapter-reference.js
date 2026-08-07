@@ -1803,11 +1803,19 @@ function validCoreMutationEnvelope(value, command, exitCode, responseContext) {
   if (!plainObject(value)
     || value.command !== command || value.contract_version !== 1) return false;
   if (value.ok === true) {
-    return canonicalMutationRequest && value.state === 'committed'
+    // A successful patch whose requested values are all already in effect
+    // reports state unchanged: it publishes nothing, so its revision is still
+    // the one the caller supplied and no decision was appended. Every other
+    // successful mutation must be committed.
+    const unchangedPatch = command === 'patch' && value.state === 'unchanged';
+    return canonicalMutationRequest
+      && (value.state === 'committed' || unchangedPatch)
       && hasExactKeys(value, ['ok', 'command', 'contract_version', 'state', 'result'])
       && hasExactKeys(value.result, ['item'])
       && validCoreItemShape(value.result.item)
-      && validMutationResultCorrelation(value.result.item, command, mutationRequest)
+      && (unchangedPatch
+        ? validUnchangedPatchCorrelation(value.result.item, mutationRequest)
+        : validMutationResultCorrelation(value.result.item, command, mutationRequest))
       && exitCode === 0;
   }
   return value.ok === false
@@ -2060,6 +2068,17 @@ function validCreateResultCorrelation(item, request) {
   } catch {
     return false;
   }
+}
+
+// The inverse of validPatchResultCorrelation: nothing was published, so the
+// revision must still be the one the caller supplied and updated must NOT have
+// moved to the request date. Stated independently rather than as a negation of
+// the committed rule, so a backend cannot satisfy it by publishing and lying.
+function validUnchangedPatchCorrelation(item, request) {
+  return plainObject(request) && plainObject(request.patch)
+    && item.core.id === request.id
+    && item.revision === request.expected_revision
+    && item.core.updated !== request.date;
 }
 
 function validPatchResultCorrelation(item, request) {

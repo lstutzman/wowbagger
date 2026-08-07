@@ -151,7 +151,7 @@ presence is reported separately as bounded recovery_artifacts.
 
 | Exit | Condition | Error codes |
 |---:|---|---|
-| 0 | Successful command; a mutation is state committed. | none |
+| 0 | Successful command; a mutation is state committed, or unchanged for a patch whose requested values are already in effect. | none |
 | 2 | Argument, request, lookup, candidate/lifecycle-precondition, or unsafe YAML mutation failure. | invalid-request, item-not-found, transition-precondition-failed, candidate-invalid, unsafe-yaml-mutation |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
@@ -470,13 +470,20 @@ canonical form before acquiring its per-ID lock. id is not accepted inside
 item.
 
 item must not supply schema_version, id, status, created, updated, completed,
-killed, archived, decisions, or body. Create inserts schema_version 1, status
-triage, created and updated equal to the UTC date encoded by id, and related []
-when omitted. It adds no terminal date or decision.
+killed, archived, decisions, body, priority, or number. Create inserts
+schema_version 1, status triage, created and updated equal to the UTC date
+encoded by id, and related [] when omitted. It adds no terminal date or
+decision.
+
+priority and number are not extension members and are not written by create.
+Section 8A owns them: patch validates the integer spelling and holds the per-ID
+lock under which number uniqueness is checked. Create takes no ledger-wide lock,
+so two concurrent creates could publish the same number.
 
 The refusal for a supplied status states the assigned status and the accepting
 step, so a caller who tries to set it learns the rule from the refusal rather
-than from an empty ready result.
+than from an empty ready result. The refusals for priority and number likewise
+name patch as the operation that sets them.
 
 The candidate complete ledger must validate before publication. After the
 requested-ID lock and locked revalidation, create applies this collision
@@ -865,15 +872,22 @@ invariants. In particular, because patch does not alter terminal dates, a
 terminal item can only be patched with a date that keeps its terminal date and
 updated valid.
 
-A patch that would change nothing is refused. If every requested patchable field
-already holds the requested value, including clearing an optional field that is
-already absent, patch returns invalid-request, exit 2, and state unchanged. It
-publishes no bytes, changes no revision, and appends no decision.
+If every requested patchable field already holds the requested value, including
+clearing an optional field that is already absent, patch returns success with
+`state: "unchanged"`, exit 0, and the existing inspect item. It publishes no
+bytes, so `revision` is still the supplied `expected_revision`, `updated` does
+not move to the request date, and no decision is appended. The decision is
+validated as part of the request but is not evidence of a change, so it is not
+recorded.
 
-The refusal is checked last, so a request that is also wrong for a stronger
-reason reports that reason instead. Patch therefore has exactly one success
-exit: no request reaches it without passing every check, and no decision records
-a change that did not happen.
+This is not invalid-request. The request is canonical, and section 12 of the
+adapter contract accepts that code only for bytes that did not form a canonical
+request.
+
+The unchanged result is determined last, after the atomic-scope, unsafe-YAML and
+lock checks. A request that is also wrong for a stronger reason reports that
+reason rather than a bland success, so a caller cannot use a no-op patch to
+probe an item that in fact refuses every real patch.
 
 ### Refusal and publication
 

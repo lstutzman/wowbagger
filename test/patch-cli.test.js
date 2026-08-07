@@ -1139,7 +1139,67 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
 // A patch that would change nothing is refused rather than published. There is
 // exactly one success exit, so no request can reach it without passing every
 // check on the way; and no decision is appended for a change that did not occur.
-test('patch refuses a request that would change nothing, without touching the item', async () => {
+// The unchanged result is determined last. A no-op request on an item that
+// refuses every real patch must report THAT refusal, not a bland success —
+// otherwise a caller can use a cheap no-op to probe patchability and get a
+// false green. This is the ordering the contract promises.
+test('a no-op patch reports an unsafe-YAML refusal rather than success', async () => {
+  const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  // A no-op still edits updated and decisions, so anchoring updated puts the
+  // unsafe-YAML refusal in the path of a request that changes nothing else.
+  const target = itemSource(targetId, '', ['mirror: *when'])
+    .replace(/^updated: (.*)$/m, 'updated: &when $1');
+
+  await withLedger({ [`${targetId}.md`]: target }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-noop-unsafe.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: revision,
+      patch: { number: null },
+      date: '2030-01-18',
+      decision: { summary: 'No-op on an unsafe item.', rationale: 'The stronger refusal must win.' },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.error.code, 'unsafe-yaml-mutation');
+    assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), target);
+  });
+});
+
+test('a patch mixing a no-op field with a real change commits the real change', async () => {
+  const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const target = itemSource(targetId, '', ['priority: 4']);
+
+  await withLedger({ [`${targetId}.md`]: target }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-mixed.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: revision,
+      // number: null is already true; priority genuinely changes.
+      patch: { number: null, priority: 9 },
+      date: '2030-01-18',
+      decision: { summary: 'Raise priority.', rationale: 'One requested value is already in effect.' },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+    const rewritten = await readFile(path.join(ledger, `${targetId}.md`), 'utf8');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'committed');
+    assert.match(rewritten, /^priority: 9$/m);
+    assert.equal(/^number:/m.test(rewritten), false);
+  });
+});
+
+test('patch returns an unchanged success when every requested value is in effect', async () => {
   const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
   const target = itemSource(targetId, '', ['priority: 4']);
 
@@ -1161,10 +1221,10 @@ test('patch refuses a request that would change nothing, without touching the it
     const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
     const output = JSON.parse(result.stdout);
 
-    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
-    assert.equal(output.ok, false);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.ok, true);
     assert.equal(output.state, 'unchanged');
-    assert.equal(output.error.code, 'invalid-request');
+    assert.equal(output.result.item.revision, revision);
     assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), target);
 
     const after = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
