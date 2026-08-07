@@ -9,7 +9,6 @@ Run from the repository root:  python3 scripts/mutation-pass.py
 Exits 0 only when every guard is proven.
 """
 import glob
-import json
 import os
 import shutil
 import subprocess
@@ -104,27 +103,22 @@ def main():
             with open(TARGET, 'w', encoding='utf-8') as target:
                 target.write(original.replace(needle, replacement))
             # A mutation must be caught by an ASSERTION, never by breaking the
-            # build. Importing the mutated module covers more than a syntax
-            # check does — it also catches a bad export, an import cycle or a
-            # top-level throw, each of which makes node --test report a failing
-            # test that no assertion produced.
-            loads = subprocess.run(
-                ['node', '-e', f'import({json.dumps(TARGET)}).then(() => {{}})'],
-                capture_output=True, text=True, cwd=ROOT).returncode == 0
-            if not loads:
-                # Skip the suite: it can only report the load failure.
-                verdict = 'INVALID MUTATION — the mutated module does not load'
+            # build. Any breakage — a syntax error, a bad export, an import
+            # cycle, a top-level throw — stops whole test FILES from loading, so
+            # the number of tests that ran drops. A caught mutation leaves every
+            # test running and fails some of them. Comparing the total against
+            # the baseline separates the two without having to enumerate the
+            # ways a module can fail to load.
+            green, total = run_suite()
+            if total is None:
+                verdict = 'NO SUMMARY — the mutated tree did not run'
+            elif total != baseline_total:
+                verdict = (f'BROKE THE BUILD — {total} of {baseline_total} tests ran; '
+                           'the mutation stopped tests loading rather than failing one')
+            elif green:
+                verdict = 'NOT CAUGHT — no test covers this guard'
             else:
-                green, total = run_suite()
-                if total is None:
-                    verdict = 'NO SUMMARY — the mutated tree did not run'
-                elif total == '0':
-                    # Checked before `green`, which a zero-test run also satisfies.
-                    verdict = 'NO TESTS RAN — the mutation stopped the suite'
-                elif green:
-                    verdict = 'NOT CAUGHT — no test covers this guard'
-                else:
-                    verdict = 'caught'
+                verdict = 'caught'
             results.append((label, verdict))
             with open(TARGET, 'w', encoding='utf-8') as target:
                 target.write(original)

@@ -3,7 +3,7 @@
 // This intentionally re-implements the rules test/work-claim-reference.js's
 // requestSchemaError encodes for the reference model — production code must not
 // depend on test code, so the rules are duplicated here rather than imported.
-import { pointer } from './request.js';
+import { matchesPattern, pointer } from './request.js';
 
 const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
 const ITEM_ID = /^wb_[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -35,10 +35,10 @@ export function validateClaimRequest(operation, request) {
   }
 
   const issues = [];
-  if (!NAMESPACE_ID.test(request.ledger_namespace)) {
+  if (!matchesPattern(NAMESPACE_ID, request.ledger_namespace)) {
     issues.push(problem(['ledger_namespace'], 'invalid-value', 'Member ledger_namespace must match wbns_[a-f0-9]{32}.'));
   }
-  if (!ITEM_ID.test(request.item_id)) {
+  if (!matchesPattern(ITEM_ID, request.item_id)) {
     issues.push(problem(['item_id'], 'invalid-value', 'Member item_id must match wb_[0-9A-HJKMNP-TV-Z]{26}.'));
   }
   if (required.includes('owner_id') && !isOwnerId(request.owner_id)) {

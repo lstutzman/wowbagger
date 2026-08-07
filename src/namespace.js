@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, open, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { matchesPattern } from './request.js';
 
 const NAMESPACE = /^wbns_[a-f0-9]{32}$/;
 
@@ -12,7 +13,7 @@ export async function readNamespace(repoRoot) {
   try {
     const text = await readFile(namespaceFile(repoRoot), 'utf8');
     const value = text.trim();
-    return NAMESPACE.test(value) ? value : null;
+    return matchesPattern(NAMESPACE, value) ? value : null;
   } catch (error) {
     if (error?.code === 'ENOENT') return null;
     throw error;

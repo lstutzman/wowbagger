@@ -19,6 +19,13 @@ export function parseJsonRequest(bytes) {
   }
 }
 
+// RegExp.test coerces its argument: a one-element array stringifies to its
+// element and passes an anchored pattern. Every pattern check on caller-supplied
+// JSON goes through here so the type check cannot be omitted at a call site.
+export function matchesPattern(pattern, value) {
+  return typeof value === 'string' && pattern.test(value);
+}
+
 export function pointer(parts) {
   return parts.length === 0 ? '' : `/${parts.map(escapePointerPart).join('/')}`;
 }

@@ -204,6 +204,9 @@ export function verifyTrustedApproval({
   if (issued >= expires) return refusal('invalid-approval-time-order', {});
   if (current < issued) return refusal('approval-not-yet-valid', { issued_at: approval.issued_at });
   if (current >= expires) return refusal('approval-expired', { expires_at: approval.expires_at });
+  // Refuse rather than throw: an omitted replay set means we cannot prove the
+  // approval is unredeemed, and an unprovable approval is not a valid one.
+  if (typeof redeemedNonces?.has !== 'function') return refusal('invalid-approval', {});
   if (redeemedNonces.has(approval.nonce)) {
     return refusal('approval-replayed', { nonce: approval.nonce });
   }
@@ -2041,8 +2044,10 @@ function isRfc3339Token(value) {
   return matchesPattern(RFC3339, value);
 }
 
+// The same rule the response side applies. A weaker request check made the
+// oracle accept as_of 2025-02-30 and then reject the conforming echo of it.
 function isCalendarDateToken(value) {
-  return matchesPattern(/^\d{4}-\d{2}-\d{2}$/, value);
+  return typeof value === 'string' && isCalendarDate(value);
 }
 
 function validCreateMutationRequest(request) {
