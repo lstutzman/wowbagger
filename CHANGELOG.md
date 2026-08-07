@@ -57,6 +57,34 @@ release yet, so everything below is unreleased.
   absent or reports anything other than 1. This install path is not yet
   verified by anyone other than its author (`84ed5b2`).
 
+### Fixed
+
+- `patch` could write bytes the caller never requested and report success.
+  Patching an anchored field wrote through the YAML anchor and silently
+  changed an aliasing field the request never named; removing a field that
+  carried a YAML comment destroyed the comment. Both returned exit 0 with
+  `state: committed`. The cause was an ignore list: the patched field names
+  were passed to candidate validation as fields to skip, and since `item.core`
+  carries neither `priority` nor `number`, that removed their only byte-level
+  guard. The candidate is now reparsed and deep-compared against the complete
+  expected successor, and every unpatched node must retain exact node
+  identity. A target that cannot be rewritten losslessly — anchored, aliased,
+  or comment-bearing — is refused with `candidate-invalid` and
+  `state: unchanged` (`dab4252`).
+- `patch` accepted float and exponent JSON tokens for `priority` and `number`,
+  coercing `7.0` to `7` and `1e2` to `100` instead of refusing them as the
+  contract requires (`dab4252`).
+- A field added by `patch` landed after the `decisions` history instead of in
+  the metadata area, so identical items differed in layout depending on
+  whether the field was set at create time or patched in later (`dab4252`).
+- `mint-id` printed an ID containing the literal string `undefined` and exited
+  0 for any date before 1970. It now refuses dates outside 1970-01-01 to
+  9999-12-31 (`dab4252`).
+- `ready` with no `--json` answered an invalid ledger with raw validation JSON,
+  so the human surface became a machine surface at the moment it was needed
+  most. It now prints prose naming the error count and pointing at `validate`.
+  `ready --json` is unchanged (`dab4252`).
+
 ### Changed
 
 - **Breaking.** `inspect` and every successful mutation result no longer return
