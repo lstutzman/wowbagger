@@ -77,7 +77,10 @@ test('create retains an extension JSON number without JavaScript precision coerc
   });
 });
 
-test('create writes caller-supplied priority and number', async () => {
+// create refuses planning metadata rather than writing it. Patch owns priority
+// and number: it validates the integer spelling, and for number it holds the
+// lock that keeps it unique. Writing them here published both unvalidated.
+test('create refuses caller-supplied planning metadata and publishes nothing', async () => {
   await withLedger({}, async (ledger) => {
     const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
     const requestPath = path.join(path.dirname(ledger), 'request.json');
@@ -98,12 +101,14 @@ test('create writes caller-supplied priority and number', async () => {
     }));
 
     const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
-    const source = await readFile(path.join(ledger, `${id}.md`), 'utf8');
-    const data = parseDocument(source.split('\n---\n', 1)[0].replace(/^---\n/, '')).toJS();
+    const output = JSON.parse(result.stdout);
+    const paths = output.error.details.issues.map((entry) => entry.path).sort();
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(data.priority, 3);
-    assert.equal(data.number, 7);
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.error.code, 'invalid-request');
+    assert.deepEqual(paths, ['/item/number', '/item/priority']);
+    await assert.rejects(readFile(path.join(ledger, `${id}.md`), 'utf8'));
   });
 });
 

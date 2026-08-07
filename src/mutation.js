@@ -119,13 +119,11 @@ export function validateCreateRequest(request, parseIssues = []) {
   }
   const controlled = new Set([
     'schema_version', 'id', 'status', 'created', 'updated', 'completed',
-    'killed', 'archived', 'decisions', 'body',
+    'killed', 'archived', 'decisions', 'body', 'priority', 'number',
   ]);
   for (const field of Object.keys(item)) {
     if (controlled.has(field)) {
-      issues.push(issue(pointer(['item', field]), 'invalid-value', field === 'status'
-        ? 'Item member status is controlled by Wowbagger. Create assigns triage; call transition to accept the item into backlog.'
-        : `Item member ${field} is controlled by Wowbagger.`));
+      issues.push(issue(pointer(['item', field]), 'invalid-value', controlledMemberMessage(field)));
     }
   }
   if (hasOwn(item, 'title') && (typeof item.title !== 'string' || item.title.trim().length === 0)) {
@@ -629,14 +627,6 @@ async function replaceItem(ledgerDirectory, request, operation, scenario) {
           return await finishUncommitted(operationFailed(id, 'serialize-candidate', 'internal-error'));
         }
       } else {
-        if (!patchChangesData(lockedTarget.data, request.patch)) {
-          return await finishUncommitted(mutationUnchanged(inspectedItem(
-            displayItemPath(lockedTarget.path),
-            lockedTarget.bytes,
-            lockedTarget.data,
-            lockedTarget.body,
-          )));
-        }
         const blockers = patchBlockers(lockedTarget, current.ledger, request.patch);
         if (blockers.length > 0) {
           return await finishUncommitted(mutationError('atomic-scope-required', 'The requested patch requires multi-item atomicity.', 'unchanged', 5, {
@@ -651,6 +641,15 @@ async function replaceItem(ledgerDirectory, request, operation, scenario) {
         );
         if (unsafeYaml) {
           return await finishUncommitted(unsafeYamlMutationError(id, lockedTarget.path, unsafeYaml));
+        }
+        // Checked last, so a request that is wrong for a stronger reason reports
+        // that reason. There is one success exit; a patch that would change
+        // nothing must not reach it and append a decision for a change that
+        // never happened.
+        if (!patchChangesData(lockedTarget.data, request.patch)) {
+          return await finishUncommitted(mutationError('invalid-request', 'The patch request is invalid.', 'unchanged', 2, {
+            issues: [issue('/patch', 'invalid-value', 'The patch would not change the item; every requested value is already in effect.')],
+          }));
         }
         successor = patchData(lockedTarget.data, request);
         try {
@@ -846,6 +845,18 @@ function patchBlockers(target, ledger, patch) {
     .filter((id) => findItem(ledger, id)?.data.status === 'done')
     .map((id) => ({ code: 'child-disposition', item_id: id, field: 'parent' }))
     .sort((left, right) => compareText(left.item_id, right.item_id));
+}
+
+// Create writes neither ranking nor handle. Patch owns both: it validates the
+// spelling of the integer and, for number, holds the lock that keeps it unique.
+const CREATE_CONTROLLED_MESSAGES = {
+  status: 'Item member status is controlled by Wowbagger. Create assigns triage; call transition to accept the item into backlog.',
+  priority: 'Item member priority is controlled by Wowbagger. Create writes no priority; call patch to set one.',
+  number: 'Item member number is controlled by Wowbagger. Create writes no number; call patch to set one.',
+};
+
+function controlledMemberMessage(field) {
+  return CREATE_CONTROLLED_MESSAGES[field] ?? `Item member ${field} is controlled by Wowbagger.`;
 }
 
 function patchData(data, request) {

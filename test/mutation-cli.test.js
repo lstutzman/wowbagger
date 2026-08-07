@@ -155,6 +155,45 @@ test('create refusing a caller-supplied status names triage and the accepting tr
   });
 });
 
+// create writes no ranking or handle field. Both are set through patch, which
+// validates them; accepting them here would need create to repeat that
+// validation and to hold a ledger-wide lock for number uniqueness.
+for (const field of ['priority', 'number']) {
+  test(`create refuses a caller-supplied ${field} and names patch`, async () => {
+    const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+    await withLedger({}, async (ledger) => {
+      const request = JSON.parse(readFileSync(fileURLToPath(new URL('request.json', fixture)), 'utf8'));
+      request.item[field] = 3;
+      const requestPath = path.join(path.dirname(ledger), 'request.json');
+      await writeFile(requestPath, JSON.stringify(request));
+
+      const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+      const output = JSON.parse(result.stdout);
+      const fieldIssue = output.error.details.issues.find((entry) => entry.path === `/item/${field}`);
+
+      assert.equal(result.status, 2);
+      assert.equal(output.state, 'unchanged');
+      assert.match(fieldIssue.message, /patch/);
+    });
+  });
+
+  test(`create refuses a non-scalar ${field} with a contract envelope`, async () => {
+    const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+    await withLedger({}, async (ledger) => {
+      const request = JSON.parse(readFileSync(fileURLToPath(new URL('request.json', fixture)), 'utf8'));
+      request.item[field] = {};
+      const requestPath = path.join(path.dirname(ledger), 'request.json');
+      await writeFile(requestPath, JSON.stringify(request));
+
+      const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+      assert.equal(result.status, 2, result.stderr);
+      assert.equal(result.stderr, '');
+      assert.equal(JSON.parse(result.stdout).error.code, 'invalid-request');
+    });
+  });
+}
+
 test('mutation argument validation consumes the value of a repeated option once', () => {
   const result = runCli(
     'create',

@@ -896,36 +896,10 @@ test('patch removes optional priority, number, and parent with null', async () =
   });
 });
 
-test('patch leaves bytes and revision unchanged when clearing an absent field', async () => {
-  const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
-  const source = itemSource(targetId);
-
-  await withLedger({ [`${targetId}.md`]: source }, async (ledger) => {
-    const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
-    const revision = JSON.parse(inspected.stdout).result.item.revision;
-    const requestPath = path.join(path.dirname(ledger), 'patch-clear-absent.json');
-    await writeFile(requestPath, JSON.stringify({
-      id: targetId,
-      expected_revision: revision,
-      patch: { number: null },
-      date: '2030-01-18',
-      decision: {
-        summary: 'Confirm the item has no number.',
-        rationale: 'Retrying an already-applied clear must remain safe.',
-      },
-    }));
-
-    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
-    const output = JSON.parse(result.stdout);
-    const rewritten = await readFile(path.join(ledger, `${targetId}.md`), 'utf8');
-
-    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
-    assert.equal(output.ok, true);
-    assert.equal(output.state, 'unchanged');
-    assert.equal(output.result.item.revision, revision);
-    assert.equal(rewritten, source);
-  });
-});
+// The no-op success this file used to assert is gone; clearing an absent field
+// now refuses. Its bytes-unchanged and revision-unchanged assertions live on in
+// 'patch refuses a request that would change nothing, without touching the item',
+// which drives the same request and additionally pins the exit code and error.
 
 test('patch refuses an invalid proposed ledger and leaves target bytes unchanged', async () => {
   const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
@@ -1160,6 +1134,69 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
     'mutation-successor-mismatch',
     'unresolved-parent',
   ]);
+});
+
+// A patch that would change nothing is refused rather than published. There is
+// exactly one success exit, so no request can reach it without passing every
+// check on the way; and no decision is appended for a change that did not occur.
+test('patch refuses a request that would change nothing, without touching the item', async () => {
+  const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const target = itemSource(targetId, '', ['priority: 4']);
+
+  await withLedger({ [`${targetId}.md`]: target }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-noop.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: revision,
+      patch: { number: null },
+      date: '2030-01-18',
+      decision: {
+        summary: 'Clear a number that is not there.',
+        rationale: 'The request asks for a state the item already has.',
+      },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.ok, false);
+    assert.equal(output.state, 'unchanged');
+    assert.equal(output.error.code, 'invalid-request');
+    assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), target);
+
+    const after = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+    assert.equal(JSON.parse(after.stdout).result.item.revision, revision);
+  });
+});
+
+test('patch refusing a no-op still refuses an unpatchable ledger first', async () => {
+  const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const missingParent = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
+  const target = itemSource(targetId, '', ['priority: 4']);
+
+  await withLedger({ [`${targetId}.md`]: target }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', targetId, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch-noop-and-real.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: revision,
+      // number: null is a no-op; parent names an item that does not exist.
+      patch: { number: null, parent: missingParent },
+      date: '2030-01-18',
+      decision: { summary: 'Mixed request.', rationale: 'One no-op and one real change.' },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.error.code, 'candidate-invalid');
+    assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), target);
+  });
 });
 
 function itemSource(id, body = '', extraFrontmatter = [], kind = 'task') {

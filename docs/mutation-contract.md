@@ -151,7 +151,7 @@ presence is reported separately as bounded recovery_artifacts.
 
 | Exit | Condition | Error codes |
 |---:|---|---|
-| 0 | Successful command; mutation state is committed or unchanged. | none |
+| 0 | Successful command; a mutation is state committed. | none |
 | 2 | Argument, request, lookup, candidate/lifecycle-precondition, or unsafe YAML mutation failure. | invalid-request, item-not-found, transition-precondition-failed, candidate-invalid, unsafe-yaml-mutation |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
@@ -456,8 +456,6 @@ Create accepts exactly:
 | item.related | No | Valid relation list; omitted means empty. |
 | item.parent | No | Valid epic ID. |
 | item.snoozed_until | No | Valid ISO calendar date. |
-| item.priority | No | Non-negative integer supplied by caller policy. |
-| item.number | No | Positive integer unique within the ledger. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
@@ -867,13 +865,15 @@ invariants. In particular, because patch does not alter terminal dates, a
 terminal item can only be patched with a date that keeps its terminal date and
 updated valid.
 
-After the locked revision check, if every requested patchable field already has
-the requested value, patch returns success with `state: "unchanged"` and the
-existing inspect item. This includes clearing an optional field that is already
-absent. It does not publish bytes, change the revision or `updated`, or append
-the supplied decision. The decision is validated as part of the request but is
-not evidence of a change, so it is not recorded. A patch that changes at least
-one patchable field follows the committed-success rules above.
+A patch that would change nothing is refused. If every requested patchable field
+already holds the requested value, including clearing an optional field that is
+already absent, patch returns invalid-request, exit 2, and state unchanged. It
+publishes no bytes, changes no revision, and appends no decision.
+
+The refusal is checked last, so a request that is also wrong for a stronger
+reason reports that reason instead. Patch therefore has exactly one success
+exit: no request reaches it without passing every check, and no decision records
+a change that did not happen.
 
 ### Refusal and publication
 
