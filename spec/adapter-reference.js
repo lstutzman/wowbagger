@@ -2002,6 +2002,12 @@ function hasCanonicalMutationRequest(responseContext, command) {
 // the subject whether the subject's input is valid proves nothing: reverting
 // the controlled-member list in src would move this rule with it and every
 // conformance test would stay green.
+//
+// This applies to create only. transition still delegates to
+// validateTransitionRequest imported from src and carries the same defect;
+// stating its lifecycle-edge and decision rules independently is its own piece
+// of work, tracked as a ledger item. Writing it hastily is how the two holes
+// round nine found in this function got here.
 const CREATE_CONTROLLED_MEMBERS = [
   'schema_version', 'id', 'status', 'created', 'updated', 'completed',
   'killed', 'archived', 'decisions', 'body', 'priority', 'number',
@@ -2010,7 +2016,7 @@ const CREATE_CONTROLLED_MEMBERS = [
 function validCreateMutationRequest(request) {
   if (!plainObject(request)
     || !hasExactKeys(request, ['id', 'item', 'body'])
-    || !WOWBAGGER_ID.test(request.id)
+    || typeof request.id !== 'string' || !WOWBAGGER_ID.test(request.id)
     || typeof request.body !== 'string'
     || !plainObject(request.item)) return false;
   const item = request.item;
@@ -2020,13 +2026,14 @@ function validCreateMutationRequest(request) {
   if (!plainObject(item.provenance)
     || typeof item.provenance.source !== 'string'
     || item.provenance.source.trim().length === 0
-    || typeof item.provenance.recorded_at !== 'string') return false;
+    || !isCoreRfc3339Utc(item.provenance.recorded_at)) return false;
   if (!Array.isArray(item.depends_on)
     || !item.depends_on.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry))) return false;
   if (Object.hasOwn(item, 'related')
     && (!Array.isArray(item.related)
       || !item.related.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry)))) return false;
-  if (Object.hasOwn(item, 'parent') && !WOWBAGGER_ID.test(item.parent)) return false;
+  if (Object.hasOwn(item, 'parent')
+    && (typeof item.parent !== 'string' || !WOWBAGGER_ID.test(item.parent))) return false;
   if (Object.hasOwn(item, 'snoozed_until') && !isCalendarDate(item.snoozed_until)) return false;
   return true;
 }
@@ -2114,6 +2121,10 @@ function validCreateResultCorrelation(item, request) {
 // and such a comparison would be the committed rule negated, not an
 // independent statement.
 function validUnchangedPatchCorrelation(item, request) {
+  // No request to correlate against: judge the envelope on its own shape, as
+  // validMutationResultCorrelation does for the committed branch. Without this
+  // the two halves of one success envelope disagree about context-free judging.
+  if (request === undefined) return true;
   return plainObject(request) && plainObject(request.patch)
     && item.core.id === request.id
     && item.revision === request.expected_revision

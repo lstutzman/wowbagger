@@ -68,10 +68,16 @@ def run_suite():
         if marker in out:
             total = out.split(marker, 1)[1].split('\n', 1)[0].strip()
             break
-    if total is None:
+    fails = None
+    for marker in ('\nℹ fail ', '\n# fail '):
+        if marker in out:
+            fails = out.split(marker, 1)[1].split('\n', 1)[0].strip()
+            break
+    # Both markers are required. A run reporting a total but no fail line has
+    # not told us whether anything failed, and guessing would score a guard.
+    if total is None or fails is None:
         return (False, None)
-    failed = ('\nℹ fail 0\n' not in out) and ('\n# fail 0\n' not in out)
-    return (not failed, total)
+    return (fails == '0', total)
 
 
 def main():
@@ -102,9 +108,13 @@ def main():
             green, total = run_suite()
             if total is None:
                 verdict = 'NO SUMMARY — the mutated tree did not run'
-            elif total != baseline_total:
-                verdict = (f'BROKE THE HARNESS — {total} tests ran, baseline {baseline_total}; '
-                           'the mutation stopped tests rather than failing one')
+            elif green and total != baseline_total:
+                # Green but a different total means tests vanished without any
+                # failing — the mutation broke the harness rather than tripping
+                # a guard. A caught mutation may legitimately lower the total,
+                # because a failing subtest can stop its siblings from running.
+                verdict = (f'BROKE THE HARNESS — {total} tests ran, baseline {baseline_total}, '
+                           'and nothing failed')
             elif green:
                 verdict = 'NOT CAUGHT — no test covers this guard'
             else:

@@ -967,8 +967,8 @@ test('patch removes optional priority, number, and parent with null', async () =
 });
 
 // The no-op case is asserted by 'patch returns an unchanged success when every
-// requested value is in effect' above, which drives the same request and pins
-// the revision, the bytes, and the absence of an appended decision.
+// requested value is in effect' in this file, which drives the same request and
+// pins the revision, the bytes, and the absence of an appended decision.
 
 test('patch refuses an invalid proposed ledger and leaves target bytes unchanged', async () => {
   const targetId = runCli('mint-id', '--date', '2030-01-14').stdout.trim();
@@ -1197,9 +1197,12 @@ test('mutation vectors cover committed patch and required guarded refusals', asy
     'invalid-request',
     'lock-held',
     'revision-conflict',
-    // Without this the oracle's whole unchanged-patch branch is unreachable
-    // from the vector suite, so another implementation could never be measured
-    // against it.
+    // Pins the CLI's unchanged bytes. NOTE: this vector lives under
+    // spec/fixtures/mutations/, which is byte-compared only — it does NOT reach
+    // the oracle's unchanged-patch branch. That branch is covered in-repo by
+    // 'adapter oracle refuses an unchanged patch whose requested value is not in
+    // effect'; third-party certification through spec/fixtures/adapters/ still
+    // does not exercise it. Tracked as a ledger item.
     'unchanged',
     'unsafe-yaml-mutation',
   ]);
