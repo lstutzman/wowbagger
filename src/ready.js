@@ -4,15 +4,30 @@ export function selectReady(items, asOf) {
 
   return items
     .filter((item) => isReady(item, byId, ancestorsBacklogById, asOf))
-    .sort((left, right) => {
-      const created = compareText(left.data.created, right.data.created);
-      return created === 0 ? compareText(left.data.id, right.data.id) : created;
-    })
+    .sort((left, right) => comparePriority(left.data, right.data)
+      || compareText(left.data.created, right.data.created)
+      || compareText(left.data.id, right.data.id))
     .map((item) => item.data.id);
 }
 
 function compareText(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+// Items carrying a priority sort before items without one, then by ascending
+// priority. The core reports the supplied priority; it never invents or
+// recalculates one.
+function comparePriority(left, right) {
+  const hasLeft = typeof left.priority === 'number';
+  const hasRight = typeof right.priority === 'number';
+
+  if (hasLeft !== hasRight) {
+    return hasLeft ? -1 : 1;
+  }
+  if (!hasLeft) {
+    return 0;
+  }
+  return left.priority - right.priority;
 }
 
 function isReady(item, byId, ancestorsBacklogById, asOf) {

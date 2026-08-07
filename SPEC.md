@@ -77,6 +77,7 @@ The following frontmatter fields are part of schema version 1.
 | related | No | List of non-blocking IDs, including satisfied former dependencies. Defaults to an empty list. |
 | parent | No | ID of an epic containing this item. |
 | snoozed_until | No | ISO calendar date. A future date temporarily removes a backlog task from readiness. |
+| priority | No | Non-negative integer supplied by a consumer policy. Lower values sort first; Wowbagger core does not calculate it. |
 | completed | Conditional | ISO calendar date required only when status is done. |
 | killed | Conditional | ISO calendar date required only when status is killed. |
 | archived | Conditional | ISO calendar date required only when status is archived. |
@@ -312,10 +313,17 @@ An item is ready only when all are true:
 4. depends_on is empty;
 5. every epic ancestor reached through parent has status backlog.
 
-The ready result sorts by ascending created date, then ascending immutable ID.
-This is deterministic without a policy engine. A later consumer policy MAY rank
-or decorate the returned set, but it MUST NOT change lifecycle validity or core
-readiness selection.
+The ready result sorts by:
+
+1. items with priority before items without priority;
+2. ascending priority;
+3. ascending created date;
+4. ascending immutable ID.
+
+This order is deterministic even when a consumer does not use a policy engine.
+The core reports the supplied priority but never invents, recalculates, or
+persists one. A later consumer policy MAY rank or decorate the returned set,
+but it MUST NOT change lifecycle validity or core readiness selection.
 
 The normative successful public result is an exact JSON object with only these
 fields:

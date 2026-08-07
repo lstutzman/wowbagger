@@ -3,6 +3,7 @@ schema_version: 1
 id: wb_01KZE1GBG03JDGJQJG1H5896VZ
 title: "Tell the caller that a created item lands in triage"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-07
 updated: 2026-08-07

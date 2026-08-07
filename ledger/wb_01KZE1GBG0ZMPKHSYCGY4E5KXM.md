@@ -3,6 +3,7 @@ schema_version: 1
 id: wb_01KZE1GBG0ZMPKHSYCGY4E5KXM
 title: "Give the ledger a way to express priority"
 kind: task
+priority: 1
 status: backlog
 created: 2026-08-07
 updated: 2026-08-07

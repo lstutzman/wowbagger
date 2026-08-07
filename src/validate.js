@@ -97,6 +97,7 @@ function inspectItem(item, context) {
   fact.related = inspectReferenceList(fact, 'related', false, context);
   fact.parent = inspectParent(fact, context);
   inspectOptionalDate(fact, 'snoozed_until', context);
+  inspectOptionalPriority(fact, context);
 
   for (const field of TERMINAL_DATE_FIELDS) {
     inspectOptionalDate(fact, field, context);
@@ -208,6 +209,25 @@ function inspectRequiredDate(fact, field, context) {
   }
 
   return inspectDate(fact, field, context);
+}
+
+// priority is supplied by a consumer policy. The core validates its form and
+// reports it; it never invents, recalculates, or persists one.
+function inspectOptionalPriority(fact, context) {
+  if (!hasOwn(fact.data, 'priority')) {
+    return;
+  }
+
+  const value = fact.data.priority;
+  if (!Number.isSafeInteger(value) || value < 0) {
+    addError(
+      fact,
+      'priority',
+      'invalid-priority',
+      'Field priority must be a non-negative integer.',
+      context,
+    );
+  }
 }
 
 function inspectOptionalDate(fact, field, context) {

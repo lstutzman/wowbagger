@@ -3,6 +3,7 @@ schema_version: 1
 id: wb_01KZE1GBG0HA3MBWWZS6NQTW6E
 title: "Make inspect consistent about which fields are promoted onto item"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-07
 updated: 2026-08-07

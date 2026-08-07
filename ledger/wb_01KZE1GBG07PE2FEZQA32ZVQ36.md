@@ -3,6 +3,7 @@ schema_version: 1
 id: wb_01KZE1GBG07PE2FEZQA32ZVQ36
 title: "Give every item a short human-readable handle"
 kind: task
+priority: 20
 status: backlog
 created: 2026-08-07
 updated: 2026-08-07

@@ -65,7 +65,7 @@ live only in one conversation or one harness's private state.
 Wowbagger makes the repository the durable coordination boundary:
 
 - One inspectable Markdown file per backlog item.
-- YAML metadata for lifecycle, dependencies, and structured provenance.
+- YAML metadata for lifecycle, priority, dependencies, and structured provenance.
 - Git history as the audit log and recovery mechanism.
 - Dependency-aware ready queues so an agent can ask what is actionable now.
 - Guarded one-item creation and lifecycle transitions with exact-byte
