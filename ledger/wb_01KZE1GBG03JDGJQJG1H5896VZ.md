@@ -5,9 +5,10 @@ number: 26
 title: "Tell the caller that a created item lands in triage"
 kind: task
 priority: 10
-status: backlog
+status: done
 created: 2026-08-07
 updated: 2026-08-07
+completed: 2026-08-07
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted from the tinydancer dogfood: create should tell the caller it assigned triage."
     rationale: "A consumer created nine items and found an empty ready queue, because create assigns triage and says so nowhere in its result. The rule is correct and documented in the mutation contract, but a consumer meets it only after the queue comes back empty. Confirmed firsthand while filing this item: the assigned status is only recoverable by base64-decoding source_base64. This is an information gap, not a behaviour change."
+  - action: complete
+    date: 2026-08-07
+    summary: "Completed, and the accepting decision is corrected: the premise was wrong."
+    rationale: "The accept record states that the assigned status was only recoverable by base64-decoding source_base64, confirmed firsthand. That is false. status has always been returned at item.core.status, which is visible in the pre-existing create fixture, so acceptance one was already met when the item was filed. A first implementation added an assigned_status member to the create result; it was rejected because create always assigns triage, so a member whose only possible value is a constant carries no information, and because promoting it contradicted item 29 in the same change. The real gap was acceptance two, the next step. Refusing a caller-supplied status now names the assigned status and the accepting transition, and the contract states both. Recorded here rather than closed quietly because an item accepted on an unchecked premise is itself a dogfood finding; item 37 is the sharper form of the same gap."
 ---
 
 A consumer created an epic and eight tasks through `create`, then found none

@@ -4,9 +4,10 @@ id: wb_01KZE1GBG0QGB161XH2VFVBFXB
 number: 32
 title: "Decide whether ownership returns, after priority did"
 kind: task
-status: backlog
+status: done
 created: 2026-08-07
 updated: 2026-08-07
+completed: 2026-08-07
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: ownership was deleted alongside priority and never re-examined."
     rationale: "Priority was restored once a consumer hit the hole. Ownership went out in the same commit, the same way, and nobody has decided whether it belongs in the ledger, belongs to the claim contract, or is deliberately absent. Any of those is a fine answer; none is recorded, which is the defect."
+  - action: complete
+    date: 2026-08-07
+    summary: "Completed: ADR 0007 records ownership as deliberately absent."
+    rationale: "The maintainer raised ownership and believed it was required, then decided against a ledger field once the distinction was stated plainly: a claim is transient and answers who is touching this now, while ownership is durable and answers whose responsibility this is. The ADR records the distinction rather than pretending claims cover both, states that the durable question does not need a field today, and states what a return would require. The record notes that the maintainer asked for it, so the decision is not misread later as nobody having wanted it."
 ---
 
 Ownership was deleted in the same commit as priority, the same way, and unlike

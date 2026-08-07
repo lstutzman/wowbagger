@@ -5,9 +5,10 @@ number: 29
 title: "Make inspect consistent about which fields are promoted onto item"
 kind: task
 priority: 10
-status: backlog
+status: done
 created: 2026-08-07
 updated: 2026-08-07
+completed: 2026-08-07
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted from the tinydancer dogfood: inspect promotes id onto item but not title."
     rationale: "Reported as a documentation gap; it is not. Verified against this repository's ledger that id appears both at item.id and item.core.id while title appears only at item.core.title, so a caller who has just used item.id will reasonably expect item.title to work. One field is promoted and the rest are not, with nothing marking the difference. Which fields are promoted is a contract decision, so the item states the options rather than presuming the fix."
+  - action: complete
+    date: 2026-08-07
+    summary: "Completed: no frontmatter field is promoted onto item, and item.id is removed."
+    rationale: "The maintainer chose the smaller and more honest option of the two the item stated. item.id duplicated item.core.id and earned nothing, while making a caller reasonably expect item.title to work. The contract now states the rule and a test pins the member set. The oracle was updated to describe the new contract and remains exact, so an implementation that kept item.id still fails. A limit found while closing this: item.core is a fixed view that does not carry priority or number, so the rule holds only for the fields core carries. The contract now says so and item 37 tracks the fix."
 ---
 
 A consumer read `inspect` output, reached for `item.title`, and got a

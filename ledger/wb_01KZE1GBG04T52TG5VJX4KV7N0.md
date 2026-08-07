@@ -5,9 +5,10 @@ number: 27
 title: "Remove the ULID generator as a prerequisite for first use"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-07
 updated: 2026-08-07
+completed: 2026-08-07
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: writing a ULID generator is a prerequisite for filing a first item."
     rationale: "Two independent consumers wrote the same generator before they could create anything — the tinydancer dogfood and this session. The caller-generated ID is sound design and is not in question; requiring every consumer to reimplement Crockford base32 before their first item is the cost being challenged. First-use friction is paid before a consumer has reason to trust the tool."
+  - action: complete
+    date: 2026-08-07
+    summary: "Completed: a mint-id command and an exported mintId remove the generator prerequisite."
+    rationale: "Both the command and the module reuse the validator own Crockford alphabet and calendar-date rule rather than copying them, so the canonical form stays single-sourced. Nine tests cover alphabet and entropy properties over ten thousand mints, the date round-trip through the validator, refusal of a non-calendar date, and a minted ID passing full ledger validation. The documentation points at it where create first states the caller-supplied-ID requirement. Exercised immediately: every item filed in this session was minted with it."
 ---
 
 Before a consumer can create their first item, they must write a ULID
