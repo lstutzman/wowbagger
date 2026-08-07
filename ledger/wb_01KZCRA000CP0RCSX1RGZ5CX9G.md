@@ -18,6 +18,11 @@ decisions:
     date: 2026-08-07
     summary: "Accept: pin the PropertyCompass extension profile and the priority inversion."
     rationale: "PropertyCompass priority_score is a float where higher is better; wowbagger priority is an integer where lower sorts first. A naive import fails loudly on the 993 float values and silently reverses the rest. This is the only gap found in the comparison that yields a ledger which validates clean and is wrong, so it is accepted above the rest of the batch."
+  - action: record
+    date: 2026-08-07
+    summary: "Allocate the missing number through the CLI."
+    rationale: "create does not allocate a number, so this item was filed without one. Patching it is the first use of the operation item 33 asked for, and it replaces the hand-edit that would otherwise bypass validation, the per-ID lock, and the compare-and-swap."
+number: 34
 ---
 
 PropertyCompass2 carries 1473 backlog items with their own frontmatter schema.

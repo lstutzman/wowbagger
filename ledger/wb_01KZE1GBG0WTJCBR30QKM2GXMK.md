@@ -4,9 +4,10 @@ id: wb_01KZE1GBG0WTJCBR30QKM2GXMK
 number: 33
 title: "Let the CLI change an item's frontmatter, not just its status"
 kind: task
-status: backlog
+status: done
 created: 2026-08-07
 updated: 2026-08-07
+completed: 2026-08-07
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: priority cannot be changed through the CLI, only by hand-editing YAML."
     rationale: "Hit three times in one session — setting priority, backfilling numbers, correcting bodies. Each hand-edit bypassed validation, the per-ID lock, and the compare-and-swap transition provides. It also makes the plugin's own instruction, drive the core rather than hand-edit, impossible to follow for frontmatter."
+  - action: complete
+    date: 2026-08-07
+    summary: "Completed: patch changes a narrow frontmatter set under the transition guarantees."
+    rationale: "The patchable set is exactly priority, number, parent, depends_on and title. status stays with transition so no second path can bypass the decision record transition appends, and id, schema_version and created stay immutable. Every patch requires a decision, because a silent priority change is the failure ADR 0006 records. The operation reuses transition per-ID lock, revision compare-and-swap, candidate validation and atomic publication rather than reimplementing them. Advertising it widened the adapter command list, which the maintainer authorised and ADR 0008 records; a test proves the list stayed exact by removing patch from an otherwise valid list and confirming the independent oracle still refuses it. First use was allocating the missing number on item 34, with the stale-revision, absent-parent, status and missing-decision refusals all exercised against the live ledger."
 ---
 
 There is no way to change an item's priority, number, parent, or dependencies
