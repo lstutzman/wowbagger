@@ -11,10 +11,10 @@ function itemSource(id, { priority = 5, number = 7 } = {}) {
     '---',
     'schema_version: 1',
     `id: ${id}`,
-    `number: ${number}`,
+    ...(number === null ? [] : [`number: ${number}`]),
     'title: "Patchable item"',
     'kind: task',
-    `priority: ${priority}`,
+    ...(priority === null ? [] : [`priority: ${priority}`]),
     'status: backlog',
     'created: 2030-01-10',
     'updated: 2030-01-10',
@@ -166,6 +166,27 @@ test('patch refuses a date earlier than the current updated date', async () => {
     assert.equal(envelope.state, 'unchanged');
     const codes = envelope.error.details.issues.map((entry) => entry.code);
     assert.deepEqual(codes, ['date-before-created', 'date-before-updated']);
+  });
+});
+
+test('patch inserts absent number and priority at their canonical positions', async () => {
+  await withLedger({ [`${ID}.md`]: itemSource(ID, { number: null, priority: null }) }, async (ledger) => {
+    const revision = inspectRevision(ledger, ID);
+
+    const result = await runPatch(ledger, {
+      id: ID,
+      expected_revision: revision,
+      date: '2030-01-11',
+      set: { number: 12, priority: 4 },
+    });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const item = JSON.parse(result.stdout).result.item;
+    assert.equal(item.core.number, 12);
+    assert.equal(item.core.priority, 4);
+    const lines = Buffer.from(item.source_base64, 'base64').toString('utf8').split('\n');
+    assert.equal(lines[lines.indexOf(`id: ${ID}`) + 1], 'number: 12');
+    assert.equal(lines[lines.indexOf('kind: task') + 1], 'priority: 4');
   });
 });
 

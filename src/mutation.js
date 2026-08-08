@@ -745,6 +745,21 @@ function patchData(data, request) {
 }
 
 function serializePatch(source, successor, request) {
+  return rewriteFrontmatter(source, (document) => {
+    setRootScalar(document, 'updated', successor.updated);
+    for (const field of Object.keys(request.set)) {
+      if (!Object.hasOwn(successor, field)) {
+        document.delete(field);
+      } else if (document.has(field)) {
+        setRootScalar(document, field, successor[field]);
+      } else {
+        insertRootAfter(document, PATCH_FIELD_ANCHORS[field], field, successor[field]);
+      }
+    }
+  });
+}
+
+function rewriteFrontmatter(source, edit) {
   const bounds = frontmatterBounds(source);
   const frontmatter = source.slice(bounds.start, bounds.end);
   const document = parseDocument(frontmatter, {
@@ -757,16 +772,7 @@ function serializePatch(source, successor, request) {
   if (document.errors.length > 0 || !isMap(document.contents)) {
     throw new Error('Unable to mutate malformed frontmatter.');
   }
-  setRootScalar(document, 'updated', successor.updated);
-  for (const field of Object.keys(request.set)) {
-    if (!Object.hasOwn(successor, field)) {
-      document.delete(field);
-    } else if (document.has(field)) {
-      setRootScalar(document, field, successor[field]);
-    } else {
-      insertRootAfter(document, PATCH_FIELD_ANCHORS[field], field, successor[field]);
-    }
-  }
+  edit(document);
   let serialized = document.toString({ lineWidth: 0 });
   if (bounds.newline === '\r\n') {
     serialized = serialized.replaceAll('\n', '\r\n');
@@ -958,38 +964,20 @@ function transitionData(data, request, edge, ledger) {
 }
 
 function serializeTransition(source, successor, edge) {
-  const bounds = frontmatterBounds(source);
-  const frontmatter = source.slice(bounds.start, bounds.end);
-  const document = parseDocument(frontmatter, {
-    intAsBigInt: true,
-    keepSourceTokens: true,
-    prettyErrors: false,
-    schema: 'core',
-    uniqueKeys: true,
+  return rewriteFrontmatter(source, (document) => {
+    setRootScalar(document, 'status', successor.status);
+    setRootScalar(document, 'updated', successor.updated);
+    document.delete('completed');
+    document.delete('killed');
+    document.delete('archived');
+    const terminal = terminalField(successor.status);
+    if (terminal) {
+      insertRootAfter(document, 'updated', terminal, successor[terminal]);
+    }
+    if (edge.requiresDecision) {
+      appendDecisionNode(document, successor.decisions.at(-1));
+    }
   });
-  if (document.errors.length > 0 || !isMap(document.contents)) {
-    throw new Error('Unable to mutate malformed frontmatter.');
-  }
-  setRootScalar(document, 'status', successor.status);
-  setRootScalar(document, 'updated', successor.updated);
-  document.delete('completed');
-  document.delete('killed');
-  document.delete('archived');
-  const terminal = terminalField(successor.status);
-  if (terminal) {
-    insertRootAfter(document, 'updated', terminal, successor[terminal]);
-  }
-  if (edge.requiresDecision) {
-    appendDecisionNode(document, successor.decisions.at(-1));
-  }
-  let serialized = document.toString({ lineWidth: 0 });
-  if (bounds.newline === '\r\n') {
-    serialized = serialized.replaceAll('\n', '\r\n');
-  }
-  if (!frontmatter.endsWith(bounds.newline)) {
-    serialized = serialized.slice(0, -bounds.newline.length);
-  }
-  return `${source.slice(0, bounds.start)}${serialized}${source.slice(bounds.end)}`;
 }
 
 function setRootScalar(document, key, value) {
