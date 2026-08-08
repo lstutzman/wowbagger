@@ -5,9 +5,10 @@ number: 28
 title: "Give every item a short human-readable handle"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: a 26-character ULID is unusable as a conversational handle."
     rationale: "Raised while reading a ready queue printed as sixteen bare ULIDs, which is the tool's primary human-facing surface. The canonical ULID stays; what is missing is a short handle beside it. Integers were requested but cannot be allocated without the coordination the ULID exists to avoid, so the item recommends a Git-style resolved short prefix and says plainly that this is not what was asked for."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: ready without --json is the human surface, showing handle, priority, and title."
+    rationale: "The number field shipped earlier at eac8954; the open acceptance was the display. ready --ledger --as-of now prints one line per ready item — #number pri=priority title — in ready order, with dashes for absent fields. ready --json is byte-identical to before, so the adapter conformance vectors are untouched. A CLI test pins the format and ordering."
 ---
 
 Nobody will say "let's do item wb_01KZ77NSW81FXZVAWQ8WT4KDCJ". **The `number`

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCli } from './support.js';
+import { runCli, withLedger } from './support.js';
 
 const validLedger = fileURLToPath(
   new URL('../spec/fixtures/ready-selection/ledger', import.meta.url),
@@ -104,6 +104,45 @@ test('ready rejects a non-calendar as-of value', () => {
   assert.equal(result.status, 1);
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /--as-of must be an ISO calendar date/);
+});
+
+function humanReadyItem(id, extraLines = []) {
+  return [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    ...extraLines,
+    `title: "Ready item ${id}"`,
+    'kind: task',
+    'status: backlog',
+    'created: 2030-01-10',
+    'updated: 2030-01-10',
+    'provenance:',
+    '  source: "fixture/ready"',
+    '  recorded_at: "2030-01-10T12:34:56.789Z"',
+    'depends_on: []',
+    'related: []',
+    '---',
+    '',
+  ].join('\n');
+}
+
+test('ready without --json prints number, priority, and title per ready item', async () => {
+  const plain = 'wb_01Q45X474NAAAAAAAAAAAAAAAA';
+  const prioritised = 'wb_01Q45X474NBBBBBBBBBBBBBBBB';
+
+  await withLedger({
+    [`${plain}.md`]: humanReadyItem(plain),
+    [`${prioritised}.md`]: humanReadyItem(prioritised, ['number: 5', 'priority: 1']),
+  }, async (ledger) => {
+    const result = runCli('ready', '--ledger', ledger, '--as-of', '2030-01-15');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      `#5 pri=1 Ready item ${prioritised}\n#- pri=- Ready item ${plain}\n`,
+    );
+  });
 });
 
 test('commands reject missing, unknown, and repeated arguments', () => {

@@ -259,10 +259,24 @@ export async function runCli(argumentsList, { scenario } = {}) {
     return;
   }
 
+  const readyIds = selectReady(ledger.items, options.asOf);
+
+  if (!options.json) {
+    const byId = new Map(ledger.items.map((item) => [item.data.id, item.data]));
+    const lines = readyIds.map((id) => {
+      const data = byId.get(id);
+      const number = Object.hasOwn(data, 'number') ? `#${data.number}` : '#-';
+      const priority = Object.hasOwn(data, 'priority') ? `pri=${data.priority}` : 'pri=-';
+      return `${number} ${priority} ${data.title}\n`;
+    });
+    process.stdout.write(lines.join(''));
+    return;
+  }
+
   const result = {
     as_of: options.asOf,
     valid: true,
-    ready: selectReady(ledger.items, options.asOf),
+    ready: readyIds,
   };
 
   process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -356,7 +370,7 @@ function parseOptions(command, argumentsList) {
     }
   }
 
-  if (!options.ledger || !options.json
+  if (!options.ledger || (!options.json && command !== 'ready')
     || (command === 'inspect' && !options.id)
     || (command === 'create' && !options.input)
     || (command === 'ready' && !options.asOf)) {
@@ -635,7 +649,7 @@ function usage(command) {
     return 'Usage: wowbagger mint-id [--date YYYY-MM-DD] --json';
   }
 
-  return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD --json';
+  return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD [--json]';
 }
 
 async function requestSource(input) {
