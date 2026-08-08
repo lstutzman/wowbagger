@@ -4,9 +4,10 @@ id: wb_01KZBT45ANXD8SX5X02F1KVKPJ
 number: 25
 title: "Define the shared adapter packaging and release path"
 kind: task
-status: backlog
+status: done
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T15:12:29Z"
@@ -30,6 +31,10 @@ decisions:
     date: 2026-08-06
     summary: "Distribution does not need marketplace approval. A Claude Code marketplace is any git repository carrying .claude-plugin/marketplace.json."
     rationale: "Verified against the installed marketplaces on the development machine: seven of the nine registered are third-party repositories, including obra/superpowers-marketplace. The approval period gates listing in the official Anthropic catalogue, which is discovery, not distribution. A self-hosted marketplace is a real distribution channel and satisfies the dogfood item's requirement to install from one rather than from a local path, so the dogfood is not blocked on any approval."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: docs/adapter-release-path.md defines the single release path."
+    rationale: "The remaining scope point was release identification, and the shipped reality answers it: one repository releasing core and adapters together at a git tag, contract_version as the behavioural version, the tag as the distribution version, CHANGELOG.md carrying behaviour changes. The other three scope points shipped at ae3dcb4 and are restated in the document so the path reads as one artifact: manifest-declared required_core_contract_version, the mutation-verified core-contract-version-mismatch refusal on skew, and the per-target implementation runner as the candidate-release gate — now parameterized by --target, so every adapter is checked by the same vectors before a tag is cut."
 ---
 
 Define one packaging and release path that ships a single core version to every
