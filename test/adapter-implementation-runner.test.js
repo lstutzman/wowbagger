@@ -110,6 +110,18 @@ test('reports fail with every committed claude-code assertion executed', async (
   assert.equal(executed.length, 183);
 });
 
+test('reports the codex target with every codex-targeted assertion executed', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin', target: 'codex' });
+
+  assert.equal(result.status, 'fail');
+  assert.equal(result.implementations.codex, 'fail');
+  assert.equal(Object.hasOwn(result.implementations, 'claude-code'), false);
+  assert.equal(result.cases.length, 15);
+
+  const executed = result.cases.flatMap((entry) => entry.executed_assertions);
+  assert.equal(executed.length, 183);
+});
+
 test('fails closed on an unknown assertion type', async (t) => {
   const fixtureRoot = await writeTempFixture(t, {
     adapter_vector_version: 1,

@@ -157,17 +157,15 @@ compatibility alone makes a harness compatible.
 
 This checkout ships two adapter packages on one shared entrypoint runtime:
 [`adapters/claude-code/`](adapters/claude-code/) and
-[`adapters/codex/`](adapters/codex/). The Claude Code adapter answers the
-section 3.3 bootstrap wire and the negotiation surface, and evidences 79 of
-the contract's 183 conformance assertions — run
-`node spec/run-adapter-implementation.js` to see exactly which. The Codex
-adapter answers the same wire with its own identity and honest host
-declaration; the implementation runner does not yet report a `codex` evidence
-target, so its conformance evidence is pending. Invocation forwarding, path
-and limit guards, and the approval and context surfaces are not yet evidenced
-for any adapter, so section 10's status table still records every platform as
-`unverified`. The Kimi and OpenAI-compatible harness adapters are not
-written.
+[`adapters/codex/`](adapters/codex/). Each answers the section 3.3 bootstrap
+wire with its own identity and honest host declaration, and each evidences
+79 of the contract's 183 conformance assertions — run
+`node spec/run-adapter-implementation.js` (add `--target codex` for the
+Codex report) to see exactly which. Invocation forwarding, path and limit
+guards, and the approval and context surfaces are not yet evidenced for any
+adapter — that is the shared engine's Plans 2 and 3 — so section 10's status
+table still records every platform as `unverified`. The Kimi and
+OpenAI-compatible harness adapters are not written.
 
 ## Core commands
 

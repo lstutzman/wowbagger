@@ -231,6 +231,7 @@ async function evaluateAssertion(directory, assertion) {
 export async function runImplementationVectors({
   fixtureRoot = defaultFixtureRoot,
   platform,
+  target = 'claude-code',
 } = {}) {
   const directories = (await readdir(fixtureRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -248,7 +249,7 @@ export async function runImplementationVectors({
     if (!isVersionOne) {
       throw new Error(`unsupported adapter_vector_version in ${name}`);
     }
-    if (!manifest.targets.includes('claude-code')) {
+    if (!manifest.targets.includes(target)) {
       continue;
     }
     // A case that asserts nothing cannot be evidence of anything, and
@@ -290,13 +291,13 @@ export async function runImplementationVectors({
   // would otherwise be told the adapter conforms on the strength of no
   // measurement at all.
   if (cases.length === 0) {
-    throw new Error(`no claude-code cases in ${fixtureRoot}`);
+    throw new Error(`no ${target} cases in ${fixtureRoot}`);
   }
 
   const passed = cases.every((entry) => entry.status === 'pass');
   return {
     status: passed ? 'pass' : 'fail',
-    implementations: { 'claude-code': passed ? 'pass' : 'fail' },
+    implementations: { [target]: passed ? 'pass' : 'fail' },
     evidence_platform: platform,
     observed_error_codes: [...new Set(cases.flatMap((entry) => entry.observed_error_codes))].sort(),
     cases,
@@ -305,8 +306,10 @@ export async function runImplementationVectors({
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
+    const targetIndex = process.argv.indexOf('--target');
     process.stdout.write(`${JSON.stringify(await runImplementationVectors({
       platform: process.platform,
+      ...(targetIndex >= 0 ? { target: process.argv[targetIndex + 1] } : {}),
     }))}\n`);
   } catch (error) {
     process.stderr.write(`${error.stack ?? error}\n`);
