@@ -509,7 +509,12 @@ The default final path is:
     <ledger>/<id>.md
 
 The filename is a portable default, not identity. The request cannot supply an
-arbitrary path.
+arbitrary path: the no-clobber publication protocol and the collision rules
+are defined against the identity-derived default, and an arbitrary path would
+let a caller aim them at anything in the ledger. A repository that prefers a
+naming convention renames the file in Git after create — a reviewable change
+that validation does not care about, because identity resolves from
+frontmatter, never from the filename.
 
 ### Body
 
