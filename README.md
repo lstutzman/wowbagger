@@ -155,14 +155,19 @@ provide agent tools. The [adapter contract](docs/adapter-contract.md) records
 the required host capabilities and refusal rules. It does not claim that API
 compatibility alone makes a harness compatible.
 
-This checkout ships one adapter, for Claude Code, in
-[`adapters/claude-code/`](adapters/claude-code/). It answers the section 3.3
-bootstrap wire and the negotiation surface, and evidences 79 of the contract's
-183 conformance assertions — run `node spec/run-adapter-implementation.js` to
-see exactly which. Invocation forwarding, path and limit guards, and the
-approval and context surfaces are not yet evidenced, so section 10's status
-table still records every platform as `unverified`. The Codex, Kimi, and
-OpenAI-compatible harness adapters are not written.
+This checkout ships two adapter packages on one shared entrypoint runtime:
+[`adapters/claude-code/`](adapters/claude-code/) and
+[`adapters/codex/`](adapters/codex/). The Claude Code adapter answers the
+section 3.3 bootstrap wire and the negotiation surface, and evidences 79 of
+the contract's 183 conformance assertions — run
+`node spec/run-adapter-implementation.js` to see exactly which. The Codex
+adapter answers the same wire with its own identity and honest host
+declaration; the implementation runner does not yet report a `codex` evidence
+target, so its conformance evidence is pending. Invocation forwarding, path
+and limit guards, and the approval and context surfaces are not yet evidenced
+for any adapter, so section 10's status table still records every platform as
+`unverified`. The Kimi and OpenAI-compatible harness adapters are not
+written.
 
 ## Core commands
 
@@ -279,7 +284,7 @@ rules and the limits of the local mutation runtime.
 ```text
 src/            The core, and the shared adapter engine in src/adapter/
 bin/            The wowbagger executable
-adapters/       Harness packaging — currently adapters/claude-code/ only
+adapters/       Harness packaging — adapters/claude-code/ and adapters/codex/
 skills/         Portable agent workflows shipped by the plugin
 spec/           Ledger schema, the adapter reference model, and normative fixtures
 test/           The test suite

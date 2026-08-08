@@ -2,10 +2,12 @@
 import { CORE_COMMAND_ORDER } from '../../src/adapter/core-probe.js';
 import { runAdapterEntrypoint } from '../../src/adapter/entrypoint-main.js';
 
-// The honest host declaration for the Claude Code harness. Every value
-// describes what this adapter can actually guarantee there — argv-array
-// launch without a shell, guarded-relative workspace selection — not what
-// the harness offers in general.
+// The honest host declaration for the Codex CLI harness (`codex exec`).
+// The values match the Claude Code adapter's because both declarations
+// describe this adapter's own launch discipline — argv-array core launch
+// without a shell, guarded-relative workspace selection, host-provided
+// instructions — which holds identically under Codex. They may diverge as
+// platform evidence accumulates; each adapter owns its declaration.
 function dynamicResult(manifest) {
   return {
     ok: true,

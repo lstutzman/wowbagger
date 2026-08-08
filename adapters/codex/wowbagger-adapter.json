@@ -1,0 +1,25 @@
+{
+  "adapter_manifest_version": 1,
+  "adapter_id": "dev.wowbagger.adapter.codex",
+  "adapter_version": "0.1.0",
+  "adapter_contract_versions": [1],
+  "bootstrap_wire_version": 1,
+  "required_core_contract_version": 1,
+  "entrypoints": {
+    "describe": {
+      "kind": "command",
+      "executable": "adapters/codex/entrypoint.js",
+      "fixed_args": ["describe"]
+    },
+    "invoke": {
+      "kind": "command",
+      "executable": "adapters/codex/entrypoint.js",
+      "fixed_args": ["invoke"]
+    }
+  },
+  "platforms": {
+    "darwin": "unverified",
+    "linux": "unverified",
+    "win32": "unverified"
+  }
+}

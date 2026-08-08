@@ -4,9 +4,9 @@ id: wb_01KZ77NSW81FXZVAWQ8WT4KDCJ
 number: 1
 title: "Deliver the Codex adapter"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
