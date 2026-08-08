@@ -8,10 +8,11 @@ dependency-aware task selection, and auditable multi-worktree coordination witho
 putting a database or hosted service inside your repository.
 
 > **Status: pre-alpha and self-hosted.** The standalone core validates a
-> Markdown ledger, selects deterministic ready tasks, and implements guarded
-> local `capabilities`, `inspect`, `create`, and `transition` commands. Its
-> mutation scope is deliberately narrow: cooperative writers in one working
-> copy, one item at a time. A Claude Code adapter and plugin ship from this
+> Markdown ledger, selects deterministic priority-ordered ready tasks, and
+> implements guarded local `capabilities`, `inspect`, `create`, `transition`,
+> and `patch` commands, plus `mint-id` for canonical item IDs. Its mutation
+> scope is deliberately narrow: cooperative writers in one working copy, one
+> item at a time. A Claude Code adapter and plugin ship from this
 > repository; the adapter answers the negotiation surface of the harness-neutral
 > contract and evidences 79 of its 183 conformance assertions, so no platform is
 > claimed `supported` yet. The core implements advisory work claims (`acquire`,
@@ -44,6 +45,58 @@ would bypass validation and atomic publication.
 
 To use the core directly from a clone instead, see
 [Core commands](#core-commands).
+
+## Upgrading from an earlier wowbagger
+
+This section is written for agents as much as humans: if you already drive a
+wowbagger core, this is how you move forward safely.
+
+Upgrade the pieces you installed:
+
+```sh
+npm install -g github:lstutzman/wowbagger   # global core
+git pull && npm ci                          # or: a direct checkout
+```
+
+In Claude Code, update the plugin the same way it was installed:
+
+```
+/plugin marketplace update wowbagger
+/plugin update wowbagger@wowbagger
+```
+
+Then verify, exactly as on first install:
+
+```sh
+wowbagger capabilities --json
+```
+
+`contract_version` is the compatibility gate. The plugin and adapter refuse a
+core that reports a version they do not support; if you automate against the
+core directly, do the same rather than guessing.
+
+Behaviour changes are recorded in [CHANGELOG.md](CHANGELOG.md) — read its
+Unreleased section on every upgrade. If you automated against an earlier
+core, these are the changes most likely to touch you:
+
+- **Stop hand-editing frontmatter for priority or number.** `wowbagger patch`
+  changes both under the same revision compare-and-swap and per-ID lock as
+  `transition`. Hand-edits bypass validation and atomic publication.
+- **Delete your local ULID generator.** `wowbagger mint-id --json` prints a
+  canonical ID; `--date YYYY-MM-DD` selects the creation date the ID must
+  encode.
+- **Read `core.number` and `core.priority` from results** instead of decoding
+  `source_base64`. Every frontmatter field lives under `item.core`; `item.id`
+  is the one deliberate duplicate.
+- **`ready` without `--json` is for you to read**: `#number pri=priority
+  title` per line, in ready order. Machine consumers keep `ready --json`,
+  which is byte-stable.
+- **A claim request with an own `__proto__` member is now refused** as
+  `invalid-request` instead of silently losing the member.
+- **`create` tells you where the item landed**: results report
+  `core.status: "triage"`, and the refusal for a caller-supplied `status`
+  names the accepting transition (triage to backlog) that makes an item
+  ready.
 
 ## Why the name?
 
@@ -119,10 +172,13 @@ The current core requires Node.js 20 or later. From a Wowbagger checkout:
 npm ci
 ./bin/wowbagger.js validate --ledger path/to/ledger --json
 ./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15 --json
+./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15
 ./bin/wowbagger.js capabilities --json
+./bin/wowbagger.js mint-id --json
 ./bin/wowbagger.js inspect --ledger path/to/ledger --id wb_... --json
 ./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js transition --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js patch --ledger path/to/ledger --input request.json --json
 ```
 
 `validate` writes exactly one JSON result to standard output. A valid ledger
@@ -138,8 +194,10 @@ returns:
 {"as_of":"2030-01-15","valid":true,"ready":["wb_..."]}
 ```
 
-`validate` and `ready` require `--ledger` and `--json`; `ready` also requires
-an ISO calendar `--as-of` date. Invalid ledgers return the validation JSON and
+`validate` and `ready` require `--ledger`; `ready` also requires an ISO
+calendar `--as-of` date. Without `--json`, `ready` prints a human queue —
+`#number pri=priority title` per ready item — while `ready --json` stays
+byte-stable for machine consumers. Invalid ledgers return the validation JSON and
 exit nonzero. The core rejects invalid UTF-8, symbolic-link entries, unreadable
 paths, and `.md` special files rather than returning a partial view. Real
 directories ending in `.md` remain containers and are traversed. These checks
@@ -148,10 +206,12 @@ process racing filesystem changes.
 
 `inspect` returns a lossless raw-byte snapshot and its SHA-256 revision.
 `create` publishes only a caller-supplied canonical ID through atomic
-no-clobber publication. `transition` compares the inspected revision while
-cooperative per-ID locks are held, then changes one lifecycle item or refuses
-the request if dependent cleanup or child disposition would require changing
-another item. See [the mutation contract](docs/mutation-contract.md) for the
+no-clobber publication — `mint-id` prints one, so no consumer writes base32
+by hand. `transition` compares the inspected revision while cooperative
+per-ID locks are held, then changes one lifecycle item or refuses the request
+if dependent cleanup or child disposition would require changing another
+item. `patch` changes the caller-supplied `number` and `priority` fields —
+nothing else — under the same lock and compare-and-swap. See [the mutation contract](docs/mutation-contract.md) for the
 JSON request, response, recovery, and scope details. A lock is never a work
 claim. See [the fenced work-claim contract](docs/work-claim-contract.md) for
 the separate future claim protocol and its strict backend boundary.
