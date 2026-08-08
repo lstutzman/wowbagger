@@ -116,7 +116,10 @@ export function validateCreateRequest(request, parseIssues = []) {
   ]);
   for (const field of Object.keys(item)) {
     if (controlled.has(field)) {
-      issues.push(issue(pointer(['item', field]), 'invalid-value', `Item member ${field} is controlled by Wowbagger.`));
+      const message = field === 'status'
+        ? 'Item member status is controlled by Wowbagger. Create assigns triage; a transition from triage to backlog accepts the item into ready.'
+        : `Item member ${field} is controlled by Wowbagger.`;
+      issues.push(issue(pointer(['item', field]), 'invalid-value', message));
     }
   }
   if (hasOwn(item, 'title') && (typeof item.title !== 'string' || item.title.trim().length === 0)) {

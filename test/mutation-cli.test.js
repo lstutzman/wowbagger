@@ -97,6 +97,34 @@ test('create atomically publishes the canonical caller-identified triage item', 
   });
 });
 
+test('create refusal for caller-supplied status names the assigned status and the accepting transition', async () => {
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+      item: {
+        title: 'Demo',
+        kind: 'task',
+        status: 'backlog',
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+      },
+      body: '',
+    }));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'invalid-request');
+    const statusIssue = envelope.error.details.issues.find((entry) => entry.path === '/item/status');
+    assert.equal(
+      statusIssue.message,
+      'Item member status is controlled by Wowbagger. Create assigns triage; a transition from triage to backlog accepts the item into ready.',
+    );
+  });
+});
+
 test('mutation argument validation consumes the value of a repeated option once', () => {
   const result = runCli(
     'create',

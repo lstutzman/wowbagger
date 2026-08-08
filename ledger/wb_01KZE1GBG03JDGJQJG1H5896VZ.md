@@ -5,9 +5,10 @@ number: 26
 title: "Tell the caller that a created item lands in triage"
 kind: task
 priority: 10
-status: backlog
+status: done
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted from the tinydancer dogfood: create should tell the caller it assigned triage."
     rationale: "A consumer created nine items and found an empty ready queue, because create assigns triage and says so nowhere in its result. The rule is correct and documented in the mutation contract, but a consumer meets it only after the queue comes back empty. Confirmed firsthand while filing this item: the assigned status is only recoverable by base64-decoding source_base64. This is an information gap, not a behaviour change."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: the create surface now reports triage and teaches the accepting transition."
+    rationale: "The create result already reports the assigned status at result.item.core.status, pinned byte-for-byte by the create fixture. The remaining gap was the next step: the /item/status refusal now carries the stable message naming triage and the triage-to-backlog transition, pinned by a CLI test, and the mutation contract documents both discovery paths. Creating in triage is unchanged."
 ---
 
 A consumer created an epic and eight tasks through `create`, then found none

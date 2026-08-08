@@ -192,6 +192,12 @@ using ascending Unicode code-point order without locale collation.
 Unknown members at the request root are rejected. Unknown members inside item
 are schema extensions and are allowed only when they do not change core
 semantics. Controlled core names forbidden by create are invalid-value issues.
+The status refusal additionally teaches the lifecycle rule, with the stable
+message `Item member status is controlled by Wowbagger. Create assigns triage;
+a transition from triage to backlog accepts the item into ready.` A caller
+therefore learns the assigned status from the create result's `core.status`
+and the accepting transition from the refusal, without reading this document
+first.
 
 ## 4. Capabilities
 
