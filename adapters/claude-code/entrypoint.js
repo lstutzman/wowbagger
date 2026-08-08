@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from '../../src/adapter/bootstrap.js';
+import { CORE_COMMAND_ORDER } from '../../src/adapter/core-probe.js';
 import { describeAdapter } from '../../src/adapter/describe.js';
 import { validateAdapterManifest } from '../../src/adapter/manifest.js';
 import { normalizeJsonValue, parseJsonRequest } from '../../src/request.js';
@@ -40,7 +41,7 @@ function dynamicResult(manifest) {
     adapter_version: manifest.adapter_version,
     core: {
       required_core_contract_version: 1,
-      commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+      commands: [...CORE_COMMAND_ORDER],
     },
     host: {
       command_execution: {

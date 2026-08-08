@@ -10,7 +10,7 @@ import { applyCapabilityInvariantScenario, mutateObject } from './run-adapter-ve
 import { describeAdapter } from '../src/adapter/describe.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
-import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
+import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 
@@ -22,7 +22,7 @@ const SUPPORTED_ASSERTION_TYPES = new Set([
   'context-validation', 'approval-schema',
 ]);
 
-const CORE_COMMANDS = ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'];
+const CORE_COMMANDS = [...CORE_COMMAND_ORDER];
 
 // Every assertion this plan cannot evidence carries this outcome. It is never
 // `ok`, so a case holding one can never reach `pass`.

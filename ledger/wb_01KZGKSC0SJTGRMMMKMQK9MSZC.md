@@ -5,9 +5,10 @@ number: 35
 title: "Deduplicate the core command list across probe, runner, and adapter entrypoint"
 kind: task
 priority: 30
-status: backlog
+status: done
 created: 2026-08-08
 updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-08T12:00:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-08
     summary: "Accepted: the core command list is declared three times and only one is the authority."
     rationale: "Found by review. The runner and the Claude Code entrypoint are not oracles and should import CORE_COMMAND_ORDER; drift skews the required-core-version probe or makes verifyCoreProbe refuse the adapter's own describe."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: the runner and the Claude Code entrypoint import CORE_COMMAND_ORDER."
+    rationale: "spec/run-adapter-implementation.js and adapters/claude-code/entrypoint.js now derive their command lists from the exported authority instead of re-declaring six strings. The reference oracle keeps its own copy deliberately — it is the independent measuring instrument. All 551 tests pass unchanged, which is the point: this removes a future drift, not a present behaviour."
 ---
 
 A code review of the adapter release path found the version 1 core command
