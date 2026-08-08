@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZBT45ANXD8SX5X02F1KVKPJ
+priority: 30
 number: 25
 title: "Define the shared adapter packaging and release path"
 kind: task
 status: backlog
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T15:12:29Z"
@@ -30,6 +31,10 @@ decisions:
     date: 2026-08-06
     summary: "Distribution does not need marketplace approval. A Claude Code marketplace is any git repository carrying .claude-plugin/marketplace.json."
     rationale: "Verified against the installed marketplaces on the development machine: seven of the nine registered are third-party repositories, including obra/superpowers-marketplace. The approval period gates listing in the official Anthropic catalogue, which is discovery, not distribution. A self-hosted marketplace is a real distribution channel and satisfies the dogfood item's requirement to install from one rather than from a local path, so the dogfood is not blocked on any approval."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank the shared adapter release path at 30."
+    rationale: "It only pays off once a second adapter exists; the Claude Code one is still Plan 1 of 3."
 ---
 
 Define one packaging and release path that ships a single core version to every

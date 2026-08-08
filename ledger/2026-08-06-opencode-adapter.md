@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZBT44T4EFEJH07G1AB07A1Y
+priority: 40
 number: 24
 title: "Deliver the opencode adapter"
 kind: task
 status: backlog
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T15:12:29Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-06
     summary: "Accept into the productization epic."
     rationale: "Filed so the work is tracked in wowbagger's own ledger rather than in a session transcript."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank the opencode adapter at 40."
+    rationale: "Third adapter. Same reasoning as the second, one step further out."
 ---
 
 Build an opencode integration that invokes the common core contract and passes

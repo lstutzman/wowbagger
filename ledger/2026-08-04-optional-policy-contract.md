@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8A25Q593G7RTX7TAH
+priority: 40
 number: 5
 title: "Define the optional policy-input contract"
 kind: task
 status: backlog
 created: 2026-08-04
-updated: 2026-08-05
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -23,6 +24,10 @@ decisions:
     date: 2026-08-05
     summary: "The mechanism and policy seam from PropertyCompass2 backlog item 1421 is folded into this item."
     rationale: "1421 held the concrete seam this item described abstractly; recording it here avoids a second overlapping item."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank the optional policy-input contract at 40."
+    rationale: "Speculative surface. No consumer has asked for it, and priority — the one policy input anyone actually wanted — is already in the core."
 ---
 
 Specify how optional consumer policy may rank or decorate valid core readiness

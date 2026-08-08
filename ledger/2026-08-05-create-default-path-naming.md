@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZA5VGVR0W5ZJMV6G8K5F77P
+priority: 20
 number: 15
 title: "Reconcile create's default item path with repository naming"
 kind: task
 status: backlog
 created: 2026-08-05
-updated: 2026-08-05
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-05T23:59:02Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-05
     summary: "Accept the create default-path reconciliation."
     rationale: "Filing this repository's own items through the CLI exposed the mismatch, so the tool owes a decision on what it guarantees about the filename."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank create's default item path at 20."
+    rationale: "Small, self-contained, and it is first-use friction: a consumer meets the naming rule before they have any reason to trust the tool."
 ---
 
 Create writes every new item to <ledger>/<id>.md and admits no path member,

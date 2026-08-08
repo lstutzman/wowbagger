@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZBT43RZSKMG8Z19RQQ43DDR
+priority: 10
 number: 22
 title: "Publish wowbagger as a Claude Code plugin on the marketplace"
 kind: task
 status: backlog
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T15:12:29Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-06
     summary: "Accept into the productization epic."
     rationale: "Filed so the work is tracked in wowbagger's own ledger rather than in a session transcript."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank publishing the plugin at 10."
+    rationale: "Nobody has ever installed it, so the marketplace path may fail at step one, and item 23 cannot start until it works. Every consumer report so far came from dogfooding, which makes the install path the highest-leverage unknown in the repo."
 ---
 
 Publish wowbagger as an installable Claude Code plugin so a consumer can add it

@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8YFDJXSNTQ8FBB2F7
+priority: 40
 number: 12
 title: "Document Kimi and OpenAI-compatible harness integration"
 kind: task
 status: backlog
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -24,6 +25,10 @@ decisions:
     date: 2026-08-06
     summary: "Moved from the standalone v0 epic to the productization epic."
     rationale: "This is consumability work, not core work. Separating them lets the v0 epic close when the core is done instead of dragging distribution along with it."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank the Kimi and OpenAI-compatible harness docs at 40."
+    rationale: "Documentation for integrations that do not exist yet. It would describe intent rather than behaviour."
 ---
 
 Document how Kimi, including Kimi K3 where applicable, and other

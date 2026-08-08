@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8CXZRZ8JH2ADYZWH3
+priority: 30
 number: 7
 title: "Test mutation concurrency and crash recovery"
 kind: task
 status: backlog
 created: 2026-08-04
-updated: 2026-08-05
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -20,6 +21,10 @@ decisions:
     date: 2026-08-04
     summary: "Concurrency and recovery testing is accepted."
     rationale: "Mutable coordination needs black-box evidence for conflict and recovery behaviour before release."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank concurrency and crash-recovery tests at 30."
+    rationale: "The mutation runtime has recovery scenarios but no concurrency proof. Worth doing before a second writer exists, not before the first consumer does."
 ---
 
 Add standalone black-box tests for concurrent writers, failures around durable

@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZBMBEZKPE7D15HKW9Q3GSZV
+priority: 50
 number: 17
 title: "Implement fenced work claims with a transactional coordinator"
 kind: task
 status: backlog
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T13:31:39Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-06
     summary: "Accept the fenced work-claim coordinator item."
     rationale: "Advisory claims are shipped; fencing is a distinct, unresolved design problem worth tracking on its own."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank fenced work claims at 50, behind the decision it waits on."
+    rationale: "This is not unwritten code; it is an unresolved design question. Either the ledger bytes move inside a transactional coordinator, which challenges the plain-Markdown thesis, or the definition of fenced changes. Ranking it as ordinary work would misrepresent it, and the PropertyCompass migration is gated on it."
 ---
 
 Advisory claims coordinate cooperating agents but enforce nothing. Fenced

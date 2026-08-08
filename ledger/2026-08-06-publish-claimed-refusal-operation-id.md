@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZBNMT2WWV2BWM2QEJX18RX2
+priority: 20
 number: 19
 title: "Reconcile the publish-claimed refusal with its normative transcript"
 kind: task
 status: backlog
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "final-review-fix-wave"
   recorded_at: "2026-08-06T00:00:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-06
     summary: "Groom into backlog from the final-review fix wave."
     rationale: "Deferred Important finding from the whole-branch review of feature/advisory-work-claims; filed as a durable ledger item rather than left in progress.md."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank the publish-claimed refusal reconciliation at 20."
+    rationale: "The implementation and its normative transcript disagree. A contract that contradicts its own transcript cannot be conformed to."
 ---
 The fixture `spec/fixtures/work-claims/advisory-publication-rejection` expects `operation_id` in the refusal envelope; the CLI omits it, necessarily, because it refuses BEFORE reading the input file where `operation_id` lives -- and that refuse-before-read ordering is now mutation-enforced by `test/claim-publish-refusal.test.js`. Two shipped requirements are in tension and the branch resolved it silently.
 

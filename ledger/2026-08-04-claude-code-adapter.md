@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW8ZP1289HFMN2ECNXD
+priority: 30
 number: 13
 title: "Deliver the Claude Code adapter"
 kind: task
 status: backlog
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -36,6 +37,10 @@ decisions:
     date: 2026-08-06
     summary: "Entrypoint is a Node command over the section 3.3 bootstrap wire; the adapter engine is shared code in src/, and spec/adapter-reference.js stays an independent oracle."
     rationale: "MCP, a daemon, and a network service are all excluded by section 9, and a shell entrypoint is excluded three ways: section 3.2 requires shell false whenever command execution is supported, section 3.3 excludes shell startup from the adapter environment, and a POSIX shell would leave the Windows platform claim permanently unverified. Importing the reference model into the shipped adapter would make the conformance vectors tautological, so the engine is re-implemented in src/ under a differential test, following the precedent of src/claim-request.js against test/work-claim-reference.js. Placing the engine in src/ rather than inside one adapter keeps the Codex, Kimi, and generic adapters from each growing their own core."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank the Claude Code adapter at 30."
+    rationale: "Plans 2 and 3 evidence the remaining assertions; 79 of 183 are evidenced and section 10 still reads Unverified for every platform. Large, and the plugin path matters more first."
 ---
 
 Build a thin Claude Code integration that invokes the common core contract and

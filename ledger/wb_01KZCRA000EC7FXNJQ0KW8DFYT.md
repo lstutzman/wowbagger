@@ -5,18 +5,24 @@ title: "Give the unchanged-patch outcome an adapter conformance vector"
 kind: task
 status: backlog
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-07T22:00:00.000Z"
 depends_on: []
 related: []
 parent: wb_01KZ77NSW8PNA4S48NYT26AGMH
+priority: 20
+number: 40
 decisions:
   - action: accept
     date: 2026-08-07
     summary: "Accepted: the unchanged-patch oracle rule is unreachable from third-party certification."
     rationale: "The patch-unchanged vector went into spec/fixtures/mutations/, which is byte-compared by the CLI vector runner and never calls mapProcessOutcome. Adapter certification reads spec/fixtures/adapters/, where no fixture produces an unchanged success. The rule is covered in-repo by a test proven non-vacuous, so this is a certification gap rather than an untested rule. The comment beside the new vector claimed otherwise, which is the second consecutive round where a comment asserted a property its artifact did not have."
+  - action: record
+    date: 2026-08-08
+    summary: "Allocate handle 40 and rank the unchanged-patch vector gap at 20."
+    rationale: "Same cause and same reach: the rule is covered in-repo by a test proven non-vacuous, so the gap is third-party certification for a third party that does not yet exist."
 ---
 
 A successful patch whose requested values are already in effect returns

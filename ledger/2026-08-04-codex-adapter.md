@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 id: wb_01KZ77NSW81FXZVAWQ8WT4KDCJ
+priority: 40
 number: 1
 title: "Deliver the Codex adapter"
 kind: task
 status: backlog
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -24,6 +25,10 @@ decisions:
     date: 2026-08-06
     summary: "Moved from the standalone v0 epic to the productization epic."
     rationale: "This is consumability work, not core work. Separating them lets the v0 epic close when the core is done instead of dragging distribution along with it."
+  - action: record
+    date: 2026-08-08
+    summary: "Rank the Codex adapter at 40."
+    rationale: "A second adapter is what would make the harness-neutral claim real, but the first one is not finished and the shared release path is unwritten."
 ---
 
 Build a thin Codex integration that invokes the common core contract and passes

@@ -5,18 +5,24 @@ title: "State the transition request contract independently in the oracle"
 kind: task
 status: backlog
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-07T22:00:00.000Z"
 depends_on: []
 related: []
 parent: wb_01KZ77NSW8PNA4S48NYT26AGMH
+priority: 20
+number: 39
 decisions:
   - action: accept
     date: 2026-08-07
     summary: "Accepted: the oracle asks the subject whether the subject is valid, for transition."
     rationale: "spec/adapter-reference.js imports validateTransitionRequest from src/mutation.js, so changing the rule in src moves the oracle with it and every conformance test stays green. Create was made independent in the ninth review round; transition was left because the hand-written create validator introduced two holes on its first attempt, and transition carries the lifecycle edge table, per-edge decision rules, terminal dates and epic rollup. Doing it hastily would repeat the failure with more surface."
+  - action: record
+    date: 2026-08-08
+    summary: "Allocate handle 39 and rank the transition oracle gap at 20."
+    rationale: "It was filed without a number because create cannot allocate one, and I then referred to it as item 39 in a commit message before the number existed. The gap it describes matters only when a second implementation is certified, and none exists."
 ---
 
 `spec/adapter-reference.js` decides whether a transition request is canonical by
