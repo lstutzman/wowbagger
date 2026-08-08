@@ -319,12 +319,20 @@ path is a forward-slash, ledger-relative display path and is not identity.
 Decoding source_base64 recovers every original byte. The decoded bytes must
 hash to revision and must be valid UTF-8.
 
+The promotion rule: the item level carries addressing and payload members
+only — id, path, revision, source_encoding, source_media_type, source_base64,
+and body. Every frontmatter field is read from core. id is the single member
+present at both levels, because the item level must identify the resource it
+addresses; no other frontmatter field is promoted, and none will be.
+
 core contains only schema version 1 fields:
 
 - schema_version, id, title, kind, status, created, updated;
 - provenance.source and provenance.recorded_at;
 - depends_on and related;
-- optional parent, snoozed_until, completed, killed, archived; and
+- optional parent, snoozed_until, completed, killed, archived;
+- optional number and priority, the caller-supplied schema version 1 fields;
+  and
 - decisions with only their defined action, date, summary, rationale, and
   optional rollup id/status members.
 

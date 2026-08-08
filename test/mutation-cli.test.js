@@ -97,6 +97,83 @@ test('create atomically publishes the canonical caller-identified triage item', 
   });
 });
 
+test('inspect reports number and priority inside core', async () => {
+  const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+  const source = [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    'number: 7',
+    'title: "Prioritised item"',
+    'kind: task',
+    'priority: 5',
+    'status: backlog',
+    'created: 2030-01-10',
+    'updated: 2030-01-10',
+    'provenance:',
+    '  source: "fixture/mutations"',
+    '  recorded_at: "2030-01-10T12:34:56.789Z"',
+    'depends_on: []',
+    'related: []',
+    '---',
+    '',
+    'Body.',
+    '',
+  ].join('\n');
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const result = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    const item = JSON.parse(result.stdout).result.item;
+    assert.equal(item.core.number, 7);
+    assert.equal(item.core.priority, 5);
+  });
+});
+
+test('the item level carries only addressing and payload members, never promoted frontmatter', async () => {
+  const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+  const source = [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    'number: 7',
+    'title: "Prioritised item"',
+    'kind: task',
+    'priority: 5',
+    'status: backlog',
+    'created: 2030-01-10',
+    'updated: 2030-01-10',
+    'provenance:',
+    '  source: "fixture/mutations"',
+    '  recorded_at: "2030-01-10T12:34:56.789Z"',
+    'depends_on: []',
+    'related: []',
+    '---',
+    '',
+    'Body.',
+    '',
+  ].join('\n');
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const result = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    const item = JSON.parse(result.stdout).result.item;
+    assert.deepEqual(Object.keys(item).sort(), [
+      'body',
+      'core',
+      'id',
+      'path',
+      'revision',
+      'source_base64',
+      'source_encoding',
+      'source_media_type',
+    ]);
+    assert.equal(item.id, item.core.id);
+  });
+});
+
 test('create refusal for caller-supplied status names the assigned status and the accepting transition', async () => {
   await withLedger({}, async (ledger) => {
     const requestPath = path.join(path.dirname(ledger), 'request.json');

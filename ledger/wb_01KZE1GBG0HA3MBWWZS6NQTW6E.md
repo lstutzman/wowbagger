@@ -5,9 +5,10 @@ number: 29
 title: "Make inspect consistent about which fields are promoted onto item"
 kind: task
 priority: 10
-status: backlog
+status: done
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted from the tinydancer dogfood: inspect promotes id onto item but not title."
     rationale: "Reported as a documentation gap; it is not. Verified against this repository's ledger that id appears both at item.id and item.core.id while title appears only at item.core.title, so a caller who has just used item.id will reasonably expect item.title to work. One field is promoted and the rest are not, with nothing marking the difference. Which fields are promoted is a contract decision, so the item states the options rather than presuming the fix."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: the promotion rule is stated, core is complete, and a test pins the shape."
+    rationale: "Promote-deliberately won over remove-item-id because the adapter handoff contract reads item.id: the oracle and engine both verify handoff item identity through it, so deleting it would rewrite the adapter contract to remove a convenience. The mutation contract now states the rule — the item level carries addressing and payload members only, id is the single dual member, nothing else is promoted. The real unexplained exceptions were number and priority: SPEC schema-1 fields omitted from core, readable only by decoding source_base64. coreView now includes them without making them create-controlled, and a CLI test pins the exact item-level key set."
 ---
 
 A consumer read `inspect` output, reached for `item.title`, and got a

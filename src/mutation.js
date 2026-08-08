@@ -24,6 +24,12 @@ const OPTIONAL_CORE_FIELDS = [
   'killed',
   'archived',
 ];
+// Schema-1 fields a caller supplies and create must keep accepting; they join
+// the core view but must stay out of CONTROLLED_ITEM_FIELDS.
+const CONSUMER_CORE_FIELDS = [
+  'number',
+  'priority',
+];
 const CONTROLLED_ITEM_FIELDS = new Set([
   ...REQUIRED_CORE_FIELDS,
   ...OPTIONAL_CORE_FIELDS,
@@ -1731,7 +1737,7 @@ function coreView(data) {
     core[field] = data[field];
   }
 
-  for (const field of OPTIONAL_CORE_FIELDS) {
+  for (const field of [...OPTIONAL_CORE_FIELDS, ...CONSUMER_CORE_FIELDS]) {
     if (Object.hasOwn(data, field)) {
       core[field] = data[field];
     }
