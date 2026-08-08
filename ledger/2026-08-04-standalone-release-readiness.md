@@ -11,9 +11,8 @@ provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
 depends_on:
-  - wb_01KZ77NSW8CXZRZ8JH2ADYZWH3
   - wb_01KZ77NSW8TWW2KWJANZ2TC837
-related: []
+related: [ wb_01KZ77NSW8CXZRZ8JH2ADYZWH3 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
 decisions:
   - action: accept
