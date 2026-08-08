@@ -5,9 +5,10 @@ number: 30
 title: "Give the ledger a way to express priority"
 kind: task
 priority: 1
-status: backlog
+status: done
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: the ledger cannot express priority, which blocks acting on dogfood reports."
     rationale: "Surfaced by a request that could not be satisfied — prioritise the dogfood issues. ready sorts by created ascending, so the two friction items landed at 15 and 16 of 16, furthest from the attention they were filed to attract. A priority extension member validates clean and steers nothing, so stamping one would be decoration that reads as data. Accepting the question, not a chosen answer: refusing priority outright is a legitimate outcome provided the refusal is written down."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: the removal is recorded in ADR-0006, with the discipline that would have caught it."
+    rationale: "Priority was restored and validated at b0ee411. The remaining acceptance was the record: ADR-0006 documents that 1058b8c's removal was deliberate in execution (three hunks each replace priority or ownership with a reassignment, and every ready-selection fixture was rewritten) but that no rationale was ever written down, so the reason is recorded as unknown and the question is closed. The ADR also states the discipline: a contract member is never removed in a documentation commit; removal requires its own commit, and an ADR or ledger decision. Ownership stays open as wb_01KZE1GBG0QGB161XH2VFVBFXB."
 ---
 
 Priority existed, was fully specified, and was deleted without a decision
