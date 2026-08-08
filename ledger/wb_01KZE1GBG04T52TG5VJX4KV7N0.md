@@ -5,9 +5,10 @@ number: 27
 title: "Remove the ULID generator as a prerequisite for first use"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: writing a ULID generator is a prerequisite for filing a first item."
     rationale: "Two independent consumers wrote the same generator before they could create anything — the tinydancer dogfood and this session. The caller-generated ID is sound design and is not in question; requiring every consumer to reimplement Crockford base32 before their first item is the cost being challenged. First-use friction is paid before a consumer has reason to trust the tool."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: mint-id and an exported mintId remove the generator prerequisite."
+    rationale: "wowbagger mint-id --json prints a canonical contract-valid ID, --date selects the intended creation date, and src/mint.js exports mintId so the plugin skill can mint without shelling out. Tests pin the canonical pattern, prove a dated mint round-trips through create with a matching created date, and fail under a wrong-alphabet or constant-entropy implementation — verified by mutating the alphabet and watching all three go red. The create documentation points at mint-id where the requirement is first met."
 ---
 
 Before a consumer can create their first item, they must write a ULID

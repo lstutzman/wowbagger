@@ -51,6 +51,7 @@ wowbagger inspect --ledger <dir> --id <id> --json
 wowbagger create --ledger <dir> --input <json-file|-> --json
 wowbagger transition --ledger <dir> --input <json-file|-> --json
 wowbagger patch --ledger <dir> --input <json-file|-> --json
+wowbagger mint-id [--date YYYY-MM-DD] --json
 ~~~
 
 A dash for --input means standard input. File and standard-input requests have
@@ -466,6 +467,11 @@ The caller generates id with the timestamp for the intended creation instant
 and at least 80 bits of collision-resistant entropy. Create validates its
 canonical form before acquiring its per-ID lock. id is not accepted inside
 item.
+
+No caller writes the base32 encoding themselves: `wowbagger mint-id --json`
+prints a canonical ID for now, `--date` selects another creation date, and
+`src/mint.js` exports `mintId` so an adapter or plugin can mint one without
+shelling out.
 
 item must not supply schema_version, id, status, created, updated, completed,
 killed, archived, decisions, or body. Create inserts schema_version 1, status

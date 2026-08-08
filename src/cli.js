@@ -14,6 +14,7 @@ import {
   validatePatchRequest,
   validateTransitionRequest,
 } from './mutation.js';
+import { mintId } from './mint.js';
 import { provisionNamespace, readNamespace } from './namespace.js';
 import { normalizeJsonValue, parseJsonRequest, sortIssues } from './request.js';
 import { selectReady } from './ready.js';
@@ -122,6 +123,26 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
     writeMutation(command, await transitionItem(parsedOptions.options.ledger, parsedRequest.value, scenario));
+    return;
+  }
+
+  if (command === 'mint-id') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    const date = parsedOptions.options.date;
+    if (date !== undefined && !isCalendarDate(date)) {
+      writeInvalidRequest(command, [issue('/arguments', 'invalid-value', 'Argument --date must be an ISO calendar date.')]);
+      return;
+    }
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      command,
+      contract_version: 1,
+      result: { id: mintId(date ?? null) },
+    })}\n`);
     return;
   }
 
@@ -360,7 +381,10 @@ function parseContractOptions(command, argumentsList) {
       ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
       : command === 'provision' || command === 'claim-capabilities'
         ? new Map([['--ledger', 'ledger']])
-        : new Map();
+        : command === 'mint-id'
+          ? new Map([['--date', 'date']])
+          : new Map();
+  const optionalFlags = command === 'mint-id' ? new Set(['--date']) : new Set();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--json') {
@@ -394,7 +418,7 @@ function parseContractOptions(command, argumentsList) {
     index += 1;
   }
   for (const [flag] of valueFlags) {
-    if (!seen.has(flag)) {
+    if (!seen.has(flag) && !optionalFlags.has(flag)) {
       issues.push(argumentIssue(-1, 'missing-argument', `Argument ${flag} is required.`));
     }
   }
@@ -605,6 +629,10 @@ function usage(command) {
 
   if (command === 'patch') {
     return 'Usage: wowbagger patch --ledger <dir> --input <json-file|-> --json';
+  }
+
+  if (command === 'mint-id') {
+    return 'Usage: wowbagger mint-id [--date YYYY-MM-DD] --json';
   }
 
   return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD --json';
