@@ -334,6 +334,16 @@ An advisory capability has no atomic publication boundary. It MUST reject
 `capability-unavailable`, message `Claim-protected publication is unavailable
 on an advisory backend.`, and `details.reason: "advisory-capability"`.
 
+The `operation_id` member of that refusal depends on when the backend
+refuses. A backend that has read and validated the request — the
+`advisory-publication-rejection` reference transcript's coordinator-backed
+model — echoes the request's `operation_id`. A backend that refuses
+categorically before reading any input, as the local CLI does, MUST omit
+`operation_id`: it cannot echo what it never read, and inventing one would
+be a guess. A conformance comparison against the reference transcript
+therefore excludes `operation_id` when the backend under test refuses
+before reading.
+
 Steps 1 through 3 use `state: "unchanged"` and deterministic `details` naming
 the first invalid JSON pointer or namespace. Step 5 details are the ordered
 ledger validation issues. Steps 6 through 8 include `ledger_namespace` and
