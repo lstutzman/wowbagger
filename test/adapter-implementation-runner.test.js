@@ -122,6 +122,21 @@ test('reports the codex target with every codex-targeted assertion executed', as
   assert.equal(executed.length, 183);
 });
 
+test('a trailing --target with no value fails fast instead of reporting no cases', async () => {
+  const { execFile } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const runner = fileURLToPath(new URL('../spec/run-adapter-implementation.js', import.meta.url));
+
+  const outcome = await new Promise((resolve) => {
+    execFile(process.execPath, [runner, '--target'], { encoding: 'utf8' }, (error, stdout, stderr) => {
+      resolve({ code: error?.code ?? 0, stderr });
+    });
+  });
+
+  assert.equal(outcome.code, 1);
+  assert.match(outcome.stderr, /--target requires a value/);
+});
+
 test('fails closed on an unknown assertion type', async (t) => {
   const fixtureRoot = await writeTempFixture(t, {
     adapter_vector_version: 1,

@@ -307,9 +307,13 @@ export async function runImplementationVectors({
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const targetIndex = process.argv.indexOf('--target');
+    const target = targetIndex >= 0 ? process.argv[targetIndex + 1] : undefined;
+    if (targetIndex >= 0 && (!target || target.startsWith('--'))) {
+      throw new Error('--target requires a value');
+    }
     process.stdout.write(`${JSON.stringify(await runImplementationVectors({
       platform: process.platform,
-      ...(targetIndex >= 0 ? { target: process.argv[targetIndex + 1] } : {}),
+      ...(target ? { target } : {}),
     }))}\n`);
   } catch (error) {
     process.stderr.write(`${error.stack ?? error}\n`);
