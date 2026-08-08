@@ -20,6 +20,7 @@ const adapterTargets = [
   'codex',
   'kimi',
   'openai-compatible-harness',
+  'opencode',
 ];
 const requiredCoverage = [
   'authority',

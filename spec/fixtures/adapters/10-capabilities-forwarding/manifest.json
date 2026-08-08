@@ -8,6 +8,7 @@
   "targets": [
     "claude-code",
     "codex",
+    "opencode",
     "direct-core",
     "kimi",
     "openai-compatible-harness"

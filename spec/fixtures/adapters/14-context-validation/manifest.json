@@ -2,7 +2,7 @@
   "adapter_vector_version": 1,
   "case": "context-validation",
   "coverage": ["handoff", "instructions"],
-  "targets": ["claude-code", "codex", "kimi", "openai-compatible-harness"],
+  "targets": ["claude-code", "codex", "opencode", "kimi", "openai-compatible-harness"],
   "mode": "protocol",
   "assertions": [
     { "id": "invocation-limit-schema-is-exact", "type": "context-validation", "scenario": "invocation-limit-schema" },

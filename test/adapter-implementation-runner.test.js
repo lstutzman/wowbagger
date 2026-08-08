@@ -137,6 +137,15 @@ test('a trailing --target with no value fails fast instead of reporting no cases
   assert.match(outcome.stderr, /--target requires a value/);
 });
 
+test('reports the opencode target with every opencode-targeted assertion executed', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin', target: 'opencode' });
+
+  assert.equal(result.status, 'fail');
+  assert.equal(result.implementations.opencode, 'fail');
+  assert.equal(result.cases.length, 15);
+  assert.equal(result.cases.flatMap((entry) => entry.executed_assertions).length, 183);
+});
+
 test('fails closed on an unknown assertion type', async (t) => {
   const fixtureRoot = await writeTempFixture(t, {
     adapter_vector_version: 1,

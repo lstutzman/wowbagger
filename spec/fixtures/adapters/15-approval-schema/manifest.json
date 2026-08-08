@@ -2,7 +2,7 @@
   "adapter_vector_version": 1,
   "case": "approval-schema",
   "coverage": ["authority"],
-  "targets": ["claude-code", "codex", "kimi", "openai-compatible-harness"],
+  "targets": ["claude-code", "codex", "opencode", "kimi", "openai-compatible-harness"],
   "mode": "protocol",
   "assertions": [
     { "id": "complete-approval-is-valid", "type": "approval-schema", "scenario": "valid" },

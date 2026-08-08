@@ -2,7 +2,7 @@
   "adapter_vector_version": 1,
   "case": "negotiation-mismatch",
   "coverage": ["capabilities"],
-  "targets": ["claude-code", "codex", "kimi", "openai-compatible-harness"],
+  "targets": ["claude-code", "codex", "opencode", "kimi", "openai-compatible-harness"],
   "mode": "protocol",
   "assertions": [
     { "id": "request-missing-is-refused", "type": "negotiation", "scenario": "request-missing" },

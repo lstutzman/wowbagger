@@ -158,13 +158,13 @@ Kimi or other OpenAI-compatible host can do today — driving the core CLI
 directly — versus what a verifiable compatibility claim requires. Neither
 claims that API compatibility alone makes a harness compatible.
 
-This checkout ships two adapter packages on one shared entrypoint runtime:
-[`adapters/claude-code/`](adapters/claude-code/) and
-[`adapters/codex/`](adapters/codex/). Each answers the section 3.3 bootstrap
+This checkout ships three adapter packages on one shared entrypoint runtime:
+[`adapters/claude-code/`](adapters/claude-code/), [`adapters/codex/`](adapters/codex/),
+and [`adapters/opencode/`](adapters/opencode/). Each answers the section 3.3 bootstrap
 wire with its own identity and honest host declaration, and each evidences
 79 of the contract's 183 conformance assertions — run
-`node spec/run-adapter-implementation.js` (add `--target codex` for the
-Codex report) to see exactly which. Invocation forwarding, path and limit
+`node spec/run-adapter-implementation.js` (add `--target codex` or
+`--target opencode` for those reports) to see exactly which. Invocation forwarding, path and limit
 guards, and the approval and context surfaces are not yet evidenced for any
 adapter — that is the shared engine's Plans 2 and 3 — so section 10's status
 table still records every platform as `unverified`. The Kimi and
@@ -285,7 +285,7 @@ rules and the limits of the local mutation runtime.
 ```text
 src/            The core, and the shared adapter engine in src/adapter/
 bin/            The wowbagger executable
-adapters/       Harness packaging — adapters/claude-code/ and adapters/codex/
+adapters/       Harness packaging — claude-code, codex, and opencode packages
 skills/         Portable agent workflows shipped by the plugin
 spec/           Ledger schema, the adapter reference model, and normative fixtures
 test/           The test suite
