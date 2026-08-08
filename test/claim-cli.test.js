@@ -211,3 +211,43 @@ test('a read request missing item_id is rejected without persisting a junk recor
   const storePath = path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`);
   await assert.rejects(stat(storePath), { code: 'ENOENT' });
 });
+
+test('a claim store that cannot be written returns clock-floor-persistence-failed', async () => {
+  const root = await repository();
+  const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const storePath = path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`);
+  await mkdir(`${storePath}.tmp`, { recursive: true });
+
+  const request = path.join(root, 'read.json');
+  await writeFile(request, JSON.stringify({
+    ledger_namespace: namespace, item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+  }));
+  const refused = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+
+  assert.equal(refused.exit, 6);
+  assert.equal(refused.envelope.error.code, 'clock-floor-persistence-failed');
+  assert.equal(refused.envelope.error.message, 'The authoritative clock floor could not be persisted.');
+  assert.equal(refused.envelope.state, 'unchanged');
+});
+
+test('a corrupted claim store returns claim-store-unavailable, not a crash', async () => {
+  const root = await repository();
+  const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const storePath = path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`);
+  await mkdir(path.dirname(storePath), { recursive: true });
+  await writeFile(storePath, '{ not json');
+
+  const request = path.join(root, 'read.json');
+  await writeFile(request, JSON.stringify({
+    ledger_namespace: namespace, item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+  }));
+  const refused = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+
+  assert.equal(refused.exit, 6);
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.message, 'The durable claim store is unavailable.');
+  assert.equal(refused.envelope.error.details.reason, 'claim-store-unreadable');
+  assert.equal(refused.envelope.state, 'unchanged');
+});

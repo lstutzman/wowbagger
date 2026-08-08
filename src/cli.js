@@ -560,9 +560,18 @@ async function runClaimCommand(claimCommand, argumentsList) {
   const operation = CLAIM_OPERATIONS[claimCommand];
   try {
     const envelope = await withClaimLock(storePath, async () => {
-      const state = await readClaimState(storePath, namespace);
+      let state;
+      try {
+        state = await readClaimState(storePath, namespace);
+      } catch (error) {
+        throw taggedFailure('CLAIM_STORE_UNREADABLE', error);
+      }
       const applied = operation(state, request, new Date().toISOString());
-      await writeClaimState(storePath, applied.state);
+      try {
+        await writeClaimState(storePath, applied.state);
+      } catch (error) {
+        throw taggedFailure('CLOCK_FLOOR_PERSISTENCE_FAILED', error);
+      }
       return applied.envelope;
     });
     writeClaimEnvelope(envelope);
@@ -571,8 +580,37 @@ async function runClaimCommand(claimCommand, argumentsList) {
       writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-locked'));
       return;
     }
+    if (error?.code === 'CLAIM_STORE_UNREADABLE') {
+      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-unreadable'));
+      return;
+    }
+    if (error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED') {
+      writeClaimEnvelope({
+        exit: 6,
+        stdout: {
+          ok: false,
+          namespace: 'work-claim',
+          command: claimCommand,
+          contract_version: 1,
+          state: 'unchanged',
+          error: {
+            code: 'clock-floor-persistence-failed',
+            message: 'The authoritative clock floor could not be persisted.',
+            details: {},
+          },
+        },
+      });
+      return;
+    }
     throw error;
   }
+}
+
+function taggedFailure(code, cause) {
+  const failure = new Error(code);
+  failure.code = code;
+  failure.cause = cause;
+  return failure;
 }
 
 function claimStoreUnavailable(command, reason) {
