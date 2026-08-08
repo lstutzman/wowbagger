@@ -8,8 +8,10 @@ import { loadLedger } from './ledger.js';
 import {
   createItem,
   inspectItem,
+  patchItem,
   transitionItem,
   validateCreateRequest,
+  validatePatchRequest,
   validateTransitionRequest,
 } from './mutation.js';
 import { provisionNamespace, readNamespace } from './namespace.js';
@@ -120,6 +122,29 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
     writeMutation(command, await transitionItem(parsedOptions.options.ledger, parsedRequest.value, scenario));
+    return;
+  }
+
+  if (command === 'patch') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeInvalidRequest(command, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    const issues = validatePatchRequest(parsedRequest.value, parsedRequest.issues);
+    if (issues.length > 0) {
+      writeInvalidRequest(command, issues);
+      return;
+    }
+    writeMutation(command, await patchItem(parsedOptions.options.ledger, parsedRequest.value, scenario));
     return;
   }
 
@@ -330,7 +355,7 @@ function parseContractOptions(command, argumentsList) {
   const seen = new Set();
   const valueFlags = command === 'inspect'
     ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
-    : command === 'create' || command === 'transition'
+    : command === 'create' || command === 'transition' || command === 'patch'
       || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew' || command === 'claim-release'
       ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
       : command === 'provision' || command === 'claim-capabilities'
@@ -398,7 +423,7 @@ function writeInvalidRequest(command, issues) {
       details: { issues },
     },
   };
-  if (command === 'create' || command === 'transition') {
+  if (command === 'create' || command === 'transition' || command === 'patch') {
     writeMutation(command, outcome);
     return;
   }
@@ -576,6 +601,10 @@ function usage(command) {
 
   if (command === 'transition') {
     return 'Usage: wowbagger transition --ledger <dir> --input <json-file|-> --json';
+  }
+
+  if (command === 'patch') {
+    return 'Usage: wowbagger patch --ledger <dir> --input <json-file|-> --json';
   }
 
   return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD --json';

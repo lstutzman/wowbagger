@@ -1511,7 +1511,8 @@ function validCoreItemShape(value) {
     'schema_version', 'id', 'title', 'kind', 'status', 'created', 'updated',
     'provenance', 'depends_on', 'related',
   ], [
-    'parent', 'snoozed_until', 'completed', 'killed', 'archived', 'decisions',
+    'parent', 'snoozed_until', 'completed', 'killed', 'archived', 'number',
+    'priority', 'decisions',
   ])) return false;
   if (!WOWBAGGER_ID.test(value.id)
     || !isSafeLedgerDisplayPath(value.path)
@@ -1555,6 +1556,10 @@ function validCoreView(value) {
   for (const field of ['snoozed_until', 'completed', 'killed', 'archived']) {
     if (Object.hasOwn(value, field) && !isCalendarDate(value[field])) return false;
   }
+  if (Object.hasOwn(value, 'number')
+    && (!Number.isSafeInteger(value.number) || value.number < 1)) return false;
+  if (Object.hasOwn(value, 'priority')
+    && (!Number.isSafeInteger(value.priority) || value.priority < 0)) return false;
   if (!validCoreTerminalDates(value)) return false;
   return !Object.hasOwn(value, 'decisions') || validCoreDecisions(value.decisions);
 }
@@ -1613,7 +1618,7 @@ function sourceCoreView(data) {
   };
   core.depends_on = data.depends_on;
   core.related = data.related ?? [];
-  for (const field of ['parent', 'snoozed_until', 'completed', 'killed', 'archived']) {
+  for (const field of ['parent', 'snoozed_until', 'completed', 'killed', 'archived', 'number', 'priority']) {
     if (Object.hasOwn(data, field)) core[field] = data[field];
   }
   if (Object.hasOwn(data, 'decisions')) {

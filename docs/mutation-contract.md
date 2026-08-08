@@ -17,8 +17,9 @@ The contract keeps four concerns separate:
 
 - capabilities describes guarantees and limitations;
 - inspect reads one item and returns a revision from the same bytes it exposes;
-- create publishes one caller-identified triage item; and
-- transition changes one existing item through a guarded lifecycle edge.
+- create publishes one caller-identified triage item;
+- transition changes one existing item through a guarded lifecycle edge; and
+- patch changes one existing item's caller-supplied fields (section 9).
 
 Work claiming is unsupported. A write lock protects a short mutation attempt;
 it is not a claim, assignment, lease, or reservation. The separate [fenced
@@ -49,6 +50,7 @@ wowbagger capabilities --json
 wowbagger inspect --ledger <dir> --id <id> --json
 wowbagger create --ledger <dir> --input <json-file|-> --json
 wowbagger transition --ledger <dir> --input <json-file|-> --json
+wowbagger patch --ledger <dir> --input <json-file|-> --json
 ~~~
 
 A dash for --input means standard input. File and standard-input requests have
@@ -56,8 +58,8 @@ identical semantics. Request bytes must be valid UTF-8 JSON with one top-level
 object and no duplicate member names at any depth. Duplicate members are
 invalid; a parser must not apply last-member-wins behaviour.
 
-Unknown, missing, and repeated command arguments are invalid-request. Create
-and transition use JSON input rather than parallel field flags.
+Unknown, missing, and repeated command arguments are invalid-request. Create,
+transition, and patch use JSON input rather than parallel field flags.
 
 ### Standard output and standard error
 
@@ -72,7 +74,7 @@ outside the configured ledger. Automation uses the JSON envelope.
 
 A process crash before an envelope is emitted is outside the command protocol.
 A caller must treat the outcome of a mutating command as unknown and follow the
-recovery rules in section 9.
+recovery rules in section 10.
 
 ### Response envelopes
 
@@ -148,14 +150,14 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or candidate/lifecycle-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, candidate-invalid |
+| 2 | Argument, request, lookup, or candidate/lifecycle-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
 | 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown |
 
 Only exit 0 is normal completion. A client must inspect mutation state on every
-nonzero create or transition result.
+nonzero create, transition, or patch result.
 
 ## 3. Deterministic invalid-request issues
 
@@ -402,8 +404,8 @@ A writer creates the lock file exclusively as valid UTF-8 JSON no larger than
 ~~~
 
 writer_id is an opaque ASCII string of 1 through 128 characters. operation is
-create or transition. The remaining values must match their schema and lock
-path. Metadata contains no credentials, user name, host name, or command
+create, transition, or patch. The remaining values must match their schema and
+lock path. Metadata contains no credentials, user name, host name, or command
 arguments.
 
 A reader reads at most 4097 bytes. A lock larger than 4096 bytes, invalid UTF-8,
@@ -450,6 +452,8 @@ Create accepts exactly:
 | item.related | No | Valid relation list; omitted means empty. |
 | item.parent | No | Valid epic ID. |
 | item.snoozed_until | No | Valid ISO calendar date. |
+| item.number | No | Positive integer; the caller-supplied schema version 1 handle. |
+| item.priority | No | Non-negative integer; the caller-supplied schema version 1 priority. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
@@ -762,7 +766,71 @@ temporary file followed by the platform's existing-file atomic replacement
 primitive. It then re-reads exact final bytes. This remains a local filesystem
 operation without universal crash durability or hostile-writer protection.
 
-## 9. Errors, artifacts, and recovery
+## 9. Patch
+
+Patch changes the caller-supplied schema version 1 fields of one existing
+item — nothing else. It runs under the same per-ID lock, locked re-read,
+exact-byte revision compare-and-swap, candidate complete-ledger validation,
+and atomic same-path publication protocol as transition (section 6), and it
+shares transition's envelopes, exits, and recovery rules except where this
+section says otherwise.
+
+### Request
+
+Patch accepts exactly:
+
+~~~json
+{
+  "id": "wb_...",
+  "expected_revision": "sha256:...",
+  "date": "2030-01-11",
+  "set": { "priority": 3, "number": null }
+}
+~~~
+
+| Member | Required | Rules |
+|---|---:|---|
+| id | Yes | Canonical existing item ID. |
+| expected_revision | Yes | Exact lowercase SHA-256 token returned by inspect. |
+| date | Yes | ISO calendar date not earlier than existing created or updated. |
+| set | Yes | Mapping naming at least one patchable field. |
+
+The patchable field set is exactly `number` and `priority`. A set member
+outside it is an invalid-request issue at its /set pointer — the boundary is
+stated here, not discovered from the implementation. An integer value sets
+the field: number must be a positive integer, priority a non-negative
+integer. null removes the field.
+
+Patch sets updated to request.date. A date earlier than the existing created
+or updated date returns patch-precondition-failed, exit 2, and unchanged,
+with date-before-created and date-before-updated issue codes matching
+transition's.
+
+Patch appends no decision: the ledger's Git history is the audit trail for a
+consumer-field change. Identity, lifecycle, title, relations, provenance,
+snooze, decisions, body, and extension members cannot change through patch.
+
+Patch never mutates another item. A candidate ledger that flags any other
+item — for example a duplicate-number collision with an existing handle —
+returns candidate-invalid, exit 2, and unchanged, and both items keep their
+bytes.
+
+### Serialization
+
+An updated field is rewritten in place. A newly added number serializes
+directly after id; a newly added priority directly after kind. Body bytes and
+extension nodes are preserved exactly as in transition.
+
+### Adapter advertisement
+
+The version 1 capabilities envelope and the version 1 adapter core probe do
+not advertise patch. Their operation and command lists are pinned by the
+version 1 adapter contract, so widening them is an adapter contract version
+change, tracked as its own ledger item. The fail-closed direction is
+preserved: nothing advertises a capability that does not exist, and
+automation that plans from capabilities alone simply does not use patch.
+
+## 10. Errors, artifacts, and recovery
 
 ### Stable error details
 
@@ -772,6 +840,7 @@ operation without universal crash durability or hostile-writer protection.
 | item-not-found | id |
 | ledger-invalid | validation_errors |
 | transition-precondition-failed | id, issues |
+| patch-precondition-failed | id, issues |
 | candidate-invalid | id, validation_errors |
 | revision-conflict | id, expected_revision, actual_revision |
 | lock-held | id, lock_path, owner, owner_diagnostic |
@@ -852,7 +921,7 @@ A cleanup failure reports the remaining bounded artifacts. Locks are never
 auto-broken by age. Clients must inspect after committed-recovery or unknown
 outcomes and must not retry blindly.
 
-## 10. Normative design vectors
+## 11. Normative design vectors
 
 The synthetic vectors under
 [spec/fixtures/mutations](../spec/fixtures/mutations/README.md) are the

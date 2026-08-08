@@ -39,6 +39,12 @@ const CONTROLLED_ITEM_FIELDS = new Set([
   'decisions',
   'body',
 ]);
+// Everything the core view owns. Extension-node identity preserves only
+// fields outside this set; core-owned values are compared through coreView.
+const CORE_OWNED_FIELDS = new Set([
+  ...CONTROLLED_ITEM_FIELDS,
+  ...CONSUMER_CORE_FIELDS,
+]);
 const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const ULID_PATTERN = /^wb_([0-7][0-9A-HJKMNP-TV-Z]{25})$/;
 const MAX_LOCK_CLOSURE_RETRIES = 3;
@@ -133,6 +139,12 @@ export function validateCreateRequest(request, parseIssues = []) {
   }
   if (hasOwn(item, 'kind') && (item.kind !== 'task' && item.kind !== 'epic')) {
     issues.push(issue('/item/kind', 'invalid-value', 'Item member kind must be task or epic.'));
+  }
+  if (hasOwn(item, 'priority') && !isPatchableInteger(item.priority, 0)) {
+    issues.push(issue('/item/priority', 'invalid-value', 'Item member priority must be a non-negative integer.'));
+  }
+  if (hasOwn(item, 'number') && !isPatchableInteger(item.number, 1)) {
+    issues.push(issue('/item/number', 'invalid-value', 'Item member number must be a positive integer.'));
   }
   if (hasOwn(item, 'depends_on') && !Array.isArray(item.depends_on)) {
     issues.push(issue('/item/depends_on', 'invalid-type', 'Item member depends_on must be an array.'));
@@ -416,6 +428,19 @@ export function validateTransitionRequest(request, parseIssues = []) {
 }
 
 export async function transitionItem(ledgerDirectory, request, scenario) {
+  return mutateExistingItem(ledgerDirectory, request, scenario, {
+    name: 'transition',
+    lockIds: lockIdsForTransition,
+    build: buildTransition,
+  });
+}
+
+// Shared locked-mutation engine for operations that rewrite one existing
+// item: lock closure, exact-byte revision compare-and-swap, candidate
+// complete-ledger validation, and atomic same-path publication with the
+// recovery protocol. `operation` supplies the name used in lock metadata and
+// diagnostics, the lock-closure rule, and the request-specific build step.
+async function mutateExistingItem(ledgerDirectory, request, scenario, operation) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
 
@@ -428,13 +453,13 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
     if (!target) {
       return mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id });
     }
-    const nextIds = lockIdsForTransition(target, initial.ledger);
+    const nextIds = operation.lockIds(target, initial.ledger);
     if (scenario === 'expand-lock-closure-through-bounded-retry-limit') {
       return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
     }
     let locks;
     try {
-      locks = await acquireLocks(root, nextIds, 'transition', scenario);
+      locks = await acquireLocks(root, nextIds, operation.name, scenario);
     } catch (error) {
       if (error instanceof ResourceFailure) {
         return operationFailed(id, error.operation, 'io-error', await artifactsForLocks(error.locks, root));
@@ -474,7 +499,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
       if (!lockedTarget) {
         return await finishUncommitted(mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id }));
       }
-      const stableIds = lockIdsForTransition(lockedTarget, current.ledger);
+      const stableIds = operation.lockIds(lockedTarget, current.ledger);
       if (!sameIds(nextIds, stableIds)) {
         const cleanupFailure = await finishUncommitted(null);
         if (cleanupFailure) {
@@ -492,31 +517,11 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
         }));
       }
 
-      const edge = transitionEdge(lockedTarget.data.kind, lockedTarget.data.status, request.to_status);
-      const issues = transitionPreconditions(lockedTarget, current.ledger, request, edge);
-      const blockers = transitionBlockers(lockedTarget, current.ledger, request.to_status);
-      if (blockers.length > 0) {
-        return await finishUncommitted(mutationError('atomic-scope-required', 'The requested transition requires multi-item atomicity.', 'unchanged', 5, {
-          id,
-          blockers,
-          precondition_issues: issues,
-        }));
+      const built = operation.build(lockedTarget, current.ledger, request);
+      if (built.outcome) {
+        return await finishUncommitted(built.outcome);
       }
-      if (issues.length > 0) {
-        return await finishUncommitted(mutationError('transition-precondition-failed', 'The requested lifecycle transition failed its preconditions.', 'unchanged', 2, {
-          id,
-          issues,
-        }));
-      }
-      if (edge.requiresDecision && !isMapping(request.decision)) {
-        return await finishUncommitted(invalidTransitionDecision());
-      }
-      if (!edge.requiresDecision && hasOwn(request, 'decision')) {
-        return await finishUncommitted(invalidTransitionDecision());
-      }
-
-      const successor = transitionData(lockedTarget.data, request, edge, current.ledger);
-      const bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
+      const { successor, bytes } = built;
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         id,
@@ -571,7 +576,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
             return await finishUncommitted(operationFailed(id, 'publish', 'verification-failed', artifacts), artifacts);
           }
           return await finishUnknown(unknownPublication(
-            'transition',
+            operation.name,
             id,
             displayItemPath(lockedTarget.path),
             evidence.bytes,
@@ -584,7 +589,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
       try {
         published = await readRegularFile(lockedTarget.file);
       } catch {
-        return await finishUnknown(mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', `The ${operation.name} publication outcome could not be verified.`, 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: displayItemPath(lockedTarget.path),
@@ -596,7 +601,7 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
         }));
       }
       if (!published.equals(bytes)) {
-        return await finishUnknown(mutationError('write-outcome-unknown', 'The transition publication outcome could not be verified.', 'unknown', 6, {
+        return await finishUnknown(mutationError('write-outcome-unknown', `The ${operation.name} publication outcome could not be verified.`, 'unknown', 6, {
           id,
           recovery_artifacts: [{
             path: displayItemPath(lockedTarget.path),
@@ -639,6 +644,167 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
   }
 
   return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
+}
+
+// The exact patchable field set (mutation contract section 8). Everything
+// else stays a reviewable hand-edit or a transition concern.
+const PATCHABLE_FIELDS = ['number', 'priority'];
+// Where a newly added field lands in the frontmatter; both anchors are
+// required members, so they always exist.
+const PATCH_FIELD_ANCHORS = { number: 'id', priority: 'kind' };
+
+export function validatePatchRequest(request, parseIssues = []) {
+  const issues = [...parseIssues];
+  if (issues.some((entry) => entry.code === 'invalid-json')) {
+    return sortIssues(issues);
+  }
+  if (!isMapping(request)) {
+    return [issue('', 'invalid-type', 'Request input must be a JSON object.')];
+  }
+  validateObjectMembers(request, [], ['id', 'expected_revision', 'date', 'set'], issues, 'Request member');
+  for (const field of ['id', 'expected_revision', 'date', 'set']) {
+    validateRequiredMember(request, [], field, issues);
+  }
+  if (hasOwn(request, 'id') && (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id))) {
+    issues.push(issue('/id', 'invalid-value', 'Member id must be a canonical Wowbagger item ID.'));
+  }
+  if (hasOwn(request, 'expected_revision') && (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision))) {
+    issues.push(issue('/expected_revision', 'invalid-value', 'Member expected_revision must be a lowercase SHA-256 revision token.'));
+  }
+  if (hasOwn(request, 'date') && (typeof request.date !== 'string' || !isCalendarDate(request.date))) {
+    issues.push(issue('/date', 'invalid-value', 'Member date must be an ISO calendar date.'));
+  }
+  if (hasOwn(request, 'set') && !isMapping(request.set)) {
+    issues.push(issue('/set', 'invalid-type', 'Member set must be an object.'));
+  }
+  if (isMapping(request.set)) {
+    validateObjectMembers(request.set, ['set'], PATCHABLE_FIELDS, issues, 'Set member');
+    if (Object.keys(request.set).length === 0) {
+      issues.push(issue('/set', 'invalid-value', 'Member set must name at least one patchable field.'));
+    }
+    if (hasOwn(request.set, 'number') && request.set.number !== null && !isPatchableInteger(request.set.number, 1)) {
+      issues.push(issue('/set/number', 'invalid-value', 'Set member number must be a positive integer or null.'));
+    }
+    if (hasOwn(request.set, 'priority') && request.set.priority !== null && !isPatchableInteger(request.set.priority, 0)) {
+      issues.push(issue('/set/priority', 'invalid-value', 'Set member priority must be a non-negative integer or null.'));
+    }
+  }
+  return sortIssues(issues);
+}
+
+function isPatchableInteger(value, minimum) {
+  const unwrapped = value instanceof JsonNumber
+    ? (/^(0|[1-9][0-9]*)$/.test(value.source) ? Number(value.source) : NaN)
+    : value;
+  return typeof unwrapped === 'number' && Number.isSafeInteger(unwrapped) && unwrapped >= minimum;
+}
+
+export async function patchItem(ledgerDirectory, request, scenario) {
+  return mutateExistingItem(ledgerDirectory, request, scenario, {
+    name: 'patch',
+    lockIds: (target) => [target.data.id],
+    build: buildPatch,
+  });
+}
+
+function buildPatch(lockedTarget, ledger, request) {
+  const issues = [];
+  if (request.date < lockedTarget.data.created) {
+    issues.push(transitionIssue('date-before-created', 'date', 'Patch date must not be earlier than the current created date.', []));
+  }
+  if (request.date < lockedTarget.data.updated) {
+    issues.push(transitionIssue('date-before-updated', 'date', 'Patch date must not be earlier than the current updated date.', []));
+  }
+  if (issues.length > 0) {
+    return { outcome: mutationError('patch-precondition-failed', 'The requested patch failed its preconditions.', 'unchanged', 2, {
+      id: lockedTarget.data.id,
+      issues: issues.sort(compareTransitionIssues),
+    }) };
+  }
+  const successor = patchData(lockedTarget.data, request);
+  const bytes = Buffer.from(serializePatch(lockedTarget.source, successor, request), 'utf8');
+  return { successor, bytes };
+}
+
+function patchData(data, request) {
+  const successor = {
+    ...data,
+    provenance: { ...data.provenance },
+    depends_on: [...(data.depends_on ?? [])],
+    related: [...(data.related ?? [])],
+    updated: request.date,
+  };
+  for (const [field, value] of Object.entries(request.set)) {
+    if (value === null) {
+      delete successor[field];
+    } else {
+      successor[field] = value instanceof JsonNumber ? Number(value.source) : value;
+    }
+  }
+  return successor;
+}
+
+function serializePatch(source, successor, request) {
+  const bounds = frontmatterBounds(source);
+  const frontmatter = source.slice(bounds.start, bounds.end);
+  const document = parseDocument(frontmatter, {
+    intAsBigInt: true,
+    keepSourceTokens: true,
+    prettyErrors: false,
+    schema: 'core',
+    uniqueKeys: true,
+  });
+  if (document.errors.length > 0 || !isMap(document.contents)) {
+    throw new Error('Unable to mutate malformed frontmatter.');
+  }
+  setRootScalar(document, 'updated', successor.updated);
+  for (const field of Object.keys(request.set)) {
+    if (!Object.hasOwn(successor, field)) {
+      document.delete(field);
+    } else if (document.has(field)) {
+      setRootScalar(document, field, successor[field]);
+    } else {
+      insertRootAfter(document, PATCH_FIELD_ANCHORS[field], field, successor[field]);
+    }
+  }
+  let serialized = document.toString({ lineWidth: 0 });
+  if (bounds.newline === '\r\n') {
+    serialized = serialized.replaceAll('\n', '\r\n');
+  }
+  if (!frontmatter.endsWith(bounds.newline)) {
+    serialized = serialized.slice(0, -bounds.newline.length);
+  }
+  return `${source.slice(0, bounds.start)}${serialized}${source.slice(bounds.end)}`;
+}
+
+function buildTransition(lockedTarget, ledger, request) {
+  const id = lockedTarget.data.id;
+  const edge = transitionEdge(lockedTarget.data.kind, lockedTarget.data.status, request.to_status);
+  const issues = transitionPreconditions(lockedTarget, ledger, request, edge);
+  const blockers = transitionBlockers(lockedTarget, ledger, request.to_status);
+  if (blockers.length > 0) {
+    return { outcome: mutationError('atomic-scope-required', 'The requested transition requires multi-item atomicity.', 'unchanged', 5, {
+      id,
+      blockers,
+      precondition_issues: issues,
+    }) };
+  }
+  if (issues.length > 0) {
+    return { outcome: mutationError('transition-precondition-failed', 'The requested lifecycle transition failed its preconditions.', 'unchanged', 2, {
+      id,
+      issues,
+    }) };
+  }
+  if (edge.requiresDecision && !isMapping(request.decision)) {
+    return { outcome: invalidTransitionDecision() };
+  }
+  if (!edge.requiresDecision && hasOwn(request, 'decision')) {
+    return { outcome: invalidTransitionDecision() };
+  }
+
+  const successor = transitionData(lockedTarget.data, request, edge, ledger);
+  const bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
+  return { successor, bytes };
 }
 
 function invalidTransitionDecision() {
@@ -957,7 +1123,7 @@ function extensionNodeIdentity(source) {
   const identity = [];
   for (const pair of document.contents.items) {
     const key = isScalar(pair.key) ? pair.key.value : undefined;
-    if (!CONTROLLED_ITEM_FIELDS.has(key)) {
+    if (!CORE_OWNED_FIELDS.has(key)) {
       identity.push(['item', sourceNodeIdentity(pair)]);
       continue;
     }
@@ -1302,7 +1468,7 @@ function validLockOwner(owner, file) {
   }
   return isJsonInteger(owner.lock_version, 1)
     && owner.item_id === expectedId
-    && (owner.operation === 'create' || owner.operation === 'transition')
+    && (owner.operation === 'create' || owner.operation === 'transition' || owner.operation === 'patch')
     && typeof owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(owner.writer_id)
     && isRfc3339Utc(owner.started_at);
@@ -1532,8 +1698,10 @@ function serializeCreate(data, body) {
     '---',
     'schema_version: 1',
     `id: ${data.id}`,
+    ...(hasOwn(data, 'number') ? [`number: ${yamlScalar(data.number)}`] : []),
     `title: ${quote(data.title)}`,
     `kind: ${data.kind}`,
+    ...(hasOwn(data, 'priority') ? [`priority: ${yamlScalar(data.priority)}`] : []),
     'status: triage',
     `created: ${data.created}`,
     `updated: ${data.updated}`,
@@ -1557,6 +1725,9 @@ function serializeCreate(data, body) {
   }
 
   for (const [key, value] of Object.entries(extensionMembers(data))) {
+    if (CONSUMER_CORE_FIELDS.includes(key)) {
+      continue;
+    }
     lines.push(...yamlLines(key, value, 0));
   }
 

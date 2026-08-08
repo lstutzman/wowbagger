@@ -97,9 +97,10 @@ test('create atomically publishes the canonical caller-identified triage item', 
   });
 });
 
-test('inspect reports number and priority inside core', async () => {
-  const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
-  const source = [
+const PRIORITISED_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+
+function prioritisedItemSource(id) {
+  return [
     '---',
     'schema_version: 1',
     `id: ${id}`,
@@ -120,9 +121,11 @@ test('inspect reports number and priority inside core', async () => {
     'Body.',
     '',
   ].join('\n');
+}
 
-  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
-    const result = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+test('inspect reports number and priority inside core', async () => {
+  await withLedger({ [`${PRIORITISED_ID}.md`]: prioritisedItemSource(PRIORITISED_ID) }, async (ledger) => {
+    const result = runCli('inspect', '--ledger', ledger, '--id', PRIORITISED_ID, '--json');
 
     assert.equal(result.status, 0, result.stderr);
     const item = JSON.parse(result.stdout).result.item;
@@ -132,31 +135,8 @@ test('inspect reports number and priority inside core', async () => {
 });
 
 test('the item level carries only addressing and payload members, never promoted frontmatter', async () => {
-  const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
-  const source = [
-    '---',
-    'schema_version: 1',
-    `id: ${id}`,
-    'number: 7',
-    'title: "Prioritised item"',
-    'kind: task',
-    'priority: 5',
-    'status: backlog',
-    'created: 2030-01-10',
-    'updated: 2030-01-10',
-    'provenance:',
-    '  source: "fixture/mutations"',
-    '  recorded_at: "2030-01-10T12:34:56.789Z"',
-    'depends_on: []',
-    'related: []',
-    '---',
-    '',
-    'Body.',
-    '',
-  ].join('\n');
-
-  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
-    const result = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+  await withLedger({ [`${PRIORITISED_ID}.md`]: prioritisedItemSource(PRIORITISED_ID) }, async (ledger) => {
+    const result = runCli('inspect', '--ledger', ledger, '--id', PRIORITISED_ID, '--json');
 
     assert.equal(result.status, 0, result.stderr);
     const item = JSON.parse(result.stdout).result.item;
@@ -199,6 +179,90 @@ test('create refusal for caller-supplied status names the assigned status and th
       statusIssue.message,
       'Item member status is controlled by Wowbagger. Create assigns triage; a transition from triage to backlog accepts the item into ready.',
     );
+  });
+});
+
+test('create refuses a malformed priority at the request level', async () => {
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+      item: {
+        title: 'Demo',
+        kind: 'task',
+        priority: 'high',
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+      },
+      body: '',
+    }));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'invalid-request');
+    assert.deepEqual(envelope.error.details.issues, [{
+      path: '/item/priority',
+      code: 'invalid-value',
+      message: 'Item member priority must be a non-negative integer.',
+    }]);
+  });
+});
+
+test('create refuses a malformed number at the request level', async () => {
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+      item: {
+        title: 'Demo',
+        kind: 'task',
+        number: 0,
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+      },
+      body: '',
+    }));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'invalid-request');
+    assert.deepEqual(envelope.error.details.issues, [{
+      path: '/item/number',
+      code: 'invalid-value',
+      message: 'Item member number must be a positive integer.',
+    }]);
+  });
+});
+
+test('create serializes number and priority at their canonical frontmatter positions', async () => {
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+      item: {
+        title: 'Demo',
+        kind: 'task',
+        number: 7,
+        priority: 5,
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+      },
+      body: '',
+    }));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, result.stdout);
+    const item = JSON.parse(result.stdout).result.item;
+    const lines = Buffer.from(item.source_base64, 'base64').toString('utf8').split('\n');
+    const idIndex = lines.findIndex((line) => line.startsWith('id:'));
+    assert.equal(lines[idIndex + 1], 'number: 7');
+    const kindIndex = lines.indexOf('kind: task');
+    assert.equal(lines[kindIndex + 1], 'priority: 5');
   });
 });
 

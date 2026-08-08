@@ -1460,6 +1460,60 @@ function digest(bytes) {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
 
+test('accepts a core inspect envelope whose item carries number and priority', () => {
+  const item = consumerCoreItem();
+
+  const result = mapProcessOutcome({
+    adapter_contract_version: 1,
+    request_id: 'review-inspect-consumer-core-0001',
+    command: 'inspect',
+    core_request: { command: 'inspect', ledger: 'ledger', id: item.id },
+    item_id: item.id,
+    process: processObservation({
+      ok: true,
+      command: 'inspect',
+      contract_version: 1,
+      result: { item },
+    }),
+  });
+
+  assert.notEqual(result?.error?.code, 'core-protocol-error', JSON.stringify(result));
+});
+
+// The consumer-supplied schema-1 fields (number, priority) belong to the core
+// view; the oracle must accept an engine item that reports them.
+function consumerCoreItem() {
+  const id = CREATE_ID;
+  const body = '\nPlot a fictional route from Brindle Station to Lumen Reef.\n';
+  const source = Buffer.from(`---\nschema_version: 1\nid: ${id}\nnumber: 7\ntitle: Map a fictional moon route\nkind: task\npriority: 5\nstatus: triage\ncreated: 2030-01-10\nupdated: 2030-01-10\nprovenance:\n  source: fixture/mutations\n  recorded_at: 2030-01-10T12:34:56.789Z\ndepends_on: []\nrelated: []\n---\n${body}`);
+  return {
+    id,
+    path: `${id}.md`,
+    revision: digest(source),
+    source_encoding: 'base64',
+    source_media_type: 'text/markdown; charset=utf-8',
+    source_base64: source.toString('base64'),
+    core: {
+      schema_version: 1,
+      id,
+      title: 'Map a fictional moon route',
+      kind: 'task',
+      status: 'triage',
+      created: '2030-01-10',
+      updated: '2030-01-10',
+      provenance: {
+        source: 'fixture/mutations',
+        recorded_at: '2030-01-10T12:34:56.789Z',
+      },
+      depends_on: [],
+      related: [],
+      number: 7,
+      priority: 5,
+    },
+    body,
+  };
+}
+
 function validCoreItem() {
   const id = CREATE_ID;
   const body = '\nPlot a fictional route from Brindle Station to Lumen Reef.\n';
