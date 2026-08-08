@@ -4,9 +4,10 @@ id: wb_01KZE1GBG0QGB161XH2VFVBFXB
 number: 32
 title: "Decide whether ownership returns, after priority did"
 kind: task
-status: backlog
+status: done
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: ownership was deleted alongside priority and never re-examined."
     rationale: "Priority was restored once a consumer hit the hole. Ownership went out in the same commit, the same way, and nobody has decided whether it belongs in the ledger, belongs to the claim contract, or is deliberately absent. Any of those is a fine answer; none is recorded, which is the defect."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: ADR-0007 records that ownership is a claim concern and the durable field is deliberately absent."
+    rationale: "The transient question — who is touching this now — is answered by the shipped claim contract with owner identity and lease renewal; a frontmatter twin would give one fact two homes. The durable question — whose responsibility is this — has no consumer demand: both dogfoods surfaced priority, numbers, patching, and minting, never responsibility. ADR-0007 records the reasoning and a reopen trigger: a consumer with more than one durable responsible party asks, and the field is then specified before it is implemented, per ADR-0006's discipline. Recorded by the maintainer agent; Lee can veto by reversing the ADR."
 ---
 
 Ownership was deleted in the same commit as priority, the same way, and unlike
