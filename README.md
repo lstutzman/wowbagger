@@ -152,8 +152,11 @@ The documented compatibility targets are:
 
 An OpenAI-compatible API describes model transport; it does not by itself
 provide agent tools. The [adapter contract](docs/adapter-contract.md) records
-the required host capabilities and refusal rules. It does not claim that API
-compatibility alone makes a harness compatible.
+the required host capabilities and refusal rules, and
+[the integration guide](docs/openai-compatible-integration.md) states what a
+Kimi or other OpenAI-compatible host can do today — driving the core CLI
+directly — versus what a verifiable compatibility claim requires. Neither
+claims that API compatibility alone makes a harness compatible.
 
 This checkout ships two adapter packages on one shared entrypoint runtime:
 [`adapters/claude-code/`](adapters/claude-code/) and
