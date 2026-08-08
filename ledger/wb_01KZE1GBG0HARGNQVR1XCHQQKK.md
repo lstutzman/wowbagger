@@ -4,9 +4,10 @@ id: wb_01KZE1GBG0HARGNQVR1XCHQQKK
 number: 31
 title: "Release-note the claim request __proto__ behaviour change"
 kind: task
-status: backlog
+status: done
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-08
+completed: 2026-08-08
 provenance:
   source: "maintainer-dogfood/wowbagger"
   recorded_at: "2026-08-07T12:00:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-07
     summary: "Accepted: a behaviour change shipped inside a commit about the adapter."
     rationale: "Consolidating four drifted JSON normalizers changed how claim requests treat an own __proto__ member. The change is correct and tested; it simply needs recording as a behaviour change rather than a refactor. If there is nowhere to record it, that absence is the finding."
+  - action: complete
+    date: 2026-08-08
+    summary: "Completed: CHANGELOG.md exists and records the __proto__ refusal as a behaviour change."
+    rationale: "The finding was that no changelog existed. CHANGELOG.md now carries an Unreleased section whose first entry is the claim-request __proto__ refusal, described as a behaviour change that shipped inside an adapter commit, with the no-stored-data note. The file states its own rule — behaviour changes land when they ship, whatever the commit label — and the first tagged release inherits it."
 ---
 
 `src/cli.js` changed behaviour outside the adapter work that prompted it. A
