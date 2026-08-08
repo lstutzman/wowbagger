@@ -7,6 +7,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { applyCapabilityInvariantScenario, mutateObject } from './scenario-shaping.js';
 
 import {
   buildResumePlan,
@@ -712,71 +713,7 @@ function applyScenarioMutation(scenario, approval, binding) {
   mutateObject(target, scenario);
 }
 
-export function mutateObject(target, scenario) {
-  if (scenario.delete) {
-    const segments = scenario.delete.split('.');
-    const parent = segments.slice(0, -1).reduce((value, key) => value[key], target);
-    delete parent[segments.at(-1)];
-  }
-  for (const mutation of [...(scenario.sets ?? []), ...(scenario.set ? [scenario.set] : [])]) {
-    const segments = mutation.path.split('.');
-    const parent = segments.slice(0, -1).reduce((value, key) => value[key], target);
-    parent[segments.at(-1)] = mutation.value;
-  }
-}
-
-export function applyCapabilityInvariantScenario(dynamic, scenario) {
-  const command = dynamic.host.command_execution;
-  const filesystem = dynamic.host.filesystem;
-  const instruction = dynamic.host.instruction_input;
-  const dependentCommandMembers = [
-    'arguments_array',
-    'stdio',
-    'process_tree_containment',
-    'orphan_detection',
-    'timeout_enforcement',
-    'stdout_limit',
-    'stderr_limit',
-  ];
-  switch (scenario.mode) {
-    case 'supported':
-      command[scenario.member] = scenario.value;
-      return;
-    case 'limit':
-      dynamic.limits[scenario.member] = 0;
-      return;
-    case 'guarded':
-      filesystem[scenario.member] = false;
-      return;
-    case 'unsupported':
-    case 'unsupported-invoke':
-      command.supported = false;
-      command.shell = false;
-      for (const member of dependentCommandMembers) command[member] = false;
-      dynamic.core.commands = [];
-      if (scenario.mode === 'unsupported') command[scenario.member] = true;
-      else dynamic.core.commands = ['capabilities'];
-      return;
-    case 'filesystem-none':
-      filesystem.workspace_selection = 'none';
-      filesystem.no_follow_resolution = false;
-      filesystem.stable_identity = false;
-      filesystem.component_walk = false;
-      filesystem[scenario.member] = true;
-      return;
-    case 'instruction-none':
-      instruction.mode = 'none';
-      instruction.max_sources = 0;
-      instruction.max_bytes = 0;
-      instruction[scenario.member] = 1;
-      return;
-    case 'instruction-configured':
-      instruction[scenario.member] = 0;
-      return;
-    default:
-      throw new Error(`unknown capability invariant mode: ${scenario.mode}`);
-  }
-}
+export { applyCapabilityInvariantScenario, mutateObject };
 
 function replaceHandoffBytes(carrier, bytes) {
   carrier.content_base64 = bytes.toString('base64');

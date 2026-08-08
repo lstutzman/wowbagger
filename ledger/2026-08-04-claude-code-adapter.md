@@ -4,9 +4,9 @@ id: wb_01KZ77NSW8ZP1289HFMN2ECNXD
 number: 13
 title: "Deliver the Claude Code adapter"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-08
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"

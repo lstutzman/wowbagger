@@ -3,10 +3,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JsonNumber, normalizeJsonValue, parseJsonRequest } from '../src/request.js';
-// Scenario-shaping helpers only. The model under test is never imported from
-// spec/adapter-reference.js: an implementation runner that asked the oracle
-// whether the oracle passes its own vectors would report nothing.
-import { applyCapabilityInvariantScenario, mutateObject } from './run-adapter-vectors.js';
+// Scenario-shaping helpers only, from a module that imports nothing. The
+// model under test is never imported from spec/adapter-reference.js: an
+// implementation runner that asked the oracle whether the oracle passes its
+// own vectors would report nothing.
+import { applyCapabilityInvariantScenario, mutateObject } from './scenario-shaping.js';
 import { describeAdapter } from '../src/adapter/describe.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
