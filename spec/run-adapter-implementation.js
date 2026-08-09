@@ -235,7 +235,7 @@ function matchesExpectation(result, scenario) {
 // the describe request, so they are evaluated against the shipped engine
 // modules imported directly rather than across the process boundary; adding a
 // test-injection seam to the entrypoint would weaken the shipped binary.
-async function evaluateNegotiationAssertion(directory, assertion, target) {
+async function evaluateNegotiationAssertion(directory, assertion, target, runtimeConfig) {
   const data = await readScenarios(directory);
 
   if (assertion.type === 'invoke-version') {
@@ -248,7 +248,7 @@ async function evaluateNegotiationAssertion(directory, assertion, target) {
       handoff_carrier: null,
       limits: { context_bytes: 0, stdout_bytes: 4096, stderr_bytes: 1024, timeout_ms: 1000 },
     };
-    const invoked = await callShippedEntrypoint(request, target);
+    const invoked = await callShippedEntrypoint(request, target, { runtimeConfig });
     const result = invoked.response;
     return {
       ok: result.error.code === scenario.expected,
@@ -376,7 +376,7 @@ async function evaluateCapabilityAssertion(directory, assertion, target, runtime
   };
 }
 
-async function evaluateCoreBaselineAssertion(directory, assertion, target) {
+async function evaluateCoreBaselineAssertion(directory, assertion, target, runtimeConfig) {
   const coreInvocation = await readStrictJson(path.join(directory, 'core-invocation.json'));
   const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
   const expected = await readStrictJson(path.join(directory, 'expected-adapter-result.json'));
@@ -427,7 +427,7 @@ async function evaluateCoreBaselineAssertion(directory, assertion, target) {
     const workspaces = invocation.workspace
       ? { [invocation.workspace.workspace_id]: root }
       : {};
-    const invoked = await callShippedEntrypoint(invocation, target, { workspaces });
+    const invoked = await callShippedEntrypoint(invocation, target, { workspaces, runtimeConfig });
     return {
       ok: sameJson(invoked.response, expected),
       evidence: invoked.evidence,
@@ -481,7 +481,7 @@ async function evaluatePlatformAssertion(directory, assertion) {
   };
 }
 
-async function evaluateInvocationPathAssertion(directory, assertion, target) {
+async function evaluateInvocationPathAssertion(directory, assertion, target, runtimeConfig) {
   if (assertion.type === 'path-refusal') {
     await readStrictJson(path.join(directory, 'filesystem-shape.json'));
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
@@ -492,6 +492,7 @@ async function evaluateInvocationPathAssertion(directory, assertion, target) {
       await symlink('ledger', path.join(temporary, invocation.core_request.ledger));
       const invoked = await callShippedEntrypoint(invocation, target, {
         workspaces: { [invocation.workspace.workspace_id]: temporary },
+        runtimeConfig,
       });
       return {
         ok: sameJson(invoked.response, expected)
@@ -708,7 +709,7 @@ async function evaluateApprovalSchemaAssertion(directory, assertion) {
   };
 }
 
-async function evaluateApprovalGateAssertion(directory, assertion, target) {
+async function evaluateApprovalGateAssertion(directory, assertion, target, runtimeConfig) {
   if (assertion.expect === 'consumer-approval-required') {
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
     const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
@@ -717,6 +718,7 @@ async function evaluateApprovalGateAssertion(directory, assertion, target) {
       await mkdir(path.join(temporary, 'ledger'));
       const invoked = await callShippedEntrypoint(invocation, target, {
         workspaces: { [invocation.workspace.workspace_id]: temporary },
+        runtimeConfig,
       });
       return {
         ok: sameJson(invoked.response, expected),
@@ -759,7 +761,7 @@ async function evaluateAssertion(directory, assertion, target, runtimeConfig) {
     case 'core-probe':
     case 'entrypoint-path':
     case 'invoke-version':
-      return evaluateNegotiationAssertion(directory, assertion, target);
+      return evaluateNegotiationAssertion(directory, assertion, target, runtimeConfig);
     case 'capability':
       return evaluateCapabilityAssertion(directory, assertion, target, runtimeConfig);
     case 'platform-status':
@@ -768,11 +770,11 @@ async function evaluateAssertion(directory, assertion, target, runtimeConfig) {
     case 'path-race':
     case 'path-syntax':
     case 'snapshot-identity':
-      return evaluateInvocationPathAssertion(directory, assertion, target);
+      return evaluateInvocationPathAssertion(directory, assertion, target, runtimeConfig);
     case 'process-outcome':
       return evaluateProcessOutcomeAssertion(directory, assertion);
     case 'core-baseline':
-      return evaluateCoreBaselineAssertion(directory, assertion, target);
+      return evaluateCoreBaselineAssertion(directory, assertion, target, runtimeConfig);
     case 'output-bound':
       return evaluateOutputBoundAssertion(directory, assertion, target, runtimeConfig);
     case 'instruction-order':
@@ -784,7 +786,7 @@ async function evaluateAssertion(directory, assertion, target, runtimeConfig) {
     case 'approval-schema':
       return evaluateApprovalSchemaAssertion(directory, assertion);
     case 'approval-gate':
-      return evaluateApprovalGateAssertion(directory, assertion, target);
+      return evaluateApprovalGateAssertion(directory, assertion, target, runtimeConfig);
     default:
       return UNIMPLEMENTED;
   }

@@ -314,6 +314,18 @@ test('uses the declared process observation for a negative-capability case', asy
   }]);
 });
 
+test('fails a negative-capability case if an evaluator launches a real core command', async (t) => {
+  const { root } = await isolateCase(t, '03-ready-forwarding', () => true);
+  const manifestPath = path.join(root, '03-ready-forwarding', 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.mode = 'negative-capability';
+  await writeFile(manifestPath, JSON.stringify(manifest));
+
+  const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
+
+  assert.equal(result.cases[0].status, 'fail');
+});
+
 test('forwards compatible core baselines and maps the declared bounded-output observation', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
