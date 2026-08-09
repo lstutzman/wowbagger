@@ -76,6 +76,22 @@ test('applies only the schema scalar when explicitly requested', async () => {
   });
 });
 
+test('preserves a UTF-8 byte order mark when applying the schema stamp', async () => {
+  const byteOrderMark = Buffer.from([0xef, 0xbb, 0xbf]);
+  const source = Buffer.concat([byteOrderMark, Buffer.from(standaloneBacklogSource)]);
+  const expected = Buffer.concat([
+    byteOrderMark,
+    Buffer.from(standaloneBacklogSource.replace('schema_version: 1', 'schema_version: 2')),
+  ]);
+
+  await withLedger({ 'item.md': source }, async (ledger) => {
+    const result = runMigration('--ledger', ledger, '--apply');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(await readFile(path.join(ledger, 'item.md')), expected);
+  });
+});
+
 test('validates schema version 1 before changing stamps', async () => {
   const dependentSource = `---
 schema_version: 1

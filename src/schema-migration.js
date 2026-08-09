@@ -9,6 +9,7 @@ import { validateLedger } from './validate.js';
 
 const MAINTENANCE_NOTICE = 'NOTICE: This is a quiesced-window maintenance operation. Take a backup before --apply; recovery uses that backup and Git, not the mutation contract.';
 const HISTORY_NOTICE = 'NOTICE: Schema 1 cleanup history is unrecoverable. Prerequisites previously moved from depends_on to related stay there; no dependency is inferred.';
+const UTF8_BYTE_ORDER_MARK = Buffer.from([0xef, 0xbb, 0xbf]);
 
 export async function runSchema2MigrationCli(argumentsList, streams = {}) {
   const stdout = streams.stdout ?? process.stdout;
@@ -82,7 +83,7 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
       path: item.path,
       file: item.file,
       before: item.bytes,
-      after: Buffer.from(source, 'utf8'),
+      after: migratedBytes(item.bytes, source),
       source,
     };
   });
@@ -229,6 +230,13 @@ function schema2Source(source) {
   const start = bounds.start + schemaVersion.range[0];
   const end = bounds.start + schemaVersion.range[1];
   return `${source.slice(0, start)}2${source.slice(end)}`;
+}
+
+function migratedBytes(before, source) {
+  const bytes = Buffer.from(source, 'utf8');
+  return before.subarray(0, UTF8_BYTE_ORDER_MARK.length).equals(UTF8_BYTE_ORDER_MARK)
+    ? Buffer.concat([UTF8_BYTE_ORDER_MARK, bytes])
+    : bytes;
 }
 
 function frontmatterBounds(source) {
