@@ -1,4 +1,5 @@
-import { parseJsonRequest } from '../request.js';
+import { normalizeJsonValue, parseJsonRequest } from '../request.js';
+import { CORE_COMMAND_ORDER, verifyCoreProbe } from './core-probe.js';
 import { hasExactMembers, isNonNegativeSafeInteger } from './schema-helpers.js';
 
 const MESSAGES = Object.freeze({
@@ -59,11 +60,25 @@ function coreEnvelope(process, command) {
   const finalLf = bytes.length > 1 && bytes.at(-1) === 0x0a && bytes.at(-2) !== 0x0a && bytes.at(-2) !== 0x0d;
   const parsed = parseJsonRequest(bytes);
   if (!finalLf || parsed.issues.length > 0) return { present: true, valid: false };
-  const value = parsed.value;
-  const valid = command === 'ready'
-    && value !== null && typeof value === 'object'
-    && typeof value.valid === 'boolean'
-    && (value.valid ? process.exit_code === 0 : process.exit_code === 1);
+  const value = normalizeJsonValue(parsed.value);
+  let valid = false;
+  if (command === 'ready') {
+    valid = hasExactMembers(value, value.valid ? ['as_of', 'valid', 'ready'] : ['valid', 'errors'])
+      && typeof value.valid === 'boolean'
+      && (value.valid ? process.exit_code === 0 && Array.isArray(value.ready) : process.exit_code === 1);
+  } else if (command === 'validate') {
+    valid = hasExactMembers(value, value.valid ? ['valid', 'item_count'] : ['valid', 'errors'])
+      && typeof value.valid === 'boolean'
+      && (value.valid ? process.exit_code === 0 : process.exit_code === 1);
+  } else if (command === 'capabilities') {
+    valid = verifyCoreProbe({
+      core: { required_core_contract_version: 1, commands: [...CORE_COMMAND_ORDER] },
+      optional_features: {
+        claims: value?.result?.operations?.work_claim?.supported === true,
+        policy: false,
+      },
+    }, value).ok && process.exit_code === 0;
+  }
   return { present: true, valid };
 }
 
