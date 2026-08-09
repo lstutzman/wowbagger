@@ -173,12 +173,12 @@ test('evaluates the negotiation cases against the shipped engine', async () => {
 
   const negotiation = byName.get('negotiation-mismatch');
   assert.equal(negotiation.executed_assertions.length, 78);
-  assert.equal(negotiation.status, 'fail');
+  assert.equal(negotiation.status, 'pass');
 
   const unimplemented = negotiation.assertion_evidence
     .filter(({ evidence }) => evidence === 'unimplemented')
     .map(({ id }) => id);
-  assert.deepEqual(unimplemented, ['future-invoke-version-is-refused']);
+  assert.deepEqual(unimplemented, []);
 
   const implemented = negotiation.assertion_evidence
     .filter(({ evidence }) => evidence !== 'unimplemented');
@@ -202,15 +202,16 @@ test('labels each evidenced assertion with the shipped module that produced it',
   assert.equal(evidenceOf('capability-separation', 'optional-features-are-absent'), 'src/adapter/describe.js');
 });
 
-test('holds the assertions that Plans 2 and 3 own at unimplemented', async () => {
+test('holds unfinished Plan 2 and Plan 3 assertions at unimplemented', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
   const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
     .find((entry) => entry.id === id).evidence;
 
-  // Plan 2 owns invokeAdapter; without it neither the invoke-version
-  // assertion nor either invoke-time capability assertion can be evidenced.
-  assert.equal(evidenceOf('negotiation-mismatch', 'future-invoke-version-is-refused'), 'unimplemented');
+  assert.equal(
+    evidenceOf('negotiation-mismatch', 'future-invoke-version-is-refused'),
+    'src/adapter/invoke.js',
+  );
   assert.equal(evidenceOf('capability-separation', 'api-transport-is-not-tooling'), 'unimplemented');
   assert.equal(evidenceOf('capabilities-forwarding', 'preserve-core-capability-truth'), 'unimplemented');
   assert.equal(byName.get('capability-separation').status, 'fail');
@@ -218,7 +219,7 @@ test('holds the assertions that Plans 2 and 3 own at unimplemented', async () =>
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 79);
+  assert.equal(evidenced.length, 80);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });

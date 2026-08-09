@@ -12,6 +12,7 @@ import { describeAdapter } from '../src/adapter/describe.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
+import { invokeAdapter } from '../src/adapter/invoke.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 
@@ -86,6 +87,29 @@ function matchesExpectation(result, scenario) {
 // test-injection seam to the entrypoint would weaken the shipped binary.
 async function evaluateNegotiationAssertion(directory, assertion) {
   const data = await readScenarios(directory);
+
+  if (assertion.type === 'invoke-version') {
+    const scenario = findScenario(data.invoke_cases, assertion.scenario);
+    const request = {
+      adapter_contract_version: scenario.adapter_contract_version,
+      request_id: scenario.id,
+      core_request: { command: 'capabilities' },
+      instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+      handoff_carrier: null,
+      limits: { context_bytes: 0, stdout_bytes: 4096, stderr_bytes: 1024, timeout_ms: 1000 },
+    };
+    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(request)}\n`), {
+      max_request_bytes: data.base_dynamic.limits.max_request_bytes,
+      describe_request: data.base_request,
+      manifest: data.base_manifest,
+      dynamic: data.base_dynamic,
+    });
+    return {
+      ok: result.error.code === scenario.expected,
+      evidence: 'src/adapter/invoke.js',
+      error_code: result.error.code,
+    };
+  }
 
   if (assertion.type === 'entrypoint-path') {
     const scenario = findScenario(data.entrypoint_paths, assertion.scenario);
@@ -219,6 +243,7 @@ async function evaluateAssertion(directory, assertion) {
     case 'negotiation':
     case 'core-probe':
     case 'entrypoint-path':
+    case 'invoke-version':
       return evaluateNegotiationAssertion(directory, assertion);
     case 'capability':
       return evaluateCapabilityAssertion(directory, assertion);
