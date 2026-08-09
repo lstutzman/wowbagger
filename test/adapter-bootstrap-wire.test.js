@@ -44,6 +44,25 @@ function execFileBytes(file, args, options = {}) {
   });
 }
 
+async function candidateEnvironment(t, workspaces) {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-candidate-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const candidateManifestPath = path.join(temporaryDirectory, 'wowbagger-adapter.json');
+  const shippedManifest = JSON.parse(await readFile(
+    path.join(projectRoot, 'adapters', 'claude-code', 'wowbagger-adapter.json'),
+    'utf8',
+  ));
+  shippedManifest.platforms[process.platform] = 'supported';
+  await writeFile(candidateManifestPath, JSON.stringify(shippedManifest));
+  const env = { ...process.env, WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath };
+  if (workspaces) {
+    const workspaceConfigPath = path.join(temporaryDirectory, 'workspaces.json');
+    await writeFile(workspaceConfigPath, JSON.stringify(workspaces));
+    env.WOWBAGGER_ADAPTER_WORKSPACES_PATH = workspaceConfigPath;
+  }
+  return env;
+}
+
 // Asserts the §3.3 wire shape: exactly one JSON object, followed by exactly
 // one trailing LF, with nothing else on stdout.
 function assertSingleJsonObject(stdout) {
@@ -92,15 +111,7 @@ test('answers invoke through the bootstrap wire and refuses a future contract ve
 });
 
 test('forwards capabilities through the shipped entrypoint and real core', async (t) => {
-  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-candidate-'));
-  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
-  const candidateManifestPath = path.join(temporaryDirectory, 'wowbagger-adapter.json');
-  const shippedManifest = JSON.parse(await readFile(
-    path.join(projectRoot, 'adapters', 'claude-code', 'wowbagger-adapter.json'),
-    'utf8',
-  ));
-  shippedManifest.platforms[process.platform] = 'supported';
-  await writeFile(candidateManifestPath, JSON.stringify(shippedManifest));
+  const env = await candidateEnvironment(t);
   const request = JSON.stringify({
     adapter_contract_version: 1,
     request_id: 'wire-capabilities-real-core-0001',
@@ -114,10 +125,7 @@ test('forwards capabilities through the shipped entrypoint and real core', async
   ], { cwd: projectRoot });
 
   const { code, stdout } = await spawnEntrypoint(['invoke'], request, {
-    env: {
-      ...process.env,
-      WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
-    },
+    env,
   });
 
   assert.equal(code, 0);
@@ -126,6 +134,26 @@ test('forwards capabilities through the shipped entrypoint and real core', async
   assert.equal(response.result.core_exit_code, 0);
   assert.deepEqual(Buffer.from(response.result.stdout.data, 'base64'), baseline.stdout);
   assert.deepEqual(Buffer.from(response.result.stderr.data, 'base64'), baseline.stderr);
+});
+
+test('resolves an approved workspace and forwards ready through the real core', async (t) => {
+  const env = await candidateEnvironment(t, {
+    'fixture-ready-workspace': path.join(projectRoot, 'spec', 'fixtures', 'ready-selection'),
+  });
+  const invocation = await readFile(
+    path.join(projectRoot, 'spec', 'fixtures', 'adapters', '03-ready-forwarding', 'invocation.json'),
+  );
+  const expected = JSON.parse(await readFile(
+    path.join(projectRoot, 'spec', 'fixtures', 'adapters', '03-ready-forwarding', 'expected-adapter-result.json'),
+    'utf8',
+  ));
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], invocation, {
+    env,
+  });
+
+  assert.equal(code, 0);
+  assert.deepEqual(assertSingleJsonObject(stdout), expected);
 });
 
 test('bounds invoke bytes before parsing the request', async () => {

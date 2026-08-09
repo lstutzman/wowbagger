@@ -1,11 +1,13 @@
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from './bootstrap.js';
 import { CORE_COMMAND_ORDER } from './core-probe.js';
 import { describeAdapter } from './describe.js';
 import { invokeAdapter } from './invoke.js';
 import { validateAdapterManifest } from './manifest.js';
+import { isSafeLogicalPath } from './paths.js';
 import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
 // The launch discipline every current adapter package shares: argv-array
@@ -140,6 +142,64 @@ async function loadManifest(manifestUrl) {
   return normalizeJsonValue(parsed.value);
 }
 
+async function loadWorkspaceRoots(workspaceConfigUrl) {
+  if (!workspaceConfigUrl) return Object.create(null);
+  let parsed;
+  try {
+    parsed = parseJsonRequest(await readFile(fileURLToPath(workspaceConfigUrl)));
+  } catch {
+    return Object.create(null);
+  }
+  if (parsed.issues.length > 0) return Object.create(null);
+  const roots = normalizeJsonValue(parsed.value);
+  if (roots === null || typeof roots !== 'object' || Array.isArray(roots)) {
+    return Object.create(null);
+  }
+  return roots;
+}
+
+function logicalComponents(logicalPath) {
+  if (!isSafeLogicalPath(logicalPath) || logicalPath === '.') return [];
+  const segments = logicalPath.split('/');
+  return segments.map((_, index) => segments.slice(0, index + 1).join('/'));
+}
+
+async function pathSnapshot(absolutePath) {
+  try {
+    const stats = await lstat(absolutePath);
+    const kind = stats.isDirectory()
+      ? 'directory'
+      : stats.isSymbolicLink() ? 'symbolic-link' : stats.isFile() ? 'regular-file' : 'special';
+    return { kind, identity: { dev: stats.dev, ino: stats.ino } };
+  } catch {
+    return { kind: 'missing', identity: 'missing' };
+  }
+}
+
+async function captureWorkspace(root, request) {
+  const snapshot = { '.': await pathSnapshot(root) };
+  const components = new Set([
+    ...logicalComponents(request.workspace.cwd ?? '.'),
+    ...logicalComponents(request.core_request.ledger),
+  ]);
+  for (const component of components) {
+    snapshot[component] = await pathSnapshot(path.join(root, ...component.split('/')));
+  }
+  return snapshot;
+}
+
+async function invocationWorkspaces(request, workspaceRoots) {
+  if (request?.core_request?.command === 'capabilities' || !request?.workspace) return {};
+  const root = workspaceRoots[request.workspace.workspace_id];
+  if (typeof root !== 'string' || !path.isAbsolute(root)) return {};
+  const approvedRoot = path.resolve(root);
+  const before = await captureWorkspace(approvedRoot, request);
+  const after = await captureWorkspace(approvedRoot, request);
+  return {
+    [request.workspace.workspace_id]: { root: approvedRoot, before, after },
+  };
+}
+
 // The shared §3.3 entrypoint flow every adapter package runs: load and
 // validate its own manifest, read one bootstrap request, answer describe or
 // refuse. Each adapter supplies only its manifest location and its honest
@@ -149,6 +209,7 @@ export async function runAdapterEntrypoint({
   dynamicResult,
   packageRoot = fileURLToPath(new URL('../../', manifestUrl)),
   coreExecutable = fileURLToPath(new URL('../../bin/wowbagger.js', import.meta.url)),
+  workspaceConfigUrl,
   argv = process.argv,
 }) {
   const [operation] = argv.slice(2);
@@ -194,6 +255,8 @@ export async function runAdapterEntrypoint({
   }
 
   if (operation === 'invoke') {
+    const workspaceRoots = await loadWorkspaceRoots(workspaceConfigUrl);
+    const workspaces = await invocationWorkspaces(incoming.request, workspaceRoots);
     const response = await invokeAdapter(incoming.bytes, {
       max_request_bytes: dynamic.limits.max_request_bytes,
       describe_request: {
@@ -206,7 +269,7 @@ export async function runAdapterEntrypoint({
       core_probe: coreProbe,
       platform: process.platform,
       package_root: packageRoot,
-      workspaces: {},
+      workspaces,
       launch: (request) => launchCoreProcess({ executable: coreExecutable, ...request }),
     });
     await writeBootstrapResponse(process.stdout, response);

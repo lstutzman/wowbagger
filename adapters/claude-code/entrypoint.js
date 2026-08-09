@@ -11,6 +11,9 @@ await runAdapterEntrypoint({
     ? pathToFileURL(path.resolve(process.env.WOWBAGGER_ADAPTER_MANIFEST_PATH))
     : new URL('./wowbagger-adapter.json', import.meta.url),
   packageRoot: fileURLToPath(new URL('../..', import.meta.url)),
+  workspaceConfigUrl: process.env.WOWBAGGER_ADAPTER_WORKSPACES_PATH
+    ? pathToFileURL(path.resolve(process.env.WOWBAGGER_ADAPTER_WORKSPACES_PATH))
+    : undefined,
   dynamicResult: standardDynamicResult,
 });
 process.exit(0);
