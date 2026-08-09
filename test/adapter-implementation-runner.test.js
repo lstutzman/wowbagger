@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -558,7 +559,13 @@ async function statusAfterEditing(t, name, keepAssertion, artifact, edit) {
   const { root } = await isolateCase(t, name, keepAssertion);
   const file = path.join(root, name, artifact);
   const content = JSON.parse(await readFile(file, 'utf8'));
-  await writeFile(file, JSON.stringify(edit(content) ?? content));
+  const editedBytes = Buffer.from(JSON.stringify(edit(content) ?? content));
+  await writeFile(file, editedBytes);
+  const manifestFile = path.join(root, name, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestFile, 'utf8'));
+  manifest.artifacts.find(({ path: artifactPath }) => artifactPath === artifact).sha256
+    = `sha256:${createHash('sha256').update(editedBytes).digest('hex')}`;
+  await writeFile(manifestFile, JSON.stringify(manifest));
   const result = await runImplementationVectors({ fixtureRoot: root, platform: 'darwin' });
   return result.cases[0].status;
 }
