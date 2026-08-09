@@ -202,3 +202,101 @@ The delta must define a separate recovery operation or define envelopes that dis
 - Whether `multi_item_atomicity: true` means storage-level visibility or only visibility to version 2 cooperative readers. Direct Markdown and Git readers do observe partial publication.
 
 [DONE] Completed the read-only adversarial review.
+
+---
+
+## Part 3 — recommendation (GPT-5.6 Sol, max reasoning effort)
+
+**This overturns item 44's recorded choice.** It recommends not building
+multi-item atomicity at all, and instead changing what `depends_on` means so a
+done transition stays a single-item write. Awaiting the maintainer's decision;
+item 44's decision record still says otherwise.
+
+166,211
+## Recommendation
+
+Do not build multi-item atomicity for item 44. Overturn the maintainer’s choice. Publish schema version 2, where `depends_on` records declared prerequisites, not only current blockers. A reference to a `done` item is satisfied history and stays in `depends_on`; it does not move automatically to `related`. A done transition then remains a single-item CAS. Keep `multi_item_atomicity: false`.
+
+## Why this and not the others
+
+Atomicity is correct only if the current eager-cleanup invariant remains mandatory. Its real cost is a transaction journal, physical-ledger binding, v1 lock compatibility, cooperative snapshot reads, recovery commands, and failure reporting. Even then, direct Markdown and Git readers still observe partial publication. That is too much machinery for denormalizing one relation.
+
+Finding 4 changes the decision. Appending the ID to `related` exists to preserve history. Leaving it in `depends_on` preserves stronger history: it says that the relation was specifically a prerequisite. The current cleanup destroys that type information.
+
+This is a breaking reader change. `ready`, validation, transition preconditions, adapters, and every external reader that interprets non-empty `depends_on` as blocked must change. That cost is finite and explicit. The project is private, pre-alpha, and its specification is still draft. This is the correct time to fix the model.
+
+Lazy cleanup is worse. Either the interim ledger violates the current schema, or readers must already understand satisfied references. Once readers do that, cleanup has no correctness purpose. A dependent might never transition, so no reliable reconciler exists.
+
+A useful fourth framing applies to genuine policy choices such as waiver, replacement, and reparenting: commit each choice on the item that owns the relation before retrying the target transition. Each decision is independently valid. It needs a single-item relation command, not a multi-item transaction.
+
+## Item 45’s resolution
+
+`limits.cross_worktree_coordination: true` is wrong for mutation.
+
+The settling clause is mutation-contract section 1: the backend coordinates cooperative writers using the same ledger directory in one working copy and “does not coordinate … worktrees.” ADR 0003 makes the same accepted decision. The adapter contract then forbids an adapter from elevating that local capability.
+
+Contract v2 must advertise local mutation scope as `same-working-copy-cooperative-writers` and set cross-worktree mutation coordination to `false`. Advisory claims may remain visible through the Git common directory, but their scope must be advertised under `operations.work_claim`. Claim visibility is not mutation coordination.
+
+## The design
+
+- Introduce `schema_version: 2`. Do not reinterpret schema version 1 silently.
+- Define `depends_on` as declared, unwaived prerequisite IDs.
+- A dependency is satisfied exactly when its referenced item has status `done`.
+- `triage`, `backlog`, and `in-progress` dependencies remain live blockers.
+- Keep the current killed and archived disposition rules in the first cut.
+- `related` remains non-blocking. Completion does not copy satisfied prerequisites into it.
+- A backlog task is ready when every `depends_on` target is `done`, plus the existing snooze, kind, status, and ancestor rules.
+- An item may become done when every one of its own dependencies is `done`. Its list need not be empty.
+- Validation permits references to done items in `depends_on`.
+- Validation permits a done item to retain dependencies only when every target is done.
+- Keep unresolved-reference, duplicate, overlap, self-reference, and cycle checks.
+- Remove `dependent-cleanup` from done-transition blockers.
+- A done transition changes only the target’s status, dates, decision, and epic rollup when applicable.
+
+The linearization point remains the target file’s same-directory atomic replacement. The backend reports `committed` only after exact-byte read-back succeeds.
+
+Before publication, failure is `unchanged`. After an attempted replacement, exact after-bytes mean `committed`, exact before-bytes mean `unchanged`, and any third or unreadable result means `unknown`. A process crash without an envelope requires inspection by target ID and revision.
+
+Keep exact-byte SHA-256 CAS on the target. Keep the current ledger-local lock path:
+
+`<ledger>/.wowbagger-locks/<item-id>.lock`
+
+Use the existing closure loop and ascending-ID order. Lock the target and referenced dependencies needed to prove that all prerequisites are done. Create and any future relation operation must continue to lock every referenced dependency, so a cooperative writer cannot add an edge through the transition.
+
+Publish core mutation contract version 2 and adapter contract version 2. Advertise:
+
+- `transition.write_scope: "single-item"`
+- `transition.cas_scope: "exact-byte-sha256"`
+- `limits.multi_item_atomicity: false`
+- cross-worktree mutation coordination `false`
+
+Do not add `atomic_scope`, transaction `STATE`, manifests, journals, or transaction recovery.
+
+The first cut includes schema, validation, ready selection, done transition, capabilities, adapter/oracle changes, fixtures, and ledger migration. It leaves killed/archived dependent disposition and epic child disposition refused until a separate owner-local relation-operation design lands.
+
+Require a quiesced, audited migration from schema 1 to schema 2. Core v2 must reject mixed-version ledgers for normal operations. Core v1 already rejects schema version 2, so old processes fail closed after migration.
+
+## How it survives the five findings
+
+**1. Wrong-ledger binding.** There is no shared mutation coordinator or commit marker. Locks, temporary files, and publication belong to one physical ledger root. A logical claim namespace never selects mutation files, so worktree B cannot accept or recover worktree A’s transition.
+
+**2. Version-1 writers.** Version 2 keeps the exact v1 ledger-local item locks. Overlapping writers therefore contend on the same path. A v1 core rejects schema-2 ledgers during complete validation. The migration must quiesce already-running v1 processes. No multi-item marker exists for an old writer to falsify.
+
+**3. Power-loss corruption.** The contract continues to state `power_loss_guarantee: none`. Directory sync remains best effort. Power loss can leave plausible old or new bytes without surviving evidence, and the backend cannot always detect that fact. This design makes no stronger claim.
+
+**4. Dropped history.** Completion drops nothing. The satisfied ID stays in `depends_on` as typed dependency history. A future explicit waiver or replacement must remove the old ID and append it to `related` when absent.
+
+**5. Dishonest recovery reporting.** A transition never recovers an earlier operation. `unchanged` still means this invocation modified no Markdown item. Existing audited manual recovery remains separate. Any future automated recovery must be its own command and report whether it changed Markdown bytes.
+
+## What it cannot promise
+
+It cannot protect against editors, Git operations, old scripts, or other writers that ignore locks and schema versions. It cannot coordinate mutations across worktrees, clones, machines, or filesystems. It cannot make directory sync durable after power loss. Non-cooperating readers may reject schema 2 or misclassify satisfied dependencies. The one-time schema migration is not atomically visible and therefore requires a maintenance window.
+
+## What must be decided before implementation starts
+
+- Will the maintainer approve a breaking schema-2 migration? If not, preserving schema 1 requires the corrected multi-item transaction design.
+- Must satisfied dependencies remain permanently in `depends_on`? The recommendation says yes; any compact “live blockers” view should be derived.
+- Which external consumers and worktrees must upgrade with the schema migration?
+- Should the owner-local relation command ship in the same release, or remain a follow-up for waiver, replacement, reparenting, and relation correction?
+
+[DONE] Recommended the schema-first, single-item design for item 44.
