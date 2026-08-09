@@ -1,9 +1,13 @@
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from './bootstrap.js';
 import { CORE_COMMAND_ORDER } from './core-probe.js';
 import { describeAdapter } from './describe.js';
+import { invokeAdapter } from './invoke.js';
 import { validateAdapterManifest } from './manifest.js';
+import { isSafeLogicalPath } from './paths.js';
 import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
 // The launch discipline every current adapter package shares: argv-array
@@ -12,7 +16,16 @@ import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 // still owns its declaration — it calls this factory and may override any
 // member before returning, so a harness whose guarantees genuinely differ
 // diverges deliberately instead of by missed edit.
-export function standardDynamicResult(manifest) {
+const STANDARD_LIMITS = Object.freeze({
+  max_request_bytes: 65536,
+  max_context_bytes: 65536,
+  max_stdout_bytes: 1048576,
+  max_stderr_bytes: 65536,
+  max_timeout_ms: 30000,
+});
+const PROBE_LIVE_CORE = Symbol('probe-live-core');
+
+export function standardDynamicResult(manifest, coreProbe) {
   return {
     ok: true,
     bootstrap_wire_version: 1,
@@ -47,16 +60,100 @@ export function standardDynamicResult(manifest) {
       trusted_approval: { supported: true, sources: ['consumer'] },
       integration_mechanisms: { hooks: false, slash_commands: false, mcp: false, daemon: false },
     },
-    optional_features: { claims: false, policy: false },
-    limits: {
-      max_request_bytes: 65536,
-      max_context_bytes: 65536,
-      max_stdout_bytes: 1048576,
-      max_stderr_bytes: 65536,
-      max_timeout_ms: 30000,
-    },
+    optional_features: { claims: coreProbe?.result?.operations?.work_claim?.supported === true, policy: false },
+    limits: { ...STANDARD_LIMITS },
     platforms: manifest.platforms,
   };
+}
+
+function appendBounded(chunks, state, chunk, limit, terminate) {
+  const remaining = Math.max(0, limit - state.length);
+  if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+  state.length += chunk.length;
+  if (state.length > limit && !state.exceeded) {
+    state.exceeded = true;
+    terminate();
+  }
+}
+
+export function launchCoreProcess({ executable, argv, cwd, input, limits }) {
+  return new Promise((resolve) => {
+    const detached = process.platform !== 'win32';
+    const child = spawn(process.execPath, [executable, ...argv], {
+      cwd,
+      detached,
+      shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    const stdoutState = { length: 0, exceeded: false };
+    const stderrState = { length: 0, exceeded: false };
+    let started = false;
+    let spawnError = false;
+    let timedOut = false;
+
+    const terminate = () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      try {
+        if (detached && child.pid) process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminate();
+    }, limits.timeout_ms);
+
+    child.once('spawn', () => {
+      started = true;
+      child.stdin.end(input);
+    });
+    child.once('error', () => { spawnError = true; });
+    child.stdout.on('data', (chunk) => {
+      appendBounded(stdoutChunks, stdoutState, chunk, limits.stdout_bytes, terminate);
+    });
+    child.stderr.on('data', (chunk) => {
+      appendBounded(stderrChunks, stderrState, chunk, limits.stderr_bytes, terminate);
+    });
+    child.once('close', (code, signal) => {
+      clearTimeout(timer);
+      const outputExceeded = stdoutState.exceeded || stderrState.exceeded;
+      const deliberatelyTerminated = outputExceeded || timedOut;
+      resolve({
+        started: started && !spawnError,
+        process_tree_contained: true,
+        orphaned: false,
+        exit_code: deliberatelyTerminated || !Number.isInteger(code) ? null : code,
+        signal: deliberatelyTerminated ? null : signal,
+        timed_out: timedOut,
+        stdout_complete: !stdoutState.exceeded,
+        stderr_complete: !stderrState.exceeded,
+        stdout_base64: Buffer.concat(stdoutChunks).toString('base64'),
+        stderr_base64: Buffer.concat(stderrChunks).toString('base64'),
+      });
+    });
+  });
+}
+
+async function probeCore(coreExecutable, packageRoot) {
+  const observation = await launchCoreProcess({
+    executable: coreExecutable,
+    argv: ['capabilities', '--json'],
+    cwd: packageRoot,
+    input: Buffer.alloc(0),
+    limits: {
+      stdout_bytes: STANDARD_LIMITS.max_stdout_bytes,
+      stderr_bytes: STANDARD_LIMITS.max_stderr_bytes,
+      timeout_ms: STANDARD_LIMITS.max_timeout_ms,
+    },
+  });
+  if (!observation.started || observation.exit_code !== 0
+    || !observation.stdout_complete || !observation.stderr_complete) return undefined;
+  const parsed = parseJsonRequest(Buffer.from(observation.stdout_base64, 'base64'));
+  return parsed.issues.length === 0 ? normalizeJsonValue(parsed.value) : undefined;
 }
 
 // The installed package's own manifest file is read as bytes and parsed
@@ -82,11 +179,78 @@ async function loadManifest(manifestUrl) {
   return normalizeJsonValue(parsed.value);
 }
 
+async function loadWorkspaceRoots(workspaceConfigUrl) {
+  if (!workspaceConfigUrl) return Object.create(null);
+  let parsed;
+  try {
+    parsed = parseJsonRequest(await readFile(fileURLToPath(workspaceConfigUrl)));
+  } catch {
+    return Object.create(null);
+  }
+  if (parsed.issues.length > 0) return Object.create(null);
+  const roots = normalizeJsonValue(parsed.value);
+  if (roots === null || typeof roots !== 'object' || Array.isArray(roots)) {
+    return Object.create(null);
+  }
+  return roots;
+}
+
+function logicalComponents(logicalPath) {
+  if (!isSafeLogicalPath(logicalPath) || logicalPath === '.') return [];
+  const segments = logicalPath.split('/');
+  return segments.map((_, index) => segments.slice(0, index + 1).join('/'));
+}
+
+async function pathSnapshot(absolutePath) {
+  try {
+    const stats = await lstat(absolutePath);
+    const kind = stats.isDirectory()
+      ? 'directory'
+      : stats.isSymbolicLink() ? 'symbolic-link' : stats.isFile() ? 'regular-file' : 'special';
+    return { kind, identity: { dev: stats.dev, ino: stats.ino } };
+  } catch {
+    return { kind: 'missing', identity: 'missing' };
+  }
+}
+
+async function captureWorkspace(root, request) {
+  const snapshot = { '.': await pathSnapshot(root) };
+  const components = new Set([
+    ...logicalComponents(request.workspace.cwd ?? '.'),
+    ...logicalComponents(request.core_request.ledger),
+  ]);
+  for (const component of components) {
+    snapshot[component] = await pathSnapshot(path.join(root, ...component.split('/')));
+  }
+  return snapshot;
+}
+
+async function invocationWorkspaces(request, workspaceRoots) {
+  if (request?.core_request?.command === 'capabilities' || !request?.workspace) return {};
+  const root = workspaceRoots[request.workspace.workspace_id];
+  if (typeof root !== 'string' || !path.isAbsolute(root)) return {};
+  const approvedRoot = path.resolve(root);
+  const before = await captureWorkspace(approvedRoot, request);
+  const after = await captureWorkspace(approvedRoot, request);
+  return {
+    [request.workspace.workspace_id]: { root: approvedRoot, before, after },
+  };
+}
+
 // The shared §3.3 entrypoint flow every adapter package runs: load and
 // validate its own manifest, read one bootstrap request, answer describe or
 // refuse. Each adapter supplies only its manifest location and its honest
 // host declaration through `dynamicResult(manifest)`.
-export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = process.argv }) {
+export async function runAdapterEntrypoint({
+  manifestUrl,
+  dynamicResult,
+  packageRoot = fileURLToPath(new URL('../../', manifestUrl)),
+  coreExecutable = fileURLToPath(new URL('../../bin/wowbagger.js', import.meta.url)),
+  workspaceConfigUrl,
+  coreProbe: suppliedCoreProbe = PROBE_LIVE_CORE,
+  launch: suppliedLaunch,
+  argv = process.argv,
+}) {
   const [operation] = argv.slice(2);
   const manifest = await loadManifest(manifestUrl);
 
@@ -97,18 +261,60 @@ export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = 
     return;
   }
 
-  const incoming = await readBootstrapRequest(process.stdin);
+  const coreProbe = suppliedCoreProbe === PROBE_LIVE_CORE
+    ? await probeCore(coreExecutable, packageRoot)
+    : suppliedCoreProbe;
+  const dynamic = dynamicResult(manifest, coreProbe);
+  const incoming = await readBootstrapRequest(process.stdin, operation === 'invoke' ? {
+    maxBytes: dynamic.limits.max_request_bytes,
+    errorCode: 'invalid-invocation',
+  } : undefined);
   if (!incoming.ok) {
-    await writeBootstrapResponse(process.stdout, { ok: false, error: { code: incoming.error_code } });
+    const response = operation === 'invoke'
+      ? {
+          ok: false,
+          adapter_contract_version: 1,
+          request_id: null,
+          error: {
+            code: incoming.error_code,
+            message: 'The adapter invocation is invalid.',
+            details: incoming.detail ?? { member: 'request_json' },
+          },
+        }
+      : { ok: false, error: { code: incoming.error_code } };
+    await writeBootstrapResponse(process.stdout, response);
     return;
   }
 
   if (operation === 'describe') {
-    const described = describeAdapter(incoming.request, manifest, dynamicResult(manifest));
+    const described = describeAdapter(incoming.request, manifest, dynamic);
     await writeBootstrapResponse(
       process.stdout,
       described.ok ? described.result : { ok: false, error: { code: described.error_code } },
     );
+    return;
+  }
+
+  if (operation === 'invoke') {
+    const workspaceRoots = await loadWorkspaceRoots(workspaceConfigUrl);
+    const workspaces = await invocationWorkspaces(incoming.request, workspaceRoots);
+    const response = await invokeAdapter(incoming.bytes, {
+      max_request_bytes: dynamic.limits.max_request_bytes,
+      describe_request: {
+        bootstrap_wire_version: 1,
+        supported_adapter_contract_versions: [1],
+        request_id: 'entrypoint-invoke-describe',
+      },
+      manifest,
+      dynamic,
+      core_probe: coreProbe,
+      platform: process.platform,
+      package_root: packageRoot,
+      workspaces,
+      launch: suppliedLaunch
+        ?? ((request) => launchCoreProcess({ executable: coreExecutable, ...request })),
+    });
+    await writeBootstrapResponse(process.stdout, response);
     return;
   }
 

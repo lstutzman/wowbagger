@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { readBootstrapRequest } from '../src/adapter/bootstrap.js';
+import { launchCoreProcess } from '../src/adapter/entrypoint-main.js';
 
 const entrypoint = fileURLToPath(new URL('../adapters/claude-code/entrypoint.js', import.meta.url));
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -18,9 +21,9 @@ const validRequest = JSON.stringify({
 // Spawns `adapters/claude-code/entrypoint.js` for real (never calling its
 // exported functions directly) so the wire assertions exercise the actual
 // process boundary: real stdin, real stdout, real exit code.
-function spawnEntrypoint(args, stdinInput) {
+function spawnEntrypoint(args, stdinInput, { env = process.env } = {}) {
   return new Promise((resolve, reject) => {
-    const child = execFile(process.execPath, [entrypoint, ...args], { encoding: 'buffer' });
+    const child = execFile(process.execPath, [entrypoint, ...args], { encoding: 'buffer', env });
     let stdout = Buffer.alloc(0);
     child.stdout.on('data', (chunk) => { stdout = Buffer.concat([stdout, chunk]); });
     child.on('error', reject);
@@ -31,6 +34,34 @@ function spawnEntrypoint(args, stdinInput) {
       child.stdin.end(stdinInput);
     }
   });
+}
+
+function execFileBytes(file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { ...options, encoding: 'buffer' }, (error, stdout, stderr) => {
+      if (error) reject(error);
+      else resolve({ stdout, stderr });
+    });
+  });
+}
+
+async function candidateEnvironment(t, workspaces) {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-candidate-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const candidateManifestPath = path.join(temporaryDirectory, 'wowbagger-adapter.json');
+  const shippedManifest = JSON.parse(await readFile(
+    path.join(projectRoot, 'adapters', 'claude-code', 'wowbagger-adapter.json'),
+    'utf8',
+  ));
+  shippedManifest.platforms[process.platform] = 'supported';
+  await writeFile(candidateManifestPath, JSON.stringify(shippedManifest));
+  const env = { ...process.env, WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath };
+  if (workspaces) {
+    const workspaceConfigPath = path.join(temporaryDirectory, 'workspaces.json');
+    await writeFile(workspaceConfigPath, JSON.stringify(workspaces));
+    env.WOWBAGGER_ADAPTER_WORKSPACES_PATH = workspaceConfigPath;
+  }
+  return env;
 }
 
 // Asserts the §3.3 wire shape: exactly one JSON object, followed by exactly
@@ -45,6 +76,9 @@ function assertSingleJsonObject(stdout) {
 
 test('answers describe with exactly one JSON object and exits zero', async () => {
   const { code, stdout } = await spawnEntrypoint(['describe'], validRequest);
+  const baseline = await execFileBytes(process.execPath, [
+    path.join(projectRoot, 'bin', 'wowbagger.js'), 'capabilities', '--json',
+  ], { cwd: projectRoot });
   assert.equal(code, 0);
   const response = assertSingleJsonObject(stdout);
   assert.equal(response.ok, true);
@@ -52,8 +86,194 @@ test('answers describe with exactly one JSON object and exits zero', async () =>
   assert.equal(response.host.command_execution.shell, false);
   assert.equal(response.host.integration_mechanisms.mcp, false);
   assert.equal(response.host.integration_mechanisms.daemon, false);
-  assert.equal(response.optional_features.claims, false);
+  assert.equal(
+    response.optional_features.claims,
+    JSON.parse(baseline.stdout).result.operations.work_claim.supported,
+  );
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
+});
+
+test('does not accept a runtime scenario through the production environment', async (t) => {
+  const env = await candidateEnvironment(t);
+  const runtimeConfigPath = path.join(path.dirname(env.WOWBAGGER_ADAPTER_MANIFEST_PATH), 'runtime.json');
+  const apiOnly = JSON.parse(await readFile(
+    path.join(projectRoot, 'spec', 'fixtures', 'adapters', '01-capability-separation', 'adapter-capabilities.json'),
+    'utf8',
+  ));
+  await writeFile(runtimeConfigPath, JSON.stringify({ dynamic_result: apiOnly, core_probe: null }));
+  env.WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH = runtimeConfigPath;
+
+  const { code, stdout } = await spawnEntrypoint(['describe'], validRequest, { env });
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, true);
+  assert.equal(response.adapter_id, 'dev.wowbagger.adapter.claude-code');
+});
+
+test('answers invoke through the bootstrap wire and refuses a future contract version', async () => {
+  const request = JSON.stringify({
+    adapter_contract_version: 2,
+    request_id: 'wire-invoke-version-0001',
+    core_request: { command: 'capabilities' },
+    instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+    handoff_carrier: null,
+    limits: { context_bytes: 0, stdout_bytes: 4096, stderr_bytes: 1024, timeout_ms: 1000 },
+  });
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], request);
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.error.code, 'adapter-contract-selection-mismatch');
+  assert.equal(response.request_id, 'wire-invoke-version-0001');
+});
+
+test('forwards capabilities through the shipped entrypoint and real core', async (t) => {
+  const env = await candidateEnvironment(t);
+  const request = JSON.stringify({
+    adapter_contract_version: 1,
+    request_id: 'wire-capabilities-real-core-0001',
+    core_request: { command: 'capabilities' },
+    instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+    handoff_carrier: null,
+    limits: { context_bytes: 0, stdout_bytes: 65536, stderr_bytes: 1024, timeout_ms: 1000 },
+  });
+  const baseline = await execFileBytes(process.execPath, [
+    path.join(projectRoot, 'bin', 'wowbagger.js'), 'capabilities', '--json',
+  ], { cwd: projectRoot });
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], request, {
+    env,
+  });
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, true);
+  assert.equal(response.result.core_exit_code, 0);
+  assert.deepEqual(Buffer.from(response.result.stdout.data, 'base64'), baseline.stdout);
+  assert.deepEqual(Buffer.from(response.result.stderr.data, 'base64'), baseline.stderr);
+});
+
+test('resolves an approved workspace and forwards ready through the real core', async (t) => {
+  const env = await candidateEnvironment(t, {
+    'fixture-ready-workspace': path.join(projectRoot, 'spec', 'fixtures', 'ready-selection'),
+  });
+  const invocation = await readFile(
+    path.join(projectRoot, 'spec', 'fixtures', 'adapters', '03-ready-forwarding', 'invocation.json'),
+  );
+  const expected = JSON.parse(await readFile(
+    path.join(projectRoot, 'spec', 'fixtures', 'adapters', '03-ready-forwarding', 'expected-adapter-result.json'),
+    'utf8',
+  ));
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], invocation, {
+    env,
+  });
+
+  assert.equal(code, 0);
+  assert.deepEqual(assertSingleJsonObject(stdout), expected);
+});
+
+test('the core launcher enforces stream byte limits while retaining raw bytes', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-launch-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const launchWriter = async (stream, bytes) => {
+    const executable = path.join(temporaryDirectory, `write-${stream}.js`);
+    await writeFile(executable, `process.${stream}.write(Buffer.from(${JSON.stringify(bytes)}));\n`);
+    return launchCoreProcess({
+      executable,
+      argv: [],
+      cwd: temporaryDirectory,
+      input: Buffer.alloc(0),
+      limits: { stdout_bytes: 3, stderr_bytes: 3, timeout_ms: 1000 },
+    });
+  };
+
+  const stdout = await launchWriter('stdout', [0x00, 0xff, 0x41, 0x42]);
+  assert.equal(stdout.started, true);
+  assert.equal(stdout.stdout_complete, false);
+  assert.deepEqual(Buffer.from(stdout.stdout_base64, 'base64'), Buffer.from([0x00, 0xff, 0x41]));
+
+  const stderr = await launchWriter('stderr', [0xfe, 0x42, 0x43, 0x44]);
+  assert.equal(stderr.started, true);
+  assert.equal(stderr.stderr_complete, false);
+  assert.deepEqual(Buffer.from(stderr.stderr_base64, 'base64'), Buffer.from([0xfe, 0x42, 0x43]));
+});
+
+test('the core launcher enforces the advertised timeout', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-timeout-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const executable = path.join(temporaryDirectory, 'wait.js');
+  await writeFile(executable, 'setTimeout(() => process.exit(0), 150);\n');
+
+  const observation = await launchCoreProcess({
+    executable,
+    argv: [],
+    cwd: temporaryDirectory,
+    input: Buffer.alloc(0),
+    limits: { stdout_bytes: 3, stderr_bytes: 3, timeout_ms: 20 },
+  });
+
+  assert.equal(observation.started, true);
+  assert.equal(observation.timed_out, true);
+  assert.equal(observation.exit_code, null);
+  assert.equal(observation.signal, null);
+});
+
+test('bounds invoke bytes before parsing the request', async () => {
+  const oversizedInvalidJson = Buffer.alloc(65537, 0x20);
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], oversizedInvalidJson);
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.error.code, 'invalid-invocation');
+  assert.equal(response.error.details.reason, 'byte-limit-exceeded');
+  assert.equal(response.request_id, null);
+});
+
+test('accepts an invocation request at the exact byte limit', async () => {
+  const maxBytes = 65536;
+  const prefix = '{"padding":"';
+  const suffix = '"}';
+  const requestBytes = Buffer.from(prefix + 'x'.repeat(maxBytes - prefix.length - suffix.length) + suffix);
+
+  const result = await readBootstrapRequest(Readable.from([requestBytes]), {
+    maxBytes,
+    errorCode: 'invalid-invocation',
+  });
+
+  assert.equal(requestBytes.length, maxBytes);
+  assert.equal(result.ok, true);
+});
+
+test('stops consuming and releases an invocation stream after it crosses the byte limit', async () => {
+  let pulledBytes = 0;
+  let released = false;
+  async function* requestChunks() {
+    try {
+      for (const size of [4, 4, 4]) {
+        pulledBytes += size;
+        yield Buffer.alloc(size, 0x20);
+      }
+    } finally {
+      released = true;
+    }
+  }
+
+  const result = await readBootstrapRequest(requestChunks(), {
+    maxBytes: 5,
+    errorCode: 'invalid-invocation',
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    error_code: 'invalid-invocation',
+    detail: { member: 'request', reason: 'byte-limit-exceeded', limit_bytes: 5 },
+  });
+  assert.equal(pulledBytes, 8);
+  assert.equal(released, true);
 });
 
 test('refuses a request with trailing bytes and still exits zero', async () => {

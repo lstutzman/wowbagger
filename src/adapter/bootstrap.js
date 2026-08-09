@@ -2,20 +2,30 @@ import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
 // The bootstrap wire (contract section 3.3): exactly one strict UTF-8 JSON
 // object in on stdin, then stdin closes; exactly one strict JSON object plus
-// one LF out on stdout. `readBootstrapRequest` reads the whole stream to
-// bytes first — `parseJsonRequest` decodes UTF-8 fatally and reports
+// one LF out on stdout. `readBootstrapRequest` collects bounded stream
+// bytes before parsing — `parseJsonRequest` decodes UTF-8 fatally and reports
 // duplicate members and trailing bytes through `issues` rather than
 // throwing, so a non-empty `issues` array is the only acceptable-parse gate.
-export async function readBootstrapRequest(stream) {
+export async function readBootstrapRequest(stream, { maxBytes, errorCode = 'invalid-describe-request' } = {}) {
   const chunks = [];
+  let byteLength = 0;
   for await (const chunk of stream) {
+    byteLength += chunk.length;
+    if (maxBytes !== undefined && byteLength > maxBytes) {
+      return {
+        ok: false,
+        error_code: errorCode,
+        detail: { member: 'request', reason: 'byte-limit-exceeded', limit_bytes: maxBytes },
+      };
+    }
     chunks.push(chunk);
   }
-  const parsed = parseJsonRequest(Buffer.concat(chunks));
+  const bytes = Buffer.concat(chunks);
+  const parsed = parseJsonRequest(bytes);
   if (parsed.issues.length > 0) {
-    return { ok: false, error_code: 'invalid-describe-request' };
+    return { ok: false, error_code: errorCode };
   }
-  return { ok: true, request: normalizeJsonValue(parsed.value) };
+  return { ok: true, request: normalizeJsonValue(parsed.value), bytes };
 }
 
 // Writes exactly one JSON object plus one trailing LF, and nothing else.
