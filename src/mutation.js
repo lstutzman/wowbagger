@@ -899,8 +899,9 @@ function transitionPreconditions(target, ledger, request, edge) {
 
 function transitionBlockers(target, ledger, toStatus) {
   const blockers = [];
-  const terminalizing = ['done', 'killed', 'archived'].includes(toStatus);
-  if (terminalizing) {
+  const requiresDependentMutation = ['killed', 'archived'].includes(toStatus)
+    || (toStatus === 'done' && target.data.schema_version === 1);
+  if (requiresDependentMutation) {
     for (const item of ledger.items) {
       if (item.data.id === target.data.id || !(item.data.depends_on ?? []).includes(target.data.id)) {
         continue;

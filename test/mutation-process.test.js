@@ -165,6 +165,65 @@ test('a terminal lifecycle change requiring dependent cleanup remains a no-write
   });
 });
 
+test('a schema version 2 done transition changes only the target when a dependent names it', async () => {
+  const targetId = 'wb_01Q4JTHP40ZVEBN63PAGS11ZPW';
+  const dependentId = 'wb_01Q4M9YB0004HMASW9NF6YY093';
+  const target = `---
+schema_version: 2
+id: ${targetId}
+title: "Complete the prerequisite"
+kind: task
+status: in-progress
+created: 2030-01-15
+updated: 2030-01-15
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-15T13:00:00Z"
+depends_on: []
+related: []
+---
+`;
+  const dependent = `---
+schema_version: 2
+id: ${dependentId}
+title: "Keep declared prerequisite history"
+kind: task
+status: backlog
+created: 2030-01-16
+updated: 2030-01-16
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-16T14:00:00Z"
+depends_on: [${targetId}]
+related: []
+---
+`;
+
+  await withLedger({ [`${targetId}.md`]: target, [`${dependentId}.md`]: dependent }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: `sha256:${createHash('sha256').update(target).digest('hex')}`,
+      to_status: 'done',
+      date: '2030-01-17',
+      decision: {
+        summary: 'Complete the prerequisite.',
+        rationale: 'Dependents retain satisfied prerequisite history.',
+      },
+    }));
+
+    const result = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = parseOutput(result);
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'committed');
+    assert.equal(output.result.item.core.status, 'done');
+    assert.equal(await readFile(path.join(ledger, `${dependentId}.md`), 'utf8'), dependent);
+    assert.deepEqual(output.result.item.core.related, []);
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
 test('a schema version 2 done transition retains its satisfied prerequisites', async () => {
   const prerequisiteId = 'wb_01Q4G4Q3G0207EXVQEXVQEXVQE';
   const targetId = 'wb_01Q4JTHP40ZVEBN63PAGS11ZPW';
