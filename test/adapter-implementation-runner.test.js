@@ -192,6 +192,16 @@ test('exercises the shipped bootstrap process for every protocol case', async (t
   );
 });
 
+test('does not require the module.register API added after Node 20.0', async () => {
+  const runner = await readFile(
+    fileURLToPath(new URL('../spec/run-adapter-implementation.js', import.meta.url)),
+    'utf8',
+  );
+
+  assert.equal(runner.includes('adapter-conformance-register.js'), false);
+  assert.equal(runner.includes('--experimental-loader'), true);
+});
+
 test('fails closed on a corrupted artifact SHA-256', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
   manifest.artifacts = [{

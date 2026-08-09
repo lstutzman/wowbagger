@@ -26,7 +26,7 @@ import { sameJson } from '../src/adapter/schema-helpers.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
-const conformanceRegister = fileURLToPath(new URL('./adapter-conformance-register.js', import.meta.url));
+const conformanceLoader = fileURLToPath(new URL('./adapter-conformance-loader.js', import.meta.url));
 const ADAPTER_STDOUT_LIMIT = 2 * 1024 * 1024;
 const ADAPTER_STDERR_LIMIT = 64 * 1024;
 const ADAPTER_TIMEOUT_MS = 35000;
@@ -109,7 +109,7 @@ function parseBootstrapResponse(stdout, entrypoint) {
 async function spawnAdapterEntrypoint(entrypoint, operation, request, env, runtimeScenario) {
   return new Promise((resolve, reject) => {
     const nodeArguments = runtimeScenario
-      ? ['--import', conformanceRegister, entrypoint, operation]
+      ? ['--experimental-loader', conformanceLoader, entrypoint, operation]
       : [entrypoint, operation];
     const child = spawn(process.execPath, nodeArguments, {
       cwd: projectRoot,
