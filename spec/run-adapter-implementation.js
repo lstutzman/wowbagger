@@ -13,6 +13,7 @@ import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
+import { resolveInvocationPaths } from '../src/adapter/paths.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 
@@ -238,6 +239,84 @@ async function evaluatePlatformAssertion(directory, assertion) {
   };
 }
 
+async function evaluateInvocationPathAssertion(directory, assertion) {
+  if (assertion.type === 'path-refusal') {
+    const shape = await readStrictJson(path.join(directory, 'filesystem-shape.json'));
+    const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
+    const ledger = invocation.core_request.ledger;
+    const selected = shape.entries.find(({ path: entryPath }) => entryPath === ledger);
+    const snapshots = {
+      '.': { kind: 'directory', identity: 'workspace' },
+      [ledger]: { kind: selected?.kind ?? 'missing', identity: selected?.path ?? 'missing' },
+    };
+    const result = resolveInvocationPaths({
+      workspace_root: `/${shape.workspace_root}`,
+      cwd: invocation.workspace.cwd,
+      ledger,
+      before: snapshots,
+      after: structuredClone(snapshots),
+    });
+    return {
+      ok: result.error_code === 'path-rejected' && result.detail.kind === assertion.expect,
+      evidence: 'src/adapter/paths.js',
+      error_code: result.error_code,
+    };
+  }
+
+  const data = await readScenarios(directory);
+  if (assertion.type === 'path-race') {
+    const input = {
+      workspace_root: data.workspace_root,
+      cwd: data.cwd,
+      ledger: data.ledger,
+      before: data.before,
+      after: assertion.expect === 'root-anchored' ? data.before : data.after,
+    };
+    const result = resolveInvocationPaths(input);
+    const ok = assertion.expect === 'root-anchored'
+      ? result.ok === true && result.ledger === data.expected.ledger_argument
+      : result.error_code === data.expected.refusal
+        && result.detail.path_role === data.expected.path_role
+        && result.detail.component === data.expected.component;
+    return { ok, evidence: 'src/adapter/paths.js', error_code: result.error_code };
+  }
+  if (assertion.type === 'path-syntax') {
+    const scenario = findScenario(data.invalid_paths, assertion.scenario);
+    const snapshot = { '.': { kind: 'directory', identity: 'root-1' } };
+    const result = resolveInvocationPaths({
+      workspace_root: data.workspace_root,
+      cwd: scenario.path,
+      ledger: '.',
+      before: snapshot,
+      after: snapshot,
+    });
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: 'src/adapter/paths.js',
+      error_code: result.error_code,
+    };
+  }
+
+  const scenario = findScenario(data.snapshot_cases, assertion.scenario);
+  const before = structuredClone(data.before);
+  const after = structuredClone(data.before);
+  const snapshot = scenario.side === 'before' ? before : after;
+  if (scenario.operation === 'delete') delete snapshot[scenario.component].identity;
+  else snapshot[scenario.component].identity = scenario.identity;
+  const result = resolveInvocationPaths({
+    workspace_root: data.workspace_root,
+    cwd: data.cwd,
+    ledger: data.ledger,
+    before,
+    after,
+  });
+  return {
+    ok: result.error_code === scenario.expected,
+    evidence: 'src/adapter/paths.js',
+    error_code: result.error_code,
+  };
+}
+
 async function evaluateAssertion(directory, assertion) {
   switch (assertion.type) {
     case 'negotiation':
@@ -249,6 +328,11 @@ async function evaluateAssertion(directory, assertion) {
       return evaluateCapabilityAssertion(directory, assertion);
     case 'platform-status':
       return evaluatePlatformAssertion(directory, assertion);
+    case 'path-refusal':
+    case 'path-race':
+    case 'path-syntax':
+    case 'snapshot-identity':
+      return evaluateInvocationPathAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }

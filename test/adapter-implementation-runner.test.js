@@ -186,6 +186,16 @@ test('evaluates the negotiation cases against the shipped engine', async () => {
   assert.ok(negotiation.observed_error_codes.includes('unsupported-adapter-contract-version'));
 });
 
+test('evaluates guarded invocation paths against the shipped engine', async () => {
+  const result = await runImplementationVectors({ platform: process.platform });
+  const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
+
+  assert.equal(byName.get('path-no-follow').status, 'pass');
+  assert.equal(byName.get('nested-cwd-path-race').status, 'pass');
+  assert.ok(byName.get('nested-cwd-path-race').assertion_evidence
+    .every(({ evidence }) => evidence === 'src/adapter/paths.js'));
+});
+
 test('labels each evidenced assertion with the shipped module that produced it', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
@@ -219,7 +229,7 @@ test('holds unfinished Plan 2 and Plan 3 assertions at unimplemented', async () 
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 80);
+  assert.equal(evidenced.length, 98);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });
