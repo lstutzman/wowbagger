@@ -205,6 +205,45 @@ test('derives executed assertions from completed evaluations and rejects a skip'
   );
 });
 
+test('fails closed when a core-baseline assertion declares the wrong exit code', async (t) => {
+  const { root } = await isolateCase(t, '03-ready-forwarding', ({ type }) => type === 'core-baseline');
+  const manifestPath = path.join(root, '03-ready-forwarding', 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.assertions[0].exit_code = 99;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: process.platform }),
+    /core baseline exit code: expected 99, received 0/,
+  );
+});
+
+test('fails closed when a core-baseline assertion declares the wrong stderr length', async (t) => {
+  const { root } = await isolateCase(t, '03-ready-forwarding', ({ type }) => type === 'core-baseline');
+  const manifestPath = path.join(root, '03-ready-forwarding', 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.assertions[0].stderr_bytes = 1;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: process.platform }),
+    /core baseline stderr bytes: expected 1, received 0/,
+  );
+});
+
+test('fails closed when a core-baseline assertion names the wrong stdout artifact', async (t) => {
+  const { root } = await isolateCase(t, '03-ready-forwarding', ({ type }) => type === 'core-baseline');
+  const manifestPath = path.join(root, '03-ready-forwarding', 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.assertions[0].stdout_artifact = 'invocation.json';
+  await writeFile(manifestPath, JSON.stringify(manifest));
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot: root, platform: process.platform }),
+    /core baseline stdout differs from invocation\.json/,
+  );
+});
+
 test('evaluates the negotiation cases against the shipped engine', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
 
