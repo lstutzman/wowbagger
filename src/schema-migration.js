@@ -48,6 +48,12 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
       'The ledger contains schema versions 1 and 2. This is a partial migration state. Restore the complete ledger from the pre-migration backup or Git, validate schema version 1, then rerun the dry run.',
     );
   }
+  if (inputValidation.valid && ledger.items.length === 0) {
+    throw new SchemaMigrationError(
+      'empty-ledger',
+      'An empty ledger has no schema_version stamp to migrate and still defaults to schema version 1. No files were changed.',
+    );
+  }
   if (inputValidation.valid && ledger.items.length > 0
     && schemaVersions.size === 1 && schemaVersions.has(2)) {
     throw new SchemaMigrationError(
