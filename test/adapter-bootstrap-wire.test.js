@@ -74,6 +74,18 @@ test('answers invoke through the bootstrap wire and refuses a future contract ve
   assert.equal(response.request_id, 'wire-invoke-version-0001');
 });
 
+test('bounds invoke bytes before parsing the request', async () => {
+  const oversizedInvalidJson = Buffer.alloc(65537, 0x20);
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], oversizedInvalidJson);
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.error.code, 'invalid-invocation');
+  assert.equal(response.error.details.reason, 'byte-limit-exceeded');
+  assert.equal(response.request_id, null);
+});
+
 test('refuses a request with trailing bytes and still exits zero', async () => {
   const { code, stdout } = await spawnEntrypoint(['describe'], '{"bootstrap_wire_version":1}{"extra":true}');
   assert.equal(code, 0);

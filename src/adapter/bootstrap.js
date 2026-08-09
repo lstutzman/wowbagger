@@ -6,15 +6,24 @@ import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 // bytes first — `parseJsonRequest` decodes UTF-8 fatally and reports
 // duplicate members and trailing bytes through `issues` rather than
 // throwing, so a non-empty `issues` array is the only acceptable-parse gate.
-export async function readBootstrapRequest(stream) {
+export async function readBootstrapRequest(stream, { maxBytes, errorCode = 'invalid-describe-request' } = {}) {
   const chunks = [];
+  let byteLength = 0;
   for await (const chunk of stream) {
     chunks.push(chunk);
+    byteLength += chunk.length;
+  }
+  if (maxBytes !== undefined && byteLength > maxBytes) {
+    return {
+      ok: false,
+      error_code: errorCode,
+      detail: { member: 'request', reason: 'byte-limit-exceeded', limit_bytes: maxBytes },
+    };
   }
   const bytes = Buffer.concat(chunks);
   const parsed = parseJsonRequest(bytes);
   if (parsed.issues.length > 0) {
-    return { ok: false, error_code: 'invalid-describe-request' };
+    return { ok: false, error_code: errorCode };
   }
   return { ok: true, request: normalizeJsonValue(parsed.value), bytes };
 }

@@ -98,14 +98,30 @@ export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = 
     return;
   }
 
-  const incoming = await readBootstrapRequest(process.stdin);
+  const dynamic = dynamicResult(manifest);
+  const incoming = await readBootstrapRequest(process.stdin, operation === 'invoke' ? {
+    maxBytes: dynamic.limits.max_request_bytes,
+    errorCode: 'invalid-invocation',
+  } : undefined);
   if (!incoming.ok) {
-    await writeBootstrapResponse(process.stdout, { ok: false, error: { code: incoming.error_code } });
+    const response = operation === 'invoke'
+      ? {
+          ok: false,
+          adapter_contract_version: 1,
+          request_id: null,
+          error: {
+            code: incoming.error_code,
+            message: 'The adapter invocation is invalid.',
+            details: incoming.detail ?? { member: 'request_json' },
+          },
+        }
+      : { ok: false, error: { code: incoming.error_code } };
+    await writeBootstrapResponse(process.stdout, response);
     return;
   }
 
   if (operation === 'describe') {
-    const described = describeAdapter(incoming.request, manifest, dynamicResult(manifest));
+    const described = describeAdapter(incoming.request, manifest, dynamic);
     await writeBootstrapResponse(
       process.stdout,
       described.ok ? described.result : { ok: false, error: { code: described.error_code } },
@@ -114,7 +130,6 @@ export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = 
   }
 
   if (operation === 'invoke') {
-    const dynamic = dynamicResult(manifest);
     const response = await invokeAdapter(incoming.bytes, {
       max_request_bytes: dynamic.limits.max_request_bytes,
       describe_request: {
