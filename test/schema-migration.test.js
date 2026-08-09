@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { migrateSchema2 } from '../src/schema-migration.js';
 import { withLedger } from './support.js';
 
 const migrationScript = fileURLToPath(new URL('../scripts/migrate-schema-2.js', import.meta.url));
@@ -16,6 +17,7 @@ const BACKLOG_ID = 'wb_01KE1VN3G0HV9ZDBB8BEASXBBG';
 const DEPENDENT_ID = 'wb_01KDZ98CG0YH769STZ754EKXSZ';
 const doneSource = readFileSync(new URL('01-foundation.md', fixtureRoot), 'utf8');
 const backlogSource = readFileSync(new URL('02-alpha.md', fixtureRoot), 'utf8');
+const standaloneBacklogSource = backlogSource.replace(`related: [${DONE_ID}]`, 'related: []');
 
 test('dry run reports every schema stamp and writes nothing by default', async () => {
   await withLedger({
@@ -179,6 +181,35 @@ test('refuses migration while any item lock is held', async () => {
     assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
     assert.equal(after.ino, before.ino);
     assert.equal(await readFile(itemPath, 'utf8'), backlogSource);
+  });
+});
+
+test('reports loudly when the post-migration ledger does not validate', async () => {
+  await withLedger({ 'item.md': standaloneBacklogSource }, async (ledger) => {
+    let changedItems = 0;
+
+    await assert.rejects(
+      migrateSchema2(ledger, {
+        apply: true,
+        onItem: async (change) => {
+          changedItems += 1;
+          const migrated = await readFile(change.file, 'utf8');
+          await writeFile(change.file, migrated.replace('status: backlog', 'status: broken'), 'utf8');
+        },
+      }),
+      (error) => {
+        assert.equal(error.code, 'post-validation-failed');
+        assert.match(error.message, /after 1 of 1 item writes/);
+        assert.match(error.message, /Restore the pre-migration backup or Git/);
+        assert.ok(error.diagnostics.some((entry) => entry.code === 'unknown-status'));
+        return true;
+      },
+    );
+
+    assert.equal(changedItems, 1);
+    const corrupted = await readFile(path.join(ledger, 'item.md'), 'utf8');
+    assert.match(corrupted, /schema_version: 2/);
+    assert.match(corrupted, /status: broken/);
   });
 });
 

@@ -25,6 +25,7 @@ export async function runSchema2MigrationCli(argumentsList, streams = {}) {
 
   if (options.apply) {
     stdout.write(`Summary: ${result.changes.length} ${itemWord(result.changes.length)} changed.\n`);
+    stdout.write('Validation: schema version 2 passed.\n');
   } else {
     for (const change of result.changes) {
       stdout.write(`WOULD CHANGE ${change.path} (${change.id}): schema_version 1 -> 2\n`);
@@ -89,14 +90,28 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
     throw new Error('The planned schema version 2 ledger does not validate.');
   }
 
+  let completed = 0;
   if (apply) {
     for (const change of changes) {
       await atomicRewrite(change);
+      completed += 1;
       await onItem(change);
+    }
+
+    const migratedLedger = await loadLedger(ledgerDirectory);
+    const postValidation = validateLedger(migratedLedger);
+    const uniformSchema2 = migratedLedger.items.length > 0
+      && migratedLedger.items.every((item) => item.data.schema_version === 2);
+    if (!postValidation.valid || !uniformSchema2) {
+      throw new SchemaMigrationError(
+        'post-validation-failed',
+        `The post-migration ledger did not validate as schema version 2 after ${completed} of ${changes.length} item writes. Restore the pre-migration backup or Git before any rerun.`,
+        postValidation.errors,
+      );
     }
   }
 
-  return { apply, changes };
+  return { apply, changes, completed };
 }
 
 async function heldItemLocks(ledgerDirectory) {
