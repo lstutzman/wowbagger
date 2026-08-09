@@ -37,6 +37,85 @@ depends_on: []
   });
 });
 
+test('validate labels schema version 2 vocabulary errors with schema version 2', async () => {
+  await withLedger({
+    'bad-decision.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Invalid decision action"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: invent
+    date: 2026-01-01
+    summary: "Use invalid vocabulary."
+    rationale: "The validator must identify the schema it checked."
+---
+`,
+    'bad-kind.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Invalid kind"
+kind: story
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: []
+---
+`,
+    'bad-status.md': `---
+schema_version: 2
+id: wb_01KE1VN3G0HV9ZDBB8BEASXBBG
+title: "Invalid status"
+kind: task
+status: paused
+created: 2026-01-03
+updated: 2026-01-03
+provenance:
+  source: "test"
+  recorded_at: "2026-01-03T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/bad-decision.md',
+          field: 'decisions[0].action',
+          code: 'invalid-decision-action',
+          message: 'Decision action is not recognized by schema version 2.',
+        },
+        {
+          path: 'ledger/bad-kind.md',
+          field: 'kind',
+          code: 'unknown-kind',
+          message: 'Kind story is not one of the schema version 2 kinds.',
+        },
+        {
+          path: 'ledger/bad-status.md',
+          field: 'status',
+          code: 'unknown-status',
+          message: 'Status paused is not one of the schema version 2 statuses.',
+        },
+      ],
+    });
+  });
+});
+
 test('validate rejects a ledger that mixes schema versions 1 and 2', async () => {
   await withLedger({
     'version-1.md': `---

@@ -196,7 +196,7 @@ function inspectKind(fact, context) {
   }
 
   if (!KINDS.has(data.kind)) {
-    addError(fact, 'kind', 'unknown-kind', `Kind ${data.kind} is not one of the schema version 1 kinds.`, context);
+    addError(fact, 'kind', 'unknown-kind', `Kind ${data.kind} is not one of the schema version ${fact.schemaVersion ?? '1 or 2'} kinds.`, context);
     return null;
   }
 
@@ -220,7 +220,7 @@ function inspectStatus(fact, context) {
       fact,
       'status',
       'unknown-status',
-      `Status ${data.status} is not one of the schema version 1 statuses.`,
+      `Status ${data.status} is not one of the schema version ${fact.schemaVersion ?? '1 or 2'} statuses.`,
       context,
     );
     return null;
@@ -408,7 +408,7 @@ function inspectDecisions(fact, context) {
       addError(fact, `${field}.action`, 'missing-decision-field', 'Each decision requires action.', context);
     } else if (typeof decision.action !== 'string' || !DECISION_ACTIONS.has(decision.action)) {
       inspected.valid = false;
-      addError(fact, `${field}.action`, 'invalid-decision-action', 'Decision action is not recognized by schema version 1.', context);
+      addError(fact, `${field}.action`, 'invalid-decision-action', `Decision action is not recognized by schema version ${fact.schemaVersion ?? '1 or 2'}.`, context);
     } else {
       inspected.action = decision.action;
     }
