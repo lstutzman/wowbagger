@@ -1098,8 +1098,10 @@ manifest's declared `mode`:
   shipped adapter transaction. It compares the exit code and exact stdout and
   stderr bytes; reconstructed output is not equivalent.
 - `negative-capability` supplies the declared capability profile, process
-  observation, or refusal input. It forbids a live core launch and fails the
-  case if evaluation reaches that launcher.
+  observation, or refusal input. A process-level audit records child-process
+  creation in the shipped entrypoint from before its modules load. The runner
+  fails the case if that audit records a child, including a launch that bypasses
+  the injected launcher or whose result is discarded.
 - `protocol` supplies the declared contract input, observation, or handoff to
   the applicable shipped contract implementation. Its bootstrap transaction
   uses a supplied core capability snapshot and does not launch a core child.

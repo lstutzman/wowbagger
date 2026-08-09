@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import {
   launchCoreProcess,
   runAdapterEntrypoint as runProductionEntrypoint,
@@ -22,6 +23,15 @@ async function loadRuntimeConfig() {
 
 export async function runAdapterEntrypoint(options) {
   const runtimeConfig = await loadRuntimeConfig();
+  if (runtimeConfig.probe_forbidden_core_launch) {
+    await launchCoreProcess({
+      executable: fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url)),
+      argv: ['capabilities', '--json'],
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+      input: Buffer.alloc(0),
+      limits: { stdout_bytes: 1048576, stderr_bytes: 65536, timeout_ms: 30000 },
+    });
+  }
   const dynamicResult = Object.hasOwn(runtimeConfig, 'dynamic_result')
     ? () => structuredClone(runtimeConfig.dynamic_result)
     : options.dynamicResult;

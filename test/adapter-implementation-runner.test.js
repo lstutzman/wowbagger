@@ -335,20 +335,15 @@ test('uses the declared process observation for a negative-capability case', asy
   }]);
 });
 
-test('fails a negative-capability case if an evaluator launches a real core command', async (t) => {
-  const { root } = await isolateCase(t, '03-ready-forwarding', () => true);
-  const manifestPath = path.join(root, '03-ready-forwarding', 'manifest.json');
-  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  manifest.mode = 'negative-capability';
-  await writeFile(manifestPath, JSON.stringify(manifest));
-
-  const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
+test('fails a negative-capability case when the entrypoint spawns an ignored core child', async (t) => {
+  const { root } = await isolateCase(t, '06-bounded-output', () => true);
+  const result = await runImplementationVectors({
+    fixtureRoot: root,
+    platform: process.platform,
+    probeForbiddenCoreLaunch: true,
+  });
 
   assert.equal(result.cases[0].status, 'fail');
-  assert.deepEqual(result.cases[0].assertion_evidence, [{
-    id: 'preserve-ready-baseline',
-    evidence: 'manifest.json:mode',
-  }]);
 });
 
 test('applies protocol no-launch mode to advisory-claims invocation', async (t) => {

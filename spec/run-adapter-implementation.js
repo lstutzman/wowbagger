@@ -27,6 +27,9 @@ import { sameJson } from '../src/adapter/schema-helpers.js';
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 const conformanceLoader = fileURLToPath(new URL('./adapter-conformance-loader.js', import.meta.url));
+const conformanceProcessAudit = fileURLToPath(
+  new URL('./adapter-conformance-process-audit.cjs', import.meta.url),
+);
 const ADAPTER_STDOUT_LIMIT = 2 * 1024 * 1024;
 const ADAPTER_STDERR_LIMIT = 64 * 1024;
 const ADAPTER_TIMEOUT_MS = 35000;
@@ -39,6 +42,7 @@ const SUPPORTED_ASSERTION_TYPES = new Set([
   'context-validation', 'approval-schema',
 ]);
 const SUPPORTED_EXECUTION_MODES = new Set(['equivalence', 'negative-capability', 'protocol']);
+const FORBIDDEN_LAUNCH_OBSERVED = Symbol('forbidden-launch-observed');
 
 const CORE_COMMANDS = [...CORE_COMMAND_ORDER];
 
@@ -109,7 +113,8 @@ function parseBootstrapResponse(stdout, entrypoint) {
 async function spawnAdapterEntrypoint(entrypoint, operation, request, env, runtimeScenario) {
   return new Promise((resolve, reject) => {
     const nodeArguments = runtimeScenario
-      ? ['--experimental-loader', conformanceLoader, entrypoint, operation]
+      ? ['--require', conformanceProcessAudit,
+        '--experimental-loader', conformanceLoader, entrypoint, operation]
       : [entrypoint, operation];
     const child = spawn(process.execPath, nodeArguments, {
       cwd: projectRoot,
@@ -185,15 +190,25 @@ async function callShippedEntrypoint(
     const candidateManifestPath = path.join(temporary, 'wowbagger-adapter.json');
     const workspacesPath = path.join(temporary, 'workspaces.json');
     const runtimeConfigPath = path.join(temporary, 'runtime-config.json');
+    const childProcessAuditPath = path.join(temporary, 'child-process-audit.txt');
     await writeFile(candidateManifestPath, JSON.stringify(candidateManifest));
     await writeFile(workspacesPath, JSON.stringify(workspaces));
     if (runtimeConfig) await writeFile(runtimeConfigPath, JSON.stringify(runtimeConfig));
+    if (runtimeConfig?.forbid_core_launch) await writeFile(childProcessAuditPath, '');
+    const response = await spawnAdapterEntrypoint(entrypoint, operation, request, {
+      WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
+      WOWBAGGER_ADAPTER_WORKSPACES_PATH: workspacesPath,
+      ...(runtimeConfig ? { WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH: runtimeConfigPath } : {}),
+      ...(runtimeConfig?.forbid_core_launch
+        ? { WOWBAGGER_ADAPTER_CHILD_PROCESS_AUDIT_PATH: childProcessAuditPath }
+        : {}),
+    }, runtimeConfig !== undefined);
+    if (runtimeConfig?.forbid_core_launch
+      && (await readFile(childProcessAuditPath)).length > 0) {
+      runtimeConfig[FORBIDDEN_LAUNCH_OBSERVED] = true;
+    }
     return {
-      response: await spawnAdapterEntrypoint(entrypoint, operation, request, {
-        WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
-        WOWBAGGER_ADAPTER_WORKSPACES_PATH: workspacesPath,
-        ...(runtimeConfig ? { WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH: runtimeConfigPath } : {}),
-      }, runtimeConfig !== undefined),
+      response,
       evidence: path.relative(projectRoot, entrypoint),
     };
   } finally {
@@ -815,7 +830,7 @@ export function deriveExecutedAssertions(declared, evaluated) {
   return executed;
 }
 
-async function runtimeConfigForMode(directory, manifest) {
+async function runtimeConfigForMode(directory, manifest, probeForbiddenCoreLaunch) {
   switch (manifest.mode) {
     case 'equivalence':
       return undefined;
@@ -830,6 +845,7 @@ async function runtimeConfigForMode(directory, manifest) {
       return {
         core_probe: coreCapabilities(),
         forbid_core_launch: true,
+        ...(probeForbiddenCoreLaunch ? { probe_forbidden_core_launch: true } : {}),
         ...(capabilityArtifact
           ? { dynamic_result: await readStrictJson(path.join(directory, capabilityArtifact.path)) }
           : {}),
@@ -850,6 +866,7 @@ export async function runImplementationVectors({
   fixtureRoot = defaultFixtureRoot,
   platform,
   target = 'claude-code',
+  probeForbiddenCoreLaunch = false,
 } = {}) {
   const directories = (await readdir(fixtureRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -885,7 +902,11 @@ export async function runImplementationVectors({
       }
     }
 
-    const runtimeConfig = await runtimeConfigForMode(directory, manifest);
+    const runtimeConfig = await runtimeConfigForMode(
+      directory,
+      manifest,
+      probeForbiddenCoreLaunch,
+    );
     if (manifest.mode === 'protocol') {
       await callShippedEntrypoint({
         bootstrap_wire_version: 1,
@@ -907,6 +928,7 @@ export async function runImplementationVectors({
       }
       evaluated.push({ id: assertion.id, evidence: outcome.evidence });
     }
+    if (runtimeConfig?.[FORBIDDEN_LAUNCH_OBSERVED]) cased = false;
     const executedAssertions = deriveExecutedAssertions(manifest.assertions, evaluated);
 
     cases.push({
