@@ -292,7 +292,7 @@ async function capabilities(ledger) {
     result: {
       backend: {
         name: 'local-filesystem',
-        coordination_scope: coordinationScope({ gitCommonDir }),
+        coordination_scope: 'same-working-copy-cooperative-writers',
       },
       operations: {
         inspect: {
@@ -323,7 +323,7 @@ async function capabilities(ledger) {
       limits: {
         multi_item_atomicity: false,
         cross_clone_coordination: false,
-        cross_worktree_coordination: Boolean(gitCommonDir),
+        cross_worktree_coordination: false,
         cross_machine_coordination: false,
         noncooperating_writer_protection: false,
         automatic_stale_lock_breaking: false,

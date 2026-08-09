@@ -1081,11 +1081,9 @@ test(
   },
 );
 
-// The three git-coordination-dependent probe members
-// (`backend.coordination_scope`, `operations.work_claim.supported`,
-// `limits.cross_worktree_coordination`) must all agree; a probe can
-// contradict via either of the latter two independently.
-test('verifyCoreProbe refuses a probe whose cross_worktree_coordination contradicts the coordination scope', () => {
+// Mutation coordination never spans worktrees, even when advisory work
+// claims are visible through the Git common directory.
+test('verifyCoreProbe refuses cross-worktree mutation coordination', () => {
   const probe = coreCapabilities();
   probe.result.limits.cross_worktree_coordination = true;
 
@@ -1093,6 +1091,17 @@ test('verifyCoreProbe refuses a probe whose cross_worktree_coordination contradi
 
   assert.equal(result.ok, false);
   assert.equal(result.error_code, 'core-protocol-error');
+});
+
+test('verifyCoreProbe accepts cross-worktree advisory claim visibility independently', () => {
+  const describe = structuredClone(SCENARIOS.base_dynamic);
+  describe.optional_features.claims = true;
+  const probe = coreCapabilities();
+  probe.result.operations.work_claim.supported = true;
+
+  const result = verifyCoreProbe(describe, probe);
+
+  assert.equal(result.ok, true);
 });
 
 // Applies a `{ delete }` and/or `{ set: { path, value } }` fixture mutation

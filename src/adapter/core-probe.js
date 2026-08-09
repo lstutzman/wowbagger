@@ -1,17 +1,12 @@
 import { hasExactMembers } from './schema-helpers.js';
 
-// The version 1 core command list, in the fixed advertising order (contract
+// The version 2 core command list, in the fixed advertising order (contract
 // section 3). `describe.js` also needs this order to validate the
 // `core.commands` subset it accepts, so it is exported from here.
 export const CORE_COMMAND_ORDER = Object.freeze([
   'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate',
 ]);
 export const CORE_CONTRACT_VERSION = 2;
-
-const GIT_COORDINATION_SCOPES = new Set([
-  'same-working-copy-cooperative-writers',
-  'shared-git-directory-cooperative-writers',
-]);
 
 function refuse(error_code, detail) {
   return { ok: false, error_code, detail };
@@ -20,7 +15,7 @@ function refuse(error_code, detail) {
 function backendIssue(backend) {
   if (!hasExactMembers(backend, ['name', 'coordination_scope'])
     || backend.name !== 'local-filesystem'
-    || !GIT_COORDINATION_SCOPES.has(backend.coordination_scope)) {
+    || backend.coordination_scope !== 'same-working-copy-cooperative-writers') {
     return 'result.backend';
   }
   return null;
@@ -109,24 +104,11 @@ function limitsIssue(limits) {
   ])
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
-    || typeof limits.cross_worktree_coordination !== 'boolean'
+    || limits.cross_worktree_coordination !== false
     || limits.cross_machine_coordination !== false
     || limits.noncooperating_writer_protection !== false
     || limits.automatic_stale_lock_breaking !== false) {
     return 'result.limits';
-  }
-  return null;
-}
-
-// `work_claim.supported`, `backend.coordination_scope`, and
-// `limits.cross_worktree_coordination` all derive from the same "was a
-// shared git common directory found?" fact; a probe may only report one of
-// the two internally-consistent combinations.
-function coordinationConsistencyIssue(result) {
-  const gitDirectoryFound = result.backend.coordination_scope === 'shared-git-directory-cooperative-writers';
-  if (result.operations.work_claim.supported !== gitDirectoryFound
-    || result.limits.cross_worktree_coordination !== gitDirectoryFound) {
-    return 'result.git-coordination-consistency';
   }
   return null;
 }
@@ -151,8 +133,7 @@ function coreProbeSchemaIssue(probe) {
   return backendIssue(result.backend)
     || operationsIssue(result.operations)
     || durabilityIssue(result.durability)
-    || limitsIssue(result.limits)
-    || coordinationConsistencyIssue(result);
+    || limitsIssue(result.limits);
 }
 
 function sameCommandOrder(commands) {
@@ -163,7 +144,7 @@ function sameCommandOrder(commands) {
 
 // verifyCoreProbe(describe, probe) checks the independently-launched core
 // `capabilities --json` probe against an already-validated describe
-// result (contract section 3): the probe must match the exact version 1
+// result (contract section 3): the probe must match the exact version 2
 // envelope, its contract version must match the required core contract
 // version, its command list must match the advertised one, and neither
 // optional feature may be elevated beyond what the probe actually supports.
@@ -189,10 +170,10 @@ export function verifyCoreProbe(describe, probe) {
 }
 
 // The engine's own core capability snapshot: this repository's core is a
-// same-process, same-working-copy `local-filesystem` backend that has not
-// found a shared git common directory, so work-claim coordination is
-// unsupported (contract section 3: "optional_features.claims is derived
-// only from operations.work_claim.supported").
+// same-process, same-working-copy `local-filesystem` backend. Advisory
+// work-claim visibility is independent of this mutation-coordination scope
+// (contract section 3: "optional_features.claims is derived only from
+// operations.work_claim.supported").
 export function coreCapabilities() {
   return {
     ok: true,

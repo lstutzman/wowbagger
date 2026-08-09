@@ -20,6 +20,16 @@ test('capabilities reports the exact supported local mutation scope', () => {
   assert.equal(result.stdout, `${JSON.stringify(JSON.parse(readFileSync(fileURLToPath(capabilitiesFixture), 'utf8')))}\n`);
 });
 
+test('capabilities separates mutation coordination from advisory cross-worktree claim visibility', () => {
+  const result = runCli('capabilities', '--json');
+
+  assert.equal(result.status, 0, result.stderr);
+  const envelope = JSON.parse(result.stdout);
+  assert.equal(envelope.result.backend.coordination_scope, 'same-working-copy-cooperative-writers');
+  assert.equal(envelope.result.limits.cross_worktree_coordination, false);
+  assert.equal(envelope.result.operations.work_claim.supported, true);
+});
+
 test('inspect returns one lossless validated item from a single byte snapshot', () => {
   const result = runCli(
     'inspect',
