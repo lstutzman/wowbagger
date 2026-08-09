@@ -3,8 +3,10 @@ import { execFile } from 'node:child_process';
 import { cp, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { readBootstrapRequest } from '../src/adapter/bootstrap.js';
 
 const entrypoint = fileURLToPath(new URL('../adapters/claude-code/entrypoint.js', import.meta.url));
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -84,6 +86,21 @@ test('bounds invoke bytes before parsing the request', async () => {
   assert.equal(response.error.code, 'invalid-invocation');
   assert.equal(response.error.details.reason, 'byte-limit-exceeded');
   assert.equal(response.request_id, null);
+});
+
+test('accepts an invocation request at the exact byte limit', async () => {
+  const maxBytes = 65536;
+  const prefix = '{"padding":"';
+  const suffix = '"}';
+  const requestBytes = Buffer.from(prefix + 'x'.repeat(maxBytes - prefix.length - suffix.length) + suffix);
+
+  const result = await readBootstrapRequest(Readable.from([requestBytes]), {
+    maxBytes,
+    errorCode: 'invalid-invocation',
+  });
+
+  assert.equal(requestBytes.length, maxBytes);
+  assert.equal(result.ok, true);
 });
 
 test('refuses a request with trailing bytes and still exits zero', async () => {
