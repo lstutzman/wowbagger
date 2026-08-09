@@ -275,8 +275,8 @@ test('holds the remaining Plan 3 assertions at unimplemented', async () => {
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 124);
-  assert.equal(183 - evidenced.length, 59);
+  assert.equal(evidenced.length, 160);
+  assert.equal(183 - evidenced.length, 23);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });
@@ -290,6 +290,20 @@ test('validates ordered instruction input through the shipped engine', async () 
     { id: 'preserve-host-order', evidence: 'src/adapter/instructions.js' },
     { id: 'no-conventional-filename-assumption', evidence: 'src/adapter/instructions.js' },
   ]);
+});
+
+test('validates every bounded instruction and handoff context scenario through the shipped engine', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin' });
+  const contextCase = result.cases.find(({ case: name }) => name === 'context-validation');
+
+  assert.equal(contextCase.status, 'pass');
+  assert.equal(contextCase.assertion_evidence.length, 36);
+  assert.ok(contextCase.assertion_evidence.every(({ evidence }) => [
+    'src/adapter/limits.js',
+    'src/adapter/instructions.js',
+    'src/adapter/handoff.js',
+    'src/adapter/context.js',
+  ].includes(evidence)));
 });
 
 test('every negotiation assertion it evidences agrees with the fixture expectation', async (t) => {

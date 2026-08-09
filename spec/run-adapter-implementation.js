@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,6 +17,9 @@ import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
 import { validateInstructionInput } from '../src/adapter/instructions.js';
+import { validateInvokeContext } from '../src/adapter/context.js';
+import { validateHandoffResume } from '../src/adapter/handoff.js';
+import { validateInvocationLimits } from '../src/adapter/limits.js';
 import { resolveInvocationPaths } from '../src/adapter/paths.js';
 import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
 import { sameJson } from '../src/adapter/schema-helpers.js';
@@ -590,6 +594,81 @@ async function evaluateInstructionAssertion(directory, assertion) {
   };
 }
 
+function replaceHandoffBytes(carrier, bytes) {
+  carrier.content_base64 = bytes.toString('base64');
+  carrier.byte_length = bytes.length;
+  carrier.sha256 = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+async function evaluateContextAssertion(directory, assertion) {
+  const data = await readScenarios(directory);
+  const scenario = findScenario(data.cases, assertion.scenario);
+  if (scenario.kind === 'invocation-limit') {
+    const requested = structuredClone(data.base_invocation_limits);
+    mutateObject(requested, scenario);
+    const result = validateInvocationLimits(requested, data.advertised_invocation_limits);
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: 'src/adapter/limits.js',
+      error_code: result.error_code,
+    };
+  }
+  if (scenario.kind === 'legacy-handoff') {
+    const result = validateHandoffResume({
+      handoff_bytes: Buffer.from(data.base_handoff_carrier.content_base64, 'base64'),
+      handoff_digest: scenario.handoff_digest,
+      resume_request: data.base_handoff_carrier.resume_request,
+      current: data.handoff_options.current,
+      max_bytes: data.handoff_options.max_bytes,
+    });
+    return {
+      ok: result.error_code === scenario.expected,
+      evidence: 'src/adapter/handoff.js',
+      error_code: result.error_code,
+    };
+  }
+
+  const instructionInput = structuredClone(data.base_instruction);
+  const instructionLimits = structuredClone(data.instruction_limits);
+  const handoffCarrier = scenario.kind === 'instruction'
+    ? null : structuredClone(data.base_handoff_carrier);
+  const handoffOptions = structuredClone(data.handoff_options);
+  if (scenario.kind === 'instruction') {
+    if (scenario.duplicate_source) instructionInput.sources.push(structuredClone(instructionInput.sources[0]));
+    else if (scenario.limit_bytes !== undefined) instructionLimits.max_bytes = scenario.limit_bytes;
+    else if (scenario.limit_sources !== undefined) instructionLimits.max_sources = scenario.limit_sources;
+    else mutateObject(instructionInput, scenario);
+  } else if (scenario.kind === 'handoff') {
+    if (scenario.duplicate_json) {
+      replaceHandoffBytes(handoffCarrier, Buffer.from('{"handoff_version":1,"handoff_version":1}\n'));
+    } else if (scenario.handoff_object_version !== undefined || scenario.handoff_item_id !== undefined) {
+      const handoff = JSON.parse(Buffer.from(handoffCarrier.content_base64, 'base64').toString('utf8'));
+      if (scenario.handoff_object_version !== undefined) handoff.handoff_version = scenario.handoff_object_version;
+      if (scenario.handoff_item_id !== undefined) handoff.item.id = scenario.handoff_item_id;
+      replaceHandoffBytes(handoffCarrier, Buffer.from(`${JSON.stringify(handoff)}\n`));
+    } else if (scenario.current_revision) handoffOptions.current.revision = scenario.current_revision;
+    else if (scenario.current_item_id) handoffOptions.current.item_id = scenario.current_item_id;
+    else if (scenario.current_instruction_set_digest) {
+      handoffOptions.current.instruction_set_digest = scenario.current_instruction_set_digest;
+    } else if (scenario.handoff_limit_bytes !== undefined) handoffOptions.max_bytes = scenario.handoff_limit_bytes;
+    else mutateObject(handoffCarrier, scenario);
+  }
+  const result = validateInvokeContext({
+    instruction_input: instructionInput,
+    handoff_carrier: handoffCarrier,
+    context_bytes: scenario.context_bytes ?? data.context_bytes,
+    instruction_limits: instructionLimits,
+    handoff_options: handoffOptions,
+  });
+  return {
+    ok: (result.ok ? 'ok' : result.error_code) === scenario.expected,
+    evidence: scenario.kind === 'instruction'
+      ? 'src/adapter/instructions.js'
+      : scenario.kind === 'combined' ? 'src/adapter/context.js' : 'src/adapter/handoff.js',
+    error_code: result.error_code,
+  };
+}
+
 async function evaluateAssertion(directory, assertion) {
   switch (assertion.type) {
     case 'negotiation':
@@ -614,6 +693,8 @@ async function evaluateAssertion(directory, assertion) {
       return evaluateOutputBoundAssertion(directory, assertion);
     case 'instruction-order':
       return evaluateInstructionAssertion(directory, assertion);
+    case 'context-validation':
+      return evaluateContextAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }
