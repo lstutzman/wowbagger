@@ -4,7 +4,7 @@ import { hasExactMembers } from './schema-helpers.js';
 // section 3). `describe.js` also needs this order to validate the
 // `core.commands` subset it accepts, so it is exported from here.
 export const CORE_COMMAND_ORDER = Object.freeze([
-  'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate',
+  'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
 export const CORE_CONTRACT_VERSION = 2;
 
@@ -55,6 +55,16 @@ function transitionOperationIssue(transition) {
   return null;
 }
 
+function patchOperationIssue(patch) {
+  if (!hasExactMembers(patch, ['supported', 'write_scope', 'cas_scope'])
+    || patch.supported !== true
+    || patch.write_scope !== 'single-item'
+    || patch.cas_scope !== 'exact-byte-sha256') {
+    return 'result.operations.patch';
+  }
+  return null;
+}
+
 // Every member except `supported` is a permanent advisory-claims invariant:
 // claims never protect publication, never fence writers, and must never
 // advertise safe exclusive dispatch.
@@ -75,12 +85,13 @@ function workClaimOperationIssue(workClaim) {
 }
 
 function operationsIssue(operations) {
-  if (!hasExactMembers(operations, ['inspect', 'create', 'transition', 'work_claim'])) {
+  if (!hasExactMembers(operations, ['inspect', 'create', 'transition', 'patch', 'work_claim'])) {
     return 'result.operations';
   }
   return inspectOperationIssue(operations.inspect)
     || createOperationIssue(operations.create)
     || transitionOperationIssue(operations.transition)
+    || patchOperationIssue(operations.patch)
     || workClaimOperationIssue(operations.work_claim);
 }
 
@@ -191,6 +202,7 @@ export function coreCapabilities() {
           publication_probe: 'per-ledger-operation',
         },
         transition: { supported: true, write_scope: 'single-item', cas_scope: 'exact-byte-sha256' },
+        patch: { supported: true, write_scope: 'single-item', cas_scope: 'exact-byte-sha256' },
         work_claim: {
           supported: false,
           api_version: 1,

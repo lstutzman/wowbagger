@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { validateAdapterManifest, isSafeRelativeExecutable } from '../src/adapter/manifest.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { describeAdapter } from '../src/adapter/describe.js';
-import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
+import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { sameJson } from '../src/adapter/schema-helpers.js';
 import {
   describeAdapter as referenceDescribe,
@@ -1104,6 +1104,17 @@ test('verifyCoreProbe accepts cross-worktree advisory claim visibility independe
   assert.equal(result.ok, true);
 });
 
+test('version 2 advertises patch in the fixed core order and exact capability shape', () => {
+  assert.deepEqual(CORE_COMMAND_ORDER, [
+    'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
+  ]);
+  assert.deepEqual(coreCapabilities().result.operations.patch, {
+    supported: true,
+    write_scope: 'single-item',
+    cas_scope: 'exact-byte-sha256',
+  });
+});
+
 // Applies a `{ delete }` and/or `{ set: { path, value } }` fixture mutation
 // to a scenario target object, following the same dotted-path convention as
 // `spec/run-adapter-vectors.js`'s negotiation and core-probe cases.
@@ -1206,7 +1217,7 @@ test('describeAdapter and verifyCoreProbe match the reference oracle on every ne
         const describe = {
           core: {
             required_core_contract_version: scenario.required_core_contract_version,
-            commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+            commands: ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'],
           },
           optional_features: { claims: false, policy: false },
         };

@@ -312,6 +312,11 @@ async function capabilities(ledger) {
           write_scope: 'single-item',
           cas_scope: 'exact-byte-sha256',
         },
+        patch: {
+          supported: true,
+          write_scope: 'single-item',
+          cas_scope: 'exact-byte-sha256',
+        },
         work_claim: resolveWorkClaimCapability({ gitCommonDir }),
       },
       durability: {

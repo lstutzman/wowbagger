@@ -78,7 +78,7 @@ const TRANSITION_BLOCKER_FIELDS = Object.freeze({
   'child-disposition': 'parent',
 });
 export const CORE_COMMANDS = Object.freeze([
-  'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate',
+  'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
 const SUPPORTED_ADAPTER_CONTRACT_VERSIONS = Object.freeze([ADAPTER_CONTRACT_VERSION]);
 const INSTRUCTION_MODES = new Set(['none', 'host-provided', 'configured-relative-paths']);
@@ -533,6 +533,11 @@ export function referenceCoreCapabilities() {
           publication_probe: 'per-ledger-operation',
         },
         transition: {
+          supported: true,
+          write_scope: 'single-item',
+          cas_scope: 'exact-byte-sha256',
+        },
+        patch: {
           supported: true,
           write_scope: 'single-item',
           cas_scope: 'exact-byte-sha256',
@@ -1263,7 +1268,7 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.backend.coordination_scope !== 'same-working-copy-cooperative-writers') {
     return 'result.backend';
   }
-  if (!hasExactKeys(result.operations, ['inspect', 'create', 'transition', 'work_claim'])) {
+  if (!hasExactKeys(result.operations, ['inspect', 'create', 'transition', 'patch', 'work_claim'])) {
     return 'result.operations';
   }
   if (!hasExactKeys(result.operations.inspect, ['supported', 'write_scope', 'cas_scope'])
@@ -1285,6 +1290,12 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.operations.transition.write_scope !== 'single-item'
     || result.operations.transition.cas_scope !== 'exact-byte-sha256') {
     return 'result.operations.transition';
+  }
+  if (!hasExactKeys(result.operations.patch, ['supported', 'write_scope', 'cas_scope'])
+    || result.operations.patch.supported !== true
+    || result.operations.patch.write_scope !== 'single-item'
+    || result.operations.patch.cas_scope !== 'exact-byte-sha256') {
+    return 'result.operations.patch';
   }
   // work_claim.supported is the one Git-environment-dependent member. Every other member is
   // a permanent advisory-claims invariant: claims never protect publication, never fence
