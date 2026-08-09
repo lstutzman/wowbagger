@@ -1106,11 +1106,13 @@ It validates `adapter_vector_version` as exactly `1` before it evaluates an
 artifact. The test suite fails unless those IDs exactly equal every manifest
 assertion; it re-hashes wrong expectation artifacts and proves that every
 expected result is semantically rejected rather than merely read. Its status is
-`reference-pass`. It does
-not run a real Claude Code, Codex, Kimi, or generic adapter, so all four implementation
-statuses remain `unverified`. A future implementation runner MUST accept the
-same fixture directory, evaluate every assertion against the installed
-entrypoint, and emit the same result shape with an evidence platform.
+`reference-pass`. It does not run a real Claude Code, Codex, Kimi, or generic
+adapter, so its implementation statuses remain `unverified`.
+`node spec/run-adapter-implementation.js` accepts the same fixture directory,
+evaluates every assertion against the shipped Claude Code adapter boundary,
+and emits the same result shape with an evidence platform. Its complete run on
+native Darwin is `pass`; Codex, Kimi, and generic adapter implementations
+remain `unverified` because no implementation run evidences them.
 
 The supported manifest assertion types are `core-baseline`, `capability`,
 `instruction-order`, `path-refusal`, `output-bound`, `approval-gate`,
@@ -1121,14 +1123,14 @@ The runner fails closed on any other type.
 
 | Requirement | Direct core baseline | Claude Code adapter | Codex adapter | Kimi adapter | Generic OpenAI-compatible harness adapter |
 |---|---|---|---|---|---|
-| Core JSON, standard streams, and exit | Reference-pass | Unverified | Unverified | Unverified | Unverified |
-| Capability negotiation | Reference-pass for core probe | Unverified | Unverified | Unverified | Unverified |
-| Instruction input | Not a core concern | Unverified | Unverified | Unverified | Unverified |
-| Safe workspace and ledger selection | Core ledger checks only | Unverified | Unverified | Unverified | Unverified |
-| Bounded context and output | Reference bytes only | Unverified | Unverified | Unverified | Unverified |
-| Mutation authority and recovery | Core mutation contract only | Unverified | Unverified | Unverified | Unverified |
-| API-only transport refusal | Not applicable | Unverified | Unverified | Unverified | Unverified |
-| Resume and handoff | Not a core concern | Unverified | Unverified | Unverified | Unverified |
+| Core JSON, standard streams, and exit | Reference-pass | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Capability negotiation | Reference-pass for core probe | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Instruction input | Not a core concern | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Safe workspace and ledger selection | Core ledger checks only | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Bounded context and output | Reference bytes only | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Mutation authority and recovery | Core mutation contract only | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| API-only transport refusal | Not applicable | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Resume and handoff | Not a core concern | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
 
 The API-only negative vector is intentionally different: it must refuse core
 invocation because model transport alone is not a coding harness. A generic
