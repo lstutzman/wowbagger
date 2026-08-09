@@ -1109,6 +1109,13 @@ manifest's declared `mode`:
 Every mode still starts the shipped adapter entrypoint as a real process and
 exercises the strict bootstrap wire for every case. Only `equivalence` uses a
 live core child because only that mode has a direct-core baseline to preserve.
+The `06-bounded-output` classification still uses its declared process
+observation. Its `output-bound` assertion also starts a runner-owned writer
+child through the production core launcher, writes one byte past the request's
+stdout limit, and requires prompt termination, an incomplete stdout marker,
+and retained output truncated to exactly that limit. Real stdout-limit
+enforcement is therefore part of the implementation-vector result rather than
+inferred only from the unit suite.
 
 `node spec/run-adapter-vectors.js` is the executable reference-model runner.
 Forwarding and negative invocation cases enter through the strict raw-byte

@@ -335,6 +335,35 @@ test('uses the declared process observation for a negative-capability case', asy
   }]);
 });
 
+test('bounded-output drives a real child past the advertised stdout limit', async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'wb-output-probe-'));
+  t.after(() => rm(temporary, { force: true, recursive: true }));
+  const sentinel = path.join(temporary, 'started.txt');
+  const executable = path.join(temporary, 'overflow.js');
+  await writeFile(executable, [
+    "const { writeFileSync } = require('node:fs');",
+    `writeFileSync(${JSON.stringify(sentinel)}, 'started');`,
+    'process.stdout.write(Buffer.alloc(129, 0x78));',
+    'setInterval(() => {}, 1000);',
+  ].join('\n'));
+  const { root } = await isolateCase(t, '06-bounded-output', () => true);
+
+  const result = await runImplementationVectors({
+    fixtureRoot: root,
+    platform: process.platform,
+    outputLimitProbeExecutable: executable,
+  });
+  let childStarted = false;
+  try {
+    childStarted = await readFile(sentinel, 'utf8') === 'started';
+  } catch {
+    // The missing sentinel is the assertion failure below, not a test setup error.
+  }
+
+  assert.equal(childStarted, true);
+  assert.equal(result.cases[0].status, 'pass');
+});
+
 test('fails a negative-capability case when the entrypoint spawns an ignored core child', async (t) => {
   const { root } = await isolateCase(t, '06-bounded-output', () => true);
   const result = await runImplementationVectors({

@@ -23,6 +23,7 @@ import { validateInvocationLimits } from '../src/adapter/limits.js';
 import { resolveInvocationPaths } from '../src/adapter/paths.js';
 import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
 import { sameJson } from '../src/adapter/schema-helpers.js';
+import { launchCoreProcess } from '../src/adapter/entrypoint-main.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -463,7 +464,49 @@ async function evaluateCoreBaselineAssertion(directory, assertion, target, runti
   }
 }
 
-async function evaluateOutputBoundAssertion(directory, assertion, target, runtimeConfig) {
+async function observeRealStdoutLimit(invocation, probeExecutable) {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-output-limit-probe-'));
+  try {
+    const executable = probeExecutable ?? path.join(temporary, 'overflow.cjs');
+    if (!probeExecutable) {
+      await writeFile(executable, [
+        `process.stdout.write(Buffer.alloc(${invocation.limits.stdout_bytes + 1}, 0x78));`,
+        'setInterval(() => {}, 1000);',
+      ].join('\n'));
+    }
+    const observation = await launchCoreProcess({
+      executable,
+      argv: [],
+      cwd: temporary,
+      input: Buffer.alloc(0),
+      limits: {
+        stdout_bytes: invocation.limits.stdout_bytes,
+        stderr_bytes: invocation.limits.stderr_bytes,
+        timeout_ms: Math.min(invocation.limits.timeout_ms, 1000),
+      },
+    });
+    return observation.started
+      && observation.process_tree_contained
+      && !observation.orphaned
+      && observation.exit_code === null
+      && observation.signal === null
+      && !observation.timed_out
+      && !observation.stdout_complete
+      && observation.stderr_complete
+      && Buffer.from(observation.stdout_base64, 'base64').length
+        === invocation.limits.stdout_bytes;
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+async function evaluateOutputBoundAssertion(
+  directory,
+  assertion,
+  target,
+  runtimeConfig,
+  outputLimitProbeExecutable,
+) {
   await readStrictJson(path.join(directory, 'process.json'));
   const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
   const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
@@ -474,8 +517,14 @@ async function evaluateOutputBoundAssertion(directory, assertion, target, runtim
       workspaces: { [invocation.workspace.workspace_id]: temporary },
       runtimeConfig,
     });
+    const realLimitEnforced = await observeRealStdoutLimit(
+      invocation,
+      outputLimitProbeExecutable,
+    );
     return {
-      ok: invoked.response.error?.code === assertion.expect && sameJson(invoked.response, expected),
+      ok: realLimitEnforced
+        && invoked.response.error?.code === assertion.expect
+        && sameJson(invoked.response, expected),
       evidence: invoked.evidence,
       error_code: invoked.response.error?.code,
     };
@@ -775,7 +824,13 @@ async function evaluateApprovalGateAssertion(directory, assertion, target, runti
   throw new Error(`unknown approval expectation ${assertion.expect}`);
 }
 
-async function evaluateAssertion(directory, assertion, target, runtimeConfig) {
+async function evaluateAssertion(
+  directory,
+  assertion,
+  target,
+  runtimeConfig,
+  outputLimitProbeExecutable,
+) {
   if (target !== 'claude-code' && [
     'instruction-order', 'approval-gate', 'resume-plan', 'context-validation', 'approval-schema',
   ].includes(assertion.type)) {
@@ -801,7 +856,13 @@ async function evaluateAssertion(directory, assertion, target, runtimeConfig) {
     case 'core-baseline':
       return evaluateCoreBaselineAssertion(directory, assertion, target, runtimeConfig);
     case 'output-bound':
-      return evaluateOutputBoundAssertion(directory, assertion, target, runtimeConfig);
+      return evaluateOutputBoundAssertion(
+        directory,
+        assertion,
+        target,
+        runtimeConfig,
+        outputLimitProbeExecutable,
+      );
     case 'instruction-order':
       return evaluateInstructionAssertion(directory, assertion);
     case 'context-validation':
@@ -867,6 +928,7 @@ export async function runImplementationVectors({
   platform,
   target = 'claude-code',
   probeForbiddenCoreLaunch = false,
+  outputLimitProbeExecutable,
 } = {}) {
   const directories = (await readdir(fixtureRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -919,7 +981,13 @@ export async function runImplementationVectors({
     const errorCodes = new Set();
     let cased = true;
     for (const assertion of manifest.assertions) {
-      const outcome = await evaluateAssertion(directory, assertion, target, runtimeConfig);
+      const outcome = await evaluateAssertion(
+        directory,
+        assertion,
+        target,
+        runtimeConfig,
+        outputLimitProbeExecutable,
+      );
       if (outcome.error_code) {
         errorCodes.add(outcome.error_code);
       }
