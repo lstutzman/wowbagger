@@ -18,7 +18,7 @@ import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/ad
 import { invokeAdapter } from '../src/adapter/invoke.js';
 import { validateInstructionInput } from '../src/adapter/instructions.js';
 import { validateInvokeContext } from '../src/adapter/context.js';
-import { validateHandoffResume } from '../src/adapter/handoff.js';
+import { buildResumePlan, validateHandoffResume } from '../src/adapter/handoff.js';
 import { validateInvocationLimits } from '../src/adapter/limits.js';
 import { resolveInvocationPaths } from '../src/adapter/paths.js';
 import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
@@ -669,6 +669,21 @@ async function evaluateContextAssertion(directory, assertion) {
   };
 }
 
+async function evaluateResumePlanAssertion(directory, assertion) {
+  const fixture = await readStrictJson(path.join(directory, 'handoff-carrier.json'));
+  const expected = await readStrictJson(path.join(directory, assertion.expect));
+  const result = buildResumePlan(fixture.carrier, fixture.options);
+  return {
+    ok: result.ok && sameJson({
+      must_invoke: result.must_invoke,
+      must_compare: result.must_compare,
+      forbidden_automatic_actions: result.forbidden_automatic_actions,
+    }, expected),
+    evidence: 'src/adapter/handoff.js',
+    error_code: result.error_code,
+  };
+}
+
 async function evaluateAssertion(directory, assertion) {
   switch (assertion.type) {
     case 'negotiation':
@@ -695,6 +710,8 @@ async function evaluateAssertion(directory, assertion) {
       return evaluateInstructionAssertion(directory, assertion);
     case 'context-validation':
       return evaluateContextAssertion(directory, assertion);
+    case 'resume-plan':
+      return evaluateResumePlanAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }

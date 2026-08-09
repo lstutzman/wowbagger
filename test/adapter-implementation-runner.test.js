@@ -275,8 +275,8 @@ test('holds the remaining Plan 3 assertions at unimplemented', async () => {
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 160);
-  assert.equal(183 - evidenced.length, 23);
+  assert.equal(evidenced.length, 161);
+  assert.equal(183 - evidenced.length, 22);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });
@@ -304,6 +304,17 @@ test('validates every bounded instruction and handoff context scenario through t
     'src/adapter/handoff.js',
     'src/adapter/context.js',
   ].includes(evidence)));
+});
+
+test('builds only the explicit non-authoritative handoff resume plan', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin' });
+  const handoffCase = result.cases.find(({ case: name }) => name === 'handoff-resume');
+
+  assert.equal(handoffCase.status, 'pass');
+  assert.deepEqual(handoffCase.assertion_evidence, [{
+    id: 'handoff-is-explicit-and-non-authoritative',
+    evidence: 'src/adapter/handoff.js',
+  }]);
 });
 
 test('every negotiation assertion it evidences agrees with the fixture expectation', async (t) => {
