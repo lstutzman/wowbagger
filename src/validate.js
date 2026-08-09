@@ -628,7 +628,8 @@ function validateDependencies(fact, index, context) {
         `Dependency ${dependency} is archived and cannot remain a live blocker; restore it or explicitly disposition the dependent.`,
         context,
       );
-    } else if (target.status === 'done' || target.status === 'killed') {
+    } else if (target.status === 'killed'
+      || (target.status === 'done' && fact.schemaVersion === 1)) {
       addError(
         fact,
         'depends_on',

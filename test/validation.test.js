@@ -91,6 +91,50 @@ depends_on: []
   });
 });
 
+test('validate accepts a schema version 2 dependency on a done prerequisite', async () => {
+  await withLedger({
+    'prerequisite.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Completed prerequisite"
+kind: task
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+completed: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: complete
+    date: 2026-01-02
+    summary: "Complete the prerequisite."
+    rationale: "The prerequisite work is complete."
+---
+`,
+    'dependent.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Dependent work"
+kind: task
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { valid: true, errors: [] });
+  });
+});
+
 test('validate rejects a status outside schema version 1', async () => {
   await withLedger({
     'item.md': `---
