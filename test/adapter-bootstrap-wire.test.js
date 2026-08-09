@@ -103,6 +103,34 @@ test('accepts an invocation request at the exact byte limit', async () => {
   assert.equal(result.ok, true);
 });
 
+test('stops consuming and releases an invocation stream after it crosses the byte limit', async () => {
+  let pulledBytes = 0;
+  let released = false;
+  async function* requestChunks() {
+    try {
+      for (const size of [4, 4, 4]) {
+        pulledBytes += size;
+        yield Buffer.alloc(size, 0x20);
+      }
+    } finally {
+      released = true;
+    }
+  }
+
+  const result = await readBootstrapRequest(requestChunks(), {
+    maxBytes: 5,
+    errorCode: 'invalid-invocation',
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    error_code: 'invalid-invocation',
+    detail: { member: 'request', reason: 'byte-limit-exceeded', limit_bytes: 5 },
+  });
+  assert.equal(pulledBytes, 8);
+  assert.equal(released, true);
+});
+
 test('refuses a request with trailing bytes and still exits zero', async () => {
   const { code, stdout } = await spawnEntrypoint(['describe'], '{"bootstrap_wire_version":1}{"extra":true}');
   assert.equal(code, 0);
