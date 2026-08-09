@@ -4,6 +4,7 @@ import { link, lstat, mkdir, open, rename, unlink, writeFile } from 'node:fs/pro
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar } from 'yaml';
+import { isDependencySatisfied } from './dependencies.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
 import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
@@ -875,8 +876,15 @@ function transitionPreconditions(target, ledger, request, edge) {
   if (!edge.allowed) {
     issues.push(transitionIssue('invalid-edge', 'to_status', 'The requested lifecycle edge is not allowed for this item.', []));
   }
-  if (request.to_status === 'done' && (target.data.depends_on ?? []).length > 0) {
-    issues.push(transitionIssue('live-dependencies', 'depends_on', 'Completion requires an empty depends_on list.', [...target.data.depends_on].sort(compareText)));
+  const dependencies = target.data.depends_on ?? [];
+  const liveDependencies = target.data.schema_version === 2
+    ? dependencies.filter((id) => !isDependencySatisfied(findItem(ledger, id)?.data.status))
+    : dependencies;
+  if (request.to_status === 'done' && liveDependencies.length > 0) {
+    const message = target.data.schema_version === 2
+      ? 'Completion requires every depends_on target to be done.'
+      : 'Completion requires an empty depends_on list.';
+    issues.push(transitionIssue('live-dependencies', 'depends_on', message, [...liveDependencies].sort(compareText)));
   }
   if (target.data.kind === 'epic' && request.to_status === 'done') {
     const children = ledger.items.filter((item) => item.data.parent === target.data.id);

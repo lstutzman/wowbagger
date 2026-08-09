@@ -1,3 +1,5 @@
+import { isDependencySatisfied } from './dependencies.js';
+
 const KINDS = new Set(['task', 'epic']);
 const STATUSES = new Set([
   'triage',
@@ -629,7 +631,7 @@ function validateDependencies(fact, index, context) {
         context,
       );
     } else if (target.status === 'killed'
-      || (target.status === 'done' && fact.schemaVersion === 1)) {
+      || (isDependencySatisfied(target.status) && fact.schemaVersion === 1)) {
       addError(
         fact,
         'depends_on',
@@ -920,7 +922,7 @@ function validateDoneDependencies(fact, index, context) {
   if (fact.schemaVersion === 2) {
     const hasUnsatisfiedDependency = fact.dependsOn.some((dependency) => {
       const target = resolveReference(dependency, index);
-      return target !== null && target !== 'ambiguous' && target.status !== 'done';
+      return target !== null && target !== 'ambiguous' && !isDependencySatisfied(target.status);
     });
     if (!hasUnsatisfiedDependency) {
       return;
