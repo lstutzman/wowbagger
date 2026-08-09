@@ -275,8 +275,8 @@ test('holds the remaining Plan 3 assertions at unimplemented', async () => {
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 161);
-  assert.equal(183 - evidenced.length, 22);
+  assert.equal(evidenced.length, 181);
+  assert.equal(183 - evidenced.length, 2);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });
@@ -315,6 +315,16 @@ test('builds only the explicit non-authoritative handoff resume plan', async () 
     id: 'handoff-is-explicit-and-non-authoritative',
     evidence: 'src/adapter/handoff.js',
   }]);
+});
+
+test('validates trusted approval schema binding time and single-use authority', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin' });
+  const approvalCase = result.cases.find(({ case: name }) => name === 'approval-schema');
+
+  assert.equal(approvalCase.status, 'pass');
+  assert.equal(approvalCase.assertion_evidence.length, 20);
+  assert.ok(approvalCase.assertion_evidence
+    .every(({ evidence }) => evidence === 'src/adapter/approval.js'));
 });
 
 test('every negotiation assertion it evidences agrees with the fixture expectation', async (t) => {

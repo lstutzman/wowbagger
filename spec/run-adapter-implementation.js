@@ -16,6 +16,7 @@ import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
+import { verifyTrustedApproval } from '../src/adapter/approval.js';
 import { validateInstructionInput } from '../src/adapter/instructions.js';
 import { validateInvokeContext } from '../src/adapter/context.js';
 import { buildResumePlan, validateHandoffResume } from '../src/adapter/handoff.js';
@@ -684,6 +685,29 @@ async function evaluateResumePlanAssertion(directory, assertion) {
   };
 }
 
+async function evaluateApprovalSchemaAssertion(directory, assertion) {
+  const data = await readScenarios(directory);
+  const scenario = findScenario(data.cases, assertion.scenario);
+  const approval = structuredClone(data.base_approval);
+  const binding = structuredClone(data.base_binding);
+  mutateObject(scenario.target === 'binding' ? binding : approval, scenario);
+  const redeemedNonces = new Set();
+  const options = {
+    approval,
+    binding,
+    now: scenario.now ?? data.now,
+    trustedSources: new Set(scenario.trusted_sources ?? ['consumer']),
+    redeemedNonces,
+  };
+  if (scenario.replay) verifyTrustedApproval(options);
+  const result = verifyTrustedApproval(options);
+  return {
+    ok: (result.ok ? 'ok' : result.error_code) === scenario.expected,
+    evidence: 'src/adapter/approval.js',
+    error_code: result.error_code,
+  };
+}
+
 async function evaluateAssertion(directory, assertion) {
   switch (assertion.type) {
     case 'negotiation':
@@ -712,6 +736,8 @@ async function evaluateAssertion(directory, assertion) {
       return evaluateContextAssertion(directory, assertion);
     case 'resume-plan':
       return evaluateResumePlanAssertion(directory, assertion);
+    case 'approval-schema':
+      return evaluateApprovalSchemaAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }
