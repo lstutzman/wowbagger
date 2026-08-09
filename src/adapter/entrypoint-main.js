@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from './bootstrap.js';
-import { CORE_COMMAND_ORDER } from './core-probe.js';
+import { CORE_COMMAND_ORDER, coreCapabilities } from './core-probe.js';
 import { describeAdapter } from './describe.js';
+import { invokeAdapter } from './invoke.js';
 import { validateAdapterManifest } from './manifest.js';
 import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
@@ -109,6 +110,27 @@ export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = 
       process.stdout,
       described.ok ? described.result : { ok: false, error: { code: described.error_code } },
     );
+    return;
+  }
+
+  if (operation === 'invoke') {
+    const dynamic = dynamicResult(manifest);
+    const response = await invokeAdapter(incoming.bytes, {
+      max_request_bytes: dynamic.limits.max_request_bytes,
+      describe_request: {
+        bootstrap_wire_version: 1,
+        supported_adapter_contract_versions: [1],
+        request_id: 'entrypoint-invoke-describe',
+      },
+      manifest,
+      dynamic,
+      core_probe: coreCapabilities(),
+      platform: process.platform,
+      package_root: fileURLToPath(new URL('../../', manifestUrl)),
+      workspaces: {},
+      launch: async () => { throw new Error('core launch is not configured'); },
+    });
+    await writeBootstrapResponse(process.stdout, response);
     return;
   }
 

@@ -56,6 +56,24 @@ test('answers describe with exactly one JSON object and exits zero', async () =>
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
 });
 
+test('answers invoke through the bootstrap wire and refuses a future contract version', async () => {
+  const request = JSON.stringify({
+    adapter_contract_version: 2,
+    request_id: 'wire-invoke-version-0001',
+    core_request: { command: 'capabilities' },
+    instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+    handoff_carrier: null,
+    limits: { context_bytes: 0, stdout_bytes: 4096, stderr_bytes: 1024, timeout_ms: 1000 },
+  });
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], request);
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.error.code, 'adapter-contract-selection-mismatch');
+  assert.equal(response.request_id, 'wire-invoke-version-0001');
+});
+
 test('refuses a request with trailing bytes and still exits zero', async () => {
   const { code, stdout } = await spawnEntrypoint(['describe'], '{"bootstrap_wire_version":1}{"extra":true}');
   assert.equal(code, 0);

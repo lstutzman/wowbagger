@@ -11,11 +11,12 @@ export async function readBootstrapRequest(stream) {
   for await (const chunk of stream) {
     chunks.push(chunk);
   }
-  const parsed = parseJsonRequest(Buffer.concat(chunks));
+  const bytes = Buffer.concat(chunks);
+  const parsed = parseJsonRequest(bytes);
   if (parsed.issues.length > 0) {
     return { ok: false, error_code: 'invalid-describe-request' };
   }
-  return { ok: true, request: normalizeJsonValue(parsed.value) };
+  return { ok: true, request: normalizeJsonValue(parsed.value), bytes };
 }
 
 // Writes exactly one JSON object plus one trailing LF, and nothing else.
