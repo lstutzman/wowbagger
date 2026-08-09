@@ -891,7 +891,12 @@ export function deriveExecutedAssertions(declared, evaluated) {
   return executed;
 }
 
-async function runtimeConfigForMode(directory, manifest, probeForbiddenCoreLaunch) {
+async function runtimeConfigForMode(
+  directory,
+  manifest,
+  probeForbiddenCoreLaunch,
+  probeForbiddenCoreLaunchSync,
+) {
   switch (manifest.mode) {
     case 'equivalence':
       return undefined;
@@ -907,6 +912,7 @@ async function runtimeConfigForMode(directory, manifest, probeForbiddenCoreLaunc
         core_probe: coreCapabilities(),
         forbid_core_launch: true,
         ...(probeForbiddenCoreLaunch ? { probe_forbidden_core_launch: true } : {}),
+        ...(probeForbiddenCoreLaunchSync ? { probe_forbidden_core_launch_sync: true } : {}),
         ...(capabilityArtifact
           ? { dynamic_result: await readStrictJson(path.join(directory, capabilityArtifact.path)) }
           : {}),
@@ -928,6 +934,7 @@ export async function runImplementationVectors({
   platform,
   target = 'claude-code',
   probeForbiddenCoreLaunch = false,
+  probeForbiddenCoreLaunchSync = false,
   outputLimitProbeExecutable,
 } = {}) {
   const directories = (await readdir(fixtureRoot, { withFileTypes: true }))
@@ -968,6 +975,7 @@ export async function runImplementationVectors({
       directory,
       manifest,
       probeForbiddenCoreLaunch,
+      probeForbiddenCoreLaunchSync,
     );
     if (manifest.mode === 'protocol') {
       await callShippedEntrypoint({

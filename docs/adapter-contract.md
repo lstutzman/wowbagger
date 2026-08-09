@@ -1098,10 +1098,11 @@ manifest's declared `mode`:
   shipped adapter transaction. It compares the exit code and exact stdout and
   stderr bytes; reconstructed output is not equivalent.
 - `negative-capability` supplies the declared capability profile, process
-  observation, or refusal input. A process-level audit records child-process
-  creation in the shipped entrypoint from before its modules load. The runner
-  fails the case if that audit records a child, including a launch that bypasses
-  the injected launcher or whose result is discarded.
+  observation, or refusal input. A process-level audit loads before the shipped
+  entrypoint's modules and records asynchronous child resources plus successful
+  calls to Node's public synchronous child-process APIs. The runner fails the
+  case if that audit records a child, including a launch that bypasses the
+  injected launcher or whose result is discarded.
 - `protocol` supplies the declared contract input, observation, or handoff to
   the applicable shipped contract implementation. Its bootstrap transaction
   uses a supplied core capability snapshot and does not launch a core child.

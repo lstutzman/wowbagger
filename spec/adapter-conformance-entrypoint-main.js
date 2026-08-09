@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   launchCoreProcess,
@@ -31,6 +32,13 @@ export async function runAdapterEntrypoint(options) {
       input: Buffer.alloc(0),
       limits: { stdout_bytes: 1048576, stderr_bytes: 65536, timeout_ms: 30000 },
     });
+  }
+  if (runtimeConfig.probe_forbidden_core_launch_sync) {
+    spawnSync(process.execPath, [
+      fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url)),
+      'capabilities',
+      '--json',
+    ], { cwd: fileURLToPath(new URL('..', import.meta.url)) });
   }
   const dynamicResult = Object.hasOwn(runtimeConfig, 'dynamic_result')
     ? () => structuredClone(runtimeConfig.dynamic_result)

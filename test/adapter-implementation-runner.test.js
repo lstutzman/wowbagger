@@ -375,6 +375,17 @@ test('fails a negative-capability case when the entrypoint spawns an ignored cor
   assert.equal(result.cases[0].status, 'fail');
 });
 
+test('fails a negative-capability case when the entrypoint synchronously spawns a core child', async (t) => {
+  const { root } = await isolateCase(t, '06-bounded-output', () => true);
+  const result = await runImplementationVectors({
+    fixtureRoot: root,
+    platform: process.platform,
+    probeForbiddenCoreLaunchSync: true,
+  });
+
+  assert.equal(result.cases[0].status, 'fail');
+});
+
 test('applies protocol no-launch mode to advisory-claims invocation', async (t) => {
   const { root } = await isolateCase(
     t,
