@@ -331,7 +331,7 @@ test('uses the declared process observation for a negative-capability case', asy
   assert.deepEqual(result.cases[0].observed_error_codes, ['output-limit-exceeded']);
   assert.deepEqual(result.cases[0].assertion_evidence, [{
     id: 'do-not-return-partial-core-json',
-    evidence: 'adapters/claude-code/entrypoint.js',
+    evidence: 'adapters/claude-code/entrypoint.js + src/adapter/entrypoint-main.js',
   }]);
 });
 
@@ -362,6 +362,10 @@ test('bounded-output drives a real child past the advertised stdout limit', asyn
 
   assert.equal(childStarted, true);
   assert.equal(result.cases[0].status, 'pass');
+  assert.equal(
+    result.cases[0].assertion_evidence[0].evidence,
+    'adapters/claude-code/entrypoint.js + src/adapter/entrypoint-main.js',
+  );
 });
 
 test('fails a negative-capability case when the entrypoint spawns an ignored core child', async (t) => {
@@ -417,7 +421,7 @@ test('forwards compatible core baselines and maps the declared bounded-output ob
   );
   assert.equal(
     byName.get('bounded-output').assertion_evidence[0].evidence,
-    'adapters/claude-code/entrypoint.js',
+    'adapters/claude-code/entrypoint.js + src/adapter/entrypoint-main.js',
   );
 });
 
@@ -467,7 +471,6 @@ test('routes every bootstrap transaction through the shipped entrypoint', async 
     ['ready-forwarding', 'preserve-ready-baseline'],
     ['validation-failure-forwarding', 'preserve-validation-failure'],
     ['path-no-follow', 'reject-link-before-core-launch'],
-    ['bounded-output', 'do-not-return-partial-core-json'],
     ['mutation-approval', 'do-not-mutate-before-approval'],
     ['capabilities-forwarding', 'preserve-core-capability-truth'],
     ['capabilities-forwarding', 'claims-are-advisory'],
@@ -475,6 +478,10 @@ test('routes every bootstrap transaction through the shipped entrypoint', async 
   ]) {
     assert.equal(evidenceOf(caseName, id), 'adapters/claude-code/entrypoint.js', `${caseName}/${id}`);
   }
+  assert.equal(
+    evidenceOf('bounded-output', 'do-not-return-partial-core-json'),
+    'adapters/claude-code/entrypoint.js + src/adapter/entrypoint-main.js',
+  );
 });
 
 test('labels each evidenced assertion with the shipped module that produced it', async () => {

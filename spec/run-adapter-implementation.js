@@ -525,7 +525,7 @@ async function evaluateOutputBoundAssertion(
       ok: realLimitEnforced
         && invoked.response.error?.code === assertion.expect
         && sameJson(invoked.response, expected),
-      evidence: invoked.evidence,
+      evidence: `${invoked.evidence} + src/adapter/entrypoint-main.js`,
       error_code: invoked.response.error?.code,
     };
   } finally {
