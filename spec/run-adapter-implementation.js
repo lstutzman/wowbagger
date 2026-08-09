@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,6 @@ import { describeAdapter } from '../src/adapter/describe.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
-import { invokeAdapter } from '../src/adapter/invoke.js';
 import { verifyMutationAuthority, verifyTrustedApproval } from '../src/adapter/approval.js';
 import { validateInstructionInput } from '../src/adapter/instructions.js';
 import { validateInvokeContext } from '../src/adapter/context.js';
@@ -27,6 +26,9 @@ import { sameJson } from '../src/adapter/schema-helpers.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
+const ADAPTER_STDOUT_LIMIT = 2 * 1024 * 1024;
+const ADAPTER_STDERR_LIMIT = 64 * 1024;
+const ADAPTER_TIMEOUT_MS = 35000;
 
 const SUPPORTED_ASSERTION_TYPES = new Set([
   'core-baseline', 'capability', 'instruction-order', 'path-refusal',
@@ -57,6 +59,99 @@ async function parseStrictJson(file) {
 
 async function readStrictJson(file) {
   return normalizeJsonValue(await parseStrictJson(file));
+}
+
+function parseBootstrapResponse(stdout, entrypoint) {
+  if (stdout.length < 3 || stdout[stdout.length - 1] !== 0x0A) {
+    throw new Error(`${entrypoint}: bootstrap stdout must end with exactly one LF`);
+  }
+  const body = stdout.subarray(0, -1);
+  if (body[0] !== 0x7B || body[body.length - 1] !== 0x7D
+    || body.includes(0x0A) || body.includes(0x0D)) {
+    throw new Error(`${entrypoint}: bootstrap stdout is not exactly one JSON object plus one LF`);
+  }
+  const parsed = parseJsonRequest(body);
+  if (parsed.issues.length > 0) {
+    throw new Error(`${entrypoint}: bootstrap stdout is not strict JSON`);
+  }
+  return normalizeJsonValue(parsed.value);
+}
+
+async function spawnAdapterEntrypoint(entrypoint, operation, request, env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [entrypoint, operation], {
+      cwd: projectRoot,
+      detached: process.platform !== 'win32',
+      env,
+      shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const stdout = [];
+    const stderr = [];
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let transportFailure = null;
+    const terminate = () => {
+      try {
+        if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    const timer = setTimeout(() => {
+      transportFailure = new Error(`${entrypoint}: adapter bootstrap timed out`);
+      terminate();
+    }, ADAPTER_TIMEOUT_MS);
+    child.once('spawn', () => { child.stdin.end(Buffer.from(JSON.stringify(request))); });
+    child.once('error', reject);
+    child.stdout.on('data', (chunk) => {
+      stdoutBytes += chunk.length;
+      if (stdoutBytes <= ADAPTER_STDOUT_LIMIT) stdout.push(chunk);
+      else {
+        transportFailure = new Error(`${entrypoint}: adapter stdout limit exceeded`);
+        terminate();
+      }
+    });
+    child.stderr.on('data', (chunk) => {
+      stderrBytes += chunk.length;
+      if (stderrBytes <= ADAPTER_STDERR_LIMIT) stderr.push(chunk);
+      else {
+        transportFailure = new Error(`${entrypoint}: adapter stderr limit exceeded`);
+        terminate();
+      }
+    });
+    child.once('close', (code, signal) => {
+      clearTimeout(timer);
+      if (transportFailure) reject(transportFailure);
+      else if (code !== 0 || signal !== null) {
+        reject(new Error(`${entrypoint}: adapter transport failed (${code ?? signal})`));
+      } else resolve(parseBootstrapResponse(Buffer.concat(stdout), entrypoint));
+    });
+  });
+}
+
+async function callShippedEntrypoint(request, target, { operation = 'invoke', workspaces = {} } = {}) {
+  const entrypoint = path.join(projectRoot, 'adapters', target, 'entrypoint.js');
+  const shippedManifestPath = path.join(projectRoot, 'adapters', target, 'wowbagger-adapter.json');
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-candidate-'));
+  try {
+    const candidateManifest = await readStrictJson(shippedManifestPath);
+    candidateManifest.platforms[process.platform] = 'supported';
+    const candidateManifestPath = path.join(temporary, 'wowbagger-adapter.json');
+    const workspacesPath = path.join(temporary, 'workspaces.json');
+    await writeFile(candidateManifestPath, JSON.stringify(candidateManifest));
+    await writeFile(workspacesPath, JSON.stringify(workspaces));
+    return {
+      response: await spawnAdapterEntrypoint(entrypoint, operation, request, {
+        WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
+        WOWBAGGER_ADAPTER_WORKSPACES_PATH: workspacesPath,
+      }),
+      evidence: path.relative(projectRoot, entrypoint),
+    };
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
 const scenarioCache = new Map();
@@ -97,7 +192,7 @@ function matchesExpectation(result, scenario) {
 // the describe request, so they are evaluated against the shipped engine
 // modules imported directly rather than across the process boundary; adding a
 // test-injection seam to the entrypoint would weaken the shipped binary.
-async function evaluateNegotiationAssertion(directory, assertion) {
+async function evaluateNegotiationAssertion(directory, assertion, target) {
   const data = await readScenarios(directory);
 
   if (assertion.type === 'invoke-version') {
@@ -110,15 +205,11 @@ async function evaluateNegotiationAssertion(directory, assertion) {
       handoff_carrier: null,
       limits: { context_bytes: 0, stdout_bytes: 4096, stderr_bytes: 1024, timeout_ms: 1000 },
     };
-    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(request)}\n`), {
-      max_request_bytes: data.base_dynamic.limits.max_request_bytes,
-      describe_request: data.base_request,
-      manifest: data.base_manifest,
-      dynamic: data.base_dynamic,
-    });
+    const invoked = await callShippedEntrypoint(request, target);
+    const result = invoked.response;
     return {
       ok: result.error.code === scenario.expected,
-      evidence: 'src/adapter/invoke.js',
+      evidence: invoked.evidence,
       error_code: result.error.code,
     };
   }
@@ -191,39 +282,16 @@ async function evaluateNegotiationAssertion(directory, assertion) {
 // through the shipped negotiator is what makes `src/adapter/describe.js` an
 // honest evidence label: the accepted result, not the raw file, is what
 // declares both optional features absent.
-async function evaluateCapabilityAssertion(directory, assertion) {
+async function evaluateCapabilityAssertion(directory, assertion, target) {
   if (assertion.expect === 'refuse-before-core-launch') {
-    const dynamic = await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
     const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
-    let launches = 0;
-    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), {
-      max_request_bytes: dynamic.limits.max_request_bytes,
-      describe_request: {
-        bootstrap_wire_version: 1,
-        supported_adapter_contract_versions: [1],
-        request_id: 'implementation-vector-describe',
-      },
-      manifest: {
-        adapter_manifest_version: 1,
-        adapter_id: dynamic.adapter_id,
-        adapter_version: dynamic.adapter_version,
-        adapter_contract_versions: [1],
-        bootstrap_wire_version: 1,
-        required_core_contract_version: dynamic.core.required_core_contract_version,
-        entrypoints: {
-          describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
-          invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
-        },
-        platforms: dynamic.platforms,
-      },
-      dynamic,
-      platform: process.platform,
-      launch: async () => { launches += 1; },
-    });
+    await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
+    const invoked = await callShippedEntrypoint(invocation, target);
+    const result = invoked.response;
     return {
-      ok: launches === 0 && sameJson(result, expected),
-      evidence: 'src/adapter/invoke.js',
+      ok: sameJson(result, expected),
+      evidence: invoked.evidence,
       error_code: result.error.code,
     };
   }
@@ -233,44 +301,35 @@ async function evaluateCapabilityAssertion(directory, assertion) {
       const parsed = parseJsonRequest(bytes);
       if (parsed.issues.length > 0) return { ok: false, evidence: 'src/adapter/core-probe.js' };
       const probe = normalizeJsonValue(parsed.value);
-      const described = vectorDynamic(probe);
+      const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
+      const invoked = await callShippedEntrypoint(invocation, target);
+      const actual = invoked.response.ok
+        ? JSON.parse(Buffer.from(invoked.response.result.stdout.data, 'base64').toString('utf8'))
+        : null;
       return {
         ok: probe.result.operations.work_claim.mode === 'advisory'
           && probe.result.operations.work_claim.safe_exclusive_dispatch === false
-          && verifyCoreProbe(described, probe).ok,
-        evidence: 'src/adapter/core-probe.js',
+          && actual?.result?.operations?.work_claim?.mode === 'advisory'
+          && actual.result.operations.work_claim.safe_exclusive_dispatch === false,
+        evidence: invoked.evidence,
+        error_code: invoked.response.error?.code,
       };
     }
     return UNIMPLEMENTED;
   }
   const capabilities = await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
-  const described = describeAdapter(
-    {
-      bootstrap_wire_version: capabilities.bootstrap_wire_version,
-      supported_adapter_contract_versions: [1],
-      request_id: assertion.id,
-    },
-    {
-      adapter_manifest_version: 1,
-      adapter_id: capabilities.adapter_id,
-      adapter_version: capabilities.adapter_version,
-      adapter_contract_versions: [1],
-      bootstrap_wire_version: capabilities.bootstrap_wire_version,
-      required_core_contract_version: capabilities.core.required_core_contract_version,
-      entrypoints: {
-        describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
-        invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
-      },
-      platforms: capabilities.platforms,
-    },
-    capabilities,
-  );
+  const invoked = await callShippedEntrypoint({
+    bootstrap_wire_version: capabilities.bootstrap_wire_version,
+    supported_adapter_contract_versions: [1],
+    request_id: assertion.id,
+  }, target, { operation: 'describe' });
+  const described = invoked.response;
   return {
     ok: described.ok === true
-      && described.result.optional_features.claims === false
-      && described.result.optional_features.policy === false,
-    evidence: 'src/adapter/describe.js',
-    error_code: described.error_code,
+      && described.optional_features.claims === false
+      && described.optional_features.policy === false,
+    evidence: invoked.evidence,
+    error_code: described.error?.code,
   };
 }
 
@@ -409,7 +468,7 @@ function coreObservation({ argv, cwd, input, limits }) {
   };
 }
 
-async function evaluateCoreBaselineAssertion(directory, assertion) {
+async function evaluateCoreBaselineAssertion(directory, assertion, target) {
   const coreInvocation = await readStrictJson(path.join(directory, 'core-invocation.json'));
   const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
   const expected = await readStrictJson(path.join(directory, 'expected-adapter-result.json'));
@@ -430,36 +489,38 @@ async function evaluateCoreBaselineAssertion(directory, assertion) {
     argv[ledgerIndex + 1] = ledger;
   }
   try {
-    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), vectorRuntime({
-      workspaces: workspaceFor(invocation, root),
-      launch: async (launch) => {
-        if (!sameJson(launch.argv, argv)) throw new Error('adapter constructed the wrong core argv');
-        return coreObservation(launch);
-      },
-    }));
+    const workspaces = invocation.workspace
+      ? { [invocation.workspace.workspace_id]: root }
+      : {};
+    const invoked = await callShippedEntrypoint(invocation, target, { workspaces });
     return {
-      ok: sameJson(result, expected),
-      evidence: 'src/adapter/invoke.js',
-      error_code: result.error?.code,
+      ok: sameJson(invoked.response, expected),
+      evidence: invoked.evidence,
+      error_code: invoked.response.error?.code,
     };
   } finally {
     if (temporary) await rm(temporary, { recursive: true, force: true });
   }
 }
 
-async function evaluateOutputBoundAssertion(directory, assertion) {
-  const processCase = await readStrictJson(path.join(directory, 'process.json'));
+async function evaluateOutputBoundAssertion(directory, assertion, target) {
+  await readStrictJson(path.join(directory, 'process.json'));
   const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
   const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
-  const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), vectorRuntime({
-    workspaces: workspaceFor(invocation, '/approved/workspace'),
-    launch: async () => processCase.request.process,
-  }));
-  return {
-    ok: result.error?.code === assertion.expect && sameJson(result, expected),
-    evidence: 'src/adapter/process-outcome.js',
-    error_code: result.error?.code,
-  };
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-output-vector-'));
+  try {
+    await mkdir(path.join(temporary, 'ledger'));
+    const invoked = await callShippedEntrypoint(invocation, target, {
+      workspaces: { [invocation.workspace.workspace_id]: temporary },
+    });
+    return {
+      ok: invoked.response.error?.code === assertion.expect && sameJson(invoked.response, expected),
+      evidence: invoked.evidence,
+      error_code: invoked.response.error?.code,
+    };
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
 // §3.1 platform statuses are evidence-based: `supported` is a claim, and no
@@ -484,28 +545,27 @@ async function evaluatePlatformAssertion(directory, assertion) {
   };
 }
 
-async function evaluateInvocationPathAssertion(directory, assertion) {
+async function evaluateInvocationPathAssertion(directory, assertion, target) {
   if (assertion.type === 'path-refusal') {
-    const shape = await readStrictJson(path.join(directory, 'filesystem-shape.json'));
+    await readStrictJson(path.join(directory, 'filesystem-shape.json'));
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
-    const ledger = invocation.core_request.ledger;
-    const selected = shape.entries.find(({ path: entryPath }) => entryPath === ledger);
-    const snapshots = {
-      '.': { kind: 'directory', identity: 'workspace' },
-      [ledger]: { kind: selected?.kind ?? 'missing', identity: selected?.path ?? 'missing' },
-    };
-    const result = resolveInvocationPaths({
-      workspace_root: `/${shape.workspace_root}`,
-      cwd: invocation.workspace.cwd,
-      ledger,
-      before: snapshots,
-      after: structuredClone(snapshots),
-    });
-    return {
-      ok: result.error_code === 'path-rejected' && result.detail.kind === assertion.expect,
-      evidence: 'src/adapter/paths.js',
-      error_code: result.error_code,
-    };
+    const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-path-vector-'));
+    try {
+      await mkdir(path.join(temporary, 'ledger'));
+      await symlink('ledger', path.join(temporary, invocation.core_request.ledger));
+      const invoked = await callShippedEntrypoint(invocation, target, {
+        workspaces: { [invocation.workspace.workspace_id]: temporary },
+      });
+      return {
+        ok: sameJson(invoked.response, expected)
+          && invoked.response.error?.details?.kind === assertion.expect,
+        evidence: invoked.evidence,
+        error_code: invoked.response.error?.code,
+      };
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   }
 
   const data = await readScenarios(directory);
@@ -712,20 +772,24 @@ async function evaluateApprovalSchemaAssertion(directory, assertion) {
   };
 }
 
-async function evaluateApprovalGateAssertion(directory, assertion) {
+async function evaluateApprovalGateAssertion(directory, assertion, target) {
   if (assertion.expect === 'consumer-approval-required') {
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
     const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
-    let launches = 0;
-    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), vectorRuntime({
-      workspaces: workspaceFor(invocation, '/approved/workspace'),
-      launch: async () => { launches += 1; },
-    }));
-    return {
-      ok: launches === 0 && sameJson(result, expected),
-      evidence: 'src/adapter/invoke.js',
-      error_code: result.error?.code,
-    };
+    const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-approval-vector-'));
+    try {
+      await mkdir(path.join(temporary, 'ledger'));
+      const invoked = await callShippedEntrypoint(invocation, target, {
+        workspaces: { [invocation.workspace.workspace_id]: temporary },
+      });
+      return {
+        ok: sameJson(invoked.response, expected),
+        evidence: invoked.evidence,
+        error_code: invoked.response.error?.code,
+      };
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   }
   if (assertion.expect === 'no-commit-or-push') {
     const approved = await readStrictJson(path.join(directory, 'approved-authority.json'));
@@ -759,22 +823,22 @@ async function evaluateAssertion(directory, assertion, target) {
     case 'core-probe':
     case 'entrypoint-path':
     case 'invoke-version':
-      return evaluateNegotiationAssertion(directory, assertion);
+      return evaluateNegotiationAssertion(directory, assertion, target);
     case 'capability':
-      return evaluateCapabilityAssertion(directory, assertion);
+      return evaluateCapabilityAssertion(directory, assertion, target);
     case 'platform-status':
       return evaluatePlatformAssertion(directory, assertion);
     case 'path-refusal':
     case 'path-race':
     case 'path-syntax':
     case 'snapshot-identity':
-      return evaluateInvocationPathAssertion(directory, assertion);
+      return evaluateInvocationPathAssertion(directory, assertion, target);
     case 'process-outcome':
       return evaluateProcessOutcomeAssertion(directory, assertion);
     case 'core-baseline':
-      return evaluateCoreBaselineAssertion(directory, assertion);
+      return evaluateCoreBaselineAssertion(directory, assertion, target);
     case 'output-bound':
-      return evaluateOutputBoundAssertion(directory, assertion);
+      return evaluateOutputBoundAssertion(directory, assertion, target);
     case 'instruction-order':
       return evaluateInstructionAssertion(directory, assertion);
     case 'context-validation':
@@ -784,7 +848,7 @@ async function evaluateAssertion(directory, assertion, target) {
     case 'approval-schema':
       return evaluateApprovalSchemaAssertion(directory, assertion);
     case 'approval-gate':
-      return evaluateApprovalGateAssertion(directory, assertion);
+      return evaluateApprovalGateAssertion(directory, assertion, target);
     default:
       return UNIMPLEMENTED;
   }

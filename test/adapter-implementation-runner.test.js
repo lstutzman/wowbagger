@@ -98,13 +98,17 @@ test('refuses a scenario that omits its expected error code', async (t) => {
   );
 });
 
-test('reports pass with every committed claude-code assertion executed', async () => {
+test('reports the honest claude-code result with every assertion executed', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
 
-  assert.equal(result.status, 'pass');
-  assert.equal(result.implementations['claude-code'], 'pass');
+  assert.equal(result.status, 'fail');
+  assert.equal(result.implementations['claude-code'], 'fail');
   assert.equal(result.evidence_platform, 'darwin');
   assert.equal(result.cases.length, 15);
+  assert.deepEqual(
+    result.cases.filter(({ status }) => status === 'fail').map(({ case: name }) => name),
+    ['capability-separation', 'bounded-output'],
+  );
 
   const executed = result.cases.flatMap((entry) => entry.executed_assertions);
   assert.equal(executed.length, 183);
@@ -182,7 +186,8 @@ test('evaluates the negotiation cases against the shipped engine', async () => {
 
   const implemented = negotiation.assertion_evidence
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.ok(implemented.every(({ evidence }) => evidence.startsWith('src/adapter/')));
+  assert.ok(implemented.every(({ evidence }) => evidence.startsWith('src/adapter/')
+    || evidence === 'adapters/claude-code/entrypoint.js'));
   assert.ok(negotiation.observed_error_codes.includes('unsupported-adapter-contract-version'));
 });
 
@@ -206,34 +211,90 @@ test('maps every bounded process observation through the shipped engine', async 
     .every(({ evidence }) => evidence === 'src/adapter/process-outcome.js'));
 });
 
-test('refuses API-only transport before core launch', async () => {
+test('reports that the shipped Claude adapter does not match the API-only host fixture', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
   const capabilityCase = result.cases.find(({ case: name }) => name === 'capability-separation');
 
-  assert.equal(capabilityCase.status, 'pass');
+  assert.equal(capabilityCase.status, 'fail');
   assert.equal(
     capabilityCase.assertion_evidence.find(({ id }) => id === 'api-transport-is-not-tooling').evidence,
-    'src/adapter/invoke.js',
+    'adapters/claude-code/entrypoint.js',
   );
+  assert.ok(capabilityCase.observed_error_codes.includes('path-rejected'));
 });
 
-test('forwards compatible core baselines byte for byte and bounds output', async () => {
+test('forwards compatible core baselines and reports the bounded-output mismatch', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
 
-  for (const name of [
-    'ready-forwarding', 'validation-failure-forwarding', 'bounded-output', 'capabilities-forwarding',
-  ]) {
+  for (const name of ['ready-forwarding', 'validation-failure-forwarding', 'capabilities-forwarding']) {
     assert.equal(byName.get(name).status, 'pass', name);
   }
+  assert.equal(byName.get('bounded-output').status, 'fail');
   assert.equal(
     byName.get('ready-forwarding').assertion_evidence[0].evidence,
-    'src/adapter/invoke.js',
+    'adapters/claude-code/entrypoint.js',
   );
   assert.equal(
     byName.get('bounded-output').assertion_evidence[0].evidence,
-    'src/adapter/process-outcome.js',
+    'adapters/claude-code/entrypoint.js',
   );
+});
+
+test('evaluates real invocation assertions through the shipped bootstrap process', async (t) => {
+  const { root, kept } = await isolateCase(
+    t,
+    '10-capabilities-forwarding',
+    ({ type }) => type === 'core-baseline',
+  );
+  assert.equal(kept, 1);
+
+  const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
+
+  assert.equal(result.cases[0].status, 'pass');
+  assert.deepEqual(result.cases[0].assertion_evidence, [{
+    id: 'preserve-core-capability-truth',
+    evidence: 'adapters/claude-code/entrypoint.js',
+  }]);
+});
+
+test('evaluates workspace forwarding through the shipped bootstrap process', async (t) => {
+  const { root, kept } = await isolateCase(
+    t,
+    '03-ready-forwarding',
+    ({ type }) => type === 'core-baseline',
+  );
+  assert.equal(kept, 1);
+
+  const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
+
+  assert.equal(result.cases[0].status, 'pass');
+  assert.deepEqual(result.cases[0].assertion_evidence, [{
+    id: 'preserve-ready-baseline',
+    evidence: 'adapters/claude-code/entrypoint.js',
+  }]);
+});
+
+test('routes every real adapter transaction through the shipped entrypoint', async () => {
+  const result = await runImplementationVectors({ platform: process.platform });
+  const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
+  const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
+    .find((entry) => entry.id === id).evidence;
+
+  for (const [caseName, id] of [
+    ['capability-separation', 'api-transport-is-not-tooling'],
+    ['capability-separation', 'optional-features-are-absent'],
+    ['ready-forwarding', 'preserve-ready-baseline'],
+    ['validation-failure-forwarding', 'preserve-validation-failure'],
+    ['path-no-follow', 'reject-link-before-core-launch'],
+    ['bounded-output', 'do-not-return-partial-core-json'],
+    ['mutation-approval', 'do-not-mutate-before-approval'],
+    ['capabilities-forwarding', 'preserve-core-capability-truth'],
+    ['capabilities-forwarding', 'claims-are-advisory'],
+    ['negotiation-mismatch', 'future-invoke-version-is-refused'],
+  ]) {
+    assert.equal(evidenceOf(caseName, id), 'adapters/claude-code/entrypoint.js', `${caseName}/${id}`);
+  }
 });
 
 test('labels each evidenced assertion with the shipped module that produced it', async () => {
@@ -249,7 +310,10 @@ test('labels each evidenced assertion with the shipped module that produced it',
   assert.equal(evidenceOf('platform-declaration', 'platform-status-is-evidence-based'), 'src/adapter/manifest.js');
   // An assertion that produced no refusal contributes no error code.
   assert.deepEqual(byName.get('platform-declaration').observed_error_codes, []);
-  assert.equal(evidenceOf('capability-separation', 'optional-features-are-absent'), 'src/adapter/describe.js');
+  assert.equal(
+    evidenceOf('capability-separation', 'optional-features-are-absent'),
+    'adapters/claude-code/entrypoint.js',
+  );
 });
 
 test('evidences every Plan 3 assertion through a shipped module', async () => {
@@ -260,25 +324,25 @@ test('evidences every Plan 3 assertion through a shipped module', async () => {
 
   assert.equal(
     evidenceOf('negotiation-mismatch', 'future-invoke-version-is-refused'),
-    'src/adapter/invoke.js',
+    'adapters/claude-code/entrypoint.js',
   );
   assert.equal(
     evidenceOf('capability-separation', 'api-transport-is-not-tooling'),
-    'src/adapter/invoke.js',
+    'adapters/claude-code/entrypoint.js',
   );
   assert.equal(
     evidenceOf('capabilities-forwarding', 'preserve-core-capability-truth'),
-    'src/adapter/invoke.js',
+    'adapters/claude-code/entrypoint.js',
   );
-  assert.equal(byName.get('capability-separation').status, 'pass');
+  assert.equal(byName.get('capability-separation').status, 'fail');
 
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
   assert.equal(evidenced.length, 183);
   assert.equal(183 - evidenced.length, 0);
-  assert.equal(result.status, 'pass');
-  assert.equal(result.implementations['claude-code'], 'pass');
+  assert.equal(result.status, 'fail');
+  assert.equal(result.implementations['claude-code'], 'fail');
 });
 
 test('validates ordered instruction input through the shipped engine', async () => {
@@ -333,7 +397,7 @@ test('requires consumer approval without granting Git authority', async () => {
 
   assert.equal(mutationCase.status, 'pass');
   assert.deepEqual(mutationCase.assertion_evidence, [
-    { id: 'do-not-mutate-before-approval', evidence: 'src/adapter/invoke.js' },
+    { id: 'do-not-mutate-before-approval', evidence: 'adapters/claude-code/entrypoint.js' },
     { id: 'do-not-grant-git-authority', evidence: 'src/adapter/approval.js' },
   ]);
   assert.ok(mutationCase.observed_error_codes.includes('consumer-approval-required'));
@@ -370,7 +434,7 @@ test('every negotiation assertion it evidences agrees with the fixture expectati
   ]);
 });
 
-test('the capability assertion it evidences agrees with the committed artifact', async (t) => {
+test('the real describe reports the core claim that the stale capability artifact omits', async (t) => {
   const { root, kept } = await isolateCase(
     t,
     '01-capability-separation',
@@ -380,7 +444,7 @@ test('the capability assertion it evidences agrees with the committed artifact',
 
   const result = await runImplementationVectors({ fixtureRoot: root, platform: 'darwin' });
 
-  assert.equal(result.cases[0].status, 'pass');
+  assert.equal(result.cases[0].status, 'fail');
 });
 
 test('reports a case as passing when the shipped engine matches the fixture expectation', async (t) => {
