@@ -5,7 +5,7 @@ number: 44
 title: "No item with dependents can be closed"
 kind: task
 priority: 1
-status: triage
+status: in-progress
 created: 2026-08-09
 updated: 2026-08-09
 provenance:
@@ -14,6 +14,11 @@ provenance:
 depends_on: []
 related: []
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-09
+    summary: "Accepted, taking the first option: give the backend multi-item atomic write scope."
+    rationale: "Lee chose to build multi-item atomicity rather than redefine what depends_on means or push cleanup onto the dependent. That keeps the meaning of a dependency intact and closes the general defect rather than routing around it. The cost is larger than the three-option summary implied, and it is recorded here so nobody discovers it mid-implementation. This is not a bug fix. Section 2 states the backend's write scope is one Markdown item with no multi-item atomicity, and limits.multi_item_atomicity is advertised as false in the capabilities envelope, so consumers negotiate against it today. Delivering this flips a published capability, adds a write scope and a compare-and-set scope spanning N items, and needs crash recovery for a partially applied set. The hard part is publication: the contract's atomicity rests on same-path atomic replacement of one file, and no filesystem primitive replaces N files atomically, so the all-or-nothing guarantee has to be built from a journal or an equivalent recoverable protocol. Design comes before code."
 ---
 
 Item 13 met every acceptance criterion, its work merged to main, and the close was
