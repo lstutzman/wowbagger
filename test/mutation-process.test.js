@@ -58,6 +58,42 @@ test('two create processes leave one complete item and no temporary or lock file
   });
 });
 
+test('create selects the schema version for every valid ledger state', async () => {
+  const seedId = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
+  const cases = [
+    { name: 'empty ledger', files: {}, expectedSchemaVersion: 2 },
+    {
+      name: 'schema version 1 ledger',
+      files: { [`${seedId}.md`]: schemaSeed(seedId, 1) },
+      expectedSchemaVersion: 1,
+    },
+    {
+      name: 'schema version 2 ledger',
+      files: { [`${seedId}.md`]: schemaSeed(seedId, 2) },
+      expectedSchemaVersion: 2,
+    },
+  ];
+
+  for (const scenario of cases) {
+    await withLedger(scenario.files, async (ledger) => {
+      const requestPath = path.join(path.dirname(ledger), 'create.json');
+      await writeFile(requestPath, JSON.stringify(createRequest(CREATE_ID, '')));
+
+      const result = await runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+      const output = parseOutput(result);
+
+      assert.equal(result.status, 0, `${scenario.name}: ${result.stdout}`);
+      assert.equal(output.result.item.core.schema_version, scenario.expectedSchemaVersion, scenario.name);
+      assert.match(
+        await readFile(path.join(ledger, `${CREATE_ID}.md`), 'utf8'),
+        new RegExp(`^schema_version: ${scenario.expectedSchemaVersion}$`, 'm'),
+        scenario.name,
+      );
+      await assertNoOwnArtifacts(ledger);
+    });
+  }
+});
+
 test('a stale transition snapshot cannot overwrite the committed successor', async () => {
   const source = await fixtureText('transition-success/before.md');
   const request = JSON.parse(await fixtureText('transition-success/request.json'));
@@ -435,6 +471,10 @@ depends_on: []
 related: []
 ---
 `;
+}
+
+function schemaSeed(id, schemaVersion) {
+  return triageSource(id).replace('schema_version: 1', `schema_version: ${schemaVersion}`);
 }
 
 function runCli(...argumentsList) {

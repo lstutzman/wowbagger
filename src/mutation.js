@@ -266,7 +266,8 @@ export async function createItem(ledgerDirectory, request, scenario) {
         return await finishUncommitted(mutationError('path-collision', 'The default item path is occupied by a different item.', 'unchanged', 4, details));
       }
 
-      const bytes = createCandidateSource(request);
+      const schemaVersion = current.ledger.items[0]?.data.schema_version ?? 2;
+      const bytes = createCandidateSource(request, schemaVersion);
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         null,
@@ -1668,13 +1669,13 @@ async function waitForTestMarker(file) {
   throw new Error(`Timed out waiting for test marker ${path.basename(file)}.`);
 }
 
-export function createCandidateSource(request) {
-  return Buffer.from(serializeCreate(createData(request, dateFromId(request.id)), request.body), 'utf8');
+export function createCandidateSource(request, schemaVersion = 1) {
+  return Buffer.from(serializeCreate(createData(request, dateFromId(request.id), schemaVersion), request.body), 'utf8');
 }
 
-function createData(request, date) {
+function createData(request, date, schemaVersion) {
   return {
-    schema_version: 1,
+    schema_version: schemaVersion,
     id: request.id,
     title: request.item.title,
     kind: request.item.kind,
@@ -1693,7 +1694,7 @@ function createData(request, date) {
 function serializeCreate(data, body) {
   const lines = [
     '---',
-    'schema_version: 1',
+    `schema_version: ${data.schema_version}`,
     `id: ${data.id}`,
     ...(hasOwn(data, 'number') ? [`number: ${yamlScalar(data.number)}`] : []),
     `title: ${quote(data.title)}`,
