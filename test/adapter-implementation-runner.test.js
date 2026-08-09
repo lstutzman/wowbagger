@@ -98,11 +98,11 @@ test('refuses a scenario that omits its expected error code', async (t) => {
   );
 });
 
-test('reports fail with every committed claude-code assertion executed', async () => {
+test('reports pass with every committed claude-code assertion executed', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
 
-  assert.equal(result.status, 'fail');
-  assert.equal(result.implementations['claude-code'], 'fail');
+  assert.equal(result.status, 'pass');
+  assert.equal(result.implementations['claude-code'], 'pass');
   assert.equal(result.evidence_platform, 'darwin');
   assert.equal(result.cases.length, 15);
 
@@ -252,7 +252,7 @@ test('labels each evidenced assertion with the shipped module that produced it',
   assert.equal(evidenceOf('capability-separation', 'optional-features-are-absent'), 'src/adapter/describe.js');
 });
 
-test('holds the remaining Plan 3 assertions at unimplemented', async () => {
+test('evidences every Plan 3 assertion through a shipped module', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
   const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
@@ -275,10 +275,10 @@ test('holds the remaining Plan 3 assertions at unimplemented', async () => {
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 181);
-  assert.equal(183 - evidenced.length, 2);
-  assert.equal(result.status, 'fail');
-  assert.equal(result.implementations['claude-code'], 'fail');
+  assert.equal(evidenced.length, 183);
+  assert.equal(183 - evidenced.length, 0);
+  assert.equal(result.status, 'pass');
+  assert.equal(result.implementations['claude-code'], 'pass');
 });
 
 test('validates ordered instruction input through the shipped engine', async () => {
@@ -325,6 +325,18 @@ test('validates trusted approval schema binding time and single-use authority', 
   assert.equal(approvalCase.assertion_evidence.length, 20);
   assert.ok(approvalCase.assertion_evidence
     .every(({ evidence }) => evidence === 'src/adapter/approval.js'));
+});
+
+test('requires consumer approval without granting Git authority', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin' });
+  const mutationCase = result.cases.find(({ case: name }) => name === 'mutation-approval');
+
+  assert.equal(mutationCase.status, 'pass');
+  assert.deepEqual(mutationCase.assertion_evidence, [
+    { id: 'do-not-mutate-before-approval', evidence: 'src/adapter/invoke.js' },
+    { id: 'do-not-grant-git-authority', evidence: 'src/adapter/approval.js' },
+  ]);
+  assert.ok(mutationCase.observed_error_codes.includes('consumer-approval-required'));
 });
 
 test('every negotiation assertion it evidences agrees with the fixture expectation', async (t) => {

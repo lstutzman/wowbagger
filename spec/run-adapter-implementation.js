@@ -16,7 +16,7 @@ import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
-import { verifyTrustedApproval } from '../src/adapter/approval.js';
+import { verifyMutationAuthority, verifyTrustedApproval } from '../src/adapter/approval.js';
 import { validateInstructionInput } from '../src/adapter/instructions.js';
 import { validateInvokeContext } from '../src/adapter/context.js';
 import { buildResumePlan, validateHandoffResume } from '../src/adapter/handoff.js';
@@ -333,7 +333,7 @@ function vectorDynamic(probe = actualCoreProbe()) {
   };
 }
 
-function vectorRuntime({ workspaces = {}, launch } = {}) {
+function vectorRuntime({ workspaces = {}, launch, approval = null } = {}) {
   const probe = actualCoreProbe();
   const dynamic = vectorDynamic(probe);
   return {
@@ -362,6 +362,10 @@ function vectorRuntime({ workspaces = {}, launch } = {}) {
     package_root: projectRoot,
     workspaces,
     launch,
+    approval,
+    now: '2030-01-15T12:01:00Z',
+    redeemed_nonces: new Set(),
+    core_executable_identity: `sha256:${'a'.repeat(64)}`,
   };
 }
 
@@ -708,7 +712,48 @@ async function evaluateApprovalSchemaAssertion(directory, assertion) {
   };
 }
 
-async function evaluateAssertion(directory, assertion) {
+async function evaluateApprovalGateAssertion(directory, assertion) {
+  if (assertion.expect === 'consumer-approval-required') {
+    const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
+    const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
+    let launches = 0;
+    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), vectorRuntime({
+      workspaces: workspaceFor(invocation, '/approved/workspace'),
+      launch: async () => { launches += 1; },
+    }));
+    return {
+      ok: launches === 0 && sameJson(result, expected),
+      evidence: 'src/adapter/invoke.js',
+      error_code: result.error?.code,
+    };
+  }
+  if (assertion.expect === 'no-commit-or-push') {
+    const approved = await readStrictJson(path.join(directory, 'approved-authority.json'));
+    const result = verifyMutationAuthority({
+      command: 'transition',
+      approval: approved.approval,
+      approvalOptions: {
+        ...approved.approval_options,
+        redeemedNonces: new Set(),
+        trustedSources: new Set(['consumer']),
+      },
+    });
+    return {
+      ok: result.ok && sameJson(result.authority, ['core:transition'])
+        && result.authority.every((entry) => !entry.startsWith('git:')),
+      evidence: 'src/adapter/approval.js',
+      error_code: result.error_code,
+    };
+  }
+  throw new Error(`unknown approval expectation ${assertion.expect}`);
+}
+
+async function evaluateAssertion(directory, assertion, target) {
+  if (target !== 'claude-code' && [
+    'instruction-order', 'approval-gate', 'resume-plan', 'context-validation', 'approval-schema',
+  ].includes(assertion.type)) {
+    return UNIMPLEMENTED;
+  }
   switch (assertion.type) {
     case 'negotiation':
     case 'core-probe':
@@ -738,6 +783,8 @@ async function evaluateAssertion(directory, assertion) {
       return evaluateResumePlanAssertion(directory, assertion);
     case 'approval-schema':
       return evaluateApprovalSchemaAssertion(directory, assertion);
+    case 'approval-gate':
+      return evaluateApprovalGateAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }
@@ -782,7 +829,7 @@ export async function runImplementationVectors({
     const errorCodes = new Set();
     let cased = true;
     for (const assertion of manifest.assertions) {
-      const outcome = await evaluateAssertion(directory, assertion);
+      const outcome = await evaluateAssertion(directory, assertion, target);
       if (outcome.error_code) {
         errorCodes.add(outcome.error_code);
       }

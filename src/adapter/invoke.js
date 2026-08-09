@@ -1,5 +1,7 @@
 import { describeAdapter } from './describe.js';
 import { createHash } from 'node:crypto';
+import { verifyMutationAuthority } from './approval.js';
+import { validateInvokeContext } from './context.js';
 import { verifyCoreProbe } from './core-probe.js';
 import { validateInvocationLimits } from './limits.js';
 import { resolveInvocationPaths } from './paths.js';
@@ -37,16 +39,13 @@ function coreRequestIssue(coreRequest) {
       && typeof coreRequest.ledger === 'string' && typeof coreRequest.id === 'string'
       ? null : 'core_request';
   }
+  if (coreRequest?.command === 'create' || coreRequest?.command === 'transition') {
+    return hasExactMembers(coreRequest, ['command', 'ledger', 'input_base64'])
+      && typeof coreRequest.ledger === 'string'
+      && typeof coreRequest.input_base64 === 'string'
+      ? null : 'core_request';
+  }
   return 'core_request';
-}
-
-function emptyContextCarriers(request) {
-  return hasExactMembers(request.instruction_input, ['instruction_input_version', 'required', 'sources'])
-    && request.instruction_input.instruction_input_version === 1
-    && request.instruction_input.required === false
-    && Array.isArray(request.instruction_input.sources)
-    && request.instruction_input.sources.length === 0
-    && request.handoff_carrier === null;
 }
 
 function argumentVector(coreRequest, ledger) {
@@ -55,6 +54,8 @@ function argumentVector(coreRequest, ledger) {
     case 'validate': return ['validate', '--ledger', ledger, '--json'];
     case 'ready': return ['ready', '--ledger', ledger, '--as-of', coreRequest.as_of, '--json'];
     case 'inspect': return ['inspect', '--ledger', ledger, '--id', coreRequest.id, '--json'];
+    case 'create': return ['create', '--ledger', ledger, '--input', '-', '--json'];
+    case 'transition': return ['transition', '--ledger', ledger, '--input', '-', '--json'];
     default: throw new TypeError('unsupported core command');
   }
 }
@@ -160,8 +161,22 @@ export async function invokeAdapter(requestBytes, runtime) {
   if (!limits.ok) return refusal(requestId, limits.error_code, limits.detail);
   const requestIssue = coreRequestIssue(request.core_request);
   if (requestIssue) return refusal(requestId, 'invalid-invocation', { member: requestIssue });
-  if (!emptyContextCarriers(request)) {
-    return refusal(requestId, 'invalid-invocation', { member: 'instruction_input' });
+  if (request.handoff_carrier !== null && described.result.host.handoff.supported !== true) {
+    return refusal(requestId, 'capability-unavailable', { missing: ['handoff'] });
+  }
+  const context = validateInvokeContext({
+    instruction_input: request.instruction_input,
+    handoff_carrier: request.handoff_carrier,
+    context_bytes: request.limits.context_bytes,
+    instruction_limits: described.result.host.instruction_input,
+    handoff_options: {
+      workspace_id: request.workspace?.workspace_id,
+      max_bytes: request.limits.context_bytes,
+      current: runtime.handoff_current,
+    },
+  });
+  if (!context.ok) {
+    return refusal(requestId, context.error_code, context.detail);
   }
 
   let workspace = null;
@@ -188,13 +203,53 @@ export async function invokeAdapter(requestBytes, runtime) {
   }
 
   const argv = argumentVector(request.core_request, workspace?.ledger);
+  if (command === 'create' || command === 'transition') {
+    if (described.result.host.trusted_approval?.supported !== true) {
+      return refusal(requestId, 'capability-unavailable', { missing: ['trusted-approval'] });
+    }
+    const authority = verifyMutationAuthority({
+      command,
+      approval: runtime.approval,
+      approvalOptions: {
+        binding: {
+          request_id: requestId,
+          adapter: {
+            id: described.result.adapter_id,
+            version: described.result.adapter_version,
+            contract_version: described.result.selected_adapter_contract_version,
+          },
+          core: {
+            executable_identity: runtime.core_executable_identity,
+            contract_version: described.result.core.required_core_contract_version,
+            argv,
+            input_base64: request.core_request.input_base64,
+          },
+          workspace: {
+            id: request.workspace.workspace_id,
+            root: runtime.workspaces[request.workspace.workspace_id].root,
+            cwd: workspace.cwd,
+            ledger: workspace.ledger,
+          },
+          limits: request.limits,
+          instruction_set_digest: context.instructions.instruction_set_digest,
+          handoff_digest: request.handoff_carrier?.sha256 ?? null,
+        },
+        now: runtime.now,
+        redeemedNonces: runtime.redeemed_nonces,
+        trustedSources: new Set(described.result.host.trusted_approval.sources),
+      },
+    });
+    if (!authority.ok) return refusal(requestId, authority.error_code, authority.detail);
+  }
   let processObservation;
   try {
     processObservation = await runtime.launch({
       command,
       argv,
       cwd: workspace?.cwd ?? runtime.package_root,
-      input: Buffer.alloc(0),
+      input: command === 'create' || command === 'transition'
+        ? Buffer.from(request.core_request.input_base64, 'base64')
+        : Buffer.alloc(0),
       limits: request.limits,
     });
   } catch {
