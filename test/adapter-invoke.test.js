@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { mapProcessOutcome as referenceMapProcessOutcome } from '../spec/adapter-reference.js';
 import { coreCapabilities } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
+import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
 import { adapterManifest, describeRequest, dynamicDescribe } from './adapter-contract-fixtures.js';
 
 function runtime() {
@@ -63,4 +66,15 @@ test('preserves exact core stream bytes and exit code', async () => {
   assert.equal(result.result.core_exit_code, 0);
   assert.deepEqual(Buffer.from(result.result.stdout.data, 'base64'), stdout);
   assert.deepEqual(Buffer.from(result.result.stderr.data, 'base64'), Buffer.alloc(0));
+});
+
+test('maps every process-outcome fixture to the independent oracle envelope', async () => {
+  const fixture = JSON.parse(await readFile(
+    new URL('../spec/fixtures/adapters/11-process-outcomes/scenarios.json', import.meta.url),
+    'utf8',
+  ));
+
+  for (const scenario of fixture.scenarios) {
+    assert.deepEqual(mapProcessOutcome(scenario.request), referenceMapProcessOutcome(scenario.request), scenario.id);
+  }
 });

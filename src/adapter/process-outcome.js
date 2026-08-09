@@ -3,11 +3,6 @@ import { CORE_COMMAND_ORDER, verifyCoreProbe } from './core-probe.js';
 import { hasExactMembers, isNonNegativeSafeInteger } from './schema-helpers.js';
 
 const MESSAGES = Object.freeze({
-  'core-launch-failed': 'The Wowbagger core could not be started.',
-  'core-observation-incomplete': 'The core process could not be observed completely.',
-  'core-protocol-error': 'The core returned an invalid protocol response.',
-  'core-signaled': 'The core process ended after a signal.',
-  'core-timeout': 'The core process exceeded the requested timeout.',
   'mutation-outcome-unknown': 'The mutation may have been applied; inspect current state before retrying.',
   'output-limit-exceeded': 'The core output exceeded the requested bound.',
 });
