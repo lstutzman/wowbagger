@@ -43,7 +43,7 @@ export function validateLedger(ledger) {
   for (const fact of facts) {
     validateRelationLists(fact, context);
     validateTerminalDates(fact, context);
-    validateDoneDependencies(fact, context);
+    validateDoneDependencies(fact, index, context);
     validateDecisionRecords(fact, context);
   }
 
@@ -911,9 +911,27 @@ function validateForbiddenTerminalDates(fact, activeField, context) {
   }
 }
 
-function validateDoneDependencies(fact, context) {
-  if (fact.schemaVersion === 2 || fact.status !== 'done' || !Array.isArray(fact.data.depends_on)
+function validateDoneDependencies(fact, index, context) {
+  if (fact.status !== 'done' || !Array.isArray(fact.data.depends_on)
     || fact.data.depends_on.length === 0) {
+    return;
+  }
+
+  if (fact.schemaVersion === 2) {
+    const hasUnsatisfiedDependency = fact.dependsOn.some((dependency) => {
+      const target = resolveReference(dependency, index);
+      return target !== null && target !== 'ambiguous' && target.status !== 'done';
+    });
+    if (!hasUnsatisfiedDependency) {
+      return;
+    }
+    addError(
+      fact,
+      'depends_on',
+      'done-item-has-dependencies',
+      `Done item ${fact.id ?? 'without a valid ID'} requires every depends_on target to be done.`,
+      context,
+    );
     return;
   }
 

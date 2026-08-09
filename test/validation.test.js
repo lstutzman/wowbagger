@@ -185,6 +185,58 @@ decisions:
   });
 });
 
+test('validate rejects a schema version 2 done item whose prerequisite is live', async () => {
+  await withLedger({
+    'prerequisite.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Live prerequisite"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+    'dependent.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Invalid completion"
+kind: task
+status: done
+created: 2026-01-02
+updated: 2026-01-03
+completed: 2026-01-03
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
+decisions:
+  - action: complete
+    date: 2026-01-03
+    summary: "Attempt completion."
+    rationale: "The live prerequisite must keep this state invalid."
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/dependent.md',
+        field: 'depends_on',
+        code: 'done-item-has-dependencies',
+        message: 'Done item wb_01KDZ98CG0YH769STZ754EKXSZ requires every depends_on target to be done.',
+      }],
+    });
+  });
+});
+
 test('validate rejects a status outside schema version 1', async () => {
   await withLedger({
     'item.md': `---
