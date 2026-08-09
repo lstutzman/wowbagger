@@ -170,12 +170,14 @@ This checkout ships three adapter packages on one shared entrypoint runtime:
 [`adapters/claude-code/`](adapters/claude-code/), [`adapters/codex/`](adapters/codex/),
 and [`adapters/opencode/`](adapters/opencode/). Each answers the section 3.3 bootstrap
 wire with its own identity and honest host declaration. The native Darwin
-implementation runner exercises all 183 assertions across all 15 cases — run
-`node spec/run-adapter-implementation.js` (add `--target codex` or
-`--target opencode` for those reports) to see the evidence. Invocation
-forwarding, path and limit guards, approval, and context all enter through the
-shared shipped engine. Platform declarations remain `unverified` until their
-separate release evidence is accepted. The Kimi and
+Claude Code report passes all 183 assertions across all 15 cases — run
+`node spec/run-adapter-implementation.js` to see the evidence. Codex and
+OpenCode share the version 2 engine and execute all 183 assertions with
+`--target codex` or `--target opencode`, but both target reports remain `fail`
+pending target-specific evidence. Invocation forwarding, path and limit guards,
+approval, and context all enter through the shared shipped engine. Platform
+declarations remain `unverified` until their separate release evidence is
+accepted. The Kimi and
 OpenAI-compatible harness adapters are not written.
 
 ## Core commands
@@ -335,8 +337,9 @@ It is the durable work ledger beneath those systems.
 - Separate optional reusable mechanisms from consumer-specific policy.
 - Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
-  packages share the version 2 engine; the native Darwin runner passes all
-  183 assertions, while manifest platform declarations remain unverified.**
+  packages share the version 2 engine; the Claude Code Darwin target passes
+  all 183 assertions, while the other target reports and all manifest platform
+  declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses.
 - Complete and review the separate fenced claim and resolution contract;
   local mutation locks are not claims. **Advisory Git-common-directory claims
