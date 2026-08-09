@@ -196,6 +196,16 @@ test('evaluates guarded invocation paths against the shipped engine', async () =
     .every(({ evidence }) => evidence === 'src/adapter/paths.js'));
 });
 
+test('maps every bounded process observation through the shipped engine', async () => {
+  const result = await runImplementationVectors({ platform: process.platform });
+  const processCase = result.cases.find(({ case: name }) => name === 'process-outcomes');
+
+  assert.equal(processCase.status, 'pass');
+  assert.equal(processCase.executed_assertions.length, 18);
+  assert.ok(processCase.assertion_evidence
+    .every(({ evidence }) => evidence === 'src/adapter/process-outcome.js'));
+});
+
 test('labels each evidenced assertion with the shipped module that produced it', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
@@ -229,7 +239,7 @@ test('holds unfinished Plan 2 and Plan 3 assertions at unimplemented', async () 
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 98);
+  assert.equal(evidenced.length, 116);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });

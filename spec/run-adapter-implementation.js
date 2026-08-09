@@ -14,6 +14,7 @@ import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
 import { resolveInvocationPaths } from '../src/adapter/paths.js';
+import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 
@@ -317,6 +318,19 @@ async function evaluateInvocationPathAssertion(directory, assertion) {
   };
 }
 
+async function evaluateProcessOutcomeAssertion(directory, assertion) {
+  const data = await readScenarios(directory);
+  const scenario = findScenario(data.scenarios, assertion.scenario);
+  const result = mapProcessOutcome(scenario.request);
+  return {
+    ok: result.error.code === scenario.expected_code
+      && (result.mutation_outcome ?? null) === scenario.expected_mutation_outcome
+      && result.process.orphaned === false,
+    evidence: 'src/adapter/process-outcome.js',
+    error_code: result.error.code,
+  };
+}
+
 async function evaluateAssertion(directory, assertion) {
   switch (assertion.type) {
     case 'negotiation':
@@ -333,6 +347,8 @@ async function evaluateAssertion(directory, assertion) {
     case 'path-syntax':
     case 'snapshot-identity':
       return evaluateInvocationPathAssertion(directory, assertion);
+    case 'process-outcome':
+      return evaluateProcessOutcomeAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }
