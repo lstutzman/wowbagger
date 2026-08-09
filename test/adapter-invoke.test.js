@@ -51,6 +51,24 @@ test('uses the bounded-output refusal for a requested stream limit above the max
   assert.equal(result.error.message, 'The core output exceeded the requested bound.');
 });
 
+test('checks handoff capability before parsing a non-null carrier', async () => {
+  const request = {
+    adapter_contract_version: 1,
+    request_id: 'handoff-capability-0001',
+    core_request: { command: 'capabilities' },
+    instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+    handoff_carrier: {},
+    limits: { context_bytes: 1, stdout_bytes: 4096, stderr_bytes: 1024, timeout_ms: 1000 },
+  };
+  const configured = runtime();
+  configured.dynamic.host.handoff.supported = false;
+
+  const result = await invokeAdapter(Buffer.from(`${JSON.stringify(request)}\n`), configured);
+
+  assert.equal(result.error.code, 'capability-unavailable');
+  assert.deepEqual(result.error.details, { missing: ['handoff'] });
+});
+
 test('preserves exact core stream bytes and exit code', async () => {
   const request = {
     adapter_contract_version: 1,
