@@ -21,7 +21,7 @@ function runtime() {
 
 test('refuses an invocation timeout above the advertised maximum', async () => {
   const request = {
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'timeout-limit-0001',
     core_request: { command: 'capabilities' },
     instruction_input: { instruction_input_version: 1, required: false, sources: [] },
@@ -37,7 +37,7 @@ test('refuses an invocation timeout above the advertised maximum', async () => {
 
 test('uses the bounded-output refusal for a requested stream limit above the maximum', async () => {
   const request = {
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'stdout-limit-0001',
     core_request: { command: 'capabilities' },
     instruction_input: { instruction_input_version: 1, required: false, sources: [] },
@@ -53,7 +53,7 @@ test('uses the bounded-output refusal for a requested stream limit above the max
 
 test('checks handoff capability before parsing a non-null carrier', async () => {
   const request = {
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'handoff-capability-0001',
     core_request: { command: 'capabilities' },
     instruction_input: { instruction_input_version: 1, required: false, sources: [] },
@@ -71,7 +71,7 @@ test('checks handoff capability before parsing a non-null carrier', async () => 
 
 test('preserves exact core stream bytes and exit code', async () => {
   const request = {
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'capability-bytes-0001',
     core_request: { command: 'capabilities' },
     instruction_input: { instruction_input_version: 1, required: false, sources: [] },

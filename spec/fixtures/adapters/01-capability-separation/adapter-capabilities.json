@@ -1,11 +1,11 @@
 {
   "ok": true,
   "bootstrap_wire_version": 1,
-  "selected_adapter_contract_version": 1,
+  "selected_adapter_contract_version": 2,
   "adapter_id": "example.api-only",
   "adapter_version": "0.0.0-fixture",
   "core": {
-    "required_core_contract_version": 1,
+    "required_core_contract_version": 2,
     "commands": []
   },
   "host": {

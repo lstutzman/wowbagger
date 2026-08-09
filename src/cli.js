@@ -21,6 +21,7 @@ import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
+const MUTATION_CONTRACT_VERSION = 2;
 
 export async function runCli(argumentsList, { scenario } = {}) {
   const command = argumentsList[0];
@@ -47,7 +48,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       process.stdout.write(`${JSON.stringify({
         ok: false,
         command,
-        contract_version: 1,
+        contract_version: MUTATION_CONTRACT_VERSION,
         error: {
           code: 'ledger-invalid',
           message: 'The configured ledger is invalid.',
@@ -61,7 +62,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       process.stdout.write(`${JSON.stringify({
         ok: false,
         command,
-        contract_version: 1,
+        contract_version: MUTATION_CONTRACT_VERSION,
         error: {
           code: 'item-not-found',
           message: 'The requested item was not found.',
@@ -74,7 +75,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     process.stdout.write(`${JSON.stringify({
       ok: true,
       command,
-      contract_version: 1,
+      contract_version: MUTATION_CONTRACT_VERSION,
       result: { item: result.item },
     })}\n`);
     return;
@@ -140,7 +141,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     process.stdout.write(`${JSON.stringify({
       ok: true,
       command,
-      contract_version: 1,
+      contract_version: MUTATION_CONTRACT_VERSION,
       result: { id: mintId(date ?? null) },
     })}\n`);
     return;
@@ -287,7 +288,7 @@ async function capabilities(ledger) {
   return {
     ok: true,
     command: 'capabilities',
-    contract_version: 1,
+    contract_version: MUTATION_CONTRACT_VERSION,
     result: {
       backend: {
         name: 'local-filesystem',
@@ -468,7 +469,7 @@ function writeInvalidRequest(command, issues) {
   process.stdout.write(`${JSON.stringify({
     ok: false,
     command,
-    contract_version: 1,
+    contract_version: MUTATION_CONTRACT_VERSION,
     error: outcome.error,
   })}\n`);
   process.exitCode = outcome.exit;
@@ -483,14 +484,14 @@ function writeMutation(command, outcome) {
     ? {
       ok: true,
       command,
-      contract_version: 1,
+      contract_version: MUTATION_CONTRACT_VERSION,
       state: outcome.state,
       result: { item: outcome.item },
     }
     : {
       ok: false,
       command,
-      contract_version: 1,
+      contract_version: MUTATION_CONTRACT_VERSION,
       state: outcome.state,
       error: outcome.error,
     };

@@ -6,6 +6,7 @@ import { hasExactMembers } from './schema-helpers.js';
 export const CORE_COMMAND_ORDER = Object.freeze([
   'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate',
 ]);
+export const CORE_CONTRACT_VERSION = 2;
 
 const GIT_COORDINATION_SCOPES = new Set([
   'same-working-copy-cooperative-writers',
@@ -140,7 +141,7 @@ function coreProbeSchemaIssue(probe) {
   if (probe.command !== 'capabilities') {
     return 'command';
   }
-  if (probe.contract_version !== 1) {
+  if (probe.contract_version !== CORE_CONTRACT_VERSION) {
     return 'contract_version';
   }
   const result = probe.result;
@@ -196,7 +197,7 @@ export function coreCapabilities() {
   return {
     ok: true,
     command: 'capabilities',
-    contract_version: 1,
+    contract_version: CORE_CONTRACT_VERSION,
     result: {
       backend: { name: 'local-filesystem', coordination_scope: 'same-working-copy-cooperative-writers' },
       operations: {

@@ -548,11 +548,11 @@ function referenceRuntime(overrides = {}) {
   const dynamic = overrides.dynamic ?? {
     ok: true,
     bootstrap_wire_version: 1,
-    selected_adapter_contract_version: 1,
+    selected_adapter_contract_version: 2,
     adapter_id: 'example.reference',
     adapter_version: '1.0.0',
     core: {
-      required_core_contract_version: 1,
+      required_core_contract_version: 2,
       commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
     },
     host: {
@@ -593,16 +593,16 @@ function referenceRuntime(overrides = {}) {
     max_request_bytes: dynamic.limits.max_request_bytes,
     describe_request: {
       bootstrap_wire_version: 1,
-      supported_adapter_contract_versions: [1],
+      supported_adapter_contract_versions: [2],
       request_id: 'reference-vector-describe',
     },
     manifest: {
       adapter_manifest_version: 1,
       adapter_id: dynamic.adapter_id,
       adapter_version: dynamic.adapter_version,
-      adapter_contract_versions: [1],
+      adapter_contract_versions: [2],
       bootstrap_wire_version: 1,
-      required_core_contract_version: 1,
+      required_core_contract_version: 2,
       entrypoints: {
         describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
         invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },

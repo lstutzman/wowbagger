@@ -1,7 +1,7 @@
 {
   "ok": true,
   "command": "capabilities",
-  "contract_version": 1,
+  "contract_version": 2,
   "result": {
     "backend": {
       "name": "local-filesystem",

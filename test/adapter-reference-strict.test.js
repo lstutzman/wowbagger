@@ -27,7 +27,7 @@ const revision = (character) => `sha256:${character.repeat(64)}`;
 
 function invokeRequest(overrides = {}) {
   return {
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'invoke-ready-0001',
     workspace: { workspace_id: 'fixture-workspace', cwd: '.' },
     core_request: { command: 'ready', ledger: 'ledger', as_of: '2030-01-15' },
@@ -80,10 +80,10 @@ function completeProcess(overrides = {}) {
 function binding() {
   return {
     request_id: 'mutation-approval-0002',
-    adapter: { id: 'example.reference', version: '1.0.0', contract_version: 1 },
+    adapter: { id: 'example.reference', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: revision('a'),
-      contract_version: 1,
+      contract_version: 2,
       argv: ['transition', '--ledger', '/approved/workspace/ledger', '--input', '-', '--json'],
       input_base64: 'e30K',
     },
@@ -121,7 +121,7 @@ test('mutation process precedence treats timeout and signal as unknown despite c
     completeProcess({ signal: 'runner-terminated' }),
   ]) {
     const result = mapProcessOutcome({
-      adapter_contract_version: 1,
+      adapter_contract_version: 2,
       request_id: 'transition-ambiguous-0001',
       command: 'transition',
       item_id: 'wb_01KDWPVNG00000000000000000',
@@ -143,14 +143,14 @@ test('read-only process failures have deterministic precedence', () => {
   ];
   for (const [process, code] of cases) {
     assert.equal(mapProcessOutcome({
-      adapter_contract_version: 1,
+      adapter_contract_version: 2,
       request_id: `ready-${code}`,
       command: 'ready',
       process,
     }).error.code, code);
   }
   const malformedValidation = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'validate-core-refusal',
     command: 'validate',
     process: completeProcess({
@@ -222,7 +222,7 @@ test('invoke wire is strict, bounded before parse, and emits exact outer envelop
   assert.equal((await invokeAdapter(
     Buffer.from(`${JSON.stringify(extra)}\n`), invokeRuntime({ launch }),
   )).error.code, 'invalid-invocation');
-  const future = invokeRequest({ adapter_contract_version: 2 });
+  const future = invokeRequest({ adapter_contract_version: 3 });
   assert.equal((await invokeAdapter(
     Buffer.from(`${JSON.stringify(future)}\n`), invokeRuntime({ launch }),
   )).error.code, 'adapter-contract-selection-mismatch');
@@ -238,8 +238,8 @@ test('negotiation compares every static and dynamic field at normative paths', (
   const mismatches = [
     [{ ...dynamic, adapter_id: 'example.other' }, 'adapter-identity-mismatch'],
     [{ ...dynamic, adapter_version: '2.0.0' }, 'adapter-version-mismatch'],
-    [{ ...dynamic, selected_adapter_contract_version: 2 }, 'invalid-describe-result'],
-    [{ ...dynamic, core: { ...dynamic.core, required_core_contract_version: 2 } }, 'required-core-contract-version-mismatch'],
+    [{ ...dynamic, selected_adapter_contract_version: 3 }, 'invalid-describe-result'],
+    [{ ...dynamic, core: { ...dynamic.core, required_core_contract_version: 1 } }, 'required-core-contract-version-mismatch'],
     [{ ...dynamic, platforms: { ...dynamic.platforms, linux: 'unverified' } }, 'adapter-platform-mismatch'],
     [{ ...dynamic, platforms: { darwin: 'unverified', linux: 'unverified' } }, 'invalid-describe-result'],
   ];
@@ -277,7 +277,7 @@ test('negotiation schemas reject missing, extra, and malformed objects without t
   }
 });
 
-test('version 1 negotiation accepts only the singleton consumer approval source', () => {
+test('version 2 negotiation accepts only the singleton consumer approval source', () => {
   for (const sources of [
     ['model'], ['agent'], ['system'], ['tool'], ['consumer', 'model'], [],
   ]) {
@@ -292,11 +292,11 @@ test('version 1 negotiation accepts only the singleton consumer approval source'
   ).ok, true);
 });
 
-test('version 1 negotiation refuses a future version even when both peers advertise it', () => {
-  const manifest = adapterManifest({ adapter_contract_versions: [2] });
-  const dynamic = dynamicDescribe({ selected_adapter_contract_version: 2 });
+test('version 2 negotiation refuses a future version even when both peers advertise it', () => {
+  const manifest = adapterManifest({ adapter_contract_versions: [3] });
+  const dynamic = dynamicDescribe({ selected_adapter_contract_version: 3 });
   assert.equal(describeAdapter(
-    describeRequest({ supported_adapter_contract_versions: [2] }), manifest, dynamic,
+    describeRequest({ supported_adapter_contract_versions: [3] }), manifest, dynamic,
   ).error.code, 'invalid-adapter-manifest');
 });
 
@@ -375,7 +375,7 @@ test('core capabilities probe is exact and cannot elevate adapter features', () 
     {},
     { ...referenceCoreCapabilities(), extra: true },
     { ...referenceCoreCapabilities(), command: 'ready' },
-    { ...referenceCoreCapabilities(), contract_version: 2 },
+    { ...referenceCoreCapabilities(), contract_version: 1 },
     {
       ...referenceCoreCapabilities(),
       result: { ...referenceCoreCapabilities().result, extra: true },

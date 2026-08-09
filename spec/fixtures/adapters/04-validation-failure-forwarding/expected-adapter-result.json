@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "adapter_contract_version": 1,
+  "adapter_contract_version": 2,
   "request_id": "validation-failure-0001",
   "result": {
     "core_command": "validate",

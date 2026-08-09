@@ -314,7 +314,7 @@ test('contract JSON commands return deterministic invalid-request envelopes for 
     const expected = {
       ok: false,
       command,
-      contract_version: 1,
+      contract_version: 2,
       ...(command === 'create' || command === 'transition' ? { state: 'unchanged' } : {}),
       error: {
         code: 'invalid-request',
@@ -335,7 +335,7 @@ test('an unreadable mutation input is an invalid-request input issue before an I
   const expected = {
     ok: false,
     command: 'create',
-    contract_version: 1,
+    contract_version: 2,
     state: 'unchanged',
     error: {
       code: 'invalid-request',

@@ -2,10 +2,10 @@
   "now": "2030-01-15T12:01:00Z",
   "base_binding": {
     "request_id": "mutation-approval-0001",
-    "adapter": { "id": "example.reference", "version": "1.0.0", "contract_version": 1 },
+    "adapter": { "id": "example.reference", "version": "1.0.0", "contract_version": 2 },
     "core": {
       "executable_identity": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "contract_version": 1,
+      "contract_version": 2,
       "argv": ["transition", "--ledger", "/approved/workspace/ledger", "--input", "-", "--json"],
       "input_base64": "e30K"
     },
@@ -25,7 +25,7 @@
     "nonce": "single-use-approval-0001",
     "issued_at": "2030-01-15T12:00:00Z",
     "expires_at": "2030-01-15T12:05:00Z",
-    "invocation_digest": "sha256:9b816d872e401982098a82d399347637813d1523430e752d7290f35c3bd44eb0"
+    "invocation_digest": "sha256:490ea75b8b8e426008cf7dffcf7f24ea46eec02b952512a8a8de4d8be1c97fb4"
   },
   "cases": [
     { "id": "valid", "expected": "ok" },
@@ -45,7 +45,7 @@
     { "id": "untrusted-tool", "set": { "path": "source", "value": "tool" }, "expected": "approval-source-untrusted" },
     { "id": "trusted-source-extra", "trusted_sources": ["consumer", "model"], "expected": "approval-source-untrusted" },
     { "id": "replay", "replay": true, "expected": "approval-replayed" },
-    { "id": "binding-mismatch", "target": "binding", "set": { "path": "core.contract_version", "value": 2 }, "expected": "approval-binding-mismatch" },
+    { "id": "binding-mismatch", "target": "binding", "set": { "path": "core.contract_version", "value": 1 }, "expected": "approval-binding-mismatch" },
     { "id": "binding-missing", "target": "binding", "delete": "core.executable_identity", "expected": "invalid-approval-binding" },
     { "id": "binding-extra", "target": "binding", "set": { "path": "extra", "value": true }, "expected": "invalid-approval-binding" }
   ]

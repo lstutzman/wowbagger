@@ -18,6 +18,8 @@ const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
 const PLATFORM_KEYS = ['darwin', 'linux', 'win32'];
 const PLATFORM_STATUS = new Set(['supported', 'unsupported', 'unverified']);
+const ADAPTER_CONTRACT_VERSION = 2;
+const CORE_CONTRACT_VERSION = 2;
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],
@@ -78,7 +80,7 @@ const TRANSITION_BLOCKER_FIELDS = Object.freeze({
 export const CORE_COMMANDS = Object.freeze([
   'capabilities', 'create', 'inspect', 'ready', 'transition', 'validate',
 ]);
-const SUPPORTED_ADAPTER_CONTRACT_VERSIONS = Object.freeze([1]);
+const SUPPORTED_ADAPTER_CONTRACT_VERSIONS = Object.freeze([ADAPTER_CONTRACT_VERSION]);
 const INSTRUCTION_MODES = new Set(['none', 'host-provided', 'configured-relative-paths']);
 const WORKSPACE_SELECTION_MODES = new Set(['none', 'guarded-relative']);
 const ORIGIN_PRECEDENCE = new Map([
@@ -515,7 +517,7 @@ export function referenceCoreCapabilities() {
   return {
     ok: true,
     command: 'capabilities',
-    contract_version: 1,
+    contract_version: CORE_CONTRACT_VERSION,
     result: {
       backend: {
         name: 'local-filesystem',
@@ -731,42 +733,42 @@ export function validateInvokeContext({
 }
 
 export async function invokeAdapter(requestBytes, runtime) {
-  const wireVersion = 1;
+  const adapterContractVersion = ADAPTER_CONTRACT_VERSION;
   const maximumRequestBytes = runtime?.max_request_bytes;
   if (!(requestBytes instanceof Uint8Array) || !positiveSafeInteger(maximumRequestBytes)) {
-    return invokeRefusal(wireVersion, null, 'invalid-invocation', { member: 'request' });
+    return invokeRefusal(adapterContractVersion, null, 'invalid-invocation', { member: 'request' });
   }
   if (requestBytes.byteLength > maximumRequestBytes) {
-    return invokeRefusal(wireVersion, null, 'invalid-invocation', {
+    return invokeRefusal(adapterContractVersion, null, 'invalid-invocation', {
       member: 'request', reason: 'byte-limit-exceeded', limit_bytes: maximumRequestBytes,
     });
   }
   const parsed = parseJsonRequest(requestBytes);
   if (parsed.issues.length > 0) {
-    return invokeRefusal(wireVersion, null, 'invalid-invocation', { member: 'request_json' });
+    return invokeRefusal(adapterContractVersion, null, 'invalid-invocation', { member: 'request_json' });
   }
   const request = JSON.parse(Buffer.from(requestBytes).toString('utf8'));
   const requestIssue = invocationRequestSchemaIssue(request);
   const requestId = SAFE_ID.test(request?.request_id) ? request.request_id : null;
-  if (requestIssue) return invokeRefusal(wireVersion, requestId, 'invalid-invocation', { member: requestIssue });
+  if (requestIssue) return invokeRefusal(adapterContractVersion, requestId, 'invalid-invocation', { member: requestIssue });
 
   const described = describeAdapter(runtime.describe_request, runtime.manifest, runtime.dynamic);
-  if (!described.ok) return invokeRefusal(wireVersion, requestId, described.error.code, described.error.details);
+  if (!described.ok) return invokeRefusal(adapterContractVersion, requestId, described.error.code, described.error.details);
   if (described.limits.max_request_bytes > maximumRequestBytes) {
-    return invokeRefusal(wireVersion, requestId, 'invalid-describe-result', {
+    return invokeRefusal(adapterContractVersion, requestId, 'invalid-describe-result', {
       member: 'limits.max_request_bytes',
       described: described.limits.max_request_bytes,
       runtime: maximumRequestBytes,
     });
   }
   if (requestBytes.byteLength > described.limits.max_request_bytes) {
-    return invokeRefusal(wireVersion, requestId, 'invalid-invocation', {
+    return invokeRefusal(adapterContractVersion, requestId, 'invalid-invocation', {
       member: 'request', reason: 'byte-limit-exceeded',
       limit_bytes: described.limits.max_request_bytes,
     });
   }
   if (request.adapter_contract_version !== described.selected_adapter_contract_version) {
-    return invokeRefusal(wireVersion, requestId, 'adapter-contract-selection-mismatch', {
+    return invokeRefusal(adapterContractVersion, requestId, 'adapter-contract-selection-mismatch', {
       expected: described.selected_adapter_contract_version,
       received: request.adapter_contract_version,
     });
@@ -790,29 +792,29 @@ export async function invokeAdapter(requestBytes, runtime) {
     required: requiredCapabilities, available: availableCapabilities,
   });
   if (!capabilities.ok) {
-    return invokeRefusal(wireVersion, requestId, capabilities.error.code, capabilities.error.details);
+    return invokeRefusal(adapterContractVersion, requestId, capabilities.error.code, capabilities.error.details);
   }
   const activePlatform = runtime.platform ?? globalThis.process.platform;
   const platformStatus = PLATFORM_KEYS.includes(activePlatform)
     ? described.platforms[activePlatform]
     : 'unknown';
   if (platformStatus !== 'supported') {
-    return invokeRefusal(wireVersion, requestId, 'adapter-platform-mismatch', {
+    return invokeRefusal(adapterContractVersion, requestId, 'adapter-platform-mismatch', {
       platform: activePlatform, status: platformStatus, required: 'supported',
     });
   }
   const probed = verifyCoreProbe(described, runtime.core_probe);
-  if (!probed.ok) return invokeRefusal(wireVersion, requestId, probed.error.code, probed.error.details);
+  if (!probed.ok) return invokeRefusal(adapterContractVersion, requestId, probed.error.code, probed.error.details);
   const limits = validateInvocationLimits(request.limits, described.limits);
-  if (!limits.ok) return invokeRefusal(wireVersion, requestId, limits.error.code, limits.error.details);
+  if (!limits.ok) return invokeRefusal(adapterContractVersion, requestId, limits.error.code, limits.error.details);
 
   const coreRequestIssue = coreRequestSchemaIssue(request.core_request);
   if (coreRequestIssue) {
-    return invokeRefusal(wireVersion, requestId, 'invalid-invocation', { member: coreRequestIssue });
+    return invokeRefusal(adapterContractVersion, requestId, 'invalid-invocation', { member: coreRequestIssue });
   }
   const coreInput = mutationInput(request.core_request);
   if (coreInput === null) {
-    return invokeRefusal(wireVersion, requestId, 'invalid-invocation', {
+    return invokeRefusal(adapterContractVersion, requestId, 'invalid-invocation', {
       member: 'core_request.input_base64',
     });
   }
@@ -821,7 +823,7 @@ export async function invokeAdapter(requestBytes, runtime) {
   if (command !== 'capabilities') {
     const configured = runtime.workspaces?.[request.workspace.workspace_id];
     if (!configured) {
-      return invokeRefusal(wireVersion, requestId, 'path-rejected', {
+      return invokeRefusal(adapterContractVersion, requestId, 'path-rejected', {
         path_role: 'workspace', kind: 'unconfigured-workspace',
       });
     }
@@ -832,7 +834,7 @@ export async function invokeAdapter(requestBytes, runtime) {
       before: configured.before,
       after: configured.after,
     });
-    if (!resolved.ok) return invokeRefusal(wireVersion, requestId, resolved.error.code, resolved.error.details);
+    if (!resolved.ok) return invokeRefusal(adapterContractVersion, requestId, resolved.error.code, resolved.error.details);
     resolvedWorkspace = {
       id: request.workspace.workspace_id,
       root: resolved.workspace_root,
@@ -861,7 +863,7 @@ export async function invokeAdapter(requestBytes, runtime) {
     instruction_limits: instructionLimits,
     handoff_options: handoffOptions,
   });
-  if (!context.ok) return invokeRefusal(wireVersion, requestId, context.error.code, context.error.details);
+  if (!context.ok) return invokeRefusal(adapterContractVersion, requestId, context.error.code, context.error.details);
 
   const argv = coreArgumentVector(request.core_request, resolvedWorkspace?.ledger);
   let mutationRequest = null;
@@ -881,7 +883,7 @@ export async function invokeAdapter(requestBytes, runtime) {
       } : undefined,
     });
     if (!authority.ok) {
-      return invokeRefusal(wireVersion, requestId, authority.error.code, authority.error.details);
+      return invokeRefusal(adapterContractVersion, requestId, authority.error.code, authority.error.details);
     }
   }
 
@@ -898,7 +900,7 @@ export async function invokeAdapter(requestBytes, runtime) {
     process = launchFailureObservation();
   }
   const processFailure = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     command,
     core_request: request.core_request,
@@ -918,7 +920,7 @@ export async function invokeAdapter(requestBytes, runtime) {
   const stderr = decodeCanonicalBase64(process.stderr_base64);
   return {
     ok: true,
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     result: {
       core_command: command,
@@ -1116,7 +1118,7 @@ function dynamicDescribeSchemaError(value) {
   ])) return 'members';
   if (value.ok !== true) return 'ok';
   if (value.bootstrap_wire_version !== 1) return 'bootstrap_wire_version';
-  if (value.selected_adapter_contract_version !== 1) {
+  if (value.selected_adapter_contract_version !== ADAPTER_CONTRACT_VERSION) {
     return 'selected_adapter_contract_version';
   }
   if (!nonEmptyString(value.adapter_id)) return 'adapter_id';
@@ -1253,7 +1255,7 @@ function coreCapabilitiesSchemaIssue(value) {
   if (!hasExactKeys(value, ['ok', 'command', 'contract_version', 'result'])) return 'members';
   if (value.ok !== true) return 'ok';
   if (value.command !== 'capabilities') return 'command';
-  if (value.contract_version !== 1) return 'contract_version';
+  if (value.contract_version !== CORE_CONTRACT_VERSION) return 'contract_version';
   const result = value.result;
   if (!hasExactKeys(result, ['backend', 'operations', 'durability', 'limits'])) return 'result';
   // coordination_scope is the one backend member that is genuinely environment-dependent: it
@@ -1489,7 +1491,7 @@ function validCoreReadEnvelope(value, command, exitCode, responseContext) {
   const coreRequest = responseCoreRequest(responseContext, command);
   if (coreRequest === null) return false;
   if (!plainObject(value)
-    || value.command !== command || value.contract_version !== 1) return false;
+    || value.command !== command || value.contract_version !== CORE_CONTRACT_VERSION) return false;
   if (value.ok === true) {
     return hasExactKeys(value, ['ok', 'command', 'contract_version', 'result'])
       && hasExactKeys(value.result, ['item'])
@@ -1788,7 +1790,7 @@ function validCoreMutationEnvelope(value, command, exitCode, responseContext) {
   const mutationRequest = responseMutationRequest(responseContext, command);
   const canonicalMutationRequest = hasCanonicalMutationRequest(responseContext, command);
   if (!plainObject(value)
-    || value.command !== command || value.contract_version !== 1) return false;
+    || value.command !== command || value.contract_version !== CORE_CONTRACT_VERSION) return false;
   if (value.ok === true) {
     return canonicalMutationRequest && value.state === 'committed'
       && hasExactKeys(value, ['ok', 'command', 'contract_version', 'state', 'result'])

@@ -1,6 +1,6 @@
 {
   "ok": false,
-  "adapter_contract_version": 1,
+  "adapter_contract_version": 2,
   "request_id": "mutation-approval-0001",
   "error": {
     "code": "consumer-approval-required",

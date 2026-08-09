@@ -35,15 +35,15 @@
     },
     {
       "path": "expected-adapter-result.json",
-      "sha256": "sha256:91bb927198151aaf60f5b79628cbecaeea0b050ac3d3b4c7ca4532e534fbae73"
+      "sha256": "sha256:09231fb45d4334edc937bd239f5807b8bd3c2053d893b16062693961dafed600"
     },
     {
       "path": "expected-core-stdout.jsonl",
-      "sha256": "sha256:477a99ec76e92c21f4621f84c0c025697f7f12dd919b5f8d38a3bd83cec5e913"
+      "sha256": "sha256:23ff0f6bbc28e593f45178acdbcfd426cbd844edb50847d1207f2ceed65a0fea"
     },
     {
       "path": "invocation.json",
-      "sha256": "sha256:02a1199e3c4892342f2f0be8a4fc2b66c221bd5b3f550a06517202c5c0730093"
+      "sha256": "sha256:ce2786010b89a3c26c3337d2be7120c7b3667ac0dd52112c2234f4bf24c60a40"
     }
   ]
 }

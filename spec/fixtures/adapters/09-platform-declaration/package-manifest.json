@@ -4,9 +4,9 @@
   "adapter_id": "example.portable.wowbagger",
   "adapter_version": "0.0.0-fixture",
   "adapter_contract_versions": [
-    1
+    2
   ],
-  "required_core_contract_version": 1,
+  "required_core_contract_version": 2,
   "entrypoints": {
     "describe": {
       "kind": "host-tool",

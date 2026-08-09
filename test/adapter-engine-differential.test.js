@@ -20,9 +20,9 @@ const BASE_MANIFEST = {
   adapter_manifest_version: 1,
   adapter_id: 'example.reference',
   adapter_version: '1.0.0',
-  adapter_contract_versions: [1],
+  adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 1,
+  required_core_contract_version: 2,
   entrypoints: {
     describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
@@ -958,13 +958,13 @@ test('verifyCoreProbe refuses a probe whose ok member is not true', () => {
   assert.equal(result.error_code, 'core-protocol-error');
 });
 
-// A protocol-version-2 probe is a schema issue (this engine only speaks
-// core contract version 1) even when its number happens to equal the
+// A protocol-version-1 probe is a schema issue (this engine only speaks
+// core contract version 2) even when its number happens to equal the
 // describe result's required core contract version.
-test('verifyCoreProbe refuses a probe with a contract_version other than 1', () => {
+test('verifyCoreProbe refuses a probe with a contract_version other than 2', () => {
   const describe = structuredClone(SCENARIOS.base_dynamic);
-  describe.core.required_core_contract_version = 2;
-  const probe = { ...coreCapabilities(), contract_version: 2 };
+  describe.core.required_core_contract_version = 1;
+  const probe = { ...coreCapabilities(), contract_version: 1 };
 
   const result = verifyCoreProbe(describe, probe);
 

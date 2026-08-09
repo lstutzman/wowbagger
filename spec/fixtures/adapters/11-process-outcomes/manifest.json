@@ -25,6 +25,6 @@
     { "id": "mutation-invalid-exit-is-unknown", "type": "process-outcome", "scenario": "mutation-invalid-exit" }
   ],
   "artifacts": [
-    { "path": "scenarios.json", "sha256": "sha256:f2b0d292469d3b91008d79c5e7310917e4c9c3350ed444aadaef80f83e0f2ce0" }
+    { "path": "scenarios.json", "sha256": "sha256:e75abd75e37f99249929e7b42557653c81594940a706929ede00d529a2d40f97" }
   ]
 }

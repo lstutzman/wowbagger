@@ -1,4 +1,4 @@
-import { describeAdapter } from './describe.js';
+import { ADAPTER_CONTRACT_VERSION, describeAdapter } from './describe.js';
 import { createHash } from 'node:crypto';
 import { verifyMutationAuthority } from './approval.js';
 import { validateInvokeContext } from './context.js';
@@ -87,7 +87,7 @@ function streamEnvelope(bytes) {
 function refusal(requestId, code, details) {
   return {
     ok: false,
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     error: {
       code,
@@ -256,7 +256,7 @@ export async function invokeAdapter(requestBytes, runtime) {
     processObservation = launchFailureObservation();
   }
   const processFailure = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     command,
     stdout_limit_bytes: request.limits.stdout_bytes,
@@ -269,7 +269,7 @@ export async function invokeAdapter(requestBytes, runtime) {
   const stderr = Buffer.from(processObservation.stderr_base64, 'base64');
   return {
     ok: true,
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     result: {
       core_command: command,

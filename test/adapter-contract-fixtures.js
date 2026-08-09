@@ -12,9 +12,9 @@ export function adapterManifest(overrides = {}) {
     adapter_manifest_version: 1,
     adapter_id: 'example.reference',
     adapter_version: '1.0.0',
-    adapter_contract_versions: [1],
+    adapter_contract_versions: [2],
     bootstrap_wire_version: 1,
-    required_core_contract_version: 1,
+    required_core_contract_version: 2,
     entrypoints: {
       describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
       invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
@@ -28,11 +28,11 @@ export function dynamicDescribe(overrides = {}) {
   return {
     ok: true,
     bootstrap_wire_version: 1,
-    selected_adapter_contract_version: 1,
+    selected_adapter_contract_version: 2,
     adapter_id: 'example.reference',
     adapter_version: '1.0.0',
     core: {
-      required_core_contract_version: 1,
+      required_core_contract_version: 2,
       commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
     },
     host: {

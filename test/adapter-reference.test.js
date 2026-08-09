@@ -10,10 +10,10 @@ import {
 function strictBinding() {
   return {
     request_id: 'mutation-approval-0002',
-    adapter: { id: 'example.reference', version: '1.0.0', contract_version: 1 },
+    adapter: { id: 'example.reference', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      contract_version: 1,
+      contract_version: 2,
       argv: ['transition', '--ledger', '/approved/workspace/ledger', '--input', '-', '--json'],
       input_base64: 'e30K',
     },
@@ -51,7 +51,7 @@ test('bootstrap describe refuses when no adapter contract version is shared', as
       code: 'unsupported-adapter-contract-version',
       details: {
         client: [3],
-        adapter: [1],
+        adapter: [2],
       },
     },
   });
@@ -191,7 +191,7 @@ test('truncated create output reports unknown mutation outcome with caller-known
   const { mapProcessOutcome } = await import('../spec/adapter-reference.js');
 
   assert.deepEqual(mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'create-zero-output-0001',
     command: 'create',
     item_id: 'wb_01KDWPVNG00000000000000000',
@@ -210,7 +210,7 @@ test('truncated create output reports unknown mutation outcome with caller-known
     },
   }), {
     ok: false,
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'create-zero-output-0001',
     mutation_outcome: 'unknown',
     error: {
@@ -245,7 +245,7 @@ test('timed-out transition reports unknown mutation outcome and revision recover
   const { mapProcessOutcome } = await import('../spec/adapter-reference.js');
 
   assert.deepEqual(mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'transition-timeout-0001',
     command: 'transition',
     item_id: 'wb_01KDWPVNG00000000000000000',
@@ -264,7 +264,7 @@ test('timed-out transition reports unknown mutation outcome and revision recover
     },
   }), {
     ok: false,
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'transition-timeout-0001',
     mutation_outcome: 'unknown',
     error: {
@@ -299,7 +299,7 @@ test('read-only truncation is an output error, never a mutation result', async (
   const { mapProcessOutcome } = await import('../spec/adapter-reference.js');
 
   assert.deepEqual(mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'ready-truncated-0001',
     command: 'ready',
     process: {
@@ -316,7 +316,7 @@ test('read-only truncation is an output error, never a mutation result', async (
     },
   }), {
     ok: false,
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'ready-truncated-0001',
     error: {
       code: 'output-limit-exceeded',
@@ -390,8 +390,8 @@ test('bootstrap describe refuses unsupported fixed bootstrap wire', async () => 
   const { describeAdapter } = await import('../spec/adapter-reference.js');
 
   assert.deepEqual(describeAdapter(
-    describeRequest({ bootstrap_wire_version: 2, supported_adapter_contract_versions: [1] }),
-    adapterManifest({ adapter_contract_versions: [1] }),
+    describeRequest({ bootstrap_wire_version: 2, supported_adapter_contract_versions: [2] }),
+    adapterManifest({ adapter_contract_versions: [2] }),
   ), {
     ok: false,
     bootstrap_wire_version: 1,
@@ -403,11 +403,11 @@ test('bootstrap describe refuses static and dynamic identity mismatch', async ()
   const { describeAdapter } = await import('../spec/adapter-reference.js');
 
   const result = describeAdapter(
-    describeRequest({ supported_adapter_contract_versions: [1] }),
-    adapterManifest({ adapter_id: 'example.static', adapter_contract_versions: [1] }),
+    describeRequest({ supported_adapter_contract_versions: [2] }),
+    adapterManifest({ adapter_id: 'example.static', adapter_contract_versions: [2] }),
     dynamicDescribe({
       adapter_id: 'example.dynamic',
-      selected_adapter_contract_version: 1,
+      selected_adapter_contract_version: 2,
     }),
   );
 
@@ -424,12 +424,12 @@ test('bootstrap describe refuses static and dynamic identity mismatch', async ()
 test('core capability probe must match the exact core schema and advertised profile', async () => {
   const { referenceCoreCapabilities, verifyCoreProbe } = await import('../spec/adapter-reference.js');
   const describe = dynamicDescribe();
-  describe.core.required_core_contract_version = 2;
+  describe.core.required_core_contract_version = 1;
   assert.deepEqual(verifyCoreProbe(describe, referenceCoreCapabilities()), {
     ok: false,
     error: {
       code: 'core-contract-version-mismatch',
-      details: { required: 2, probed: 1 },
+      details: { required: 1, probed: 2 },
     },
   });
 });

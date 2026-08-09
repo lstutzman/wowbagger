@@ -35,7 +35,7 @@ function processObservation(stdout, overrides = {}) {
 
 test('returns unknown when create has an incomplete success envelope', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-create-incomplete-0001',
     command: 'create',
     item_id: 'wb_01KDWPVNG00000000000000000',
@@ -52,7 +52,7 @@ test('treats a missing mutation started observation as unknown', () => {
   const process = processObservation({ ok: true });
   delete process.started;
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-create-missing-started-0001',
     command: 'create',
     item_id: CREATE_ID,
@@ -66,7 +66,7 @@ test('treats a missing mutation started observation as unknown', () => {
 
 test('treats a contradicted mutation not-started observation as unknown', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-create-contradicted-started-0001',
     command: 'create',
     item_id: CREATE_ID,
@@ -88,7 +88,7 @@ test('forwards a definitive invalid create request response for invalid request 
   const coreResponse = {
     ok: false,
     command: 'create',
-    contract_version: 1,
+    contract_version: 2,
     state: 'unchanged',
     error: {
       code: 'invalid-request',
@@ -122,7 +122,7 @@ test('forwards a definitive invalid create request response for invalid request 
 
 test('returns unknown when invalid-request issues are not in canonical order', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-invalid-request-issue-order-0001',
     command: 'create',
     core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
@@ -132,7 +132,7 @@ test('returns unknown when invalid-request issues are not in canonical order', (
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'invalid-request',
@@ -198,7 +198,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'inspect',
-        contract_version: 1,
+        contract_version: 2,
         result: { item: coreItemWithId(validCoreItem(), alternateId) },
       },
       expected: 'core-protocol-error',
@@ -209,7 +209,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'inspect',
-        contract_version: 1,
+        contract_version: 2,
         error: {
           code: 'item-not-found',
           message: 'The requested item was not found.',
@@ -227,7 +227,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'create',
-        contract_version: 1,
+        contract_version: 2,
         state: 'committed',
         result: { item: coreItemWithId(validCoreItem(), alternateId) },
       },
@@ -244,7 +244,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'create',
-        contract_version: 1,
+        contract_version: 2,
         state: 'committed',
         result: { item: validCoreItem() },
       },
@@ -258,7 +258,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'create',
-        contract_version: 1,
+        contract_version: 2,
         state: 'committed',
         result: { item: { ...validCoreItem(), path: `nested/${CREATE_ID}.md` } },
       },
@@ -272,7 +272,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'create',
-        contract_version: 1,
+        contract_version: 2,
         state: 'unchanged',
         error: {
           code: 'path-collision',
@@ -291,7 +291,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'create',
-        contract_version: 1,
+        contract_version: 2,
         state: 'unchanged',
         error: {
           code: 'invalid-request',
@@ -317,7 +317,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'transition',
-        contract_version: 1,
+        contract_version: 2,
         state: 'unchanged',
         error: {
           code: 'revision-conflict',
@@ -341,7 +341,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'transition',
-        contract_version: 1,
+        contract_version: 2,
         state: 'committed',
         error: {
           code: 'post-commit-recovery-required',
@@ -366,7 +366,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'transition',
-        contract_version: 1,
+        contract_version: 2,
         state: 'committed',
         result: { item: validCoreItem() },
       },
@@ -376,7 +376,7 @@ test('requires every forwarded core response to match its exact request', () => 
 
   for (const scenario of cases) {
     const result = mapProcessOutcome({
-      adapter_contract_version: 1,
+      adapter_contract_version: 2,
       request_id: `review-correlation-${scenario.command}-0001`,
       ...scenario,
       process: processObservation(scenario.stdout, { exit_code: scenario.exit_code ?? 0 }),
@@ -404,7 +404,7 @@ test('forwards a create success with the exact canonical candidate source', () =
   };
   const source = createCandidateSource(request);
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-canonical-create-source-0001',
     command: 'create',
     core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
@@ -414,7 +414,7 @@ test('forwards a create success with the exact canonical candidate source', () =
     process: processObservation({
       ok: true,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'committed',
       result: {
         item: {
@@ -446,7 +446,7 @@ test('returns unknown when committed create recovery reports a different candida
     body: validCoreItem().body,
   };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-create-recovery-revision-0001',
     command: 'create',
     core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
@@ -456,7 +456,7 @@ test('returns unknown when committed create recovery reports a different candida
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'committed',
       error: {
         code: 'post-commit-recovery-required',
@@ -490,7 +490,7 @@ test('returns unknown when recovery artifacts are not in canonical order', () =>
     body: validCoreItem().body,
   };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-recovery-artifact-order-0001',
     command: 'create',
     core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
@@ -500,7 +500,7 @@ test('returns unknown when recovery artifacts are not in canonical order', () =>
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'operation-failed',
@@ -538,7 +538,7 @@ test('returns unknown when recovery artifacts repeat a path under different kind
     body: validCoreItem().body,
   };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-recovery-artifact-path-uniqueness-0001',
     command: 'create',
     core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
@@ -548,7 +548,7 @@ test('returns unknown when recovery artifacts repeat a path under different kind
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'operation-failed',
@@ -579,7 +579,7 @@ test('returns unknown when a revision conflict reports the expected revision as 
     date: '2030-01-11',
   };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-revision-conflict-same-revision-0001',
     command: 'transition',
     core_request: { command: 'transition', ledger: 'ledger', input_base64: '' },
@@ -589,7 +589,7 @@ test('returns unknown when a revision conflict reports the expected revision as 
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'revision-conflict',
@@ -615,7 +615,7 @@ test('returns unknown when atomic scope required has no blockers', () => {
     date: '2030-01-11',
   };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-atomic-scope-empty-blockers-0001',
     command: 'transition',
     core_request: { command: 'transition', ledger: 'ledger', input_base64: '' },
@@ -625,7 +625,7 @@ test('returns unknown when atomic scope required has no blockers', () => {
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'atomic-scope-required',
@@ -651,7 +651,7 @@ test('returns unknown when atomic scope required blockers are not in canonical o
     date: '2030-01-11',
   };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-atomic-scope-blocker-order-0001',
     command: 'transition',
     core_request: { command: 'transition', ledger: 'ledger', input_base64: '' },
@@ -661,7 +661,7 @@ test('returns unknown when atomic scope required blockers are not in canonical o
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'atomic-scope-required',
@@ -730,13 +730,13 @@ test('returns unknown when transition blocker or issue fields contradict their c
   ];
   for (const scenario of cases) {
     const result = mapProcessOutcome({
-      adapter_contract_version: 1,
+      adapter_contract_version: 2,
       request_id: scenario.request_id,
       command: 'transition',
       process: processObservation({
         ok: false,
         command: 'transition',
-        contract_version: 1,
+        contract_version: 2,
         state: scenario.state,
         error: scenario.error,
       }, { exit_code: scenario.exit_code }),
@@ -755,7 +755,7 @@ test('returns unknown when transition precondition issues are not in canonical o
     date: '2030-01-11',
   };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-transition-issue-order-0001',
     command: 'transition',
     core_request: { command: 'transition', ledger: 'ledger', input_base64: '' },
@@ -765,7 +765,7 @@ test('returns unknown when transition precondition issues are not in canonical o
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'transition-precondition-failed',
@@ -846,14 +846,14 @@ test('rejects source-consistent items that violate ledger semantic invariants', 
 
   for (const invalidItem of cases) {
     const result = mapProcessOutcome({
-      adapter_contract_version: 1,
+      adapter_contract_version: 2,
       request_id: 'review-semantic-inspect-0001',
       command: 'inspect',
       core_request: { command: 'inspect', ledger: 'ledger', id: CREATE_ID },
       process: processObservation({
         ok: true,
         command: 'inspect',
-        contract_version: 1,
+        contract_version: 2,
         result: { item: invalidItem },
       }),
     });
@@ -862,7 +862,7 @@ test('rejects source-consistent items that violate ledger semantic invariants', 
   }
 
   const transition = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-semantic-transition-0001',
     command: 'transition',
     core_request: { command: 'transition', ledger: 'ledger', input_base64: '' },
@@ -877,7 +877,7 @@ test('rejects source-consistent items that violate ledger semantic invariants', 
     process: processObservation({
       ok: true,
       command: 'transition',
-      contract_version: 1,
+      contract_version: 2,
       state: 'committed',
       result: {
         item: coreItemWithSource(item,
@@ -894,13 +894,13 @@ test('rejects source-consistent items that violate ledger semantic invariants', 
 
 test('rejects an inspect success whose nested item omits contract fields', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-inspect-missing-item-field-0001',
     command: 'inspect',
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 1,
+      contract_version: 2,
       result: { item: {} },
     }),
   });
@@ -911,13 +911,13 @@ test('rejects an inspect success whose nested item omits contract fields', () =>
 
 test('forwards an exact inspect success envelope at exit zero', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-inspect-success-0001',
     command: 'inspect',
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 1,
+      contract_version: 2,
       result: { item: validCoreItem() },
     }),
   });
@@ -929,13 +929,13 @@ test('rejects an inspect success whose core view has an undocumented member', ()
   const item = validCoreItem();
   item.core.extension_data = 'must remain only in source_base64';
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-inspect-extra-core-member-0001',
     command: 'inspect',
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 1,
+      contract_version: 2,
       result: { item },
     }),
   });
@@ -947,13 +947,13 @@ test('rejects an inspect success whose core view disagrees with its source bytes
   const item = validCoreItem();
   item.core.id = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-inspect-source-core-mismatch-0001',
     command: 'inspect',
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 1,
+      contract_version: 2,
       result: { item },
     }),
   });
@@ -970,13 +970,13 @@ test('rejects an inspect success whose source-consistent core status is outside 
   item.revision = digest(bytes);
   item.core.status = 'invented';
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-inspect-invalid-core-status-0001',
     command: 'inspect',
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 1,
+      contract_version: 2,
       result: { item },
     }),
   });
@@ -992,13 +992,13 @@ test('rejects an inspect success when invalid source relations normalize into a 
   item.source_base64 = bytes.toString('base64');
   item.revision = digest(bytes);
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-inspect-invalid-source-relation-0001',
     command: 'inspect',
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 1,
+      contract_version: 2,
       result: { item },
     }),
   });
@@ -1008,7 +1008,7 @@ test('rejects an inspect success when invalid source relations normalize into a 
 
 test('returns unknown when create success does not have exit zero', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-create-exit-0001',
     command: 'create',
     item_id: 'wb_01KDWPVNG00000000000000001',
@@ -1016,7 +1016,7 @@ test('returns unknown when create success does not have exit zero', () => {
     process: processObservation({
       ok: true,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'committed',
       result: { item: validCoreItem() },
     }, { exit_code: 2 }),
@@ -1030,7 +1030,7 @@ test('returns unknown when a committed create result has unauthenticated source 
   const item = validCoreItem();
   item.source_base64 = '';
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-create-source-digest-0001',
     command: 'create',
     item_id: CREATE_ID,
@@ -1038,7 +1038,7 @@ test('returns unknown when a committed create result has unauthenticated source 
     process: processObservation({
       ok: true,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'committed',
       result: { item },
     }),
@@ -1050,7 +1050,7 @@ test('returns unknown when a committed create result has unauthenticated source 
 
 test('returns unknown when transition declares an unknown core mutation state', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-transition-unknown-0001',
     command: 'transition',
     item_id: 'wb_01KDWPVNG00000000000000002',
@@ -1058,7 +1058,7 @@ test('returns unknown when transition declares an unknown core mutation state', 
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unknown',
       error: {
         code: 'write-outcome-unknown',
@@ -1079,7 +1079,7 @@ test('returns unknown when transition declares an unknown core mutation state', 
 
 test('returns unknown when create reports a transition-only core error code', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-create-wrong-error-code-0001',
     command: 'create',
     item_id: CREATE_ID,
@@ -1087,7 +1087,7 @@ test('returns unknown when create reports a transition-only core error code', ()
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 1,
+      contract_version: 2,
       state: 'unchanged',
       error: {
         code: 'item-not-found',
@@ -1103,7 +1103,7 @@ test('returns unknown when create reports a transition-only core error code', ()
 
 test('forwards the documented invalid-ledger ready envelope at exit one', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-ready-invalid-ledger-0001',
     command: 'ready',
     process: processObservation({
@@ -1122,7 +1122,7 @@ test('forwards the documented invalid-ledger ready envelope at exit one', () => 
 
 test('rejects an invalid-ledger ready envelope with no validation errors', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-ready-empty-errors-0001',
     command: 'ready',
     process: processObservation({ valid: false, errors: [] }, { exit_code: 1 }),
@@ -1134,7 +1134,7 @@ test('rejects an invalid-ledger ready envelope with no validation errors', () =>
 
 test('rejects validation errors that are not in canonical order', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-validation-error-order-0001',
     command: 'ready',
     process: processObservation({
@@ -1166,7 +1166,7 @@ test('rejects validate and capabilities envelopes at inconsistent exits', () => 
     ['capabilities', referenceCoreCapabilities()],
   ]) {
     const result = mapProcessOutcome({
-      adapter_contract_version: 1,
+      adapter_contract_version: 2,
       request_id: `review-${command}-exit-0001`,
       command,
       process: processObservation(stdout, { exit_code: 1 }),
@@ -1180,7 +1180,7 @@ test('rejects validate and capabilities envelopes at inconsistent exits', () => 
 test('rejects a complete core envelope that omits its required final LF', () => {
   const stdout = { as_of: '2030-01-15', valid: true, ready: [] };
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-missing-final-lf-0001',
     command: 'ready',
     process: processObservation(stdout, {
@@ -1194,7 +1194,7 @@ test('rejects a complete core envelope that omits its required final LF', () => 
 
 test('rejects a noncompact core envelope before its required final LF', () => {
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-noncompact-core-envelope-0001',
     command: 'ready',
     process: processObservation({ as_of: '2030-01-15', valid: true, ready: [] }, {
@@ -1222,7 +1222,7 @@ test('refuses approved mutations when trusted approval is unavailable', async ()
         return processObservation({
           ok: true,
           command: 'create',
-          contract_version: 1,
+          contract_version: 2,
           state: 'committed',
           result: { item: {} },
         });
@@ -1345,7 +1345,7 @@ test('rejects captured streams over the requested limits despite complete runner
 
 function mutationInvocation() {
   return {
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-approval-unavailable-0001',
     workspace: { workspace_id: 'review-workspace', cwd: '.' },
     core_request: {
@@ -1361,7 +1361,7 @@ function mutationInvocation() {
 
 function readyInvocation() {
   return {
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-request-limit-0001',
     workspace: { workspace_id: 'review-workspace', cwd: '.' },
     core_request: { command: 'ready', ledger: 'ledger', as_of: '2030-01-15' },
@@ -1382,7 +1382,7 @@ function mutationRuntime(request, dynamic, launch) {
     },
     core: {
       executable_identity: `sha256:${'a'.repeat(64)}`,
-      contract_version: 1,
+      contract_version: 2,
       argv: ['create', '--ledger', '/approved/workspace/ledger', '--input', '-', '--json'],
       input_base64: coreInput.toString('base64'),
     },
@@ -1464,7 +1464,7 @@ test('accepts a core inspect envelope whose item carries number and priority', (
   const item = consumerCoreItem();
 
   const result = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'review-inspect-consumer-core-0001',
     command: 'inspect',
     core_request: { command: 'inspect', ledger: 'ledger', id: item.id },
@@ -1472,7 +1472,7 @@ test('accepts a core inspect envelope whose item carries number and priority', (
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 1,
+      contract_version: 2,
       result: { item },
     }),
   });

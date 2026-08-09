@@ -383,7 +383,7 @@ async function evaluateCapabilityAssertion(directory, assertion, target, runtime
   const capabilities = await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
   const invoked = await callShippedEntrypoint({
     bootstrap_wire_version: capabilities.bootstrap_wire_version,
-    supported_adapter_contract_versions: [1],
+    supported_adapter_contract_versions: [2],
     request_id: assertion.id,
   }, target, { operation: 'describe', runtimeConfig });
   const described = invoked.response;
@@ -980,7 +980,7 @@ export async function runImplementationVectors({
     if (manifest.mode === 'protocol') {
       await callShippedEntrypoint({
         bootstrap_wire_version: 1,
-        supported_adapter_contract_versions: [1],
+        supported_adapter_contract_versions: [2],
         request_id: `implementation-vector-${manifest.case}`,
       }, target, { operation: 'describe', runtimeConfig });
     }

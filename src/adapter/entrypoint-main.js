@@ -3,8 +3,8 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from './bootstrap.js';
-import { CORE_COMMAND_ORDER } from './core-probe.js';
-import { describeAdapter } from './describe.js';
+import { CORE_COMMAND_ORDER, CORE_CONTRACT_VERSION } from './core-probe.js';
+import { ADAPTER_CONTRACT_VERSION, describeAdapter } from './describe.js';
 import { invokeAdapter } from './invoke.js';
 import { validateAdapterManifest } from './manifest.js';
 import { isSafeLogicalPath } from './paths.js';
@@ -29,11 +29,11 @@ export function standardDynamicResult(manifest, coreProbe) {
   return {
     ok: true,
     bootstrap_wire_version: 1,
-    selected_adapter_contract_version: 1,
+    selected_adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     adapter_id: manifest.adapter_id,
     adapter_version: manifest.adapter_version,
     core: {
-      required_core_contract_version: 1,
+      required_core_contract_version: CORE_CONTRACT_VERSION,
       commands: [...CORE_COMMAND_ORDER],
     },
     host: {
@@ -273,7 +273,7 @@ export async function runAdapterEntrypoint({
     const response = operation === 'invoke'
       ? {
           ok: false,
-          adapter_contract_version: 1,
+          adapter_contract_version: ADAPTER_CONTRACT_VERSION,
           request_id: null,
           error: {
             code: incoming.error_code,
@@ -302,7 +302,7 @@ export async function runAdapterEntrypoint({
       max_request_bytes: dynamic.limits.max_request_bytes,
       describe_request: {
         bootstrap_wire_version: 1,
-        supported_adapter_contract_versions: [1],
+        supported_adapter_contract_versions: [ADAPTER_CONTRACT_VERSION],
         request_id: 'entrypoint-invoke-describe',
       },
       manifest,

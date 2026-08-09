@@ -22,15 +22,15 @@
   "artifacts": [
     {
       "path": "expected-refusal.json",
-      "sha256": "sha256:a2bbebc9e26a738475d21ffa4fef8db46913ea8fdc288379b1fb46c99a77ed35"
+      "sha256": "sha256:02f1d0ff015acdd9efb18a176509dcfd4d0b55958bd31eaa324f4eb10eb01223"
     },
     {
       "path": "invocation.json",
-      "sha256": "sha256:7b2ce163091bac53890a4afb5b151f5736891620853e4d214d3816c2eccd2460"
+      "sha256": "sha256:83bf7754fc5b094811cd12b1555369ed6ff2a5b7a78c1cb25622ac2556701e06"
     },
     {
       "path": "process.json",
-      "sha256": "sha256:7e04f78208fdc133468506685cdce5c6f66e13820a31cf9114c65a0bda69ec19"
+      "sha256": "sha256:810c80274eef4de05631cb3bc35a3735fa070a2f42bd25c67b08a2f63dfd0306"
     }
   ]
 }
