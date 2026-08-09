@@ -178,6 +178,20 @@ test('fails closed on an unknown execution mode', async (t) => {
   );
 });
 
+test('fails closed on a corrupted artifact SHA-256', async (t) => {
+  const { manifest, files } = syntheticEntrypointFixture('path-replaced');
+  manifest.artifacts = [{
+    path: 'scenarios.json',
+    sha256: `sha256:${'0'.repeat(64)}`,
+  }];
+  const fixtureRoot = await writeTempFixture(t, manifest, files);
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot, platform: 'darwin' }),
+    /artifact SHA-256 mismatch.*scenarios\.json/,
+  );
+});
+
 test('evaluates the negotiation cases against the shipped engine', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
 

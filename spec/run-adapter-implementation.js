@@ -62,6 +62,33 @@ async function readStrictJson(file) {
   return normalizeJsonValue(await parseStrictJson(file));
 }
 
+function isSafeArtifactPath(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && !value.startsWith('/')
+    && !value.includes('\\')
+    && !value.includes('\0')
+    && value.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
+}
+
+async function verifyArtifacts(directory, manifest) {
+  if (!Array.isArray(manifest.artifacts)) {
+    throw new Error(`${manifest.case}: artifacts must be an array`);
+  }
+  for (const artifact of manifest.artifacts) {
+    if (!isSafeArtifactPath(artifact?.path)) {
+      throw new Error(`${manifest.case}: unsafe artifact path ${artifact?.path}`);
+    }
+    const file = path.join(directory, artifact.path);
+    const bytes = await readFile(file);
+    const digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+    if (digest !== artifact.sha256) {
+      throw new Error(`${manifest.case}: artifact SHA-256 mismatch for ${artifact.path}`);
+    }
+    if (artifact.path.endsWith('.json')) await parseStrictJson(file);
+  }
+}
+
 function parseBootstrapResponse(stdout, entrypoint) {
   if (stdout.length < 3 || stdout[stdout.length - 1] !== 0x0A) {
     throw new Error(`${entrypoint}: bootstrap stdout must end with exactly one LF`);
@@ -879,6 +906,7 @@ export async function runImplementationVectors({
     if (!SUPPORTED_EXECUTION_MODES.has(manifest.mode)) {
       throw new Error(`unknown execution mode ${manifest.mode} in ${name}`);
     }
+    await verifyArtifacts(directory, manifest);
     if (!manifest.targets.includes(target)) {
       continue;
     }
