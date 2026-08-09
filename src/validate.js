@@ -119,12 +119,12 @@ function validateSchemaVersion(fact, context) {
   }
 
   if (!Number.isInteger(data.schema_version)) {
-    addError(fact, 'schema_version', 'invalid-schema-version', 'schema_version must be the integer 1.', context);
+    addError(fact, 'schema_version', 'invalid-schema-version', 'schema_version must be the integer 1 or 2.', context);
     return;
   }
 
-  if (data.schema_version !== 1) {
-    addError(fact, 'schema_version', 'unsupported-schema-version', 'schema_version must be 1.', context);
+  if (data.schema_version !== 1 && data.schema_version !== 2) {
+    addError(fact, 'schema_version', 'unsupported-schema-version', 'schema_version must be 1 or 2.', context);
   }
 }
 

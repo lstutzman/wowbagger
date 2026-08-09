@@ -13,6 +13,30 @@ const expectedFixtureErrors = JSON.parse(readFileSync(
   new URL('../spec/fixtures/validation-errors/expected-errors.json', import.meta.url),
 ));
 
+test('validate accepts a uniform schema version 2 ledger', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Versioned item"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { valid: true, errors: [] });
+  });
+});
+
 test('validate rejects a status outside schema version 1', async () => {
   await withLedger({
     'item.md': `---
