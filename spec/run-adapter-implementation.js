@@ -37,6 +37,7 @@ const SUPPORTED_ASSERTION_TYPES = new Set([
   'entrypoint-path', 'invoke-version', 'core-probe', 'negotiation',
   'context-validation', 'approval-schema',
 ]);
+const SUPPORTED_EXECUTION_MODES = new Set(['equivalence', 'negative-capability', 'protocol']);
 
 const CORE_COMMANDS = [...CORE_COMMAND_ORDER];
 
@@ -874,6 +875,9 @@ export async function runImplementationVectors({
     const isVersionOne = version instanceof JsonNumber && version.source === '1';
     if (!isVersionOne) {
       throw new Error(`unsupported adapter_vector_version in ${name}`);
+    }
+    if (!SUPPORTED_EXECUTION_MODES.has(manifest.mode)) {
+      throw new Error(`unknown execution mode ${manifest.mode} in ${name}`);
     }
     if (!manifest.targets.includes(target)) {
       continue;

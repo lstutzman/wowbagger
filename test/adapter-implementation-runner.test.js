@@ -167,6 +167,17 @@ test('fails closed on an unknown assertion type', async (t) => {
   );
 });
 
+test('fails closed on an unknown execution mode', async (t) => {
+  const { manifest, files } = syntheticEntrypointFixture('path-replaced');
+  manifest.mode = 'not-a-real-mode';
+  const fixtureRoot = await writeTempFixture(t, manifest, files);
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot, platform: 'darwin' }),
+    /unknown execution mode not-a-real-mode/,
+  );
+});
+
 test('evaluates the negotiation cases against the shipped engine', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
 
