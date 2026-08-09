@@ -882,6 +882,19 @@ async function evaluateAssertion(directory, assertion, target) {
   }
 }
 
+export function deriveExecutedAssertions(declared, evaluated) {
+  const executed = evaluated.map(({ id }) => id);
+  for (const [index, assertion] of declared.entries()) {
+    if (executed[index] !== assertion.id) {
+      throw new Error(`assertion ${assertion.id} was not evaluated`);
+    }
+  }
+  if (executed.length !== declared.length) {
+    throw new Error('an undeclared assertion was evaluated');
+  }
+  return executed;
+}
+
 export async function runImplementationVectors({
   fixtureRoot = defaultFixtureRoot,
   platform,
@@ -934,12 +947,13 @@ export async function runImplementationVectors({
       }
       evaluated.push({ id: assertion.id, evidence: outcome.evidence });
     }
+    const executedAssertions = deriveExecutedAssertions(manifest.assertions, evaluated);
 
     cases.push({
       case: manifest.case,
       status: cased ? 'pass' : 'fail',
       executed_mode: manifest.mode,
-      executed_assertions: manifest.assertions.map((assertion) => assertion.id),
+      executed_assertions: executedAssertions,
       assertion_evidence: evaluated,
       observed_error_codes: [...errorCodes].sort(),
     });

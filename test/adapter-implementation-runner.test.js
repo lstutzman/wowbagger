@@ -4,7 +4,9 @@ import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { runImplementationVectors } from '../spec/run-adapter-implementation.js';
+import * as implementationRunner from '../spec/run-adapter-implementation.js';
+
+const { runImplementationVectors } = implementationRunner;
 
 const fixtureRoot = fileURLToPath(new URL('../spec/fixtures/adapters/', import.meta.url));
 
@@ -189,6 +191,17 @@ test('fails closed on a corrupted artifact SHA-256', async (t) => {
   await assert.rejects(
     () => runImplementationVectors({ fixtureRoot, platform: 'darwin' }),
     /artifact SHA-256 mismatch.*scenarios\.json/,
+  );
+});
+
+test('derives executed assertions from completed evaluations and rejects a skip', () => {
+  assert.equal(typeof implementationRunner.deriveExecutedAssertions, 'function');
+  assert.throws(
+    () => implementationRunner.deriveExecutedAssertions(
+      [{ id: 'completed' }, { id: 'skipped' }],
+      [{ id: 'completed', evidence: 'test' }],
+    ),
+    /assertion skipped was not evaluated/,
   );
 });
 
