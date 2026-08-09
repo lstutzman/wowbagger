@@ -252,7 +252,7 @@ test('labels each evidenced assertion with the shipped module that produced it',
   assert.equal(evidenceOf('capability-separation', 'optional-features-are-absent'), 'src/adapter/describe.js');
 });
 
-test('holds only Plan 3 assertions at unimplemented', async () => {
+test('holds the remaining Plan 3 assertions at unimplemented', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
   const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
@@ -275,10 +275,21 @@ test('holds only Plan 3 assertions at unimplemented', async () => {
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 122);
-  assert.equal(183 - evidenced.length, 61);
+  assert.equal(evidenced.length, 124);
+  assert.equal(183 - evidenced.length, 59);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
+});
+
+test('validates ordered instruction input through the shipped engine', async () => {
+  const result = await runImplementationVectors({ platform: 'darwin' });
+  const instructionCase = result.cases.find(({ case: name }) => name === 'instruction-input');
+
+  assert.equal(instructionCase.status, 'pass');
+  assert.deepEqual(instructionCase.assertion_evidence, [
+    { id: 'preserve-host-order', evidence: 'src/adapter/instructions.js' },
+    { id: 'no-conventional-filename-assumption', evidence: 'src/adapter/instructions.js' },
+  ]);
 });
 
 test('every negotiation assertion it evidences agrees with the fixture expectation', async (t) => {

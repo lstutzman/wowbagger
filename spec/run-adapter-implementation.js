@@ -15,6 +15,7 @@ import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
 import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
+import { validateInstructionInput } from '../src/adapter/instructions.js';
 import { resolveInvocationPaths } from '../src/adapter/paths.js';
 import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
 import { sameJson } from '../src/adapter/schema-helpers.js';
@@ -565,6 +566,30 @@ async function evaluateProcessOutcomeAssertion(directory, assertion) {
   };
 }
 
+async function evaluateInstructionAssertion(directory, assertion) {
+  const input = await readStrictJson(path.join(directory, 'instruction-input.json'));
+  const expected = await readStrictJson(path.join(directory, 'expected-discovery.json'));
+  const result = validateInstructionInput(input, {
+    max_sources: input.sources.length,
+    max_bytes: Number.MAX_SAFE_INTEGER,
+  });
+  const discovery = result.ok ? {
+    source_ids: result.ordered_sources,
+    discovery_mode: 'host-provided',
+    guessed_filenames: false,
+    total_bytes: result.total_bytes,
+  } : null;
+  return {
+    ok: result.ok
+      && sameJson(discovery, expected)
+      && (Array.isArray(assertion.expect)
+        ? sameJson(result.ordered_sources, assertion.expect)
+        : assertion.expect === 'no-guessed-filenames' && discovery.guessed_filenames === false),
+    evidence: 'src/adapter/instructions.js',
+    error_code: result.error_code,
+  };
+}
+
 async function evaluateAssertion(directory, assertion) {
   switch (assertion.type) {
     case 'negotiation':
@@ -587,6 +612,8 @@ async function evaluateAssertion(directory, assertion) {
       return evaluateCoreBaselineAssertion(directory, assertion);
     case 'output-bound':
       return evaluateOutputBoundAssertion(directory, assertion);
+    case 'instruction-order':
+      return evaluateInstructionAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }
