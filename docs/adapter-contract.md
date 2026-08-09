@@ -316,9 +316,12 @@ bytes before base64 expansion. An adapter MAY advertise smaller limits than
 the example. It MUST NOT imply an unbounded context, output, or execution time.
 
 `optional_features.claims` and `optional_features.policy` default to `false`.
-They may become true only after both a future versioned core contract and the
-adapter advertise the same feature. The current local core reports work claims
-unsupported. A mutation lock remains a short local mutation lock, not a claim.
+Claims become true only when the independently probed version 1 core reports
+`work_claim.supported: true`; policy remains false because version 1 advertises
+no policy feature. Work claims are advisory. They do not protect publication or
+fence writers: `fencing_enforced_at` is `"none"` and
+`safe_exclusive_dispatch` is `false`. A mutation lock remains a short local
+mutation lock, not a claim.
 
 ### 3.3 Bootstrap command wire
 
@@ -1088,6 +1091,23 @@ The direct core is the baseline. A future adapter does not pass by emitting an
 equivalent-looking object; it passes by preserving the baseline core exit code
 and exact standard-output and standard-error bytes for each compatible case.
 
+The implementation runner selects the runtime scenario only from each
+manifest's declared `mode`:
+
+- `equivalence` launches a real core child for both the direct baseline and the
+  shipped adapter transaction. It compares the exit code and exact stdout and
+  stderr bytes; reconstructed output is not equivalent.
+- `negative-capability` supplies the declared capability profile, process
+  observation, or refusal input. It forbids a live core launch and fails the
+  case if evaluation reaches that launcher.
+- `protocol` supplies the declared contract input, observation, or handoff to
+  the applicable shipped contract implementation. Its bootstrap transaction
+  uses a supplied core capability snapshot and does not launch a core child.
+
+Every mode still starts the shipped adapter entrypoint as a real process and
+exercises the strict bootstrap wire for every case. Only `equivalence` uses a
+live core child because only that mode has a direct-core baseline to preserve.
+
 `node spec/run-adapter-vectors.js` is the executable reference-model runner.
 Forwarding and negative invocation cases enter through the strict raw-byte
 reference `invoke` function. The real core run is a baseline comparison inside
@@ -1109,10 +1129,10 @@ expected result is semantically rejected rather than merely read. Its status is
 `reference-pass`. It does not run a real Claude Code, Codex, Kimi, or generic
 adapter, so its implementation statuses remain `unverified`.
 `node spec/run-adapter-implementation.js` accepts the same fixture directory,
-evaluates real transactions through the shipped Claude Code entrypoint and
-emits the same result shape with an evidence platform. Its current native
-Darwin run is `fail`: 180 of 183 assertions and 13 of 15 cases pass. A failing
-candidate run earns no platform support claim, so Claude Code, Codex, Kimi, and
+evaluates transactions through the shipped Claude Code entrypoint and emits the
+same result shape with an evidence platform. Its current native Darwin run is
+`pass`: 183 of 183 assertions and 15 of 15 cases pass. This is implementation
+evidence, not a change to any shipped platform declaration. Codex, Kimi, and
 generic adapter implementations remain `unverified`.
 
 The supported manifest assertion types are `core-baseline`, `capability`,
@@ -1124,14 +1144,14 @@ The runner fails closed on any other type.
 
 | Requirement | Direct core baseline | Claude Code adapter | Codex adapter | Kimi adapter | Generic OpenAI-compatible harness adapter |
 |---|---|---|---|---|---|
-| Core JSON, standard streams, and exit | Reference-pass | Unverified | Unverified | Unverified | Unverified |
-| Capability negotiation | Reference-pass for core probe | Unverified | Unverified | Unverified | Unverified |
-| Instruction input | Not a core concern | Unverified | Unverified | Unverified | Unverified |
-| Safe workspace and ledger selection | Core ledger checks only | Unverified | Unverified | Unverified | Unverified |
-| Bounded context and output | Reference bytes only | Unverified | Unverified | Unverified | Unverified |
-| Mutation authority and recovery | Core mutation contract only | Unverified | Unverified | Unverified | Unverified |
-| API-only transport refusal | Not applicable | Unverified | Unverified | Unverified | Unverified |
-| Resume and handoff | Not a core concern | Unverified | Unverified | Unverified | Unverified |
+| Core JSON, standard streams, and exit | Reference-pass | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Capability negotiation | Reference-pass for core probe | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Instruction input | Not a core concern | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Safe workspace and ledger selection | Core ledger checks only | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Bounded context and output | Reference bytes only | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Mutation authority and recovery | Core mutation contract only | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| API-only transport refusal | Not applicable | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
+| Resume and handoff | Not a core concern | Implementation-pass (darwin) | Unverified | Unverified | Unverified |
 
 The API-only negative vector is intentionally different: it must refuse core
 invocation because model transport alone is not a coding harness. A generic
