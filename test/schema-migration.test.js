@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -153,6 +153,32 @@ test('refuses an already schema version 2 ledger without rewriting it', async ()
     assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
     assert.equal(after.ino, before.ino);
     assert.equal(await readFile(itemPath, 'utf8'), migratedDoneSource);
+  });
+});
+
+test('refuses migration while any item lock is held', async () => {
+  await withLedger({
+    '01-foundation.md': doneSource,
+    '02-alpha.md': backlogSource,
+  }, async (ledger) => {
+    const itemPath = path.join(ledger, '02-alpha.md');
+    const lockDirectory = path.join(ledger, '.wowbagger-locks');
+    const lockName = `${BACKLOG_ID}.lock`;
+    await mkdir(lockDirectory);
+    await writeFile(path.join(lockDirectory, lockName), '{malformed lock metadata', 'utf8');
+    const before = await stat(itemPath);
+
+    const result = runMigration('--ledger', ledger, '--apply');
+    const after = await stat(itemPath);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^ERROR \[lock-held\]:/);
+    assert.match(result.stderr, new RegExp(`\\.wowbagger-locks/${BACKLOG_ID}\\.lock`));
+    assert.match(result.stderr, /requires a quiesced window/);
+    assert.match(result.stderr, /audited manual recovery/);
+    assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
+    assert.equal(after.ino, before.ino);
+    assert.equal(await readFile(itemPath, 'utf8'), backlogSource);
   });
 });
 

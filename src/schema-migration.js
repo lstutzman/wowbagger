@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, rename, unlink } from 'node:fs/promises';
+import { open, readdir, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { parseDocument } from 'yaml';
 
@@ -61,6 +61,13 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
       inputValidation.errors,
     );
   }
+  const heldLocks = await heldItemLocks(ledgerDirectory);
+  if (heldLocks.length > 0) {
+    throw new SchemaMigrationError(
+      'lock-held',
+      `Item locks are held under the ledger: ${heldLocks.join(', ')}. The migration requires a quiesced window. Stop all writers and resolve the locks through audited manual recovery before rerunning the dry run. No files were changed.`,
+    );
+  }
   const changes = ledger.items.map((item) => {
     const source = schema2Source(item.source);
     return {
@@ -90,6 +97,26 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
   }
 
   return { apply, changes };
+}
+
+async function heldItemLocks(ledgerDirectory) {
+  const lockDirectory = path.join(path.resolve(ledgerDirectory), '.wowbagger-locks');
+  let entries;
+  try {
+    entries = await readdir(lockDirectory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return [];
+    }
+    throw new SchemaMigrationError(
+      'lock-state-unknown',
+      'The item-lock directory could not be inspected. Quiescence is not established. No files were changed.',
+    );
+  }
+  return entries
+    .filter((entry) => entry.name.endsWith('.lock'))
+    .map((entry) => `.wowbagger-locks/${entry.name}`)
+    .sort();
 }
 
 export function formatSchemaMigrationError(error) {
