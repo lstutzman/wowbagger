@@ -7,6 +7,7 @@ import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 const SAFE_ID = /^[A-Za-z0-9._-]{1,128}$/;
 
 const MESSAGES = Object.freeze({
+  'capability-unavailable': 'The configured host cannot invoke the Wowbagger core.',
   'invalid-invocation': 'The adapter invocation is invalid.',
   'timeout-limit-exceeded': 'The requested timeout exceeds the adapter limit.',
 });

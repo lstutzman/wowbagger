@@ -15,6 +15,7 @@ import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/ad
 import { invokeAdapter } from '../src/adapter/invoke.js';
 import { resolveInvocationPaths } from '../src/adapter/paths.js';
 import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
+import { sameJson } from '../src/adapter/schema-helpers.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 
@@ -182,9 +183,42 @@ async function evaluateNegotiationAssertion(directory, assertion) {
 // honest evidence label: the accepted result, not the raw file, is what
 // declares both optional features absent.
 async function evaluateCapabilityAssertion(directory, assertion) {
+  if (assertion.expect === 'refuse-before-core-launch') {
+    const dynamic = await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
+    const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
+    const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
+    let launches = 0;
+    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), {
+      max_request_bytes: dynamic.limits.max_request_bytes,
+      describe_request: {
+        bootstrap_wire_version: 1,
+        supported_adapter_contract_versions: [1],
+        request_id: 'implementation-vector-describe',
+      },
+      manifest: {
+        adapter_manifest_version: 1,
+        adapter_id: dynamic.adapter_id,
+        adapter_version: dynamic.adapter_version,
+        adapter_contract_versions: [1],
+        bootstrap_wire_version: 1,
+        required_core_contract_version: dynamic.core.required_core_contract_version,
+        entrypoints: {
+          describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
+          invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
+        },
+        platforms: dynamic.platforms,
+      },
+      dynamic,
+      platform: process.platform,
+      launch: async () => { launches += 1; },
+    });
+    return {
+      ok: launches === 0 && sameJson(result, expected),
+      evidence: 'src/adapter/invoke.js',
+      error_code: result.error.code,
+    };
+  }
   if (assertion.expect !== 'claims-and-policy-false') {
-    // `refuse-before-core-launch` and `work-claim-advisory` both need
-    // invokeAdapter, which is Plan 2's work.
     return UNIMPLEMENTED;
   }
   const capabilities = await readStrictJson(path.join(directory, 'adapter-capabilities.json'));

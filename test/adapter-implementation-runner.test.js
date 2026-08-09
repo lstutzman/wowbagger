@@ -206,6 +206,17 @@ test('maps every bounded process observation through the shipped engine', async 
     .every(({ evidence }) => evidence === 'src/adapter/process-outcome.js'));
 });
 
+test('refuses API-only transport before core launch', async () => {
+  const result = await runImplementationVectors({ platform: process.platform });
+  const capabilityCase = result.cases.find(({ case: name }) => name === 'capability-separation');
+
+  assert.equal(capabilityCase.status, 'pass');
+  assert.equal(
+    capabilityCase.assertion_evidence.find(({ id }) => id === 'api-transport-is-not-tooling').evidence,
+    'src/adapter/invoke.js',
+  );
+});
+
 test('labels each evidenced assertion with the shipped module that produced it', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
@@ -232,14 +243,17 @@ test('holds unfinished Plan 2 and Plan 3 assertions at unimplemented', async () 
     evidenceOf('negotiation-mismatch', 'future-invoke-version-is-refused'),
     'src/adapter/invoke.js',
   );
-  assert.equal(evidenceOf('capability-separation', 'api-transport-is-not-tooling'), 'unimplemented');
+  assert.equal(
+    evidenceOf('capability-separation', 'api-transport-is-not-tooling'),
+    'src/adapter/invoke.js',
+  );
   assert.equal(evidenceOf('capabilities-forwarding', 'preserve-core-capability-truth'), 'unimplemented');
-  assert.equal(byName.get('capability-separation').status, 'fail');
+  assert.equal(byName.get('capability-separation').status, 'pass');
 
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 116);
+  assert.equal(evidenced.length, 117);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });
