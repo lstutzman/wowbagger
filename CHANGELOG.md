@@ -48,6 +48,10 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- `scripts/migrate-schema-2.js` dry-runs a schema-version-1 ledger migration by
+  default and requires `--apply` to write. It refuses invalid, mixed, already
+  migrated, empty, or locked ledgers; reports each item; validates the complete
+  schema-version-2 result; and directs partial failures to backup/Git recovery.
 - `wowbagger patch` changes an item's caller-supplied fields — `number` and
   `priority` — under the same per-ID lock, revision compare-and-swap, and
   candidate validation as transition. Mutation contract section 9.

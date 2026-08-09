@@ -80,8 +80,15 @@ core directly, do the same rather than guessing.
 The shipped adapter selects only adapter contract version 2 and requires core
 contract version 2. A v1-only consumer receives
 `unsupported-adapter-contract-version`; it does not receive v2 behavior. The
-schema-2 transport is available, but migrating this repository's live ledger
-remains a separate quiesced operation.
+schema-2 transport is available. Ledger migration remains a separate quiesced
+maintenance operation. The
+[schema-2 migration runbook](docs/schema-2-migration.md) documents the required
+backup, dry run, explicit `--apply`, lock refusal, and recovery procedure. The
+tool is dry-run-only by default:
+
+```sh
+TMPDIR=/tmp node scripts/migrate-schema-2.js --ledger path/to/ledger
+```
 
 Behaviour changes are recorded in [CHANGELOG.md](CHANGELOG.md) — read its
 Unreleased section on every upgrade. If you automated against an earlier
@@ -300,6 +307,7 @@ skills/         Portable agent workflows shipped by the plugin
 spec/           Ledger schema, the adapter reference model, and normative fixtures
 test/           The test suite
 docs/           Contracts, integration guidance, and handoffs
+scripts/        Maintenance commands that stay outside the core mutation contract
 ledger/         This repository's own backlog, managed by wowbagger itself
 ```
 
