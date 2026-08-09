@@ -312,6 +312,11 @@ export async function runAdapterEntrypoint({
   if (operation === 'invoke') {
     const workspaceRoots = await loadWorkspaceRoots(workspaceConfigUrl);
     const workspaces = await invocationWorkspaces(incoming.request, workspaceRoots);
+    const launch = runtimeConfig?.process_observation
+      ? async () => structuredClone(runtimeConfig.process_observation)
+      : runtimeConfig?.forbid_core_launch
+        ? async () => { throw new Error('core launch forbidden by runtime scenario'); }
+        : (request) => launchCoreProcess({ executable: coreExecutable, ...request });
     const response = await invokeAdapter(incoming.bytes, {
       max_request_bytes: dynamic.limits.max_request_bytes,
       describe_request: {
@@ -325,7 +330,7 @@ export async function runAdapterEntrypoint({
       platform: process.platform,
       package_root: packageRoot,
       workspaces,
-      launch: (request) => launchCoreProcess({ executable: coreExecutable, ...request }),
+      launch,
     });
     await writeBootstrapResponse(process.stdout, response);
     return;

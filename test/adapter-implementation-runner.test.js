@@ -104,13 +104,13 @@ test('refuses a scenario that omits its expected error code', async (t) => {
 test('reports the honest claude-code result with every assertion executed', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
 
-  assert.equal(result.status, 'fail');
-  assert.equal(result.implementations['claude-code'], 'fail');
+  assert.equal(result.status, 'pass');
+  assert.equal(result.implementations['claude-code'], 'pass');
   assert.equal(result.evidence_platform, 'darwin');
   assert.equal(result.cases.length, 15);
   assert.deepEqual(
     result.cases.filter(({ status }) => status === 'fail').map(({ case: name }) => name),
-    ['bounded-output'],
+    [],
   );
 
   const executed = result.cases.flatMap((entry) => entry.executed_assertions);
@@ -302,14 +302,27 @@ test('uses the declared API-only profile for a negative-capability case', async 
   assert.deepEqual(capabilityCase.observed_error_codes, ['capability-unavailable']);
 });
 
-test('forwards compatible core baselines and reports the bounded-output mismatch', async () => {
+test('uses the declared process observation for a negative-capability case', async (t) => {
+  const { root } = await isolateCase(t, '06-bounded-output', () => true);
+  const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
+
+  assert.equal(result.cases[0].status, 'pass');
+  assert.deepEqual(result.cases[0].observed_error_codes, ['output-limit-exceeded']);
+  assert.deepEqual(result.cases[0].assertion_evidence, [{
+    id: 'do-not-return-partial-core-json',
+    evidence: 'adapters/claude-code/entrypoint.js',
+  }]);
+});
+
+test('forwards compatible core baselines and maps the declared bounded-output observation', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
 
-  for (const name of ['ready-forwarding', 'validation-failure-forwarding', 'capabilities-forwarding']) {
+  for (const name of [
+    'ready-forwarding', 'validation-failure-forwarding', 'bounded-output', 'capabilities-forwarding',
+  ]) {
     assert.equal(byName.get(name).status, 'pass', name);
   }
-  assert.equal(byName.get('bounded-output').status, 'fail');
   assert.equal(
     byName.get('ready-forwarding').assertion_evidence[0].evidence,
     'adapters/claude-code/entrypoint.js',
@@ -354,7 +367,7 @@ test('evaluates workspace forwarding through the shipped bootstrap process', asy
   }]);
 });
 
-test('routes every real adapter transaction through the shipped entrypoint', async () => {
+test('routes every bootstrap transaction through the shipped entrypoint', async () => {
   const result = await runImplementationVectors({ platform: process.platform });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
   const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
@@ -420,8 +433,8 @@ test('evidences every Plan 3 assertion through a shipped module', async () => {
     .filter(({ evidence }) => evidence !== 'unimplemented');
   assert.equal(evidenced.length, 183);
   assert.equal(183 - evidenced.length, 0);
-  assert.equal(result.status, 'fail');
-  assert.equal(result.implementations['claude-code'], 'fail');
+  assert.equal(result.status, 'pass');
+  assert.equal(result.implementations['claude-code'], 'pass');
 });
 
 test('validates ordered instruction input through the shipped engine', async () => {

@@ -174,11 +174,9 @@ async function callShippedEntrypoint(
       candidateManifest.adapter_version = runtimeConfig.dynamic_result.adapter_version;
       candidateManifest.required_core_contract_version
         = runtimeConfig.dynamic_result.core.required_core_contract_version;
-      candidateManifest.platforms = runtimeConfig.dynamic_result.platforms;
-    }
-    candidateManifest.platforms[process.platform] = 'supported';
-    if (runtimeConfig?.dynamic_result) {
-      runtimeConfig.dynamic_result.platforms[process.platform] = 'supported';
+      candidateManifest.platforms = structuredClone(runtimeConfig.dynamic_result.platforms);
+    } else {
+      candidateManifest.platforms[process.platform] = 'supported';
     }
     const candidateManifestPath = path.join(temporary, 'wowbagger-adapter.json');
     const workspacesPath = path.join(temporary, 'workspaces.json');
@@ -440,7 +438,7 @@ async function evaluateCoreBaselineAssertion(directory, assertion, target) {
   }
 }
 
-async function evaluateOutputBoundAssertion(directory, assertion, target) {
+async function evaluateOutputBoundAssertion(directory, assertion, target, runtimeConfig) {
   await readStrictJson(path.join(directory, 'process.json'));
   const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
   const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
@@ -449,6 +447,7 @@ async function evaluateOutputBoundAssertion(directory, assertion, target) {
     await mkdir(path.join(temporary, 'ledger'));
     const invoked = await callShippedEntrypoint(invocation, target, {
       workspaces: { [invocation.workspace.workspace_id]: temporary },
+      runtimeConfig,
     });
     return {
       ok: invoked.response.error?.code === assertion.expect && sameJson(invoked.response, expected),
@@ -775,7 +774,7 @@ async function evaluateAssertion(directory, assertion, target, runtimeConfig) {
     case 'core-baseline':
       return evaluateCoreBaselineAssertion(directory, assertion, target);
     case 'output-bound':
-      return evaluateOutputBoundAssertion(directory, assertion, target);
+      return evaluateOutputBoundAssertion(directory, assertion, target, runtimeConfig);
     case 'instruction-order':
       return evaluateInstructionAssertion(directory, assertion);
     case 'context-validation':
@@ -812,11 +811,18 @@ async function runtimeConfigForMode(directory, manifest) {
     case 'negative-capability': {
       const capabilityArtifact = manifest.artifacts
         .find(({ path: artifactPath }) => artifactPath === 'adapter-capabilities.json');
+      const processArtifact = manifest.artifacts
+        .find(({ path: artifactPath }) => artifactPath === 'process.json');
+      const processCase = processArtifact
+        ? await readStrictJson(path.join(directory, processArtifact.path))
+        : undefined;
       return {
-        core_probe: null,
+        core_probe: coreCapabilities(),
+        forbid_core_launch: true,
         ...(capabilityArtifact
           ? { dynamic_result: await readStrictJson(path.join(directory, capabilityArtifact.path)) }
           : {}),
+        ...(processCase ? { process_observation: processCase.request.process } : {}),
       };
     }
     default:
