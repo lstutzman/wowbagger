@@ -39,6 +39,14 @@ function itemWord(count) {
 
 export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = async () => {} } = {}) {
   const ledger = await loadLedger(ledgerDirectory);
+  const inputValidation = validateLedger(ledger);
+  if (!inputValidation.valid) {
+    throw new SchemaMigrationError(
+      'invalid-schema-1',
+      'The ledger must validate completely as schema version 1 before migration. No files were changed.',
+      inputValidation.errors,
+    );
+  }
   const changes = ledger.items.map((item) => {
     const source = schema2Source(item.source);
     return {
@@ -68,6 +76,24 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
   }
 
   return { apply, changes };
+}
+
+export function formatSchemaMigrationError(error) {
+  if (!(error instanceof SchemaMigrationError)) {
+    return `ERROR: ${error.message}\n`;
+  }
+  const diagnostics = error.diagnostics
+    .map((entry) => `${entry.path} ${entry.field} [${entry.code}]: ${entry.message}`)
+    .join('\n');
+  return `ERROR [${error.code}]: ${error.message}\n${diagnostics ? `${diagnostics}\n` : ''}`;
+}
+
+class SchemaMigrationError extends Error {
+  constructor(code, message, diagnostics = []) {
+    super(message);
+    this.code = code;
+    this.diagnostics = diagnostics;
+  }
 }
 
 async function atomicRewrite(change) {

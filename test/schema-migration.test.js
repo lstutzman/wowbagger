@@ -13,6 +13,7 @@ const fixtureRoot = new URL('../spec/fixtures/ready-selection/ledger/', import.m
 
 const DONE_ID = 'wb_01KDWPVNG05FCBFC6R7R7CJANX';
 const BACKLOG_ID = 'wb_01KE1VN3G0HV9ZDBB8BEASXBBG';
+const DEPENDENT_ID = 'wb_01KDZ98CG0YH769STZ754EKXSZ';
 const doneSource = readFileSync(new URL('01-foundation.md', fixtureRoot), 'utf8');
 const backlogSource = readFileSync(new URL('02-alpha.md', fixtureRoot), 'utf8');
 
@@ -70,6 +71,44 @@ test('applies only the schema scalar when explicitly requested', async () => {
     assert.match(result.stdout, new RegExp(`^CHANGED ledger/item\\.md \\(${BACKLOG_ID}\\): schema_version 1 -> 2$`, 'm'));
     assert.match(result.stdout, /^Summary: 1 item changed\.$/m);
     assert.equal(await readFile(path.join(ledger, 'item.md'), 'utf8'), expected);
+  });
+});
+
+test('validates schema version 1 before changing stamps', async () => {
+  const dependentSource = `---
+schema_version: 1
+id: ${DEPENDENT_ID}
+title: "Retained schema 1 dependency"
+kind: task
+status: done
+created: 2026-01-02
+updated: 2026-01-03
+completed: 2026-01-03
+provenance:
+  source: "fixture/schema-migration"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: [${DONE_ID}]
+related: []
+decisions:
+  - action: complete
+    date: 2026-01-03
+    summary: "Record invalid schema 1 history."
+    rationale: "The migration must refuse rather than reinterpret this state."
+---
+`;
+
+  await withLedger({
+    '01-prerequisite.md': doneSource,
+    '02-dependent.md': dependentSource,
+  }, async (ledger) => {
+    const result = runMigration('--ledger', ledger, '--apply');
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^ERROR \[invalid-schema-1\]:/);
+    assert.match(result.stderr, /done-item-has-dependencies/);
+    assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
+    assert.equal(await readFile(path.join(ledger, '01-prerequisite.md'), 'utf8'), doneSource);
+    assert.equal(await readFile(path.join(ledger, '02-dependent.md'), 'utf8'), dependentSource);
   });
 });
 
