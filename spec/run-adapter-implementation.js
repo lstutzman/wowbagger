@@ -808,7 +808,6 @@ export function deriveExecutedAssertions(declared, evaluated) {
 async function runtimeConfigForMode(directory, manifest) {
   switch (manifest.mode) {
     case 'equivalence':
-    case 'protocol':
       return undefined;
     case 'negative-capability': {
       const capabilityArtifact = manifest.artifacts
@@ -827,6 +826,11 @@ async function runtimeConfigForMode(directory, manifest) {
         ...(processCase ? { process_observation: processCase.request.process } : {}),
       };
     }
+    case 'protocol':
+      return {
+        core_probe: coreCapabilities(),
+        forbid_core_launch: true,
+      };
     default:
       throw new Error(`unknown execution mode ${manifest.mode} in ${manifest.case}`);
   }
@@ -872,6 +876,13 @@ export async function runImplementationVectors({
     }
 
     const runtimeConfig = await runtimeConfigForMode(directory, manifest);
+    if (manifest.mode === 'protocol') {
+      await callShippedEntrypoint({
+        bootstrap_wire_version: 1,
+        supported_adapter_contract_versions: [1],
+        request_id: `implementation-vector-${manifest.case}`,
+      }, target, { operation: 'describe', runtimeConfig });
+    }
 
     const evaluated = [];
     const errorCodes = new Set();

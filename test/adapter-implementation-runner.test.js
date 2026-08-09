@@ -181,6 +181,17 @@ test('fails closed on an unknown execution mode', async (t) => {
   );
 });
 
+test('exercises the shipped bootstrap process for every protocol case', async (t) => {
+  const { manifest, files } = syntheticEntrypointFixture('path-replaced');
+  manifest.targets = ['missing-adapter'];
+  const fixtureRoot = await writeTempFixture(t, manifest, files);
+
+  await assert.rejects(
+    () => runImplementationVectors({ fixtureRoot, platform: 'darwin', target: 'missing-adapter' }),
+    /ENOENT/,
+  );
+});
+
 test('fails closed on a corrupted artifact SHA-256', async (t) => {
   const { manifest, files } = syntheticEntrypointFixture('path-replaced');
   manifest.artifacts = [{
@@ -597,6 +608,14 @@ async function statusAfterEditing(t, name, keepAssertion, artifact, edit) {
 }
 
 const keepOptionalFeatures = ({ expect }) => expect === 'claims-and-policy-false';
+
+test('reports fail when protocol input order is not preserved', async (t) => {
+  const status = await statusAfterEditing(
+    t, '02-instruction-input', () => true, 'instruction-input.json',
+    (input) => { input.sources.reverse(); },
+  );
+  assert.equal(status, 'fail');
+});
 
 test('reports fail when the negotiation evaluator disagrees with the fixture', async (t) => {
   const status = await statusAfterEditing(
