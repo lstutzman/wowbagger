@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest } from '../src/adapter/bootstrap.js';
+import { launchCoreProcess } from '../src/adapter/entrypoint-main.js';
 
 const entrypoint = fileURLToPath(new URL('../adapters/claude-code/entrypoint.js', import.meta.url));
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -154,6 +155,52 @@ test('resolves an approved workspace and forwards ready through the real core', 
 
   assert.equal(code, 0);
   assert.deepEqual(assertSingleJsonObject(stdout), expected);
+});
+
+test('the core launcher enforces stream byte limits while retaining raw bytes', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-launch-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const launchWriter = async (stream, bytes) => {
+    const executable = path.join(temporaryDirectory, `write-${stream}.js`);
+    await writeFile(executable, `process.${stream}.write(Buffer.from(${JSON.stringify(bytes)}));\n`);
+    return launchCoreProcess({
+      executable,
+      argv: [],
+      cwd: temporaryDirectory,
+      input: Buffer.alloc(0),
+      limits: { stdout_bytes: 3, stderr_bytes: 3, timeout_ms: 1000 },
+    });
+  };
+
+  const stdout = await launchWriter('stdout', [0x00, 0xff, 0x41, 0x42]);
+  assert.equal(stdout.started, true);
+  assert.equal(stdout.stdout_complete, false);
+  assert.deepEqual(Buffer.from(stdout.stdout_base64, 'base64'), Buffer.from([0x00, 0xff, 0x41]));
+
+  const stderr = await launchWriter('stderr', [0xfe, 0x42, 0x43, 0x44]);
+  assert.equal(stderr.started, true);
+  assert.equal(stderr.stderr_complete, false);
+  assert.deepEqual(Buffer.from(stderr.stderr_base64, 'base64'), Buffer.from([0xfe, 0x42, 0x43]));
+});
+
+test('the core launcher enforces the advertised timeout', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-timeout-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const executable = path.join(temporaryDirectory, 'wait.js');
+  await writeFile(executable, 'setTimeout(() => process.exit(0), 150);\n');
+
+  const observation = await launchCoreProcess({
+    executable,
+    argv: [],
+    cwd: temporaryDirectory,
+    input: Buffer.alloc(0),
+    limits: { stdout_bytes: 3, stderr_bytes: 3, timeout_ms: 20 },
+  });
+
+  assert.equal(observation.started, true);
+  assert.equal(observation.timed_out, true);
+  assert.equal(observation.exit_code, null);
+  assert.equal(observation.signal, null);
 });
 
 test('bounds invoke bytes before parsing the request', async () => {

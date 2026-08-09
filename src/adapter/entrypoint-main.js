@@ -65,35 +65,71 @@ export function standardDynamicResult(manifest, coreProbe) {
   };
 }
 
+function appendBounded(chunks, state, chunk, limit, terminate) {
+  const remaining = Math.max(0, limit - state.length);
+  if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
+  state.length += chunk.length;
+  if (state.length > limit && !state.exceeded) {
+    state.exceeded = true;
+    terminate();
+  }
+}
+
 export function launchCoreProcess({ executable, argv, cwd, input, limits }) {
   return new Promise((resolve) => {
+    const detached = process.platform !== 'win32';
     const child = spawn(process.execPath, [executable, ...argv], {
       cwd,
+      detached,
       shell: false,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const stdoutChunks = [];
     const stderrChunks = [];
+    const stdoutState = { length: 0, exceeded: false };
+    const stderrState = { length: 0, exceeded: false };
     let started = false;
     let spawnError = false;
+    let timedOut = false;
+
+    const terminate = () => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      try {
+        if (detached && child.pid) process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminate();
+    }, limits.timeout_ms);
 
     child.once('spawn', () => {
       started = true;
       child.stdin.end(input);
     });
     child.once('error', () => { spawnError = true; });
-    child.stdout.on('data', (chunk) => { stdoutChunks.push(chunk); });
-    child.stderr.on('data', (chunk) => { stderrChunks.push(chunk); });
+    child.stdout.on('data', (chunk) => {
+      appendBounded(stdoutChunks, stdoutState, chunk, limits.stdout_bytes, terminate);
+    });
+    child.stderr.on('data', (chunk) => {
+      appendBounded(stderrChunks, stderrState, chunk, limits.stderr_bytes, terminate);
+    });
     child.once('close', (code, signal) => {
+      clearTimeout(timer);
+      const outputExceeded = stdoutState.exceeded || stderrState.exceeded;
+      const deliberatelyTerminated = outputExceeded || timedOut;
       resolve({
         started: started && !spawnError,
         process_tree_contained: true,
         orphaned: false,
-        exit_code: Number.isInteger(code) ? code : null,
-        signal,
-        timed_out: false,
-        stdout_complete: true,
-        stderr_complete: true,
+        exit_code: deliberatelyTerminated || !Number.isInteger(code) ? null : code,
+        signal: deliberatelyTerminated ? null : signal,
+        timed_out: timedOut,
+        stdout_complete: !stdoutState.exceeded,
+        stderr_complete: !stderrState.exceeded,
         stdout_base64: Buffer.concat(stdoutChunks).toString('base64'),
         stderr_base64: Buffer.concat(stderrChunks).toString('base64'),
       });
