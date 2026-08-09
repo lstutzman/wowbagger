@@ -110,7 +110,7 @@ test('reports the honest claude-code result with every assertion executed', asyn
   assert.equal(result.cases.length, 15);
   assert.deepEqual(
     result.cases.filter(({ status }) => status === 'fail').map(({ case: name }) => name),
-    ['capability-separation', 'bounded-output'],
+    ['bounded-output'],
   );
 
   const executed = result.cases.flatMap((entry) => entry.executed_assertions);
@@ -289,16 +289,17 @@ test('maps every bounded process observation through the shipped engine', async 
     .every(({ evidence }) => evidence === 'src/adapter/process-outcome.js'));
 });
 
-test('reports that the shipped Claude adapter does not match the API-only host fixture', async () => {
-  const result = await runImplementationVectors({ platform: process.platform });
-  const capabilityCase = result.cases.find(({ case: name }) => name === 'capability-separation');
+test('uses the declared API-only profile for a negative-capability case', async (t) => {
+  const { root } = await isolateCase(t, '01-capability-separation', () => true);
+  const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
+  const capabilityCase = result.cases[0];
 
-  assert.equal(capabilityCase.status, 'fail');
+  assert.equal(capabilityCase.status, 'pass');
   assert.equal(
     capabilityCase.assertion_evidence.find(({ id }) => id === 'api-transport-is-not-tooling').evidence,
     'adapters/claude-code/entrypoint.js',
   );
-  assert.ok(capabilityCase.observed_error_codes.includes('path-rejected'));
+  assert.deepEqual(capabilityCase.observed_error_codes, ['capability-unavailable']);
 });
 
 test('forwards compatible core baselines and reports the bounded-output mismatch', async () => {
@@ -412,7 +413,7 @@ test('evidences every Plan 3 assertion through a shipped module', async () => {
     evidenceOf('capabilities-forwarding', 'preserve-core-capability-truth'),
     'adapters/claude-code/entrypoint.js',
   );
-  assert.equal(byName.get('capability-separation').status, 'fail');
+  assert.equal(byName.get('capability-separation').status, 'pass');
 
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
@@ -512,7 +513,7 @@ test('every negotiation assertion it evidences agrees with the fixture expectati
   ]);
 });
 
-test('the real describe reports the core claim that the stale capability artifact omits', async (t) => {
+test('the negative-capability describe preserves the declared optional features', async (t) => {
   const { root, kept } = await isolateCase(
     t,
     '01-capability-separation',
@@ -522,7 +523,7 @@ test('the real describe reports the core claim that the stale capability artifac
 
   const result = await runImplementationVectors({ fixtureRoot: root, platform: 'darwin' });
 
-  assert.equal(result.cases[0].status, 'fail');
+  assert.equal(result.cases[0].status, 'pass');
 });
 
 test('reports a case as passing when the shipped engine matches the fixture expectation', async (t) => {

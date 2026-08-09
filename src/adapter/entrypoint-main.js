@@ -194,6 +194,21 @@ async function loadWorkspaceRoots(workspaceConfigUrl) {
   return roots;
 }
 
+async function loadRuntimeConfig(runtimeConfigPath) {
+  if (!runtimeConfigPath) return undefined;
+  let parsed;
+  try {
+    parsed = parseJsonRequest(await readFile(runtimeConfigPath));
+  } catch {
+    return undefined;
+  }
+  if (parsed.issues.length > 0) return undefined;
+  const config = normalizeJsonValue(parsed.value);
+  return config !== null && typeof config === 'object' && !Array.isArray(config)
+    ? config
+    : undefined;
+}
+
 function logicalComponents(logicalPath) {
   if (!isSafeLogicalPath(logicalPath) || logicalPath === '.') return [];
   const segments = logicalPath.split('/');
@@ -246,6 +261,7 @@ export async function runAdapterEntrypoint({
   packageRoot = fileURLToPath(new URL('../../', manifestUrl)),
   coreExecutable = fileURLToPath(new URL('../../bin/wowbagger.js', import.meta.url)),
   workspaceConfigUrl,
+  runtimeConfigPath = process.env.WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH,
   argv = process.argv,
 }) {
   const [operation] = argv.slice(2);
@@ -258,8 +274,11 @@ export async function runAdapterEntrypoint({
     return;
   }
 
-  const coreProbe = await probeCore(coreExecutable, packageRoot);
-  const dynamic = dynamicResult(manifest, coreProbe);
+  const runtimeConfig = await loadRuntimeConfig(runtimeConfigPath);
+  const coreProbe = runtimeConfig && Object.hasOwn(runtimeConfig, 'core_probe')
+    ? runtimeConfig.core_probe
+    : await probeCore(coreExecutable, packageRoot);
+  const dynamic = runtimeConfig?.dynamic_result ?? dynamicResult(manifest, coreProbe);
   const incoming = await readBootstrapRequest(process.stdin, operation === 'invoke' ? {
     maxBytes: dynamic.limits.max_request_bytes,
     errorCode: 'invalid-invocation',

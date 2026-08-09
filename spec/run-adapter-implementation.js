@@ -159,21 +159,38 @@ async function spawnAdapterEntrypoint(entrypoint, operation, request, env) {
   });
 }
 
-async function callShippedEntrypoint(request, target, { operation = 'invoke', workspaces = {} } = {}) {
+async function callShippedEntrypoint(
+  request,
+  target,
+  { operation = 'invoke', workspaces = {}, runtimeConfig } = {},
+) {
   const entrypoint = path.join(projectRoot, 'adapters', target, 'entrypoint.js');
   const shippedManifestPath = path.join(projectRoot, 'adapters', target, 'wowbagger-adapter.json');
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-candidate-'));
   try {
     const candidateManifest = await readStrictJson(shippedManifestPath);
+    if (runtimeConfig?.dynamic_result) {
+      candidateManifest.adapter_id = runtimeConfig.dynamic_result.adapter_id;
+      candidateManifest.adapter_version = runtimeConfig.dynamic_result.adapter_version;
+      candidateManifest.required_core_contract_version
+        = runtimeConfig.dynamic_result.core.required_core_contract_version;
+      candidateManifest.platforms = runtimeConfig.dynamic_result.platforms;
+    }
     candidateManifest.platforms[process.platform] = 'supported';
+    if (runtimeConfig?.dynamic_result) {
+      runtimeConfig.dynamic_result.platforms[process.platform] = 'supported';
+    }
     const candidateManifestPath = path.join(temporary, 'wowbagger-adapter.json');
     const workspacesPath = path.join(temporary, 'workspaces.json');
+    const runtimeConfigPath = path.join(temporary, 'runtime-config.json');
     await writeFile(candidateManifestPath, JSON.stringify(candidateManifest));
     await writeFile(workspacesPath, JSON.stringify(workspaces));
+    if (runtimeConfig) await writeFile(runtimeConfigPath, JSON.stringify(runtimeConfig));
     return {
       response: await spawnAdapterEntrypoint(entrypoint, operation, request, {
         WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
         WOWBAGGER_ADAPTER_WORKSPACES_PATH: workspacesPath,
+        ...(runtimeConfig ? { WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH: runtimeConfigPath } : {}),
       }),
       evidence: path.relative(projectRoot, entrypoint),
     };
@@ -310,12 +327,12 @@ async function evaluateNegotiationAssertion(directory, assertion, target) {
 // through the shipped negotiator is what makes `src/adapter/describe.js` an
 // honest evidence label: the accepted result, not the raw file, is what
 // declares both optional features absent.
-async function evaluateCapabilityAssertion(directory, assertion, target) {
+async function evaluateCapabilityAssertion(directory, assertion, target, runtimeConfig) {
   if (assertion.expect === 'refuse-before-core-launch') {
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
     const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
     await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
-    const invoked = await callShippedEntrypoint(invocation, target);
+    const invoked = await callShippedEntrypoint(invocation, target, { runtimeConfig });
     const result = invoked.response;
     return {
       ok: sameJson(result, expected),
@@ -350,7 +367,7 @@ async function evaluateCapabilityAssertion(directory, assertion, target) {
     bootstrap_wire_version: capabilities.bootstrap_wire_version,
     supported_adapter_contract_versions: [1],
     request_id: assertion.id,
-  }, target, { operation: 'describe' });
+  }, target, { operation: 'describe', runtimeConfig });
   const described = invoked.response;
   return {
     ok: described.ok === true
@@ -732,7 +749,7 @@ async function evaluateApprovalGateAssertion(directory, assertion, target) {
   throw new Error(`unknown approval expectation ${assertion.expect}`);
 }
 
-async function evaluateAssertion(directory, assertion, target) {
+async function evaluateAssertion(directory, assertion, target, runtimeConfig) {
   if (target !== 'claude-code' && [
     'instruction-order', 'approval-gate', 'resume-plan', 'context-validation', 'approval-schema',
   ].includes(assertion.type)) {
@@ -745,7 +762,7 @@ async function evaluateAssertion(directory, assertion, target) {
     case 'invoke-version':
       return evaluateNegotiationAssertion(directory, assertion, target);
     case 'capability':
-      return evaluateCapabilityAssertion(directory, assertion, target);
+      return evaluateCapabilityAssertion(directory, assertion, target, runtimeConfig);
     case 'platform-status':
       return evaluatePlatformAssertion(directory, assertion);
     case 'path-refusal':
@@ -787,6 +804,26 @@ export function deriveExecutedAssertions(declared, evaluated) {
   return executed;
 }
 
+async function runtimeConfigForMode(directory, manifest) {
+  switch (manifest.mode) {
+    case 'equivalence':
+    case 'protocol':
+      return undefined;
+    case 'negative-capability': {
+      const capabilityArtifact = manifest.artifacts
+        .find(({ path: artifactPath }) => artifactPath === 'adapter-capabilities.json');
+      return {
+        core_probe: null,
+        ...(capabilityArtifact
+          ? { dynamic_result: await readStrictJson(path.join(directory, capabilityArtifact.path)) }
+          : {}),
+      };
+    }
+    default:
+      throw new Error(`unknown execution mode ${manifest.mode} in ${manifest.case}`);
+  }
+}
+
 export async function runImplementationVectors({
   fixtureRoot = defaultFixtureRoot,
   platform,
@@ -826,11 +863,13 @@ export async function runImplementationVectors({
       }
     }
 
+    const runtimeConfig = await runtimeConfigForMode(directory, manifest);
+
     const evaluated = [];
     const errorCodes = new Set();
     let cased = true;
     for (const assertion of manifest.assertions) {
-      const outcome = await evaluateAssertion(directory, assertion, target);
+      const outcome = await evaluateAssertion(directory, assertion, target, runtimeConfig);
       if (outcome.error_code) {
         errorCodes.add(outcome.error_code);
       }
