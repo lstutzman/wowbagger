@@ -77,11 +77,14 @@ The refusals are deliberate:
 
 - `invalid-schema-1` means the complete input did not validate. Repair it as
   schema version 1 before another dry run.
+- `invalid-schema-2` means every item is already stamped version 2, but the
+  complete ledger is invalid. Repair it as schema version 2 or restore the
+  pre-migration backup or Git; do not try to migrate it again.
 - `mixed-schema-versions` means a prior attempt stopped after some item writes.
   Restore the complete ledger from the pre-migration backup or Git. Do not
   finish the remaining stamps by hand.
-- `already-schema-2` means this tool will not run again. Validate schema version
-  2. Restore the backup or Git if that validation fails.
+- `already-schema-2` means the complete ledger is already valid schema version
+  2 and this tool will not run again.
 - `empty-ledger` means there is no schema stamp to change. An empty ledger still
   defaults to schema version 1.
 - `lock-held` means the window is not quiesced. Stop the writer and use audited

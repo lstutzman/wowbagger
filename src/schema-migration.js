@@ -55,8 +55,14 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
       'An empty ledger has no schema_version stamp to migrate and still defaults to schema version 1. No files were changed.',
     );
   }
-  if (inputValidation.valid && ledger.items.length > 0
-    && schemaVersions.size === 1 && schemaVersions.has(2)) {
+  if (ledger.items.length > 0 && schemaVersions.size === 1 && schemaVersions.has(2)) {
+    if (!inputValidation.valid) {
+      throw new SchemaMigrationError(
+        'invalid-schema-2',
+        'Every item is schema version 2, but the complete ledger is invalid. Repair the schema version 2 ledger or restore the pre-migration backup or Git. No files were changed.',
+        inputValidation.errors,
+      );
+    }
     throw new SchemaMigrationError(
       'already-schema-2',
       'Every item is already schema version 2. This tool will not run again. Validate the ledger as schema version 2; if validation fails, restore the pre-migration backup or Git.',

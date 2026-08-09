@@ -174,6 +174,24 @@ test('refuses an already schema version 2 ledger without rewriting it', async ()
   });
 });
 
+test('identifies an invalid all-version-2 ledger as version 2 recovery work', async () => {
+  const invalidSchema2Source = standaloneBacklogSource
+    .replace('schema_version: 1', 'schema_version: 2')
+    .replace('status: backlog', 'status: broken');
+
+  await withLedger({ 'item.md': invalidSchema2Source }, async (ledger) => {
+    const result = runMigration('--ledger', ledger, '--apply');
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^ERROR \[invalid-schema-2\]:/);
+    assert.match(result.stderr, /Repair the schema version 2 ledger or restore the pre-migration backup or Git/);
+    assert.match(result.stderr, /unknown-status/);
+    assert.doesNotMatch(result.stderr, /validate completely as schema version 1/);
+    assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
+    assert.equal(await readFile(path.join(ledger, 'item.md'), 'utf8'), invalidSchema2Source);
+  });
+});
+
 test('refuses migration while any item lock is held', async () => {
   await withLedger({
     '01-foundation.md': doneSource,
