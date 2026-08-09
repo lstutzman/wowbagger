@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { readFile, readdir } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JsonNumber, normalizeJsonValue, parseJsonRequest } from '../src/request.js';
@@ -18,6 +20,7 @@ import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
 import { sameJson } from '../src/adapter/schema-helpers.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
+const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 
 const SUPPORTED_ASSERTION_TYPES = new Set([
   'core-baseline', 'capability', 'instruction-order', 'path-refusal',
@@ -219,6 +222,19 @@ async function evaluateCapabilityAssertion(directory, assertion) {
     };
   }
   if (assertion.expect !== 'claims-and-policy-false') {
+    if (assertion.expect === 'work-claim-advisory') {
+      const bytes = await readFile(path.join(directory, 'expected-core-stdout.jsonl'));
+      const parsed = parseJsonRequest(bytes);
+      if (parsed.issues.length > 0) return { ok: false, evidence: 'src/adapter/core-probe.js' };
+      const probe = normalizeJsonValue(parsed.value);
+      const described = vectorDynamic(probe);
+      return {
+        ok: probe.result.operations.work_claim.mode === 'advisory'
+          && probe.result.operations.work_claim.safe_exclusive_dispatch === false
+          && verifyCoreProbe(described, probe).ok,
+        evidence: 'src/adapter/core-probe.js',
+      };
+    }
     return UNIMPLEMENTED;
   }
   const capabilities = await readStrictJson(path.join(directory, 'adapter-capabilities.json'));
@@ -249,6 +265,190 @@ async function evaluateCapabilityAssertion(directory, assertion) {
       && described.result.optional_features.policy === false,
     evidence: 'src/adapter/describe.js',
     error_code: described.error_code,
+  };
+}
+
+let probedCore;
+
+function actualCoreProbe() {
+  if (probedCore) return structuredClone(probedCore);
+  const result = spawnSync(process.execPath, [path.join(projectRoot, 'bin/wowbagger.js'), 'capabilities', '--json'], {
+    cwd: projectRoot,
+    encoding: null,
+  });
+  if (result.status !== 0) throw new Error('core capability probe failed');
+  const parsed = parseJsonRequest(result.stdout);
+  if (parsed.issues.length > 0) throw new Error('core capability probe returned invalid JSON');
+  probedCore = normalizeJsonValue(parsed.value);
+  return structuredClone(probedCore);
+}
+
+function vectorDynamic(probe = actualCoreProbe()) {
+  return {
+    ok: true,
+    bootstrap_wire_version: 1,
+    selected_adapter_contract_version: 1,
+    adapter_id: 'example.implementation-vector',
+    adapter_version: '1.0.0',
+    core: { required_core_contract_version: 1, commands: [...CORE_COMMAND_ORDER] },
+    host: {
+      command_execution: {
+        supported: true,
+        arguments_array: true,
+        shell: false,
+        stdio: true,
+        process_tree_containment: true,
+        orphan_detection: true,
+        timeout_enforcement: true,
+        stdout_limit: true,
+        stderr_limit: true,
+      },
+      filesystem: {
+        workspace_selection: 'guarded-relative',
+        no_follow_resolution: true,
+        stable_identity: true,
+        component_walk: true,
+      },
+      model_transport: { available: true, protocol: 'openai-compatible' },
+      instruction_input: { mode: 'host-provided', max_sources: 8, max_bytes: 65536 },
+      handoff: { supported: true, persistence: 'explicit-only' },
+      trusted_approval: { supported: true, sources: ['consumer'] },
+      integration_mechanisms: { hooks: false, slash_commands: false, mcp: false, daemon: false },
+    },
+    optional_features: { claims: probe.result.operations.work_claim.supported, policy: false },
+    limits: {
+      max_request_bytes: 65536,
+      max_context_bytes: 65536,
+      max_stdout_bytes: 1048576,
+      max_stderr_bytes: 65536,
+      max_timeout_ms: 30000,
+    },
+    platforms: { darwin: 'supported', linux: 'supported', win32: 'supported' },
+  };
+}
+
+function vectorRuntime({ workspaces = {}, launch } = {}) {
+  const probe = actualCoreProbe();
+  const dynamic = vectorDynamic(probe);
+  return {
+    max_request_bytes: dynamic.limits.max_request_bytes,
+    describe_request: {
+      bootstrap_wire_version: 1,
+      supported_adapter_contract_versions: [1],
+      request_id: 'implementation-vector-describe',
+    },
+    manifest: {
+      adapter_manifest_version: 1,
+      adapter_id: dynamic.adapter_id,
+      adapter_version: dynamic.adapter_version,
+      adapter_contract_versions: [1],
+      bootstrap_wire_version: 1,
+      required_core_contract_version: 1,
+      entrypoints: {
+        describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
+        invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
+      },
+      platforms: dynamic.platforms,
+    },
+    dynamic,
+    core_probe: probe,
+    platform: process.platform,
+    package_root: projectRoot,
+    workspaces,
+    launch,
+  };
+}
+
+function workspaceFor(invocation, root) {
+  if (!invocation.workspace) return {};
+  const before = { '.': { kind: 'directory', identity: 'workspace-root' } };
+  for (const logicalPath of [invocation.workspace.cwd ?? '.', invocation.core_request.ledger]) {
+    if (!logicalPath || logicalPath === '.') continue;
+    const segments = logicalPath.split('/');
+    for (let index = 1; index <= segments.length; index += 1) {
+      const component = segments.slice(0, index).join('/');
+      before[component] = { kind: 'directory', identity: `component-${component}` };
+    }
+  }
+  return {
+    [invocation.workspace.workspace_id]: { root, before, after: structuredClone(before) },
+  };
+}
+
+function coreObservation({ argv, cwd, input, limits }) {
+  const result = spawnSync(process.execPath, [path.join(projectRoot, 'bin/wowbagger.js'), ...argv], {
+    cwd,
+    input,
+    encoding: null,
+    timeout: limits.timeout_ms,
+    maxBuffer: Math.max(limits.stdout_bytes, limits.stderr_bytes) + 1,
+  });
+  const stdout = result.stdout ?? Buffer.alloc(0);
+  const stderr = result.stderr ?? Buffer.alloc(0);
+  return {
+    started: !result.error || result.error.code !== 'ENOENT',
+    process_tree_contained: true,
+    orphaned: false,
+    exit_code: Number.isInteger(result.status) ? result.status : null,
+    signal: result.signal ?? null,
+    timed_out: result.error?.code === 'ETIMEDOUT',
+    stdout_complete: stdout.length <= limits.stdout_bytes,
+    stderr_complete: stderr.length <= limits.stderr_bytes,
+    stdout_base64: stdout.subarray(0, limits.stdout_bytes).toString('base64'),
+    stderr_base64: stderr.subarray(0, limits.stderr_bytes).toString('base64'),
+  };
+}
+
+async function evaluateCoreBaselineAssertion(directory, assertion) {
+  const coreInvocation = await readStrictJson(path.join(directory, 'core-invocation.json'));
+  const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
+  const expected = await readStrictJson(path.join(directory, 'expected-adapter-result.json'));
+  let root = projectRoot;
+  let argv = [...coreInvocation.argv];
+  let temporary = null;
+  if (coreInvocation.command === 'ready') {
+    root = path.join(projectRoot, 'spec/fixtures/ready-selection');
+    const ledgerIndex = argv.indexOf('--ledger');
+    argv[ledgerIndex + 1] = path.join(root, 'ledger');
+  } else if (coreInvocation.command === 'validate') {
+    temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-vector-'));
+    root = temporary;
+    const ledger = path.join(root, 'ledger');
+    await mkdir(ledger);
+    await writeFile(path.join(ledger, 'bad.md'), await readFile(path.join(directory, 'ledger-bad.md')));
+    const ledgerIndex = argv.indexOf('--ledger');
+    argv[ledgerIndex + 1] = ledger;
+  }
+  try {
+    const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), vectorRuntime({
+      workspaces: workspaceFor(invocation, root),
+      launch: async (launch) => {
+        if (!sameJson(launch.argv, argv)) throw new Error('adapter constructed the wrong core argv');
+        return coreObservation(launch);
+      },
+    }));
+    return {
+      ok: sameJson(result, expected),
+      evidence: 'src/adapter/invoke.js',
+      error_code: result.error?.code,
+    };
+  } finally {
+    if (temporary) await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+async function evaluateOutputBoundAssertion(directory, assertion) {
+  const processCase = await readStrictJson(path.join(directory, 'process.json'));
+  const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
+  const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
+  const result = await invokeAdapter(Buffer.from(`${JSON.stringify(invocation)}\n`), vectorRuntime({
+    workspaces: workspaceFor(invocation, '/approved/workspace'),
+    launch: async () => processCase.request.process,
+  }));
+  return {
+    ok: result.error?.code === assertion.expect && sameJson(result, expected),
+    evidence: 'src/adapter/process-outcome.js',
+    error_code: result.error?.code,
   };
 }
 
@@ -383,6 +583,10 @@ async function evaluateAssertion(directory, assertion) {
       return evaluateInvocationPathAssertion(directory, assertion);
     case 'process-outcome':
       return evaluateProcessOutcomeAssertion(directory, assertion);
+    case 'core-baseline':
+      return evaluateCoreBaselineAssertion(directory, assertion);
+    case 'output-bound':
+      return evaluateOutputBoundAssertion(directory, assertion);
     default:
       return UNIMPLEMENTED;
   }

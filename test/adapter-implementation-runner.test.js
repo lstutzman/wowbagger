@@ -217,6 +217,25 @@ test('refuses API-only transport before core launch', async () => {
   );
 });
 
+test('forwards compatible core baselines byte for byte and bounds output', async () => {
+  const result = await runImplementationVectors({ platform: process.platform });
+  const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
+
+  for (const name of [
+    'ready-forwarding', 'validation-failure-forwarding', 'bounded-output', 'capabilities-forwarding',
+  ]) {
+    assert.equal(byName.get(name).status, 'pass', name);
+  }
+  assert.equal(
+    byName.get('ready-forwarding').assertion_evidence[0].evidence,
+    'src/adapter/invoke.js',
+  );
+  assert.equal(
+    byName.get('bounded-output').assertion_evidence[0].evidence,
+    'src/adapter/process-outcome.js',
+  );
+});
+
 test('labels each evidenced assertion with the shipped module that produced it', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
@@ -233,7 +252,7 @@ test('labels each evidenced assertion with the shipped module that produced it',
   assert.equal(evidenceOf('capability-separation', 'optional-features-are-absent'), 'src/adapter/describe.js');
 });
 
-test('holds unfinished Plan 2 and Plan 3 assertions at unimplemented', async () => {
+test('holds only Plan 3 assertions at unimplemented', async () => {
   const result = await runImplementationVectors({ platform: 'darwin' });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
   const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
@@ -247,13 +266,17 @@ test('holds unfinished Plan 2 and Plan 3 assertions at unimplemented', async () 
     evidenceOf('capability-separation', 'api-transport-is-not-tooling'),
     'src/adapter/invoke.js',
   );
-  assert.equal(evidenceOf('capabilities-forwarding', 'preserve-core-capability-truth'), 'unimplemented');
+  assert.equal(
+    evidenceOf('capabilities-forwarding', 'preserve-core-capability-truth'),
+    'src/adapter/invoke.js',
+  );
   assert.equal(byName.get('capability-separation').status, 'pass');
 
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 117);
+  assert.equal(evidenced.length, 122);
+  assert.equal(183 - evidenced.length, 61);
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations['claude-code'], 'fail');
 });
