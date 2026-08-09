@@ -47,6 +47,13 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
       'The ledger contains schema versions 1 and 2. This is a partial migration state. Restore the complete ledger from the pre-migration backup or Git, validate schema version 1, then rerun the dry run.',
     );
   }
+  if (inputValidation.valid && ledger.items.length > 0
+    && schemaVersions.size === 1 && schemaVersions.has(2)) {
+    throw new SchemaMigrationError(
+      'already-schema-2',
+      'Every item is already schema version 2. This tool will not run again. Validate the ledger as schema version 2; if validation fails, restore the pre-migration backup or Git.',
+    );
+  }
   if (!inputValidation.valid) {
     throw new SchemaMigrationError(
       'invalid-schema-1',

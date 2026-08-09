@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -129,6 +129,30 @@ test('refuses a mixed schema ledger as a partial migration state', async () => {
     assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
     assert.equal(await readFile(path.join(ledger, '01-foundation.md'), 'utf8'), migratedDoneSource);
     assert.equal(await readFile(path.join(ledger, '02-alpha.md'), 'utf8'), backlogSource);
+  });
+});
+
+test('refuses an already schema version 2 ledger without rewriting it', async () => {
+  const migratedDoneSource = doneSource.replace('schema_version: 1', 'schema_version: 2');
+  const migratedBacklogSource = backlogSource.replace('schema_version: 1', 'schema_version: 2');
+
+  await withLedger({
+    '01-foundation.md': migratedDoneSource,
+    '02-alpha.md': migratedBacklogSource,
+  }, async (ledger) => {
+    const itemPath = path.join(ledger, '01-foundation.md');
+    const before = await stat(itemPath);
+    const result = runMigration('--ledger', ledger, '--apply');
+    const after = await stat(itemPath);
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^ERROR \[already-schema-2\]:/);
+    assert.match(result.stderr, /will not run again/);
+    assert.match(result.stderr, /Validate the ledger as schema version 2/);
+    assert.match(result.stderr, /restore the pre-migration backup or Git/);
+    assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
+    assert.equal(after.ino, before.ino);
+    assert.equal(await readFile(itemPath, 'utf8'), migratedDoneSource);
   });
 });
 
