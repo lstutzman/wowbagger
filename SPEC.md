@@ -405,13 +405,16 @@ invalid work.
 
 ## 10. Capability boundary and local mutation contract
 
-The implemented core mutation contract version 1 has no persisted work-claim
-or revision metadata, and ready does not resolve or exclude claims.
+Core mutation contracts 1 and 2 are defined. The shipped runtime emits version
+2; version 1 remains the frozen compatibility definition. Neither version adds
+work-claim or revision metadata to Markdown, and ready does not resolve or
+exclude claims.
 
 [docs/mutation-contract.md](docs/mutation-contract.md) specifies the
-implemented local backend for `capabilities`, inspect/revision, create, and
-lifecycle transition commands. Inspect parses, exposes, and hashes one raw byte
-buffer and returns a lossless base64 source alongside a normalized core view.
+implemented local backend for `capabilities`, inspect/revision, create,
+lifecycle transition, and patch commands. Inspect parses, exposes, and hashes
+one raw byte buffer and returns a lossless base64 source alongside a normalized
+core view.
 Create requires a caller-generated canonical ID and either publishes complete
 bytes with an atomic no-clobber primitive or fails unchanged. Revision is
 SHA-256 over exact item-file bytes; it is not added to frontmatter and YAML is
@@ -425,11 +428,20 @@ local or Git write is globally atomic. Before transition publication the local
 backend validates the complete one-item proposed ledger and refuses every
 required dependent cleanup or child disposition when it lacks multi-item
 atomicity when the selected schema requires such cleanup. The current local
-backend reports work claims unsupported. A future
+backend may expose advisory claim visibility through the Git common directory.
+That capability is reported only under `operations.work_claim`; it does not
+widen the fixed same-working-copy mutation scope, cross-worktree mutation
+coordination remains false, and publication is not fenced. A future fenced
 claim backend MUST implement the separate [fenced work-claim
 contract](docs/work-claim-contract.md) and [ADR
 0004](docs/adr/0004-fenced-work-claim-protocol.md); it MUST NOT add claim state
 to schema version 1 or 2 Markdown merely because that backend can coordinate it.
+
+Contract version 2 accepts a uniformly schema-1 or uniformly schema-2 ledger
+and rejects a mixture. Schema version 2 uses the prerequisite satisfaction and
+retention rules in sections 5 through 7. Migrating this repository's live
+ledger is a separate quiesced operation and is not part of publishing the
+transport contract.
 
 The command contract distinguishes immutable-ID collision from an unrelated
 item or valid directory occupying the default creation path. It also defines a

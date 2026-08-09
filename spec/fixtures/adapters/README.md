@@ -28,16 +28,19 @@ reproducible from an exported tarball, an `npm pack` extraction, or a container
 build context that does not copy `.git`.
 
 The `10-capabilities-forwarding` case compares the core's `capabilities` output
-byte for byte, and three members of that output are derived from whether a
-`.git` directory can be resolved from the working directory:
+byte for byte. In core mutation contract version 2, one member of that output
+is derived from whether a `.git` directory can be resolved from the working
+directory:
 
-- `backend.coordination_scope` — `shared-git-directory-cooperative-writers`
-  with git, `same-working-copy-cooperative-writers` without
 - `operations.work_claim.supported` — `true` with git, `false` without
-- `limits.cross_worktree_coordination` — `true` with git, `false` without
 
-The committed expectation pins the git-present values. Without a `.git`
-directory the core truthfully reports the other three, the byte comparison
+The mutation members are fixed regardless of Git discovery:
+
+- `backend.coordination_scope` — `same-working-copy-cooperative-writers`
+- `limits.cross_worktree_coordination` — `false`
+
+The committed expectation pins the Git-present claim value. Without a `.git`
+directory the core truthfully reports claims unsupported, the byte comparison
 fails, and **that failure is caused by the environment, not by the adapter
 under test**. Do not treat it as an adapter defect.
 

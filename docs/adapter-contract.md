@@ -1,7 +1,7 @@
 # Harness-neutral adapter contract
 
-Status: version 1, accepted for adapter design. No adapter executable is
-implemented by this document.
+Status: version 1 remains accepted and frozen; version 2 is implemented by the
+shipped adapters and independent reference oracle.
 
 This is the public contract for a thin adapter between a coding-agent harness
 and the existing Wowbagger core CLI. It supplements [SPEC.md](../SPEC.md),
@@ -30,6 +30,10 @@ Version 1 covers only these core commands: `validate`, `ready`, `capabilities`,
 `inspect`, `create`, and `transition`. An adapter MUST use their documented
 `--json` forms. It MUST NOT create an alternate interpretation of lifecycle,
 readiness, revisions, locks, error codes, or mutation state.
+
+Sections 1 through 11 define version 1 unchanged. Section 12 defines version 2
+only as explicit deltas from that base; an unmodified rule applies to both
+versions.
 
 The core contract version and this adapter-contract version are different
 numbers. `contract_version` in core JSON is defined by the core. This document
@@ -1179,3 +1183,53 @@ This contract does not:
 - grant automatic Git commit, push, setup, installation, or configuration
   authority; or
 - implement a Claude Code, Codex, Kimi, or generic adapter.
+
+## 12. Adapter contract version 2
+
+Version 2 retains sections 1 through 11, including the strict bootstrap wire,
+path guards, exact stream forwarding, bounded process observation, consumer
+approval, instruction input, explicit handoff, recovery precedence, and public
+error registry. It changes only this versioned surface:
+
+| Path or behavior | Version 2 requirement |
+|---|---|
+| Manifest `adapter_contract_versions` | Exactly `[2]` |
+| Manifest and describe required core contract | Exactly `2` |
+| Describe `selected_adapter_contract_version` | Exactly `2` |
+| Describe `core.commands` order | `capabilities`, `create`, `inspect`, `patch`, `ready`, `transition`, `validate` |
+| Invoke and result `adapter_contract_version` | Exactly `2` |
+| Independently probed core `contract_version` | Exactly `2` |
+
+The version 2 core capability probe adds exactly
+`operations.patch: {"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}`.
+Its mutation backend scope is always
+`same-working-copy-cooperative-writers`,
+`limits.cross_worktree_coordination` is always `false`, and
+`limits.multi_item_atomicity` remains `false`. The separately probed
+`operations.work_claim.supported` may still be `true` when advisory claims are
+visible through the Git common directory. That visibility may set
+`optional_features.claims: true`; it MUST NOT elevate mutation coordination,
+publication fencing, or safe exclusive dispatch.
+
+Version 2 accepts a `patch` core request with exactly `command`, `ledger`, and
+`input_base64`. It launches the argument vector
+`["patch","--ledger","<resolved>","--input","-","--json"]`, sends the exact
+decoded bytes to standard input, and treats
+patch as a mutation for trusted consumer approval, process doubt, and
+revision-based recovery. It does not accept an arbitrary input-file path from
+the invocation.
+
+Bootstrap wire version 1 and the manifest, approval, instruction-input,
+handoff, and adapter-vector format versions remain 1; they are separate
+version domains. The version 1 adapter and core contracts remain defined by
+the preceding sections and are not widened to include patch.
+
+A v1-only consumer sending `supported_adapter_contract_versions: [1]` to a
+shipped v2 adapter exits successfully at the bootstrap process level but
+receives exactly the compact refusal
+`{"ok":false,"error":{"code":"unsupported-adapter-contract-version"}}` plus
+one LF. It receives no v2 describe result and no requested core child is
+launched. Conversely, a v1 adapter probing a v2 core observes
+`contract_version: 2` and refuses the pairing as
+`core-contract-version-mismatch`; neither direction silently receives the
+other version's behavior.

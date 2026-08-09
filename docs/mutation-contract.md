@@ -1,6 +1,7 @@
 # Local mutation contract
 
-Status: implemented by the pre-alpha standalone local-filesystem runtime.
+Status: versions 1 and 2 are defined; the pre-alpha standalone
+local-filesystem runtime currently emits version 2.
 
 This document defines the machine contract implemented by the local-filesystem
 mutation backend. It supplements [SPEC.md](../SPEC.md) and
@@ -10,6 +11,23 @@ mutation backend. It supplements [SPEC.md](../SPEC.md) and
 The executable supports `validate`, `ready`, and the commands below. Clients
 must still call `capabilities` and honor its advertised limits before assuming a
 backend can provide a particular write guarantee.
+
+## Contract versions
+
+Version 1 remains the frozen contract described by the version 1 envelopes and
+capability example below. Version 2 retains every version 1 request, response,
+state, exit, locking, CAS, publication, and recovery rule except for these
+explicit deltas:
+
+- every core command envelope in this contract carries `contract_version: 2`;
+- one non-empty ledger may use schema version 1 or schema version 2, but never a
+  mixture;
+- the capability envelope uses the fixed local mutation scope described in
+  section 4 and advertises `patch`; and
+- adapter contract version 2 may invoke `patch` as an approved mutation.
+
+The bootstrap wire, work-claim API, adapter approval, instruction, handoff, and
+fixture-format versions are separate version domains and remain version 1.
 
 ## 1. Scope
 
@@ -21,10 +39,12 @@ The contract keeps four concerns separate:
 - transition changes one existing item through a guarded lifecycle edge; and
 - patch changes one existing item's caller-supplied fields (section 9).
 
-Work claiming is unsupported. A write lock protects a short mutation attempt;
-it is not a claim, assignment, lease, or reservation. The separate [fenced
-work-claim contract](work-claim-contract.md) defines a future backend protocol;
-it does not add a member or guarantee to these version 1 requests.
+Fenced work claiming is unsupported. Advisory claims may be visible through a
+Git common directory, but they do not protect publication or coordinate a
+mutation. A write lock protects a short mutation attempt; it is not a claim,
+assignment, lease, or reservation. The separate [fenced work-claim
+contract](work-claim-contract.md) defines a future backend protocol; it does
+not add a fencing guarantee to either mutation-contract version.
 
 If a future backend advertises safely fenced claims while retaining these
 legacy entry points, it must run them through the same coordinator: transition
@@ -97,7 +117,7 @@ A successful read-only command has exactly:
 }
 ~~~
 
-A successful create or transition adds state:
+A successful create, transition, or patch adds state:
 
 ~~~json
 {
@@ -124,7 +144,7 @@ A read-only error has exactly:
 }
 ~~~
 
-Every create or transition error has a state member:
+Every create, transition, or patch error has a state member:
 
 ~~~json
 {
@@ -285,6 +305,28 @@ otherwise (see `resolveGitCommonDir` in `src/claim-store.js`); presence of a
 members above. This is the one input to `capabilities`, so the response is
 deterministic for a given working directory but not fixed across working
 directories.
+
+### Contract version 2 capability delta
+
+The preceding JSON and three-member Git-dependent coupling remain the exact
+version 1 definition. Version 2 changes only the following capability paths;
+all omitted paths retain their version 1 values:
+
+| Path | Version 2 value |
+|---|---|
+| `contract_version` | `2` |
+| `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
+| `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
+| `result.limits.cross_worktree_coordination` | `false` |
+
+`result.operations.work_claim.supported` remains independently derived from
+Git-common-directory discovery: it is `true` when advisory claims are visible
+there and `false` otherwise. That member does not elevate the fixed mutation
+scope. In particular, version 2 keeps
+`transition.write_scope: "single-item"`,
+`transition.cas_scope: "exact-byte-sha256"`, and
+`limits.multi_item_atomicity: false`. Claim visibility across worktrees is an
+`operations.work_claim` fact, never cross-worktree mutation coordination.
 
 Because capabilities takes no ledger content and does not write, it still
 cannot prove that a particular filesystem supports the required atomic
@@ -857,9 +899,12 @@ extension nodes are preserved exactly as in transition.
 The version 1 capabilities envelope and the version 1 adapter core probe do
 not advertise patch. Their operation and command lists are pinned by the
 version 1 adapter contract, so widening them is an adapter contract version
-change, tracked as its own ledger item. The fail-closed direction is
-preserved: nothing advertises a capability that does not exist, and
-automation that plans from capabilities alone simply does not use patch.
+change. Version 2 makes that change: its capability envelope includes the exact
+`operations.patch` member from section 4 and adapter contract version 2 inserts
+`patch` between `inspect` and `ready` in the fixed core-command order. The
+fail-closed direction is preserved: a version 1 consumer never sees the wider
+surface, and automation that plans from version 1 capabilities does not use
+patch.
 
 ## 10. Errors, artifacts, and recovery
 
@@ -924,8 +969,8 @@ operation-failed is a mutation-only error. operation is exactly one of:
 reason is exactly retry-limit-exhausted, io-error, or verification-failed.
 retry-limit-exhausted is used only with lock-closure. verification-failed is
 used only when verification proves the expected publication is absent for
-create or proves the original bytes remain for transition. All other handled
-filesystem failures use io-error. Platform exception text, errno names,
+create or proves the original bytes remain for transition or patch. All other
+handled filesystem failures use io-error. Platform exception text, errno names,
 numeric OS error codes, and absolute paths are not members of the normative
 JSON envelope and cannot alter operation or reason.
 
@@ -936,8 +981,8 @@ response:
 
 - exact expected final bytes produce state committed; a remaining verify or
   cleanup problem is post-commit-recovery-required;
-- proven absence for create or exact original bytes for transition produce
-  operation-failed with state unchanged, operation publish or
+- proven absence for create or exact original bytes for transition or patch
+  produce operation-failed with state unchanged, operation publish or
   verify-publication as applicable, and reason io-error or
   verification-failed as applicable; and
 - unreadable, different, or otherwise indeterminate final bytes produce
@@ -967,7 +1012,8 @@ recovery outcomes; transition revision, locking, date monotonicity, lifecycle
 edges, the schema version 1 dependent-cleanup blocker and the other two
 multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
-unchanged/committed/unknown states.
+unchanged/committed/unknown states; and patch field boundaries, CAS,
+serialization, and preconditions.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.

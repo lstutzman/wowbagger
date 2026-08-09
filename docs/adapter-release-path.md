@@ -1,9 +1,9 @@
 # The shared adapter packaging and release path
 
-Version 1. One packaging and release path ships a single core version to
-every harness adapter, so the adapters cannot drift apart. This records the
-four scope answers; three shipped with the adapter work at `ae3dcb4` and are
-restated here only so the path reads as one document.
+Version 2. One packaging and release path ships core mutation contract 2 and
+adapter contract 2 to every harness adapter, so the adapters cannot drift
+apart. Contract version 1 of each remains frozen and defined, but the shipped
+manifests advertise only adapter `[2]` and require core `2`.
 
 ## One repository, one version
 
@@ -27,10 +27,11 @@ How a released core version is identified:
 
 ## How an adapter declares support
 
-`required_core_contract_version` in its manifest, validated before the
-adapter advertises anything (section 3.1). The adapter and the core it finds
-at runtime may be installed separately, which is exactly the skew the next
-rule exists for.
+`adapter_contract_versions` and `required_core_contract_version` in its
+manifest, validated before the adapter advertises anything (section 3.1). The
+version 2 manifests use `[2]` and `2`, respectively. The adapter and the core it
+finds at runtime may be installed separately, which is exactly the skew the
+next rule exists for.
 
 ## What happens on an unsupported pairing
 
@@ -38,6 +39,11 @@ rule exists for.
 `capabilities --json` probe against the validated describe result and
 refuses a mismatch with `core-contract-version-mismatch` — machinery that is
 mutation-verified in the tree. Refusal, never a guess.
+
+A v1-only consumer receives `unsupported-adapter-contract-version` from a v2
+adapter and no dynamic capability result. A v1 adapter probing the v2 core sees
+`contract_version: 2` and refuses before the requested command. Neither pairing
+silently selects the other version's behavior.
 
 ## How a candidate release is checked
 
