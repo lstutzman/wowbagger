@@ -912,7 +912,7 @@ function validateForbiddenTerminalDates(fact, activeField, context) {
 }
 
 function validateDoneDependencies(fact, context) {
-  if (fact.status !== 'done' || !Array.isArray(fact.data.depends_on)
+  if (fact.schemaVersion === 2 || fact.status !== 'done' || !Array.isArray(fact.data.depends_on)
     || fact.data.depends_on.length === 0) {
     return;
   }
