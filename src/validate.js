@@ -36,6 +36,7 @@ export function validateLedger(ledger) {
   const facts = ledger.items.map((item) => inspectItem(item, context));
   const index = buildIdentityIndex(facts);
 
+  validateUniformSchemaVersion(facts, context);
   validateDuplicateIds(index, context);
   validateDuplicateNumbers(facts, context);
 
@@ -73,6 +74,7 @@ function inspectItem(item, context) {
   const fact = {
     item,
     data,
+    schemaVersion: null,
     id: null,
     kind: null,
     status: null,
@@ -86,7 +88,7 @@ function inspectItem(item, context) {
     matchingTerminalDecision: null,
   };
 
-  validateSchemaVersion(fact, context);
+  fact.schemaVersion = validateSchemaVersion(fact, context);
   fact.id = inspectId(fact, context);
   validateTitle(fact, context);
   fact.kind = inspectKind(fact, context);
@@ -115,16 +117,37 @@ function validateSchemaVersion(fact, context) {
   const { data } = fact;
   if (!hasOwn(data, 'schema_version')) {
     addError(fact, 'schema_version', 'missing-required-field', 'Field schema_version is required.', context);
-    return;
+    return null;
   }
 
   if (!Number.isInteger(data.schema_version)) {
     addError(fact, 'schema_version', 'invalid-schema-version', 'schema_version must be the integer 1 or 2.', context);
-    return;
+    return null;
   }
 
   if (data.schema_version !== 1 && data.schema_version !== 2) {
     addError(fact, 'schema_version', 'unsupported-schema-version', 'schema_version must be 1 or 2.', context);
+    return null;
+  }
+
+  return data.schema_version;
+}
+
+function validateUniformSchemaVersion(facts, context) {
+  if (new Set(facts.map((fact) => fact.schemaVersion).filter(Boolean)).size < 2) {
+    return;
+  }
+
+  for (const fact of facts) {
+    if (fact.schemaVersion !== null) {
+      addError(
+        fact,
+        'schema_version',
+        'mixed-schema-versions',
+        'Schema versions 1 and 2 must not be mixed in one ledger.',
+        context,
+      );
+    }
   }
 }
 

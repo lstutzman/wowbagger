@@ -37,6 +37,60 @@ depends_on: []
   });
 });
 
+test('validate rejects a ledger that mixes schema versions 1 and 2', async () => {
+  await withLedger({
+    'version-1.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Version 1 item"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+    'version-2.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Version 2 item"
+kind: task
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/version-1.md',
+          field: 'schema_version',
+          code: 'mixed-schema-versions',
+          message: 'Schema versions 1 and 2 must not be mixed in one ledger.',
+        },
+        {
+          path: 'ledger/version-2.md',
+          field: 'schema_version',
+          code: 'mixed-schema-versions',
+          message: 'Schema versions 1 and 2 must not be mixed in one ledger.',
+        },
+      ],
+    });
+  });
+});
+
 test('validate rejects a status outside schema version 1', async () => {
   await withLedger({
     'item.md': `---
