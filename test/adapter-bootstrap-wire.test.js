@@ -93,6 +93,24 @@ test('answers describe with exactly one JSON object and exits zero', async () =>
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
 });
 
+test('does not accept a runtime scenario through the production environment', async (t) => {
+  const env = await candidateEnvironment(t);
+  const runtimeConfigPath = path.join(path.dirname(env.WOWBAGGER_ADAPTER_MANIFEST_PATH), 'runtime.json');
+  const apiOnly = JSON.parse(await readFile(
+    path.join(projectRoot, 'spec', 'fixtures', 'adapters', '01-capability-separation', 'adapter-capabilities.json'),
+    'utf8',
+  ));
+  await writeFile(runtimeConfigPath, JSON.stringify({ dynamic_result: apiOnly, core_probe: null }));
+  env.WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH = runtimeConfigPath;
+
+  const { code, stdout } = await spawnEntrypoint(['describe'], validRequest, { env });
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, true);
+  assert.equal(response.adapter_id, 'dev.wowbagger.adapter.claude-code');
+});
+
 test('answers invoke through the bootstrap wire and refuses a future contract version', async () => {
   const request = JSON.stringify({
     adapter_contract_version: 2,

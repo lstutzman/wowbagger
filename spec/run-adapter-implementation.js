@@ -26,6 +26,7 @@ import { sameJson } from '../src/adapter/schema-helpers.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
+const conformanceRegister = fileURLToPath(new URL('./adapter-conformance-register.js', import.meta.url));
 const ADAPTER_STDOUT_LIMIT = 2 * 1024 * 1024;
 const ADAPTER_STDERR_LIMIT = 64 * 1024;
 const ADAPTER_TIMEOUT_MS = 35000;
@@ -105,9 +106,12 @@ function parseBootstrapResponse(stdout, entrypoint) {
   return normalizeJsonValue(parsed.value);
 }
 
-async function spawnAdapterEntrypoint(entrypoint, operation, request, env) {
+async function spawnAdapterEntrypoint(entrypoint, operation, request, env, runtimeScenario) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [entrypoint, operation], {
+    const nodeArguments = runtimeScenario
+      ? ['--import', conformanceRegister, entrypoint, operation]
+      : [entrypoint, operation];
+    const child = spawn(process.execPath, nodeArguments, {
       cwd: projectRoot,
       detached: process.platform !== 'win32',
       env,
@@ -189,7 +193,7 @@ async function callShippedEntrypoint(
         WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
         WOWBAGGER_ADAPTER_WORKSPACES_PATH: workspacesPath,
         ...(runtimeConfig ? { WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH: runtimeConfigPath } : {}),
-      }),
+      }, runtimeConfig !== undefined),
       evidence: path.relative(projectRoot, entrypoint),
     };
   } finally {
@@ -232,9 +236,9 @@ function matchesExpectation(result, scenario) {
 
 // The negotiation, core-probe, and entrypoint-path assertions all inject a
 // synthetic manifest or describe result. The §3.3 bootstrap wire carries only
-// the describe request, so they are evaluated against the shipped engine
-// modules imported directly rather than across the process boundary; adding a
-// test-injection seam to the entrypoint would weaken the shipped binary.
+// the describe request, so these local engine assertions shape their declared
+// inputs directly. Mode runtime observations reach the actual entrypoint process
+// through the spec-only conformance loader, never through production behavior.
 async function evaluateNegotiationAssertion(directory, assertion, target, runtimeConfig) {
   const data = await readScenarios(directory);
 

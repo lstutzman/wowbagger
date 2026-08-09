@@ -23,6 +23,7 @@ const STANDARD_LIMITS = Object.freeze({
   max_stderr_bytes: 65536,
   max_timeout_ms: 30000,
 });
+const PROBE_LIVE_CORE = Symbol('probe-live-core');
 
 export function standardDynamicResult(manifest, coreProbe) {
   return {
@@ -194,21 +195,6 @@ async function loadWorkspaceRoots(workspaceConfigUrl) {
   return roots;
 }
 
-async function loadRuntimeConfig(runtimeConfigPath) {
-  if (!runtimeConfigPath) return undefined;
-  let parsed;
-  try {
-    parsed = parseJsonRequest(await readFile(runtimeConfigPath));
-  } catch {
-    return undefined;
-  }
-  if (parsed.issues.length > 0) return undefined;
-  const config = normalizeJsonValue(parsed.value);
-  return config !== null && typeof config === 'object' && !Array.isArray(config)
-    ? config
-    : undefined;
-}
-
 function logicalComponents(logicalPath) {
   if (!isSafeLogicalPath(logicalPath) || logicalPath === '.') return [];
   const segments = logicalPath.split('/');
@@ -261,7 +247,8 @@ export async function runAdapterEntrypoint({
   packageRoot = fileURLToPath(new URL('../../', manifestUrl)),
   coreExecutable = fileURLToPath(new URL('../../bin/wowbagger.js', import.meta.url)),
   workspaceConfigUrl,
-  runtimeConfigPath = process.env.WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH,
+  coreProbe: suppliedCoreProbe = PROBE_LIVE_CORE,
+  launch: suppliedLaunch,
   argv = process.argv,
 }) {
   const [operation] = argv.slice(2);
@@ -274,11 +261,10 @@ export async function runAdapterEntrypoint({
     return;
   }
 
-  const runtimeConfig = await loadRuntimeConfig(runtimeConfigPath);
-  const coreProbe = runtimeConfig && Object.hasOwn(runtimeConfig, 'core_probe')
-    ? runtimeConfig.core_probe
-    : await probeCore(coreExecutable, packageRoot);
-  const dynamic = runtimeConfig?.dynamic_result ?? dynamicResult(manifest, coreProbe);
+  const coreProbe = suppliedCoreProbe === PROBE_LIVE_CORE
+    ? await probeCore(coreExecutable, packageRoot)
+    : suppliedCoreProbe;
+  const dynamic = dynamicResult(manifest, coreProbe);
   const incoming = await readBootstrapRequest(process.stdin, operation === 'invoke' ? {
     maxBytes: dynamic.limits.max_request_bytes,
     errorCode: 'invalid-invocation',
@@ -312,11 +298,6 @@ export async function runAdapterEntrypoint({
   if (operation === 'invoke') {
     const workspaceRoots = await loadWorkspaceRoots(workspaceConfigUrl);
     const workspaces = await invocationWorkspaces(incoming.request, workspaceRoots);
-    const launch = runtimeConfig?.process_observation
-      ? async () => structuredClone(runtimeConfig.process_observation)
-      : runtimeConfig?.forbid_core_launch
-        ? async () => { throw new Error('core launch forbidden by runtime scenario'); }
-        : (request) => launchCoreProcess({ executable: coreExecutable, ...request });
     const response = await invokeAdapter(incoming.bytes, {
       max_request_bytes: dynamic.limits.max_request_bytes,
       describe_request: {
@@ -330,7 +311,8 @@ export async function runAdapterEntrypoint({
       platform: process.platform,
       package_root: packageRoot,
       workspaces,
-      launch,
+      launch: suppliedLaunch
+        ?? ((request) => launchCoreProcess({ executable: coreExecutable, ...request })),
     });
     await writeBootstrapResponse(process.stdout, response);
     return;
