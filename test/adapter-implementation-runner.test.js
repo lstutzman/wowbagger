@@ -335,6 +335,26 @@ test('fails a negative-capability case if an evaluator launches a real core comm
   const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
 
   assert.equal(result.cases[0].status, 'fail');
+  assert.deepEqual(result.cases[0].assertion_evidence, [{
+    id: 'preserve-ready-baseline',
+    evidence: 'manifest.json:mode',
+  }]);
+});
+
+test('applies protocol no-launch mode to advisory-claims invocation', async (t) => {
+  const { root } = await isolateCase(
+    t,
+    '10-capabilities-forwarding',
+    ({ expect }) => expect === 'work-claim-advisory',
+  );
+  const manifestPath = path.join(root, '10-capabilities-forwarding', 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.mode = 'protocol';
+  await writeFile(manifestPath, JSON.stringify(manifest));
+
+  const result = await runImplementationVectors({ fixtureRoot: root, platform: process.platform });
+
+  assert.equal(result.cases[0].status, 'fail');
 });
 
 test('forwards compatible core baselines and maps the declared bounded-output observation', async () => {

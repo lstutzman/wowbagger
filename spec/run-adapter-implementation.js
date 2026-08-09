@@ -349,7 +349,7 @@ async function evaluateCapabilityAssertion(directory, assertion, target, runtime
       if (parsed.issues.length > 0) return { ok: false, evidence: 'src/adapter/core-probe.js' };
       const probe = normalizeJsonValue(parsed.value);
       const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
-      const invoked = await callShippedEntrypoint(invocation, target);
+      const invoked = await callShippedEntrypoint(invocation, target, { runtimeConfig });
       const actual = invoked.response.ok
         ? JSON.parse(Buffer.from(invoked.response.result.stdout.data, 'base64').toString('utf8'))
         : null;
@@ -381,6 +381,12 @@ async function evaluateCapabilityAssertion(directory, assertion, target, runtime
 }
 
 async function evaluateCoreBaselineAssertion(directory, assertion, target, runtimeConfig) {
+  if (runtimeConfig !== undefined) {
+    return {
+      ok: false,
+      evidence: 'manifest.json:mode',
+    };
+  }
   const coreInvocation = await readStrictJson(path.join(directory, 'core-invocation.json'));
   const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
   const expected = await readStrictJson(path.join(directory, 'expected-adapter-result.json'));
