@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -210,6 +210,42 @@ test('reports loudly when the post-migration ledger does not validate', async ()
     const corrupted = await readFile(path.join(ledger, 'item.md'), 'utf8');
     assert.match(corrupted, /schema_version: 2/);
     assert.match(corrupted, /status: broken/);
+  });
+});
+
+test('reports exact progress and recovery after a partial write failure', async () => {
+  await withLedger({
+    '01-foundation.md': doneSource,
+    '02-alpha.md': standaloneBacklogSource,
+  }, async (ledger) => {
+    const secondPath = path.join(ledger, '02-alpha.md');
+    const changed = [];
+
+    await assert.rejects(
+      migrateSchema2(ledger, {
+        apply: true,
+        onItem: async (change) => {
+          changed.push(change.path);
+          if (changed.length === 1) {
+            await unlink(secondPath);
+            await mkdir(secondPath);
+            await writeFile(path.join(secondPath, 'nested.md'), standaloneBacklogSource, 'utf8');
+          }
+        },
+      }),
+      (error) => {
+        assert.equal(error.code, 'partial-write-failed');
+        assert.match(error.message, /after 1 of 2 item writes/);
+        assert.match(error.message, /ledger\/02-alpha\.md/);
+        assert.match(error.message, /now contains mixed schema versions/);
+        assert.match(error.message, /Restore the complete ledger from the pre-migration backup or Git before rerunning/);
+        return true;
+      },
+    );
+
+    assert.deepEqual(changed, ['ledger/01-foundation.md']);
+    assert.match(await readFile(path.join(ledger, '01-foundation.md'), 'utf8'), /schema_version: 2/);
+    assert.match(await readFile(path.join(secondPath, 'nested.md'), 'utf8'), /schema_version: 1/);
   });
 });
 

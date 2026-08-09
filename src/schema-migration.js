@@ -93,7 +93,17 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
   let completed = 0;
   if (apply) {
     for (const change of changes) {
-      await atomicRewrite(change);
+      try {
+        await atomicRewrite(change);
+      } catch {
+        const state = completed === 0
+          ? 'No item write completed.'
+          : 'The ledger now contains mixed schema versions.';
+        throw new SchemaMigrationError(
+          'partial-write-failed',
+          `Migration stopped at ${change.path} after ${completed} of ${changes.length} item writes. ${state} Restore the complete ledger from the pre-migration backup or Git before rerunning.`,
+        );
+      }
       completed += 1;
       await onItem(change);
     }
