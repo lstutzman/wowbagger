@@ -38,6 +38,41 @@ test('dry run reports every schema stamp and writes nothing by default', async (
   });
 });
 
+test('applies only the schema scalar when explicitly requested', async () => {
+  const source = [
+    '---',
+    'schema_version: 1 # keep this comment',
+    `id: ${BACKLOG_ID}`,
+    'title: "Keep exact migration bytes"',
+    'kind: task',
+    'x-policy:',
+    '  score: 1.2300',
+    'status: backlog',
+    'created: 2026-01-03',
+    'updated: 2026-01-03',
+    'provenance:',
+    '  source: "fixture/schema-migration"',
+    '  recorded_at: "2026-01-03T12:00:00Z"',
+    'depends_on: []',
+    'related: []',
+    '---',
+    '',
+    'Body bytes stay exact.',
+    '',
+  ].join('\r\n');
+  const expected = source.replace('schema_version: 1', 'schema_version: 2');
+
+  await withLedger({ 'item.md': source }, async (ledger) => {
+    const result = runMigration('--ledger', ledger, '--apply');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.match(result.stdout, new RegExp(`^CHANGED ledger/item\\.md \\(${BACKLOG_ID}\\): schema_version 1 -> 2$`, 'm'));
+    assert.match(result.stdout, /^Summary: 1 item changed\.$/m);
+    assert.equal(await readFile(path.join(ledger, 'item.md'), 'utf8'), expected);
+  });
+});
+
 function runMigration(...argumentsList) {
   return spawnSync(process.execPath, [migrationScript, ...argumentsList], {
     encoding: 'utf8',
