@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -20,9 +20,9 @@ const validRequest = JSON.stringify({
 // Spawns `adapters/claude-code/entrypoint.js` for real (never calling its
 // exported functions directly) so the wire assertions exercise the actual
 // process boundary: real stdin, real stdout, real exit code.
-function spawnEntrypoint(args, stdinInput) {
+function spawnEntrypoint(args, stdinInput, { env = process.env } = {}) {
   return new Promise((resolve, reject) => {
-    const child = execFile(process.execPath, [entrypoint, ...args], { encoding: 'buffer' });
+    const child = execFile(process.execPath, [entrypoint, ...args], { encoding: 'buffer', env });
     let stdout = Buffer.alloc(0);
     child.stdout.on('data', (chunk) => { stdout = Buffer.concat([stdout, chunk]); });
     child.on('error', reject);
@@ -32,6 +32,15 @@ function spawnEntrypoint(args, stdinInput) {
     } else {
       child.stdin.end(stdinInput);
     }
+  });
+}
+
+function execFileBytes(file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { ...options, encoding: 'buffer' }, (error, stdout, stderr) => {
+      if (error) reject(error);
+      else resolve({ stdout, stderr });
+    });
   });
 }
 
@@ -47,6 +56,9 @@ function assertSingleJsonObject(stdout) {
 
 test('answers describe with exactly one JSON object and exits zero', async () => {
   const { code, stdout } = await spawnEntrypoint(['describe'], validRequest);
+  const baseline = await execFileBytes(process.execPath, [
+    path.join(projectRoot, 'bin', 'wowbagger.js'), 'capabilities', '--json',
+  ], { cwd: projectRoot });
   assert.equal(code, 0);
   const response = assertSingleJsonObject(stdout);
   assert.equal(response.ok, true);
@@ -54,7 +66,10 @@ test('answers describe with exactly one JSON object and exits zero', async () =>
   assert.equal(response.host.command_execution.shell, false);
   assert.equal(response.host.integration_mechanisms.mcp, false);
   assert.equal(response.host.integration_mechanisms.daemon, false);
-  assert.equal(response.optional_features.claims, false);
+  assert.equal(
+    response.optional_features.claims,
+    JSON.parse(baseline.stdout).result.operations.work_claim.supported,
+  );
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
 });
 
@@ -74,6 +89,43 @@ test('answers invoke through the bootstrap wire and refuses a future contract ve
   const response = assertSingleJsonObject(stdout);
   assert.equal(response.error.code, 'adapter-contract-selection-mismatch');
   assert.equal(response.request_id, 'wire-invoke-version-0001');
+});
+
+test('forwards capabilities through the shipped entrypoint and real core', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-candidate-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const candidateManifestPath = path.join(temporaryDirectory, 'wowbagger-adapter.json');
+  const shippedManifest = JSON.parse(await readFile(
+    path.join(projectRoot, 'adapters', 'claude-code', 'wowbagger-adapter.json'),
+    'utf8',
+  ));
+  shippedManifest.platforms[process.platform] = 'supported';
+  await writeFile(candidateManifestPath, JSON.stringify(shippedManifest));
+  const request = JSON.stringify({
+    adapter_contract_version: 1,
+    request_id: 'wire-capabilities-real-core-0001',
+    core_request: { command: 'capabilities' },
+    instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+    handoff_carrier: null,
+    limits: { context_bytes: 0, stdout_bytes: 65536, stderr_bytes: 1024, timeout_ms: 1000 },
+  });
+  const baseline = await execFileBytes(process.execPath, [
+    path.join(projectRoot, 'bin', 'wowbagger.js'), 'capabilities', '--json',
+  ], { cwd: projectRoot });
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], request, {
+    env: {
+      ...process.env,
+      WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
+    },
+  });
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, true);
+  assert.equal(response.result.core_exit_code, 0);
+  assert.deepEqual(Buffer.from(response.result.stdout.data, 'base64'), baseline.stdout);
+  assert.deepEqual(Buffer.from(response.result.stderr.data, 'base64'), baseline.stderr);
 });
 
 test('bounds invoke bytes before parsing the request', async () => {

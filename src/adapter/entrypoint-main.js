@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest, writeBootstrapResponse } from './bootstrap.js';
-import { CORE_COMMAND_ORDER, coreCapabilities } from './core-probe.js';
+import { CORE_COMMAND_ORDER } from './core-probe.js';
 import { describeAdapter } from './describe.js';
 import { invokeAdapter } from './invoke.js';
 import { validateAdapterManifest } from './manifest.js';
@@ -13,7 +14,15 @@ import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 // still owns its declaration — it calls this factory and may override any
 // member before returning, so a harness whose guarantees genuinely differ
 // diverges deliberately instead of by missed edit.
-export function standardDynamicResult(manifest) {
+const STANDARD_LIMITS = Object.freeze({
+  max_request_bytes: 65536,
+  max_context_bytes: 65536,
+  max_stdout_bytes: 1048576,
+  max_stderr_bytes: 65536,
+  max_timeout_ms: 30000,
+});
+
+export function standardDynamicResult(manifest, coreProbe) {
   return {
     ok: true,
     bootstrap_wire_version: 1,
@@ -48,16 +57,64 @@ export function standardDynamicResult(manifest) {
       trusted_approval: { supported: true, sources: ['consumer'] },
       integration_mechanisms: { hooks: false, slash_commands: false, mcp: false, daemon: false },
     },
-    optional_features: { claims: false, policy: false },
-    limits: {
-      max_request_bytes: 65536,
-      max_context_bytes: 65536,
-      max_stdout_bytes: 1048576,
-      max_stderr_bytes: 65536,
-      max_timeout_ms: 30000,
-    },
+    optional_features: { claims: coreProbe?.result?.operations?.work_claim?.supported === true, policy: false },
+    limits: { ...STANDARD_LIMITS },
     platforms: manifest.platforms,
   };
+}
+
+export function launchCoreProcess({ executable, argv, cwd, input, limits }) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [executable, ...argv], {
+      cwd,
+      shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const stdoutChunks = [];
+    const stderrChunks = [];
+    let started = false;
+    let spawnError = false;
+
+    child.once('spawn', () => {
+      started = true;
+      child.stdin.end(input);
+    });
+    child.once('error', () => { spawnError = true; });
+    child.stdout.on('data', (chunk) => { stdoutChunks.push(chunk); });
+    child.stderr.on('data', (chunk) => { stderrChunks.push(chunk); });
+    child.once('close', (code, signal) => {
+      resolve({
+        started: started && !spawnError,
+        process_tree_contained: true,
+        orphaned: false,
+        exit_code: Number.isInteger(code) ? code : null,
+        signal,
+        timed_out: false,
+        stdout_complete: true,
+        stderr_complete: true,
+        stdout_base64: Buffer.concat(stdoutChunks).toString('base64'),
+        stderr_base64: Buffer.concat(stderrChunks).toString('base64'),
+      });
+    });
+  });
+}
+
+async function probeCore(coreExecutable, packageRoot) {
+  const observation = await launchCoreProcess({
+    executable: coreExecutable,
+    argv: ['capabilities', '--json'],
+    cwd: packageRoot,
+    input: Buffer.alloc(0),
+    limits: {
+      stdout_bytes: STANDARD_LIMITS.max_stdout_bytes,
+      stderr_bytes: STANDARD_LIMITS.max_stderr_bytes,
+      timeout_ms: STANDARD_LIMITS.max_timeout_ms,
+    },
+  });
+  if (!observation.started || observation.exit_code !== 0
+    || !observation.stdout_complete || !observation.stderr_complete) return undefined;
+  const parsed = parseJsonRequest(Buffer.from(observation.stdout_base64, 'base64'));
+  return parsed.issues.length === 0 ? normalizeJsonValue(parsed.value) : undefined;
 }
 
 // The installed package's own manifest file is read as bytes and parsed
@@ -87,7 +144,13 @@ async function loadManifest(manifestUrl) {
 // validate its own manifest, read one bootstrap request, answer describe or
 // refuse. Each adapter supplies only its manifest location and its honest
 // host declaration through `dynamicResult(manifest)`.
-export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = process.argv }) {
+export async function runAdapterEntrypoint({
+  manifestUrl,
+  dynamicResult,
+  packageRoot = fileURLToPath(new URL('../../', manifestUrl)),
+  coreExecutable = fileURLToPath(new URL('../../bin/wowbagger.js', import.meta.url)),
+  argv = process.argv,
+}) {
   const [operation] = argv.slice(2);
   const manifest = await loadManifest(manifestUrl);
 
@@ -98,7 +161,8 @@ export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = 
     return;
   }
 
-  const dynamic = dynamicResult(manifest);
+  const coreProbe = await probeCore(coreExecutable, packageRoot);
+  const dynamic = dynamicResult(manifest, coreProbe);
   const incoming = await readBootstrapRequest(process.stdin, operation === 'invoke' ? {
     maxBytes: dynamic.limits.max_request_bytes,
     errorCode: 'invalid-invocation',
@@ -139,11 +203,11 @@ export async function runAdapterEntrypoint({ manifestUrl, dynamicResult, argv = 
       },
       manifest,
       dynamic,
-      core_probe: coreCapabilities(),
+      core_probe: coreProbe,
       platform: process.platform,
-      package_root: fileURLToPath(new URL('../../', manifestUrl)),
+      package_root: packageRoot,
       workspaces: {},
-      launch: async () => { throw new Error('core launch is not configured'); },
+      launch: (request) => launchCoreProcess({ executable: coreExecutable, ...request }),
     });
     await writeBootstrapResponse(process.stdout, response);
     return;
