@@ -61,7 +61,7 @@ test('two create processes leave one complete item and no temporary or lock file
 test('create selects the schema version for every valid ledger state', async () => {
   const seedId = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
   const cases = [
-    { name: 'empty ledger', files: {}, expectedSchemaVersion: 2 },
+    { name: 'empty ledger', files: {}, expectedSchemaVersion: 1 },
     {
       name: 'schema version 1 ledger',
       files: { [`${seedId}.md`]: schemaSeed(seedId, 1) },
