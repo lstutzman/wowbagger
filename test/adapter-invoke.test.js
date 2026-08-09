@@ -35,6 +35,22 @@ test('refuses an invocation timeout above the advertised maximum', async () => {
   assert.equal(result.request_id, request.request_id);
 });
 
+test('uses the bounded-output refusal for a requested stream limit above the maximum', async () => {
+  const request = {
+    adapter_contract_version: 1,
+    request_id: 'stdout-limit-0001',
+    core_request: { command: 'capabilities' },
+    instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+    handoff_carrier: null,
+    limits: { context_bytes: 0, stdout_bytes: 1048577, stderr_bytes: 1024, timeout_ms: 1000 },
+  };
+
+  const result = await invokeAdapter(Buffer.from(`${JSON.stringify(request)}\n`), runtime());
+
+  assert.equal(result.error.code, 'output-limit-exceeded');
+  assert.equal(result.error.message, 'The core output exceeded the requested bound.');
+});
+
 test('preserves exact core stream bytes and exit code', async () => {
   const request = {
     adapter_contract_version: 1,

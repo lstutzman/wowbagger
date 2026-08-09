@@ -11,8 +11,12 @@ const SAFE_ID = /^[A-Za-z0-9._-]{1,128}$/;
 
 const MESSAGES = Object.freeze({
   'capability-unavailable': 'The configured host cannot invoke the Wowbagger core.',
+  'consumer-approval-required': 'The consumer must approve this ledger mutation.',
   'invalid-invocation': 'The adapter invocation is invalid.',
-  'timeout-limit-exceeded': 'The requested timeout exceeds the adapter limit.',
+  'mutation-outcome-unknown': 'The mutation may have been applied; inspect current state before retrying.',
+  'output-limit-exceeded': 'The core output exceeded the requested bound.',
+  'path-rejected': 'The requested ledger path is not a guarded real directory.',
+  'path-replaced': 'A guarded path component changed before core launch.',
 });
 
 function coreRequestIssue(coreRequest) {
