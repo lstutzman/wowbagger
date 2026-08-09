@@ -5,7 +5,7 @@ Status: implemented by the pre-alpha standalone local-filesystem runtime.
 This document defines the machine contract implemented by the local-filesystem
 mutation backend. It supplements [SPEC.md](../SPEC.md) and
 [ADR 0003](adr/0003-local-mutation-and-cas.md); it does not relax schema version
-1 lifecycle invariants.
+1 or 2 lifecycle invariants.
 
 The executable supports `validate`, `ready`, and the commands below. Clients
 must still call `capabilities` and honor its advertised limits before assuming a
@@ -38,8 +38,15 @@ ledger directory in one working copy. It does not coordinate clones, worktrees,
 machines, hostile or non-cooperating writers, or Git operations. Its write
 scope is one Markdown item and it has no multi-item atomicity.
 
-Schema version 1 remains canonical Markdown. Revision and lock data are
-transport state and are not persisted in item frontmatter.
+Schema versions 1 and 2 remain canonical Markdown. One non-empty ledger must
+use one schema version; complete-ledger validation rejects a mixture. Revision
+and lock data are transport state and are not persisted in item frontmatter.
+
+Validation and ready selection use the versioned semantics in SPEC.md. Schema
+version 1 ready tasks have an empty depends_on list. Schema version 2 ready
+tasks may retain declared prerequisites, but every target must have status
+done. These schema rules do not change the version 1 request or response
+envelopes in this document.
 
 ## 2. Commands and transport
 
@@ -328,13 +335,13 @@ and body. Every frontmatter field is read from core. id is the single member
 present at both levels, because the item level must identify the resource it
 addresses; no other frontmatter field is promoted, and none will be.
 
-core contains only schema version 1 fields:
+core contains only fields defined by supported item schema versions:
 
 - schema_version, id, title, kind, status, created, updated;
 - provenance.source and provenance.recorded_at;
 - depends_on and related;
 - optional parent, snoozed_until, completed, killed, archived;
-- optional number and priority, the caller-supplied schema version 1 fields;
+- optional number and priority, the caller-supplied schema fields;
   and
 - decisions with only their defined action, date, summary, rationale, and
   optional rollup id/status members.
@@ -446,15 +453,15 @@ Create accepts exactly:
 |---|---:|---|
 | id | Yes | Caller-generated canonical Wowbagger ULID. |
 | item | Yes | Frontmatter draft mapping. |
-| item.title | Yes | Non-empty schema version 1 string. |
+| item.title | Yes | Non-empty schema string. |
 | item.kind | Yes | task or epic. |
 | item.provenance | Yes | Valid required provenance; extension members are preserved. |
 | item.depends_on | Yes | Valid relation list. |
 | item.related | No | Valid relation list; omitted means empty. |
 | item.parent | No | Valid epic ID. |
 | item.snoozed_until | No | Valid ISO calendar date. |
-| item.number | No | Positive integer; the caller-supplied schema version 1 handle. |
-| item.priority | No | Non-negative integer; the caller-supplied schema version 1 priority. |
+| item.number | No | Positive integer; the caller-supplied schema handle. |
+| item.priority | No | Non-negative integer; the caller-supplied schema priority. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
@@ -474,9 +481,11 @@ prints a canonical ID for now, `--date` selects another creation date, and
 shelling out.
 
 item must not supply schema_version, id, status, created, updated, completed,
-killed, archived, decisions, or body. Create inserts schema_version 1, status
-triage, created and updated equal to the UTC date encoded by id, and related []
-when omitted. It adds no terminal date or decision.
+killed, archived, decisions, or body. For a non-empty valid ledger, create
+inserts the schema_version already used by every existing item. For an empty
+ledger, it inserts schema_version 1. Create also inserts status triage, created
+and updated equal to the UTC date encoded by id, and related [] when omitted.
+It adds no terminal date or decision.
 
 The candidate complete ledger must validate before publication. After the
 requested-ID lock and locked revalidation, create applies this collision
@@ -632,7 +641,8 @@ which must already be done or killed, ordered by immutable ID.
 
 No other edge is supported. Epics never enter in-progress; done and killed
 items do not reopen; and transition cannot edit identity, title, relations,
-parent, snooze, body, or extension fields.
+parent, snooze, body, or extension fields. A schema version 2 done transition
+therefore retains the target's depends_on and related lists unchanged.
 
 ### Lossless preservation
 
@@ -665,7 +675,10 @@ validates it completely before publication.
 Every item whose depends_on contains the target is considered when the target
 would become done, killed, or archived, regardless of the referring item's own
 status. Every direct child is considered for an epic transition. The backend
-does not limit relation checks to ready or non-terminal referring items.
+does not limit relation checks to ready or non-terminal referring items. For a
+schema version 2 done transition, incoming depends_on references become
+satisfied and remain in place; they do not require another item mutation and
+do not create a multi-item blocker.
 
 ### Deterministic precondition issues
 
@@ -692,6 +705,13 @@ live-dependencies, or nonterminal-children. related_ids are unique immutable IDs
 sorted ascending. Issues sort by code, then field, then their related ID
 sequence. Date checks are all reported: a date earlier than both created and
 updated produces both date issues.
+
+For a schema version 1 done transition, any non-empty depends_on list produces
+live-dependencies and related_ids contains the complete list. For a schema
+version 2 done transition, only targets whose status is not done produce
+live-dependencies, and related_ids contains only those unsatisfied prerequisite
+IDs. A successful schema version 2 done transition retains every satisfied ID
+in depends_on and does not append it to related.
 
 ### Deterministic multi-item refusal
 
@@ -721,7 +741,7 @@ Blocker codes are:
 
 | Code | Condition |
 |---|---|
-| dependent-cleanup | A done target is still present in another item's depends_on, regardless of that item's status. |
+| dependent-cleanup | Schema version 1 only: a done target is still present in another item's depends_on, regardless of that item's status. Schema version 2 keeps this reference as satisfied prerequisite history and does not produce this blocker. |
 | dependent-disposition | A killed or archived target is still present in another item's depends_on, regardless of that item's status. |
 | child-disposition | A killed or archived epic has a direct triage, backlog, or in-progress child. |
 
@@ -779,8 +799,8 @@ operation without universal crash durability or hostile-writer protection.
 
 ## 9. Patch
 
-Patch changes the caller-supplied schema version 1 fields of one existing
-item — nothing else. It runs under the same per-ID lock, locked re-read,
+Patch changes the caller-supplied fields common to schema versions 1 and 2 of
+one existing item — nothing else. It runs under the same per-ID lock, locked re-read,
 exact-byte revision compare-and-swap, candidate complete-ledger validation,
 and atomic same-path publication protocol as transition (section 6), and it
 shares transition's envelopes, exits, and recovery rules except where this
@@ -944,7 +964,8 @@ The matrix covers capability honesty; lossless inspect and failure envelopes;
 caller-known create identity, file/stdin equivalence, strict input, ID and path
 collision, candidate validation, body boundaries, publication limitation and
 recovery outcomes; transition revision, locking, date monotonicity, lifecycle
-edges, all three multi-item reasons, terminal referrers, combined blockers,
+edges, the schema version 1 dependent-cleanup blocker and the other two
+multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
 unchanged/committed/unknown states.
 
