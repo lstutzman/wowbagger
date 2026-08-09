@@ -40,6 +40,13 @@ function itemWord(count) {
 export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = async () => {} } = {}) {
   const ledger = await loadLedger(ledgerDirectory);
   const inputValidation = validateLedger(ledger);
+  const schemaVersions = new Set(ledger.items.map((item) => item.data.schema_version));
+  if (schemaVersions.has(1) && schemaVersions.has(2)) {
+    throw new SchemaMigrationError(
+      'mixed-schema-versions',
+      'The ledger contains schema versions 1 and 2. This is a partial migration state. Restore the complete ledger from the pre-migration backup or Git, validate schema version 1, then rerun the dry run.',
+    );
+  }
   if (!inputValidation.valid) {
     throw new SchemaMigrationError(
       'invalid-schema-1',

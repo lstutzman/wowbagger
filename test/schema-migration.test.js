@@ -112,6 +112,26 @@ decisions:
   });
 });
 
+test('refuses a mixed schema ledger as a partial migration state', async () => {
+  const migratedDoneSource = doneSource.replace('schema_version: 1', 'schema_version: 2');
+
+  await withLedger({
+    '01-foundation.md': migratedDoneSource,
+    '02-alpha.md': backlogSource,
+  }, async (ledger) => {
+    const result = runMigration('--ledger', ledger, '--apply');
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /^ERROR \[mixed-schema-versions\]:/);
+    assert.match(result.stderr, /partial migration state/);
+    assert.match(result.stderr, /Restore the complete ledger from the pre-migration backup or Git/);
+    assert.match(result.stderr, /validate schema version 1, then rerun the dry run/);
+    assert.doesNotMatch(result.stdout, /CHANGED|Summary:/);
+    assert.equal(await readFile(path.join(ledger, '01-foundation.md'), 'utf8'), migratedDoneSource);
+    assert.equal(await readFile(path.join(ledger, '02-alpha.md'), 'utf8'), backlogSource);
+  });
+});
+
 function runMigration(...argumentsList) {
   return spawnSync(process.execPath, [migrationScript, ...argumentsList], {
     encoding: 'utf8',
