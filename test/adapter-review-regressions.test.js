@@ -1480,6 +1480,47 @@ test('accepts a core inspect envelope whose item carries number and priority', (
   assert.notEqual(result?.error?.code, 'core-protocol-error', JSON.stringify(result));
 });
 
+test('reference oracle correlates a patch success with the requested fields', () => {
+  const before = consumerCoreItem();
+  const source = Buffer.from(before.source_base64, 'base64').toString('utf8')
+    .replace('priority: 5', 'priority: 1')
+    .replace('updated: 2030-01-10', 'updated: 2030-01-15');
+  const after = coreItemWithSource(before, source, {
+    ...before.core,
+    priority: 1,
+    updated: '2030-01-15',
+  });
+  const request = {
+    id: before.id,
+    expected_revision: before.revision,
+    date: '2030-01-15',
+    set: { priority: 1 },
+  };
+  const response = processObservation({
+    ok: true,
+    command: 'patch',
+    contract_version: 2,
+    state: 'committed',
+    result: { item: after },
+  });
+  const outcome = (mutationRequest) => mapProcessOutcome({
+    adapter_contract_version: 2,
+    request_id: 'review-patch-success-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_request: mutationRequest,
+    item_id: before.id,
+    expected_revision: before.revision,
+    process: response,
+  });
+
+  assert.equal(outcome(request), null);
+  assert.equal(outcome({ ...request, set: { priority: 2 } }).error.code, 'mutation-outcome-unknown');
+  assert.equal(outcome({ ...request, date: '2030-01-16' }).error.code, 'mutation-outcome-unknown');
+  assert.equal(outcome({ ...request, id: 'wb_01Q45X474N28T5CY4GNF6YY4HN' }).error.code,
+    'mutation-outcome-unknown');
+});
+
 // The consumer-supplied schema-1 fields (number, priority) belong to the core
 // view; the oracle must accept an engine item that reports them.
 function consumerCoreItem() {

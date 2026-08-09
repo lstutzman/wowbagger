@@ -126,7 +126,7 @@ export function mapProcessOutcome({
   process,
 }) {
   const base = { ok: false, adapter_contract_version: adapterContractVersion, request_id: requestId };
-  const mutation = command === 'create' || command === 'transition';
+  const mutation = command === 'create' || command === 'transition' || command === 'patch';
   const issue = observationIssue(process);
   if (issue) {
     if (mutation && process?.started !== false) {

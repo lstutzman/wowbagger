@@ -24,6 +24,7 @@ const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],
   ['transition-precondition-failed', 2],
+  ['patch-precondition-failed', 2],
   ['candidate-invalid', 2],
   ['ledger-invalid', 3],
   ['revision-conflict', 4],
@@ -53,6 +54,11 @@ const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
     'candidate-invalid', 'operation-failed', 'post-commit-recovery-required',
     'write-outcome-unknown',
   ]),
+  patch: new Set([
+    'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
+    'revision-conflict', 'patch-precondition-failed', 'candidate-invalid',
+    'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
+  ]),
 });
 const INVALID_REQUEST_CODES = new Set([
   'invalid-json', 'duplicate-key', 'missing-member', 'unknown-member', 'invalid-type',
@@ -72,6 +78,10 @@ const TRANSITION_ISSUE_FIELDS = Object.freeze({
   'live-dependencies': 'depends_on',
   'nonterminal-children': 'parent',
 });
+const PATCH_ISSUE_MESSAGES = Object.freeze({
+  'date-before-created': 'Patch date must not be earlier than the current created date.',
+  'date-before-updated': 'Patch date must not be earlier than the current updated date.',
+});
 const TRANSITION_BLOCKER_FIELDS = Object.freeze({
   'dependent-cleanup': 'depends_on',
   'dependent-disposition': 'depends_on',
@@ -80,6 +90,10 @@ const TRANSITION_BLOCKER_FIELDS = Object.freeze({
 export const CORE_COMMANDS = Object.freeze([
   'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
+
+function isMutationCommand(command) {
+  return command === 'create' || command === 'transition' || command === 'patch';
+}
 const SUPPORTED_ADAPTER_CONTRACT_VERSIONS = Object.freeze([ADAPTER_CONTRACT_VERSION]);
 const INSTRUCTION_MODES = new Set(['none', 'host-provided', 'configured-relative-paths']);
 const WORKSPACE_SELECTION_MODES = new Set(['none', 'guarded-relative']);
@@ -218,7 +232,7 @@ export function verifyTrustedApproval({
 }
 
 export function verifyMutationAuthority({ command, approval, approvalOptions }) {
-  if (command !== 'create' && command !== 'transition') {
+  if (!isMutationCommand(command)) {
     return { ok: true, authority: [] };
   }
   if (approval === null || approval === undefined) {
@@ -318,7 +332,7 @@ export function mapProcessOutcome({
     adapter_contract_version: adapterContractVersion,
     request_id: requestId,
   };
-  const mutation = command === 'create' || command === 'transition';
+  const mutation = isMutationCommand(command);
   const responseContext = coreRequest === null
     ? null
     : {
@@ -779,7 +793,7 @@ export async function invokeAdapter(requestBytes, runtime) {
     });
   }
   const command = request.core_request.command;
-  const mutation = command === 'create' || command === 'transition';
+  const mutation = isMutationCommand(command);
   const requiredCapabilities = ['command-execution'];
   if (command !== 'capabilities') requiredCapabilities.push('guarded-filesystem');
   if (mutation) requiredCapabilities.push('trusted-approval');
@@ -1010,6 +1024,7 @@ function coreRequestSchemaIssue(value) {
         && isSafeLogicalPath(value.ledger) && WOWBAGGER_ID.test(value.id)
         ? null : 'core_request';
     case 'create':
+    case 'patch':
     case 'transition':
       return hasExactKeys(value, ['command', 'ledger', 'input_base64'])
         && isSafeLogicalPath(value.ledger)
@@ -1021,7 +1036,7 @@ function coreRequestSchemaIssue(value) {
 }
 
 function mutationInput(coreRequest) {
-  if (coreRequest.command !== 'create' && coreRequest.command !== 'transition') return Buffer.alloc(0);
+  if (!isMutationCommand(coreRequest.command)) return Buffer.alloc(0);
   return decodeCanonicalBase64(coreRequest.input_base64);
 }
 
@@ -1032,6 +1047,7 @@ function coreArgumentVector(coreRequest, ledger) {
     case 'ready': return ['ready', '--ledger', ledger, '--as-of', coreRequest.as_of, '--json'];
     case 'inspect': return ['inspect', '--ledger', ledger, '--id', coreRequest.id, '--json'];
     case 'create': return ['create', '--ledger', ledger, '--input', '-', '--json'];
+    case 'patch': return ['patch', '--ledger', ledger, '--input', '-', '--json'];
     case 'transition': return ['transition', '--ledger', ledger, '--input', '-', '--json'];
     default: throw new TypeError('unsupported core command');
   }
@@ -1446,7 +1462,7 @@ function envelopeState(process, command = null, responseContext = null) {
   return {
     present: bytes.length > 0,
     valid,
-    mutation_state: valid && (command === 'create' || command === 'transition')
+    mutation_state: valid && isMutationCommand(command)
       ? value.state
       : null,
   };
@@ -1479,7 +1495,7 @@ function validCoreCommandEnvelope(value, command, exitCode, responseContext) {
   if (command === 'ready') return validCoreReadyEnvelope(value, exitCode, responseContext);
   if (command === 'capabilities') return coreCapabilitiesSchemaIssue(value) === null && exitCode === 0;
   if (command === 'inspect') return validCoreReadEnvelope(value, command, exitCode, responseContext);
-  if (command === 'create' || command === 'transition') {
+  if (isMutationCommand(command)) {
     return validCoreMutationEnvelope(value, command, exitCode, responseContext);
   }
   return false;
@@ -1817,6 +1833,7 @@ function coreErrorMessageMatches(code, command, message) {
     'item-not-found': 'The requested item was not found.',
     'ledger-invalid': 'The configured ledger is invalid.',
     'transition-precondition-failed': 'The requested lifecycle transition failed its preconditions.',
+    'patch-precondition-failed': 'The requested patch failed its preconditions.',
     'candidate-invalid': 'The proposed item would make the ledger invalid.',
     'revision-conflict': 'The item changed after it was inspected.',
     'lock-held': 'The item is locked by another cooperative Wowbagger writer.',
@@ -1849,6 +1866,9 @@ function validCoreErrorDetails(code, details, command, responseContext) {
     case 'transition-precondition-failed': return hasExactKeys(details, ['id', 'issues'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validTransitionIssues(details.issues) && details.issues.length > 0;
+    case 'patch-precondition-failed': return hasExactKeys(details, ['id', 'issues'])
+      && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+      && validPatchIssues(details.issues) && details.issues.length > 0;
     case 'candidate-invalid': return hasExactKeys(details, ['id', 'validation_errors'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
@@ -1878,7 +1898,8 @@ function validCoreErrorDetails(code, details, command, responseContext) {
     ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id) && DIGEST.test(details.revision)
       && (command !== 'create' || expectedCreateRevision === undefined
         || details.revision === expectedCreateRevision)
-      && (command !== 'transition' || expectedRevision === undefined || details.revision !== expectedRevision)
+      && ((command !== 'transition' && command !== 'patch')
+        || expectedRevision === undefined || details.revision !== expectedRevision)
       && validRecoveryArtifacts(details.recovery_artifacts, details.recovery_artifacts_truncated);
     case 'write-outcome-unknown': return hasExactKeys(details, [
       'id', 'recovery_artifacts', 'recovery_artifacts_truncated',
@@ -1897,7 +1918,7 @@ function responseCoreRequest(responseContext, command) {
 function responseMutationRequest(responseContext, command) {
   const coreRequest = responseCoreRequest(responseContext, command);
   if (coreRequest === undefined) return undefined;
-  if (coreRequest === null || (command !== 'create' && command !== 'transition')) return null;
+  if (coreRequest === null || !isMutationCommand(command)) return null;
   const mutationInput = responseMutationInput(responseContext, command);
   if (mutationInput !== undefined) {
     if (mutationInput === null) return null;
@@ -1910,7 +1931,7 @@ function responseMutationRequest(responseContext, command) {
 function responseMutationInput(responseContext, command) {
   const coreRequest = responseCoreRequest(responseContext, command);
   if (coreRequest === undefined) return undefined;
-  if (coreRequest === null || (command !== 'create' && command !== 'transition')) return null;
+  if (coreRequest === null || !isMutationCommand(command)) return null;
   if (!Object.hasOwn(responseContext, 'mutation_input')) return undefined;
   return responseContext.mutation_input instanceof Uint8Array
     ? responseContext.mutation_input
@@ -1931,7 +1952,7 @@ function responseItemId(responseContext, command) {
 function responseExpectedRevision(responseContext, command) {
   const mutationRequest = responseMutationRequest(responseContext, command);
   if (mutationRequest === undefined) return undefined;
-  return command === 'transition' && DIGEST.test(mutationRequest?.expected_revision)
+  return (command === 'transition' || command === 'patch') && DIGEST.test(mutationRequest?.expected_revision)
     ? mutationRequest.expected_revision
     : null;
 }
@@ -1956,6 +1977,7 @@ function hasCanonicalMutationRequest(responseContext, command) {
     if (parsed.issues.length > 0 || !plainObject(parsed.value)) return false;
     if (command === 'create') return validateCreateRequest(parsed.value).length === 0;
     if (command === 'transition') return validateTransitionRequest(parsed.value).length === 0;
+    if (command === 'patch') return validPatchRequest(parsed.value);
     return false;
   }
   const mutationRequest = responseMutationRequest(responseContext, command);
@@ -1963,12 +1985,14 @@ function hasCanonicalMutationRequest(responseContext, command) {
   if (!plainObject(mutationRequest)) return false;
   if (command === 'create') return validateCreateRequest(mutationRequest).length === 0;
   if (command === 'transition') return validateTransitionRequest(mutationRequest).length === 0;
+  if (command === 'patch') return validPatchRequest(mutationRequest);
   return false;
 }
 
 function validMutationResultCorrelation(item, command, mutationRequest) {
   if (mutationRequest === undefined) return true;
   if (command === 'create') return validCreateResultCorrelation(item, mutationRequest);
+  if (command === 'patch') return validPatchResultCorrelation(item, mutationRequest);
   return validTransitionResultCorrelation(item, mutationRequest);
 }
 
@@ -2015,6 +2039,50 @@ function validTransitionResultCorrelation(item, request) {
     && decision.rationale === request.decision.rationale);
 }
 
+// Independent patch-request validation. This deliberately does not call the
+// core's validatePatchRequest implementation: the adapter vectors need a
+// second implementation capable of detecting drift in either direction.
+function validPatchRequest(request) {
+  if (!hasExactKeys(request, ['id', 'expected_revision', 'date', 'set'])
+    || !WOWBAGGER_ID.test(request.id)
+    || !DIGEST.test(request.expected_revision)
+    || !isCalendarDate(request.date)
+    || !hasExactKeys(request.set, [], ['number', 'priority'])
+    || Object.keys(request.set).length === 0) return false;
+  for (const [field, value] of Object.entries(request.set)) {
+    if (value === null) continue;
+    const minimum = field === 'number' ? 1 : 0;
+    if (parsedIntegerValue(value, minimum) === undefined) return false;
+  }
+  return true;
+}
+
+function parsedIntegerValue(value, minimum) {
+  if (Number.isSafeInteger(value) && value >= minimum) return value;
+  if (value === null || typeof value !== 'object'
+    || Object.getPrototypeOf(value)?.constructor?.name !== 'JsonNumber'
+    || !hasExactKeys(value, ['source'])
+    || typeof value.source !== 'string'
+    || !/^(0|[1-9][0-9]*)$/.test(value.source)) return undefined;
+  const parsed = Number(value.source);
+  return Number.isSafeInteger(parsed) && parsed >= minimum ? parsed : undefined;
+}
+
+function validPatchResultCorrelation(item, request) {
+  if (!validPatchRequest(request)
+    || item.id !== request.id
+    || item.revision === request.expected_revision
+    || item.core.updated !== request.date) return false;
+  for (const [field, requested] of Object.entries(request.set)) {
+    if (requested === null) {
+      if (Object.hasOwn(item.core, field)) return false;
+    } else if (item.core[field] !== parsedIntegerValue(requested, field === 'number' ? 1 : 0)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function validInvalidRequestDetails(value) {
   return hasExactKeys(value, ['issues']) && Array.isArray(value.issues) && value.issues.length > 0
     && value.issues.every((issue) => hasExactKeys(issue, ['path', 'code', 'message'])
@@ -2037,6 +2105,16 @@ function validTransitionIssues(value) {
     && issue.field === TRANSITION_ISSUE_FIELDS[issue.code]
     && issue.message === TRANSITION_ISSUE_MESSAGES[issue.code]
     && validSortedUniqueIds(issue.related_ids))
+    && isOrdered(value, compareTransitionIssues);
+}
+
+function validPatchIssues(value) {
+  if (!Array.isArray(value)) return false;
+  return value.every((issue) => hasExactKeys(issue, ['code', 'field', 'message', 'related_ids'])
+    && Object.hasOwn(PATCH_ISSUE_MESSAGES, issue.code)
+    && issue.field === 'date'
+    && issue.message === PATCH_ISSUE_MESSAGES[issue.code]
+    && sameJson(issue.related_ids, []))
     && isOrdered(value, compareTransitionIssues);
 }
 
@@ -2078,7 +2156,7 @@ function validLockHeldDetails(value) {
     && hasExactKeys(value.owner, ['lock_version', 'item_id', 'operation', 'writer_id', 'started_at'])
     && value.owner.lock_version === 1
     && value.owner.item_id === value.id
-    && new Set(['create', 'transition']).has(value.owner.operation)
+    && new Set(['create', 'transition', 'patch']).has(value.owner.operation)
     && typeof value.owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(value.owner.writer_id)
     && isCoreRfc3339Utc(value.owner.started_at);
