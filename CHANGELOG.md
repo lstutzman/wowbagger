@@ -48,6 +48,10 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- `wowbagger` is distributed as a public npm package with a `wowbagger` binary
+  (`npm install -g wowbagger`), alongside the git-ref install route. The
+  package ships `bin`, `src`, the skill, and every adapter. README gains an
+  Installation, Compatibility, and Security section. Item 11.
 - `wowbagger --help` prints the command inventory and exits 0; `wowbagger <command> --help`
   prints that command's usage and exits 0; `wowbagger --version` prints the distribution
   version from package.json and exits 0. An unknown command now suggests a close match

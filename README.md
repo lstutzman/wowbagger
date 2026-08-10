@@ -25,14 +25,16 @@ putting a database or hosted service inside your repository.
 
 ## Start here
 
-Install the core, then the plugin:
+Install the core CLI, then verify it:
 
 ```sh
-npm install -g github:lstutzman/wowbagger
+npm install -g wowbagger   # public npm registry (released versions)
+# or, from this repository's git tag:
+# npm install -g github:lstutzman/wowbagger
 wowbagger capabilities --json
 ```
 
-In Claude Code:
+In Claude Code, add the plugin:
 
 ```
 /plugin marketplace add lstutzman/wowbagger
@@ -48,6 +50,62 @@ would bypass validation and atomic publication.
 To use the core directly from a clone instead, see
 [Core commands](#core-commands).
 
+## Installation, compatibility, and security
+
+### Installation routes
+
+Wowbagger ships as an npm package with a single `wowbagger` binary. There are
+two supported install routes:
+
+- **npm registry** — `npm install -g wowbagger` installs a released version.
+- **git tag** — `npm install -g github:lstutzman/wowbagger` installs this
+  repository at a ref. A release is a git tag; installing at a ref installs the
+  core and every adapter that ref carries.
+
+Either route installs the core and the `wowbagger` command. The Claude Code
+plugin is a separate artifact (see [Start here](#start-here)); the core and the
+plugin are installed and versioned independently, and a mismatch is refused by
+`contract_version` rather than guessed.
+
+### Compatibility
+
+The behavioural version is `contract_version`, reported by
+`wowbagger capabilities --json`. Contracts change it; refactors do not. The
+distribution version is the npm/git version, which names bytes, not behaviour.
+Match on `contract_version` — never on the package version — when you decide
+whether a core supports your request.
+
+- **Node.js:** 20 and later. The adapter conformance vectors run against Node
+  20 and the current runtime before each release.
+- **Platforms:** the core runs wherever Node.js runs, but a formal `supported`
+  platform claim is still `unverified` (they become verified per-platform only
+  with release evidence). Do not assume a platform is officially supported just
+  because the CLI starts.
+- **Other tooling:** `wowbagger` manages a Git-tracked Markdown ledger. It
+  needs `git` present for work-claim and namespace operations.
+
+### Security
+
+- **Read-only by default.** `validate`, `ready`, `inspect`, `capabilities`, and
+  `mint-id` never modify anything. Every mutation (`create`, `transition`,
+  `patch`) is an explicit, reviewable write.
+- **Lock is not a claim.** A short mutation lock serializes writers during a
+  single operation; it is not a work claim and grants no coordination
+  guarantee.
+- **Claims are advisory.** `claim` operations record a courtesy note that
+  someone is working on an item; they enforce nothing and two agents can hold
+  the same claim. Fenced claims are unimplemented.
+- **Local authority only.** The core coordinates within a Git working copy; it
+  does not mediate across machines, clones, or uncooperative writers. It is
+  not a sandbox against a process racing the filesystem.
+- **Supply chain.** Install only from the npm registry or this repository's
+  git tags, and verify the `contract_version` your adapter or script requires.
+
+This README is documentation, not a substitute for the contracts. The
+machinery behind these properties is specified in [SPEC.md](SPEC.md),
+[docs/mutation-contract.md](docs/mutation-contract.md), and
+[docs/work-claim-contract.md](docs/work-claim-contract.md).
+
 ## Upgrading from an earlier wowbagger
 
 This section is written for agents as much as humans: if you already drive a
@@ -56,8 +114,9 @@ wowbagger core, this is how you move forward safely.
 Upgrade the pieces you installed:
 
 ```sh
-npm install -g github:lstutzman/wowbagger   # global core
-git pull && npm ci                          # or: a direct checkout
+npm install -g wowbagger@latest                # public npm registry
+npm install -g github:lstutzman/wowbagger      # or: a direct git-tag install
+git pull && npm ci                            # or: a direct checkout
 ```
 
 In Claude Code, update the plugin the same way it was installed:

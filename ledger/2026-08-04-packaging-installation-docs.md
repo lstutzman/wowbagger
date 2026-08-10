@@ -4,9 +4,10 @@ id: wb_01KZ77NSW8TWW2KWJANZ2TC837
 number: 11
 title: "Package Wowbagger and document installation"
 kind: task
-status: backlog
+status: done
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -27,6 +28,10 @@ decisions:
     date: 2026-08-06
     summary: "Moved from the standalone v0 epic to the productization epic."
     rationale: "This is consumability work, not core work. Separating them lets the v0 epic close when the core is done instead of dragging distribution along with it."
+  - action: complete
+    date: 2026-08-10
+    summary: "Packaged wowbagger as a public npm package with Installation, Compatibility, and Security docs."
+    rationale: "Made the package publicly distributable under the 'wowbagger' name (private:false, files allowlist, bin, prepublishOnly guard, license/repo metadata). Verified the tarball installs and runs in a clean directory. Added honest Installation, Compatibility, and Security guidance to the README per item 11's requirement to document only capabilities backed by the fixtures. Actual first npm publish is a separate credentialed release step."
 ---
 
 Provide an installable package and concise installation, compatibility, and

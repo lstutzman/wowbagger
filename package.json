@@ -1,18 +1,49 @@
 {
   "name": "wowbagger",
   "version": "0.1.0-prealpha",
-  "private": true,
-  "description": "Standalone Markdown ledger validation, readiness selection, and guarded local mutations.",
+  "description": "Plain-Markdown, Git-native work ledger for coordinating agents — validate, ready-select, and mutate a task ledger from the CLI.",
   "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "Lee Stutzman"
+  },
+  "homepage": "https://github.com/lstutzman/wowbagger",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lstutzman/wowbagger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lstutzman/wowbagger/issues"
+  },
+  "keywords": [
+    "ledger",
+    "task-management",
+    "backlog",
+    "coordination",
+    "agent",
+    "markdown",
+    "git",
+    "cli"
+  ],
   "engines": {
     "node": ">=20"
   },
   "bin": {
     "wowbagger": "./bin/wowbagger.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "adapters",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "scripts": {
     "check": "npm test && git diff --check && git diff --cached --check",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "prepublishOnly": "node bin/wowbagger.js validate --ledger ledger --json >/dev/null && node --check bin/wowbagger.js"
   },
   "dependencies": {
     "yaml": "^2.9.0"

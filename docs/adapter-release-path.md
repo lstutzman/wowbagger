@@ -8,9 +8,10 @@ manifests advertise only adapter `[2]` and require core `2`.
 ## One repository, one version
 
 The core and every adapter package live in this repository and release
-together. A release is a git tag of this repository; installing
-`github:lstutzman/wowbagger` at a ref installs the core and every adapter
-that ref carries. No adapter bundles a core or acquires its own copy —
+together. A release is a git tag of this repository. A tag is published to the
+public npm registry as `wowbagger` and is also installable directly from a ref
+(`github:lstutzman/wowbagger`); either route installs the core and every
+adapter that tag carries. No adapter bundles a core or acquires its own copy —
 adapters depend on the installed core, which keeps version skew detectable
 instead of silent (decision recorded on the release-path ledger item).
 
