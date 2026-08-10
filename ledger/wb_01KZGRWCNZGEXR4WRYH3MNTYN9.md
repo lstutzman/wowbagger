@@ -5,9 +5,10 @@ number: 36
 title: "Give the CLI --help and --version surfaces"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-08
-updated: 2026-08-08
+updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "consumer-dogfood/tinydancer"
   recorded_at: "2026-08-08T14:30:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-08
     summary: "Accepted from the tinydancer dogfood: the CLI has no help or version surface."
     rationale: "A consumer asked whether in-flight work covered --help and --version; nothing did. Usage strings are only reachable by error, and no surface prints the distribution version the release path defines. Accepted at the dogfood-friction priority tier."
+  - action: complete
+    date: 2026-08-10
+    summary: "Shipped --help, per-command help, and --version with a typo suggestion."
+    rationale: "All acceptance criteria met: --help and --version exit 0, per-command help exits 0, machine JSON contracts and usage-error refusals unchanged, and the README core-commands section points at --help. Tested by 10 mutation-guarded tests plus the full 640-test suite on current node and node 20."
 ---
 
 The CLI has no `--help` and no `--version`. A consumer discovering the tool

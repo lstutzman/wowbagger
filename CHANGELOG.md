@@ -48,6 +48,12 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- `wowbagger --help` prints the command inventory and exits 0; `wowbagger <command> --help`
+  prints that command's usage and exits 0; `wowbagger --version` prints the distribution
+  version from package.json and exits 0. An unknown command now suggests a close match
+  (or points at `--help`) instead of throwing the bare ready usage. Existing JSON
+  contracts, exit codes, and usage-error refusals for genuinely wrong arguments are
+  unchanged.
 - `scripts/migrate-schema-2.js` dry-runs a schema-version-1 ledger migration by
   default and requires `--apply` to write. It refuses invalid schema-1 or
   schema-2, mixed, already migrated, empty, or locked ledgers; reports each

@@ -189,7 +189,10 @@ OpenAI-compatible harness adapters are not written.
 
 ## Core commands
 
-The current core requires Node.js 20 or later. From a Wowbagger checkout:
+The current core requires Node.js 20 or later. From a Wowbagger checkout, `./bin/wowbagger.js --help`
+prints the full command inventory, `./bin/wowbagger.js <command> --help` prints that
+command's usage, and `./bin/wowbagger.js --version` prints the installed package
+version. The commands below are the current inventory:
 
 ```sh
 npm ci

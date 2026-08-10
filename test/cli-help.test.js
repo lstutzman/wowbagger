@@ -1,0 +1,120 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { runCli } from './support.js';
+
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const distributionVersion = JSON.parse(
+  readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
+).version;
+
+const INVENTORY_COMMANDS = [
+  'validate',
+  'ready',
+  'capabilities',
+  'inspect',
+  'create',
+  'transition',
+  'patch',
+  'mint-id',
+  'provision',
+  'claim',
+  'publish-claimed',
+];
+
+test('--help prints the command inventory and exits 0', () => {
+  const result = runCli('--help');
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '', result.stderr);
+  for (const command of INVENTORY_COMMANDS) {
+    assert.ok(result.stdout.includes(command), `inventory missing ${command}`);
+  }
+  assert.match(result.stdout, /wowbagger <command> \[options\]/);
+});
+
+test('-h is an accepted alias for --help', () => {
+  const result = runCli('-h');
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes('Commands:'));
+});
+
+test('--version prints the package version and exits 0', () => {
+  const result = runCli('--version');
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '', result.stderr);
+  assert.equal(result.stdout, `${distributionVersion}\n`);
+});
+
+test('-v is an accepted alias for --version', () => {
+  const result = runCli('-v');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, `${distributionVersion}\n`);
+});
+
+test('every command supports <command> --help and exits 0', () => {
+  for (const command of INVENTORY_COMMANDS) {
+    const result = runCli(command, '--help');
+    assert.equal(result.status, 0, `${command}: ${result.stderr}`);
+    assert.equal(result.stderr, '', `${command}: ${result.stderr}`);
+    assert.match(result.stdout, new RegExp(`wowbagger ${command}`), `help header missing ${command}`);
+  }
+});
+
+test('per-command help prints that command usage line', () => {
+  const cases = [
+    ['validate', 'wowbagger validate --ledger <dir> --json'],
+    ['ready', 'wowbagger ready --ledger <dir> --as-of YYYY-MM-DD'],
+    ['inspect', 'wowbagger inspect --ledger <dir> --id <id> --json'],
+    ['create', 'wowbagger create --ledger <dir> --input <json-file|-> --json'],
+    ['transition', 'wowbagger transition --ledger <dir> --input <json-file|-> --json'],
+    ['patch', 'wowbagger patch --ledger <dir> --input <json-file|-> --json'],
+    ['mint-id', 'wowbagger mint-id [--date YYYY-MM-DD] --json'],
+  ];
+
+  for (const [command, usageLine] of cases) {
+    const result = runCli(command, '--help');
+    assert.ok(result.stdout.includes(usageLine), `${command}: expected "${usageLine}"`);
+  }
+});
+
+test('claim --help lists the claim subcommands', () => {
+  const result = runCli('claim', '--help');
+
+  assert.equal(result.status, 0, result.stderr);
+  for (const subcommand of ['capabilities', 'read', 'acquire', 'renew', 'release']) {
+    assert.ok(result.stdout.includes(subcommand), `claim help missing ${subcommand}`);
+  }
+});
+
+test('a typo suggestion turns an unknown command into a did-you-mean instead of the bare usage throw', () => {
+  const result = runCli('transitio');
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Unknown command: transitio/);
+  assert.match(result.stderr, /Did you mean wowbagger transition\?/);
+});
+
+test('a distant unknown command points at the inventory', () => {
+  const result = runCli('frobnicate');
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Unknown command: frobnicate/);
+  assert.match(result.stderr, /wowbagger --help/);
+});
+
+test('help and version are untouched by machine JSON surfaces', () => {
+  const invalid = runCli('validate', '--json');
+  assert.equal(invalid.status, 1);
+
+  const capabilities = runCli('capabilities', '--json');
+  assert.equal(capabilities.status, 0, capabilities.stderr);
+  const parsed = JSON.parse(capabilities.stdout);
+  assert.equal(parsed.ok, true);
+
+  const version = runCli('--version');
+  assert.equal(version.stdout, `${distributionVersion}\n`);
+});

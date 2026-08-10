@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { coordinationScope, resolveWorkClaimCapability } from './claim-capabilities.js';
 import { claimAcquire, claimRead, claimRelease, claimRenew } from './claim-operations.js';
@@ -23,8 +25,68 @@ import { isCalendarDate, validateLedger } from './validate.js';
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 2;
 
+const DISTRIBUTION_VERSION = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+).version;
+
+const COMMAND_SUMMARIES = {
+  validate: 'Validate a ledger and print the single JSON validation result.',
+  ready: 'Validate a ledger and print the readiness queue for a date.',
+  capabilities: "Describe the backend's capabilities and versioned contract surface.",
+  inspect: 'Inspect one ledger item as a lossless raw-byte snapshot.',
+  create: 'Create one ledger item through atomic, no-clobber publication.',
+  transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
+  patch: "Patch an item's number and priority fields, guarded the same way.",
+  'mint-id': 'Mint a canonical item ID.',
+  provision: 'Provision the work-claim namespace.',
+  claim: 'Work-claim lifecycle operations on the provisioned store.',
+  'publish-claimed': 'Publish claim-protected ledger results (unavailable on an advisory backend).',
+};
+
+const KNOWN_COMMANDS = new Set([
+  'validate',
+  'ready',
+  'capabilities',
+  'inspect',
+  'create',
+  'transition',
+  'patch',
+  'mint-id',
+  'provision',
+  'claim',
+  'publish-claimed',
+]);
+
+const CLAIM_SUBCOMMAND_SUMMARIES = {
+  capabilities: 'Describe the work-claim backend and its coordination scope.',
+  read: 'Read the current claims from the provisioned store.',
+  acquire: 'Acquire a cooperative work claim.',
+  renew: 'Renew an existing work claim.',
+  release: 'Release an owned work claim.',
+};
+
 export async function runCli(argumentsList, { scenario } = {}) {
   const command = argumentsList[0];
+
+  if (command === '--help' || command === '-h') {
+    process.stdout.write(globalHelp());
+    return;
+  }
+
+  if (command === '--version' || command === '-v') {
+    process.stdout.write(`${DISTRIBUTION_VERSION}\n`);
+    return;
+  }
+
+  if (command === 'claim' && argumentsList[1] === '--help') {
+    process.stdout.write(commandHelp('claim'));
+    return;
+  }
+
+  if (KNOWN_COMMANDS.has(command) && argumentsList[1] === '--help') {
+    process.stdout.write(commandHelp(command));
+    return;
+  }
 
   if (command === 'capabilities') {
     const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
@@ -241,11 +303,11 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
 
-    throw new Error(usage());
+    throw new Error(unknownCommandMessage(subcommand));
   }
 
   if (command !== 'validate' && command !== 'ready') {
-    throw new Error(usage());
+    throw new Error(unknownCommandMessage(command));
   }
 
   const options = parseOptions(command, argumentsList.slice(1));
@@ -673,6 +735,26 @@ function usage(command) {
     return 'Usage: wowbagger validate --ledger <dir> --json';
   }
 
+  if (command === 'ready') {
+    return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD [--json]';
+  }
+
+  if (command === 'capabilities') {
+    return 'Usage: wowbagger capabilities --json';
+  }
+
+  if (command === 'provision') {
+    return 'Usage: wowbagger provision --ledger <dir> --json';
+  }
+
+  if (command === 'publish-claimed') {
+    return 'Usage: wowbagger publish-claimed';
+  }
+
+  if (command === 'claim') {
+    return 'Usage: wowbagger claim <read|acquire|renew|release|capabilities> [options]';
+  }
+
   if (command === 'inspect') {
     return 'Usage: wowbagger inspect --ledger <dir> --id <id> --json';
   }
@@ -694,6 +776,91 @@ function usage(command) {
   }
 
   return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD [--json]';
+}
+
+function globalHelp() {
+  return [
+    'wowbagger — standalone Markdown ledger validation, readiness selection, and guarded local mutations.',
+    '',
+    'Usage:',
+    '  wowbagger <command> [options]',
+    '  wowbagger --help',
+    '  wowbagger --version',
+    '',
+    'Commands:',
+    ...Object.keys(COMMAND_SUMMARIES).map((name) => (
+      `  ${name.padEnd(12)} ${COMMAND_SUMMARIES[name]}`
+    )),
+    '',
+    "Run 'wowbagger <command> --help' for the usage of a specific command.",
+    '',
+  ].join('\n');
+}
+
+function commandHelp(command) {
+  const header = COMMAND_SUMMARIES[command]
+    ? `wowbagger ${command} — ${COMMAND_SUMMARIES[command]}`
+    : `wowbagger ${command}`;
+
+  if (command === 'claim') {
+    return [
+      header,
+      '',
+      'Usage:',
+      '  wowbagger claim <read|acquire|renew|release|capabilities> [options]',
+      '',
+      'Subcommands:',
+      ...Object.keys(CLAIM_SUBCOMMAND_SUMMARIES).map((name) => (
+        `  ${name.padEnd(12)} ${CLAIM_SUBCOMMAND_SUMMARIES[name]}`
+      )),
+      '',
+    ].join('\n');
+  }
+
+  return [
+    header,
+    '',
+    `${usage(command)}`,
+    '',
+  ].join('\n');
+}
+
+function unknownCommandMessage(command) {
+  const suggestion = closestCommand(command);
+  if (suggestion) {
+    return `Unknown command: ${command}\nDid you mean wowbagger ${suggestion}?`;
+  }
+  return `Unknown command: ${command}. Run 'wowbagger --help' for the command inventory.`;
+}
+
+function closestCommand(command) {
+  let best = null;
+  let bestDistance = Infinity;
+  for (const name of KNOWN_COMMANDS) {
+    const distance = editDistance(command, name);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = name;
+    }
+  }
+  return bestDistance <= 2 ? best : null;
+}
+
+function editDistance(left, right) {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost,
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[right.length];
 }
 
 async function requestSource(input) {
