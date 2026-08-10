@@ -272,6 +272,9 @@ export async function invokeAdapter(requestBytes, runtime) {
     adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     command,
+    core_request: request.core_request,
+    mutation_request: mutationRequest,
+    mutation_input: mutation ? mutationInput : undefined,
     item_id: WOWBAGGER_ID.test(mutationRequest?.id) ? mutationRequest.id : null,
     expected_revision: DIGEST.test(mutationRequest?.expected_revision)
       ? mutationRequest.expected_revision

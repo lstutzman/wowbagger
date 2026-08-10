@@ -9,16 +9,23 @@ import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 export async function readBootstrapRequest(stream, { maxBytes, errorCode = 'invalid-describe-request' } = {}) {
   const chunks = [];
   let byteLength = 0;
-  for await (const chunk of stream) {
-    byteLength += chunk.length;
-    if (maxBytes !== undefined && byteLength > maxBytes) {
-      return {
-        ok: false,
-        error_code: errorCode,
-        detail: { member: 'request', reason: 'byte-limit-exceeded', limit_bytes: maxBytes },
-      };
+  // A stream error must surface as a refusal, never as an uncaught rejection: the
+  // entrypoint has to emit exactly one JSON object plus one LF and exit zero on
+  // every path (§3.3), including a stdin read failure.
+  try {
+    for await (const chunk of stream) {
+      byteLength += chunk.length;
+      if (maxBytes !== undefined && byteLength > maxBytes) {
+        return {
+          ok: false,
+          error_code: errorCode,
+          detail: { member: 'request', reason: 'byte-limit-exceeded', limit_bytes: maxBytes },
+        };
+      }
+      chunks.push(chunk);
     }
-    chunks.push(chunk);
+  } catch {
+    return { ok: false, error_code: errorCode, detail: { member: 'request', reason: 'stream-error' } };
   }
   const bytes = Buffer.concat(chunks);
   const parsed = parseJsonRequest(bytes);

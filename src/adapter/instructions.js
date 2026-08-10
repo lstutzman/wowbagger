@@ -59,6 +59,7 @@ export function validateInstructionInput(input, limits) {
     if (!hasExactMembers(source, [
       'source_id', 'origin', 'content_encoding', 'content_base64', 'sha256', 'byte_length',
     ], ['logical_path'])
+      || typeof source.source_id !== 'string'
       || !SAFE_ID.test(source.source_id)
       || !ORIGIN_PRECEDENCE.has(source.origin)
       || source.content_encoding !== 'base64'

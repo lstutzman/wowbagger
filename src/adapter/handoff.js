@@ -107,6 +107,8 @@ export function validateHandoffResume({
     return refuse('handoff-limit-exceeded');
   }
   if (digest(handoffBytes) !== handoffDigest) return refuse('handoff-digest-mismatch');
+  const parsedResumeBytes = parseJsonRequest(handoffBytes);
+  if (parsedResumeBytes.issues.length > 0) return refuse('invalid-handoff-json');
   if (!WOWBAGGER_ID.test(resumeRequest?.item_id)) return refuse('invalid-handoff-resume-request');
   if (resumeRequest.instruction_set_digest !== current.instruction_set_digest) {
     return refuse('handoff-instruction-set-mismatch');

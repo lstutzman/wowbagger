@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { mapProcessOutcome as referenceMapProcessOutcome } from '../spec/adapter-reference.js';
-import { canonicalInvocationDigest } from '../src/adapter/approval.js';
+import { canonicalInvocationDigest, verifyTrustedApproval } from '../src/adapter/approval.js';
 import { coreCapabilities } from '../src/adapter/core-probe.js';
 import { invokeAdapter } from '../src/adapter/invoke.js';
 import { mapProcessOutcome } from '../src/adapter/process-outcome.js';
@@ -22,6 +22,31 @@ function runtime() {
 }
 
 const digest = (bytes) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+
+test('maps a launcher exception to a launch-failed outcome, never a fabricated success', async () => {
+  const request = {
+    adapter_contract_version: 2,
+    request_id: 'launch-throw-0001',
+    core_request: { command: 'capabilities' },
+    instruction_input: { instruction_input_version: 1, required: false, sources: [] },
+    handoff_carrier: null,
+    limits: { context_bytes: 0, stdout_bytes: 4096, stderr_bytes: 1024, timeout_ms: 1000 },
+  };
+  const configured = runtime();
+  configured.package_root = '/installed/adapter';
+  configured.launch = async () => {
+    throw new Error('core could not be spawned');
+  };
+
+  const result = await invokeAdapter(Buffer.from(`${JSON.stringify(request)}
+`), configured);
+
+  // A launcher exception must fabricate a clean non-start (started: false) that
+  // maps to core-launch-failed. It must never become a started: true fabrication
+  // that reads as a partial success.
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'core-launch-failed');
+});
 
 test('refuses an invocation timeout above the advertised maximum', async () => {
   const request = {
@@ -206,4 +231,40 @@ test('maps every process-outcome fixture to the independent oracle envelope', as
   for (const scenario of fixture.scenarios) {
     assert.deepEqual(mapProcessOutcome(scenario.request), referenceMapProcessOutcome(scenario.request), scenario.id);
   }
+});
+
+test('rejects an approval whose nonce is a number, not a string', () => {
+  const binding = {
+    request_id: 'nonce-coercion-0001',
+    adapter: { id: 'a', version: '1.0.0', contract_version: 2 },
+    core: {
+      executable_identity: `sha256:${'a'.repeat(64)}`,
+      contract_version: 2,
+      argv: ['capabilities', '--json'],
+      input_base64: '',
+    },
+    workspace: { id: 'w', root: '/w', cwd: '.', ledger: 'ledger' },
+    limits: { context_bytes: 0, stdout_bytes: 0, stderr_bytes: 0, timeout_ms: 1000 },
+    instruction_set_digest: `sha256:${'b'.repeat(64)}`,
+    handoff_digest: null,
+  };
+  const invocationDigest = canonicalInvocationDigest(binding).digest;
+  const numericNonce = 1234567890123456;
+  const result = verifyTrustedApproval({
+    approval: {
+      approval_version: 1,
+      source: 'consumer',
+      nonce: numericNonce,
+      issued_at: '2030-01-15T00:00:00Z',
+      expires_at: '2030-01-15T01:00:00Z',
+      invocation_digest: invocationDigest,
+    },
+    binding,
+    now: '2030-01-15T00:30:00Z',
+    redeemedNonces: new Set(),
+    trustedSources: new Set(['consumer']),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-approval');
 });

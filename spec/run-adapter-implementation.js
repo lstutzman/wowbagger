@@ -607,7 +607,10 @@ async function evaluateInvocationPathAssertion(directory, assertion, target, run
       after: snapshot,
     });
     return {
-      ok: result.error_code === scenario.expected,
+      // Prove the syntax guard itself fired (kind invalid-logical-path), not a
+      // later missing-snapshot refusal that would mask a removed guard.
+      ok: result.error_code === scenario.expected
+        && result.detail.kind === 'invalid-logical-path',
       evidence: 'src/adapter/paths.js',
       error_code: result.error_code,
     };
@@ -637,6 +640,15 @@ async function evaluateProcessOutcomeAssertion(directory, assertion) {
   const data = await readScenarios(directory);
   const scenario = findScenario(data.scenarios, assertion.scenario);
   const result = mapProcessOutcome(scenario.request);
+  if (scenario.expected_code === null) {
+    // A null expected_code asserts forward-as-success: mapProcessOutcome
+    // returns null (no refusal) for a fully valid envelope.
+    return {
+      ok: result === null,
+      evidence: 'src/adapter/process-outcome.js',
+      error_code: null,
+    };
+  }
   return {
     ok: result.error.code === scenario.expected_code
       && (result.mutation_outcome ?? null) === scenario.expected_mutation_outcome

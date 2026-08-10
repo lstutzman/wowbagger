@@ -604,6 +604,7 @@ export function validateInstructionInput(input, limits) {
     if (!hasExactKeys(source,
       ['source_id', 'origin', 'content_encoding', 'content_base64', 'sha256', 'byte_length'],
       ['logical_path'])
+      || typeof source.source_id !== 'string'
       || !SAFE_ID.test(source.source_id)
       || !ORIGIN_PRECEDENCE.has(source.origin)
       || source.content_encoding !== 'base64'
@@ -959,6 +960,8 @@ export function validateHandoffResume({
 }) {
   if (handoffBytes.length > maxBytes) return refusal('handoff-limit-exceeded', {});
   if (sha256(handoffBytes) !== handoffDigest) return refusal('handoff-digest-mismatch', {});
+  const parsedResumeBytes = parseJsonRequest(handoffBytes);
+  if (parsedResumeBytes.issues.length > 0) return refusal('invalid-handoff-json', {});
   if (!WOWBAGGER_ID.test(resumeRequest?.item_id)) {
     return refusal('invalid-handoff-resume-request', {});
   }
@@ -1423,7 +1426,7 @@ function approvalSchemaError(value) {
   ])) return 'members';
   if (value.approval_version !== 1) return 'approval_version';
   if (typeof value.source !== 'string') return 'source';
-  if (!NONCE.test(value.nonce)) return 'nonce';
+  if (typeof value.nonce !== 'string' || !NONCE.test(value.nonce)) return 'nonce';
   if (!DIGEST.test(value.invocation_digest)) return 'invocation_digest';
   if (!RFC3339.test(value.issued_at) || !validCanonicalTime(value.issued_at)) return 'issued_at';
   if (!RFC3339.test(value.expires_at) || !validCanonicalTime(value.expires_at)) return 'expires_at';
@@ -1552,7 +1555,7 @@ function validCoreItemShape(value) {
 
 function validCoreView(value) {
   if (!plainObject(value)
-    || value.schema_version !== 1
+    || (value.schema_version !== 1 && value.schema_version !== 2)
     || !WOWBAGGER_ID.test(value.id)
     || !nonEmptyTrimmedString(value.title)
     || !new Set(['task', 'epic']).has(value.kind)

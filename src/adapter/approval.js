@@ -66,6 +66,7 @@ function approvalSchemaError(value) {
   ])) return true;
   return value.approval_version !== 1
     || typeof value.source !== 'string'
+    || typeof value.nonce !== 'string'
     || !NONCE.test(value.nonce)
     || !DIGEST.test(value.invocation_digest)
     || !RFC3339.test(value.issued_at)

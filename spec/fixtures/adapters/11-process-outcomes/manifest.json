@@ -1,30 +1,134 @@
 {
   "adapter_vector_version": 1,
   "case": "process-outcomes",
-  "coverage": ["bounded-io", "authority"],
-  "targets": ["claude-code", "codex", "opencode", "kimi", "openai-compatible-harness"],
+  "coverage": [
+    "bounded-io",
+    "authority"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "opencode",
+    "kimi",
+    "openai-compatible-harness"
+  ],
   "mode": "protocol",
   "assertions": [
-    { "id": "read-launch-failure-is-deterministic", "type": "process-outcome", "scenario": "read-launch-failed" },
-    { "id": "read-observation-doubt-is-refused", "type": "process-outcome", "scenario": "read-observation-incomplete" },
-    { "id": "mutation-timeout-is-unknown", "type": "process-outcome", "scenario": "mutation-timeout-complete" },
-    { "id": "mutation-signal-is-unknown", "type": "process-outcome", "scenario": "mutation-signal-complete" },
-    { "id": "mutation-missing-envelope-is-unknown", "type": "process-outcome", "scenario": "mutation-missing-envelope" },
-    { "id": "mutation-stdout-truncation-is-unknown", "type": "process-outcome", "scenario": "mutation-stdout-truncated" },
-    { "id": "mutation-stderr-truncation-is-unknown", "type": "process-outcome", "scenario": "mutation-stderr-truncated" },
-    { "id": "read-timeout-is-deterministic", "type": "process-outcome", "scenario": "read-timeout" },
-    { "id": "read-signal-is-deterministic", "type": "process-outcome", "scenario": "read-signal" },
-    { "id": "read-missing-envelope-is-protocol-error", "type": "process-outcome", "scenario": "read-missing-envelope" },
-    { "id": "read-stdout-truncation-is-output-error", "type": "process-outcome", "scenario": "read-stdout-truncated" },
-    { "id": "read-stderr-truncation-is-output-error", "type": "process-outcome", "scenario": "read-stderr-truncated" },
-    { "id": "read-null-exit-is-incomplete", "type": "process-outcome", "scenario": "read-null-exit" },
-    { "id": "mutation-null-exit-is-unknown", "type": "process-outcome", "scenario": "mutation-null-exit" },
-    { "id": "read-missing-exit-is-incomplete", "type": "process-outcome", "scenario": "read-missing-exit" },
-    { "id": "mutation-missing-exit-is-unknown", "type": "process-outcome", "scenario": "mutation-missing-exit" },
-    { "id": "read-invalid-exit-is-incomplete", "type": "process-outcome", "scenario": "read-invalid-exit" },
-    { "id": "mutation-invalid-exit-is-unknown", "type": "process-outcome", "scenario": "mutation-invalid-exit" }
+    {
+      "id": "read-launch-failure-is-deterministic",
+      "type": "process-outcome",
+      "scenario": "read-launch-failed"
+    },
+    {
+      "id": "read-observation-doubt-is-refused",
+      "type": "process-outcome",
+      "scenario": "read-observation-incomplete"
+    },
+    {
+      "id": "mutation-timeout-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-timeout-complete"
+    },
+    {
+      "id": "mutation-signal-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-signal-complete"
+    },
+    {
+      "id": "mutation-missing-envelope-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-missing-envelope"
+    },
+    {
+      "id": "mutation-stdout-truncation-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-stdout-truncated"
+    },
+    {
+      "id": "mutation-stderr-truncation-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-stderr-truncated"
+    },
+    {
+      "id": "read-timeout-is-deterministic",
+      "type": "process-outcome",
+      "scenario": "read-timeout"
+    },
+    {
+      "id": "read-signal-is-deterministic",
+      "type": "process-outcome",
+      "scenario": "read-signal"
+    },
+    {
+      "id": "read-missing-envelope-is-protocol-error",
+      "type": "process-outcome",
+      "scenario": "read-missing-envelope"
+    },
+    {
+      "id": "read-stdout-truncation-is-output-error",
+      "type": "process-outcome",
+      "scenario": "read-stdout-truncated"
+    },
+    {
+      "id": "read-stderr-truncation-is-output-error",
+      "type": "process-outcome",
+      "scenario": "read-stderr-truncated"
+    },
+    {
+      "id": "read-null-exit-is-incomplete",
+      "type": "process-outcome",
+      "scenario": "read-null-exit"
+    },
+    {
+      "id": "mutation-null-exit-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-null-exit"
+    },
+    {
+      "id": "read-missing-exit-is-incomplete",
+      "type": "process-outcome",
+      "scenario": "read-missing-exit"
+    },
+    {
+      "id": "mutation-missing-exit-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-missing-exit"
+    },
+    {
+      "id": "read-invalid-exit-is-incomplete",
+      "type": "process-outcome",
+      "scenario": "read-invalid-exit"
+    },
+    {
+      "id": "mutation-invalid-exit-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-invalid-exit"
+    },
+    {
+      "id": "mutation-contradicted-not-started-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-contradicted-not-started"
+    },
+    {
+      "id": "mutation-launch-failed-is-deterministic",
+      "type": "process-outcome",
+      "scenario": "mutation-launch-failed"
+    },
+    {
+      "id": "read-stdout-over-limit-is-output-error",
+      "type": "process-outcome",
+      "scenario": "read-stdout-over-limit"
+    },
+    {
+      "id": "inspect-schema-two-forwards-as-success",
+      "type": "process-outcome",
+      "scenario": "inspect-schema-two-valid"
+    }
   ],
   "artifacts": [
-    { "path": "scenarios.json", "sha256": "sha256:e75abd75e37f99249929e7b42557653c81594940a706929ede00d529a2d40f97" }
+    {
+      "path": "scenarios.json",
+      "sha256": "sha256:745c17475a318845c643d87f98a5349a58088ac6adbbfec09a0108af2f5b76fd"
+    }
   ]
 }

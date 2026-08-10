@@ -220,9 +220,15 @@ async function evaluateAssertion(directory, caseName, assertion) {
       const scenario = data.scenarios.find(({ id }) => id === assertion.scenario);
       assert.ok(scenario, assertion.scenario);
       const result = mapProcessOutcome(scenario.request);
-      assert.equal(result.error.code, scenario.expected_code);
-      assert.equal(result.mutation_outcome ?? null, scenario.expected_mutation_outcome);
-      assert.equal(result.process.orphaned, false);
+      if (scenario.expected_code === null) {
+        // A null expected_code asserts forward-as-success: mapProcessOutcome
+        // returns null (no refusal) for a fully valid envelope.
+        assert.equal(result, null, scenario.id);
+      } else {
+        assert.equal(result.error.code, scenario.expected_code, scenario.id);
+        assert.equal(result.mutation_outcome ?? null, scenario.expected_mutation_outcome);
+        assert.equal(result.process.orphaned, false);
+      }
       return evidenceWithResult('mapProcessOutcome', result);
     }
     case 'path-race': {
@@ -256,6 +262,9 @@ async function evaluateAssertion(directory, caseName, assertion) {
         after: snapshot,
       });
       assert.equal(result.error.code, scenario.expected);
+      // Prove the syntax guard itself fired (kind invalid-logical-path), not a
+      // later missing-snapshot refusal that would mask a removed guard.
+      assert.equal(result.error.details.kind, 'invalid-logical-path');
       return evidenceWithResult('resolveInvocationPaths', result);
     }
     case 'snapshot-identity': {

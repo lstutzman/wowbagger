@@ -247,6 +247,25 @@ test('bounds invoke bytes before parsing the request', async () => {
   assert.equal(response.request_id, null);
 });
 
+test('refuses with a stream-error detail instead of throwing when stdin errors', async () => {
+  const failingStream = new Readable({
+    read() {
+      this.destroy(new Error('simulated stdin read error'));
+    },
+  });
+
+  const result = await readBootstrapRequest(failingStream, {
+    maxBytes: 65536,
+    errorCode: 'invalid-invocation',
+  });
+
+  // §3.3: a stdin read failure must become a refusal the entrypoint can emit as
+  // exactly one JSON object plus one LF, never an uncaught rejection that exits 1.
+  assert.equal(result.ok, false);
+  assert.equal(result.error_code, 'invalid-invocation');
+  assert.equal(result.detail.reason, 'stream-error');
+});
+
 test('accepts an invocation request at the exact byte limit', async () => {
   const maxBytes = 65536;
   const prefix = '{"padding":"';
