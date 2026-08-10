@@ -4,15 +4,20 @@ id: wb_01KZHX3E00YP7ZXJAKKGENZYHH
 number: 37
 title: "Validate the adapter under concurrent invokes"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-09T13:30:00.000Z"
-depends_on: [wb_01KZ77NSW8ZP1289HFMN2ECNXD]
+depends_on: [ wb_01KZ77NSW8ZP1289HFMN2ECNXD ]
 related: []
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-10
+    summary: "Accept into backlog: prove or contract what concurrent adapter invocation may mean."
+    rationale: "The adapter boundary was only ever exercised one invoke at a time; concurrent safety is an assumption, not a finding. Valid follow-on scope distinct from core item 7."
 ---
 
 The adapter has only ever been exercised one invoke at a time. Nothing in the

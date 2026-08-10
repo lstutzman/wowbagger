@@ -4,15 +4,20 @@ id: wb_01KZHX3E001CSCENR21QMTDJFN
 number: 39
 title: "Close the bootstrap wire's duplicated refusal paths"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T14:05:00.000Z"
-depends_on: [wb_01KZ77NSW8ZP1289HFMN2ECNXD]
+depends_on: [ wb_01KZ77NSW8ZP1289HFMN2ECNXD ]
 related: []
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-10
+    summary: "Accept into backlog: close the bootstrap wire's duplicated and unreachable refusal paths."
+    rationale: "A review found the entrypoint's inner refusal branches unreachable and message/shape duplication across tables and the reference model; the work is a contract decision, not a silence."
 ---
 
 A review of the Plan 2 work found six issues that were deliberately left unfixed,

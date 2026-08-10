@@ -4,15 +4,20 @@ id: wb_01KZHX3E00ZH5SA7H0M3WNVP7N
 number: 38
 title: "Earn a supported platform claim on linux and win32"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-09T13:31:00.000Z"
-depends_on: [wb_01KZ77NSW8ZP1289HFMN2ECNXD]
+depends_on: [ wb_01KZ77NSW8ZP1289HFMN2ECNXD ]
 related: []
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-10
+    summary: "Accept into backlog: earn the supported platform claim on linux and win32 with native evidence."
+    rationale: "Every platform still reads unverified and a supported claim requires native common-vector evidence; consumers on linux or Windows need it."
 ---
 
 Item 13 requires the conformance run to be reported on one real native platform.

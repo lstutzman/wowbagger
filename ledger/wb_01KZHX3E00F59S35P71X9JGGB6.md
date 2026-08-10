@@ -5,15 +5,20 @@ number: 41
 title: "Fix the adapter defects three reviews confirmed"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T15:12:00.000Z"
 depends_on: []
-related: [wb_01KZ77NSW8ZP1289HFMN2ECNXD]
+related: [ wb_01KZ77NSW8ZP1289HFMN2ECNXD ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-10
+    summary: "Accept into backlog: fix the adapter defects three reviews confirmed."
+    rationale: "An applied mutation can be reported as core-launch-failed, invoking a retry; envelopes for inspect/create/transition are misclassified; several guards are untested. Highest-risk, accept first."
 ---
 
 Three independent reviews of the Plan 2 and Plan 3 work each confirmed their
