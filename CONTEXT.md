@@ -19,3 +19,4 @@ One line per term. This is a glossary, not documentation.
 - **decision record** — the `decisions:` entries on an item; why a lifecycle edge happened, written at transition time.
 - **schema migration** — the one-time maintenance tool that changes a complete ledger from schema version 1 to schema version 2.
 - **quiesced window** — a maintenance period in which all processes and people that can write the target ledger are stopped.
+- **Herdr** — the terminal workspace manager that keeps this repository's panes, agents, and sessions persistent and observable.
