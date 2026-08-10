@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E001CSCENR21QMTDJFN
 number: 39
 title: "Close the bootstrap wire's duplicated refusal paths"

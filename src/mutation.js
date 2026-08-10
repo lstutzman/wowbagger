@@ -4,6 +4,7 @@ import { link, lstat, mkdir, open, rename, unlink, writeFile } from 'node:fs/pro
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar } from 'yaml';
+import { isDependencySatisfied } from './dependencies.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
 import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
@@ -265,7 +266,8 @@ export async function createItem(ledgerDirectory, request, scenario) {
         return await finishUncommitted(mutationError('path-collision', 'The default item path is occupied by a different item.', 'unchanged', 4, details));
       }
 
-      const bytes = createCandidateSource(request);
+      const schemaVersion = current.ledger.items[0]?.data.schema_version ?? 1;
+      const bytes = createCandidateSource(request, schemaVersion);
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         null,
@@ -875,8 +877,15 @@ function transitionPreconditions(target, ledger, request, edge) {
   if (!edge.allowed) {
     issues.push(transitionIssue('invalid-edge', 'to_status', 'The requested lifecycle edge is not allowed for this item.', []));
   }
-  if (request.to_status === 'done' && (target.data.depends_on ?? []).length > 0) {
-    issues.push(transitionIssue('live-dependencies', 'depends_on', 'Completion requires an empty depends_on list.', [...target.data.depends_on].sort(compareText)));
+  const dependencies = target.data.depends_on ?? [];
+  const liveDependencies = target.data.schema_version === 2
+    ? dependencies.filter((id) => !isDependencySatisfied(findItem(ledger, id)?.data.status))
+    : dependencies;
+  if (request.to_status === 'done' && liveDependencies.length > 0) {
+    const message = target.data.schema_version === 2
+      ? 'Completion requires every depends_on target to be done.'
+      : 'Completion requires an empty depends_on list.';
+    issues.push(transitionIssue('live-dependencies', 'depends_on', message, [...liveDependencies].sort(compareText)));
   }
   if (target.data.kind === 'epic' && request.to_status === 'done') {
     const children = ledger.items.filter((item) => item.data.parent === target.data.id);
@@ -891,8 +900,9 @@ function transitionPreconditions(target, ledger, request, edge) {
 
 function transitionBlockers(target, ledger, toStatus) {
   const blockers = [];
-  const terminalizing = ['done', 'killed', 'archived'].includes(toStatus);
-  if (terminalizing) {
+  const requiresDependentMutation = ['killed', 'archived'].includes(toStatus)
+    || (toStatus === 'done' && target.data.schema_version === 1);
+  if (requiresDependentMutation) {
     for (const item of ledger.items) {
       if (item.data.id === target.data.id || !(item.data.depends_on ?? []).includes(target.data.id)) {
         continue;
@@ -1659,13 +1669,13 @@ async function waitForTestMarker(file) {
   throw new Error(`Timed out waiting for test marker ${path.basename(file)}.`);
 }
 
-export function createCandidateSource(request) {
-  return Buffer.from(serializeCreate(createData(request, dateFromId(request.id)), request.body), 'utf8');
+export function createCandidateSource(request, schemaVersion = 1) {
+  return Buffer.from(serializeCreate(createData(request, dateFromId(request.id), schemaVersion), request.body), 'utf8');
 }
 
-function createData(request, date) {
+function createData(request, date, schemaVersion) {
   return {
-    schema_version: 1,
+    schema_version: schemaVersion,
     id: request.id,
     title: request.item.title,
     kind: request.item.kind,
@@ -1684,7 +1694,7 @@ function createData(request, date) {
 function serializeCreate(data, body) {
   const lines = [
     '---',
-    'schema_version: 1',
+    `schema_version: ${data.schema_version}`,
     `id: ${data.id}`,
     ...(hasOwn(data, 'number') ? [`number: ${yamlScalar(data.number)}`] : []),
     `title: ${quote(data.title)}`,

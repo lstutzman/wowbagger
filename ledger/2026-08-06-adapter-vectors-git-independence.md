@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZBNMT39DE0F95RV0C5K0EJQ
 number: 20
 title: "Document the git-checkout requirement for adapter conformance vectors"

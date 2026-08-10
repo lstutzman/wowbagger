@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00XVRADSYMHC29A88Y
 number: 40
 title: "Make the conformance run evidence the shipped entrypoint"

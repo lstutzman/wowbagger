@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { validateAdapterManifest, isSafeRelativeExecutable } from '../src/adapter/manifest.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { describeAdapter } from '../src/adapter/describe.js';
-import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
+import { CORE_COMMAND_ORDER, coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { sameJson } from '../src/adapter/schema-helpers.js';
 import {
   describeAdapter as referenceDescribe,
@@ -20,9 +20,9 @@ const BASE_MANIFEST = {
   adapter_manifest_version: 1,
   adapter_id: 'example.reference',
   adapter_version: '1.0.0',
-  adapter_contract_versions: [1],
+  adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 1,
+  required_core_contract_version: 2,
   entrypoints: {
     describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
@@ -958,13 +958,13 @@ test('verifyCoreProbe refuses a probe whose ok member is not true', () => {
   assert.equal(result.error_code, 'core-protocol-error');
 });
 
-// A protocol-version-2 probe is a schema issue (this engine only speaks
-// core contract version 1) even when its number happens to equal the
+// A protocol-version-1 probe is a schema issue (this engine only speaks
+// core contract version 2) even when its number happens to equal the
 // describe result's required core contract version.
-test('verifyCoreProbe refuses a probe with a contract_version other than 1', () => {
+test('verifyCoreProbe refuses a probe with a contract_version other than 2', () => {
   const describe = structuredClone(SCENARIOS.base_dynamic);
-  describe.core.required_core_contract_version = 2;
-  const probe = { ...coreCapabilities(), contract_version: 2 };
+  describe.core.required_core_contract_version = 1;
+  const probe = { ...coreCapabilities(), contract_version: 1 };
 
   const result = verifyCoreProbe(describe, probe);
 
@@ -1081,11 +1081,9 @@ test(
   },
 );
 
-// The three git-coordination-dependent probe members
-// (`backend.coordination_scope`, `operations.work_claim.supported`,
-// `limits.cross_worktree_coordination`) must all agree; a probe can
-// contradict via either of the latter two independently.
-test('verifyCoreProbe refuses a probe whose cross_worktree_coordination contradicts the coordination scope', () => {
+// Mutation coordination never spans worktrees, even when advisory work
+// claims are visible through the Git common directory.
+test('verifyCoreProbe refuses cross-worktree mutation coordination', () => {
   const probe = coreCapabilities();
   probe.result.limits.cross_worktree_coordination = true;
 
@@ -1093,6 +1091,28 @@ test('verifyCoreProbe refuses a probe whose cross_worktree_coordination contradi
 
   assert.equal(result.ok, false);
   assert.equal(result.error_code, 'core-protocol-error');
+});
+
+test('verifyCoreProbe accepts cross-worktree advisory claim visibility independently', () => {
+  const describe = structuredClone(SCENARIOS.base_dynamic);
+  describe.optional_features.claims = true;
+  const probe = coreCapabilities();
+  probe.result.operations.work_claim.supported = true;
+
+  const result = verifyCoreProbe(describe, probe);
+
+  assert.equal(result.ok, true);
+});
+
+test('version 2 advertises patch in the fixed core order and exact capability shape', () => {
+  assert.deepEqual(CORE_COMMAND_ORDER, [
+    'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
+  ]);
+  assert.deepEqual(coreCapabilities().result.operations.patch, {
+    supported: true,
+    write_scope: 'single-item',
+    cas_scope: 'exact-byte-sha256',
+  });
 });
 
 // Applies a `{ delete }` and/or `{ set: { path, value } }` fixture mutation
@@ -1197,7 +1217,7 @@ test('describeAdapter and verifyCoreProbe match the reference oracle on every ne
         const describe = {
           core: {
             required_core_contract_version: scenario.required_core_contract_version,
-            commands: ['capabilities', 'create', 'inspect', 'ready', 'transition', 'validate'],
+            commands: ['capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate'],
           },
           optional_features: { claims: false, policy: false },
         };

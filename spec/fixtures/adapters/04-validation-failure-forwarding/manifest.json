@@ -29,7 +29,7 @@
     },
     {
       "path": "expected-adapter-result.json",
-      "sha256": "sha256:97550c82e64859ecf356f4d46732d6cb03144232f3c51f6e767d45ae5bb1092e"
+      "sha256": "sha256:2d07591685aca35d38c385eb443cf43836d3d6d5429d9709b7f28832581ce830"
     },
     {
       "path": "expected-core-stdout.jsonl",
@@ -37,7 +37,7 @@
     },
     {
       "path": "invocation.json",
-      "sha256": "sha256:edc5900cc34dc228cec550a08694c4221332b5baab6a64caa46b960e2bd66565"
+      "sha256": "sha256:16c96706bd13127c9909ceb7d4face127be428a155c660b4d06a7c8576bd0b9d"
     },
     {
       "path": "ledger-bad.md",

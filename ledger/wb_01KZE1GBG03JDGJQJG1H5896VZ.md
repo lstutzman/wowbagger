@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZE1GBG03JDGJQJG1H5896VZ
 number: 26
 title: "Tell the caller that a created item lands in triage"

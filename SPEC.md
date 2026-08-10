@@ -59,13 +59,13 @@ directory produces `ledger-root-not-directory`. These root errors use the
 root's final path component as their machine-readable path and MUST be returned
 as validation output rather than an operational stderr failure.
 
-## 4. Schema version 1
+## 4. Schema versions 1 and 2
 
-The following frontmatter fields are part of schema version 1.
+The following frontmatter fields are common to schema versions 1 and 2.
 
 | Field | Required | Meaning |
 |---|---:|---|
-| schema_version | Yes | Integer 1 for this contract version. |
+| schema_version | Yes | Integer 1 or 2. Every item in one non-empty ledger MUST use the same version. |
 | id | Yes | Immutable primary identity using the canonical Wowbagger ULID form. |
 | title | Yes | Non-empty human-readable summary. |
 | kind | Yes | task or epic. |
@@ -73,8 +73,8 @@ The following frontmatter fields are part of schema version 1.
 | created | Yes | ISO calendar date of the ID timestamp in UTC. |
 | updated | Yes | ISO calendar date of the latest durable item change. |
 | provenance | Yes | Mapping with source and recorded_at fields. |
-| depends_on | Yes | List of currently live blocker IDs. |
-| related | No | List of non-blocking IDs, including satisfied former dependencies. Defaults to an empty list. |
+| depends_on | Yes | In schema 1, a list of currently live blocker IDs. In schema 2, a list of declared, unwaived prerequisite IDs. |
+| related | No | List of non-blocking IDs. Schema 1 completion moves satisfied former dependencies here. Schema 2 completion does not. Defaults to an empty list. |
 | parent | No | ID of an epic containing this item. |
 | snoozed_until | No | ISO calendar date. A future date temporarily removes a backlog task from readiness. |
 | priority | No | Non-negative integer supplied by a consumer policy. Lower values sort first; Wowbagger core does not calculate it. |
@@ -83,6 +83,12 @@ The following frontmatter fields are part of schema version 1.
 | killed | Conditional | ISO calendar date required only when status is killed. |
 | archived | Conditional | ISO calendar date required only when status is archived. |
 | decisions | Conditional | Sequence of durable decision records, each with action, date, summary, and rationale. A terminal item requires a matching terminal decision; an epic completion also requires structured rollup evidence. |
+
+A non-empty ledger MUST use one schema version. A validator MUST reject every
+item in a ledger that mixes schema versions 1 and 2. Schema version 2 changes
+dependency satisfaction and retention only. All other fields, lifecycle edges,
+relation-integrity rules, and evidence rules remain as defined below unless a
+rule explicitly distinguishes the versions.
 
 ### 4.1 Canonical identity
 
@@ -120,7 +126,7 @@ The canonical recorded_at representation is
 `YYYY-MM-DDTHH:MM:SS[.fraction]Z`: uppercase `T` and `Z`, a valid calendar date,
 hours 00 through 23, minutes and seconds 00 through 59, and an optional
 fractional-second component. Numeric offsets, including `+00:00`, and leap
-second value `60` are not accepted in schema version 1.
+second value `60` are not accepted in schema version 1 or 2.
 
 Consumers MAY add provenance subfields, but source and recorded_at remain
 mandatory. Provenance identifies where the durable item came from; it is not a
@@ -145,14 +151,15 @@ The triage gate is mandatory: a triage item MUST NOT be scored, selected as
 ready, or implicitly promoted. Only an explicit lifecycle transition may accept
 it into backlog.
 
-The allowed version 1 transitions are kind-specific:
+The allowed transitions are the same in schema versions 1 and 2. Their
+completion preconditions differ as shown below:
 
 | Item kind | From | Allowed targets | Required cleanup or evidence |
 |---|---|---|---|
 | task or epic | triage | backlog, killed | action: accept decision for backlog; action: kill decision and killed date for killed. |
 | task | backlog | in-progress, archived, killed | Archive or kill preconditions in section 6; matching terminal decision. |
-| task | in-progress | backlog, done, killed | depends_on MUST be empty before done; done or kill date and matching terminal decision. |
-| epic | backlog | done, archived, killed | depends_on MUST be empty before done; epic rollup preconditions below; archive or kill child-disposition preconditions in section 6; matching terminal decision. |
+| task | in-progress | backlog, done, killed | Before done, schema 1 depends_on MUST be empty and every schema 2 dependency target MUST be done; done or kill date and matching terminal decision. |
+| epic | backlog | done, archived, killed | Before done, schema 1 depends_on MUST be empty and every schema 2 dependency target MUST be done; epic rollup preconditions below; archive or kill child-disposition preconditions in section 6; matching terminal decision. |
 | task or epic | archived | backlog | Clear archived date and add an action: restore decision. |
 | task or epic | done or killed | none | Create a new item if work is reconsidered or discovered. |
 
@@ -166,13 +173,20 @@ status MUST clear every terminal date. Terminal-date invariants are strict:
 - archived requires archived and forbids completed and killed;
 - triage, backlog, and in-progress forbid completed, killed, and archived.
 
-Any task or epic MAY transition to done only when its depends_on list is already
-empty. A mutation MUST refuse completion while any dependency remains; it MUST
-NOT infer that a dependency was satisfied, replaced, or waived. Any replacement
-or waiver MUST be recorded explicitly before the completion attempt, and a
-replacement remains a blocker until it is separately resolved or waived. A
-validator MUST reject every persisted done item with a non-empty depends_on
-list.
+In schema version 1, any task or epic MAY transition to done only when its
+depends_on list is already empty. A validator MUST reject every persisted
+schema version 1 done item with a non-empty depends_on list.
+
+In schema version 2, a task or epic MAY transition to done only when every
+depends_on target has status done. The satisfied prerequisite IDs MUST remain
+in depends_on. A validator MUST accept that retained history and MUST reject a
+persisted schema version 2 done item when any dependency target does not have
+status done.
+
+In both versions, a mutation MUST NOT infer replacement or waiver. Any
+replacement or waiver MUST be recorded explicitly before the completion
+attempt, and a replacement remains a prerequisite until it is separately done
+or waived.
 
 An epic is a container regardless of status. An epic MUST NEVER enter
 in-progress, be dispatched, or be returned by a ready query. A backlog epic MAY
@@ -198,14 +212,19 @@ Killed and archived are intentionally different:
 
 No implementation may silently turn one into the other.
 
-## 6. Relations, dependency liveness, and safe terminalization
+## 6. Relations, prerequisite satisfaction, and safe terminalization
 
-The depends_on list contains only live blockers with status triage, backlog, or
-in-progress. Related items never block readiness.
+In schema version 1, depends_on contains only live blockers with status triage,
+backlog, or in-progress. When a dependency becomes done, a mutation-capable
+implementation MUST remove that ID from every affected dependent's depends_on
+list and append it to related if absent. That cleanup is part of the successful
+done transition.
 
-When a dependency becomes done, a mutation-capable implementation MUST remove
-that ID from every affected dependent's depends_on list and append it to related
-if absent. That cleanup is part of the successful done transition.
+In schema version 2, depends_on contains declared, unwaived prerequisites. A
+dependency is satisfied exactly when its target has status done. A satisfied
+prerequisite MUST remain in depends_on as typed history. Completion MUST NOT
+copy it to related. Targets with status triage, backlog, or in-progress remain
+live blockers. Related items never block readiness in either version.
 
 A mutation preflight MUST inspect every item whose depends_on contains the
 target, regardless of the referring item's own status. The explicit disposition
@@ -235,10 +254,10 @@ dependent disposition within its advertised atomic scope, or reject the whole
 operation and leave the ledger unchanged. This is not a claim of global
 atomicity across backends.
 
-An archived item MUST NOT remain an incoming prerequisite. Manual data in which
-a dependent still lists an archived item in depends_on is invalid, just as a
-done or killed prerequisite left in depends_on is invalid. The validator MUST
-fail closed; it MUST NOT silently make dependents ready.
+An archived or killed item MUST NOT remain an incoming prerequisite. A done
+item MUST NOT remain in schema version 1 depends_on, but it is the only
+satisfied schema version 2 dependency. The validator MUST fail closed on every
+other terminal dependency state; it MUST NOT silently make dependents ready.
 
 Before an epic transitions to killed or archived, the implementation MUST find
 every direct child with status triage, backlog, or in-progress. It MUST refuse
@@ -264,9 +283,11 @@ Validation MUST reject:
 
 - a dependency that does not resolve to an item in the complete ledger;
 - a self-dependency or dependency cycle;
-- a done or killed dependency left in depends_on;
+- a done dependency left in schema version 1 depends_on;
+- a killed dependency left in either schema version;
 - an archived dependency left in depends_on;
-- any done item with a non-empty depends_on list;
+- a schema version 1 done item with a non-empty depends_on list;
+- a schema version 2 done item whose depends_on contains a target that is not done;
 - a parent that does not resolve to an epic;
 - a parent equal to the item's own ID;
 - a containment cycle through parent references;
@@ -311,7 +332,8 @@ An item is ready only when all are true:
 1. kind is task;
 2. status is backlog;
 3. snoozed_until is absent or is on or before the evaluation date;
-4. depends_on is empty;
+4. schema version 1 depends_on is empty, or every schema version 2 depends_on
+   target has status done;
 5. every epic ancestor reached through parent has status backlog.
 
 The ready result sorts by:
@@ -347,11 +369,11 @@ the whole configured ledger, rather than returning a partial ready list, when
 it finds a structural error in any included item.
 
 At minimum, validation rejects malformed or missing frontmatter, duplicate IDs,
-unknown kind or status values, invalid dates or timestamps, an ID whose
+unsupported or mixed schema versions, unknown kind or status values, invalid dates or timestamps, an ID whose
 timestamp date disagrees with created, invalid provenance, missing required
 fields, invalid field types, impossible status-date combinations, unresolved
-relations, invalid parent targets, terminal or archived live dependencies, a
-done item with live dependencies, terminal epics with non-terminal children,
+relations, invalid parent targets, disallowed terminal dependencies, a done
+item with unsatisfied dependencies, terminal epics with non-terminal children,
 invalid or mismatched terminal decisions, dependency cycles, parent
 self-references, containment cycles, and invalid epic rollup evidence.
 
@@ -383,13 +405,16 @@ invalid work.
 
 ## 10. Capability boundary and local mutation contract
 
-The implemented version 1 core has no persisted work-claim or revision
-metadata, and ready does not resolve or exclude claims.
+Core mutation contracts 1 and 2 are defined. The shipped runtime emits version
+2; version 1 remains the frozen compatibility definition. Neither version adds
+work-claim or revision metadata to Markdown, and ready does not resolve or
+exclude claims.
 
 [docs/mutation-contract.md](docs/mutation-contract.md) specifies the
-implemented local backend for `capabilities`, inspect/revision, create, and
-lifecycle transition commands. Inspect parses, exposes, and hashes one raw byte
-buffer and returns a lossless base64 source alongside a normalized core view.
+implemented local backend for `capabilities`, inspect/revision, create,
+lifecycle transition, and patch commands. Inspect parses, exposes, and hashes
+one raw byte buffer and returns a lossless base64 source alongside a normalized
+core view.
 Create requires a caller-generated canonical ID and either publishes complete
 bytes with an atomic no-clobber primitive or fails unchanged. Revision is
 SHA-256 over exact item-file bytes; it is not added to frontmatter and YAML is
@@ -402,11 +427,21 @@ Any later backend MUST report a missing capability rather than pretending a
 local or Git write is globally atomic. Before transition publication the local
 backend validates the complete one-item proposed ledger and refuses every
 required dependent cleanup or child disposition when it lacks multi-item
-atomicity. The current local backend reports work claims unsupported. A future
+atomicity when the selected schema requires such cleanup. The current local
+backend may expose advisory claim visibility through the Git common directory.
+That capability is reported only under `operations.work_claim`; it does not
+widen the fixed same-working-copy mutation scope, cross-worktree mutation
+coordination remains false, and publication is not fenced. A future fenced
 claim backend MUST implement the separate [fenced work-claim
 contract](docs/work-claim-contract.md) and [ADR
 0004](docs/adr/0004-fenced-work-claim-protocol.md); it MUST NOT add claim state
-to schema version 1 Markdown merely because that backend can coordinate it.
+to schema version 1 or 2 Markdown merely because that backend can coordinate it.
+
+Contract version 2 accepts a uniformly schema-1 or uniformly schema-2 ledger
+and rejects a mixture. Schema version 2 uses the prerequisite satisfaction and
+retention rules in sections 5 through 7. Migrating this repository's live
+ledger is a separate quiesced operation and is not part of publishing the
+transport contract.
 
 The command contract distinguishes immutable-ID collision from an unrelated
 item or valid directory occupying the default creation path. It also defines a

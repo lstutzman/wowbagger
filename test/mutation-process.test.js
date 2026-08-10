@@ -58,6 +58,42 @@ test('two create processes leave one complete item and no temporary or lock file
   });
 });
 
+test('create selects the schema version for every valid ledger state', async () => {
+  const seedId = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
+  const cases = [
+    { name: 'empty ledger', files: {}, expectedSchemaVersion: 1 },
+    {
+      name: 'schema version 1 ledger',
+      files: { [`${seedId}.md`]: schemaSeed(seedId, 1) },
+      expectedSchemaVersion: 1,
+    },
+    {
+      name: 'schema version 2 ledger',
+      files: { [`${seedId}.md`]: schemaSeed(seedId, 2) },
+      expectedSchemaVersion: 2,
+    },
+  ];
+
+  for (const scenario of cases) {
+    await withLedger(scenario.files, async (ledger) => {
+      const requestPath = path.join(path.dirname(ledger), 'create.json');
+      await writeFile(requestPath, JSON.stringify(createRequest(CREATE_ID, '')));
+
+      const result = await runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+      const output = parseOutput(result);
+
+      assert.equal(result.status, 0, `${scenario.name}: ${result.stdout}`);
+      assert.equal(output.result.item.core.schema_version, scenario.expectedSchemaVersion, scenario.name);
+      assert.match(
+        await readFile(path.join(ledger, `${CREATE_ID}.md`), 'utf8'),
+        new RegExp(`^schema_version: ${scenario.expectedSchemaVersion}$`, 'm'),
+        scenario.name,
+      );
+      await assertNoOwnArtifacts(ledger);
+    });
+  }
+});
+
 test('a stale transition snapshot cannot overwrite the committed successor', async () => {
   const source = await fixtureText('transition-success/before.md');
   const request = JSON.parse(await fixtureText('transition-success/request.json'));
@@ -165,6 +201,201 @@ test('a terminal lifecycle change requiring dependent cleanup remains a no-write
   });
 });
 
+test('a schema version 2 done transition changes only the target when a dependent names it', async () => {
+  const targetId = 'wb_01Q4JTHP40ZVEBN63PAGS11ZPW';
+  const dependentId = 'wb_01Q4M9YB0004HMASW9NF6YY093';
+  const target = `---
+schema_version: 2
+id: ${targetId}
+title: "Complete the prerequisite"
+kind: task
+status: in-progress
+created: 2030-01-15
+updated: 2030-01-15
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-15T13:00:00Z"
+depends_on: []
+related: []
+---
+`;
+  const dependent = `---
+schema_version: 2
+id: ${dependentId}
+title: "Keep declared prerequisite history"
+kind: task
+status: backlog
+created: 2030-01-16
+updated: 2030-01-16
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-16T14:00:00Z"
+depends_on: [${targetId}]
+related: []
+---
+`;
+
+  await withLedger({ [`${targetId}.md`]: target, [`${dependentId}.md`]: dependent }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: `sha256:${createHash('sha256').update(target).digest('hex')}`,
+      to_status: 'done',
+      date: '2030-01-17',
+      decision: {
+        summary: 'Complete the prerequisite.',
+        rationale: 'Dependents retain satisfied prerequisite history.',
+      },
+    }));
+
+    const result = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = parseOutput(result);
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'committed');
+    assert.equal(output.result.item.core.status, 'done');
+    assert.equal(await readFile(path.join(ledger, `${dependentId}.md`), 'utf8'), dependent);
+    assert.deepEqual(output.result.item.core.related, []);
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('a schema version 2 done transition retains its satisfied prerequisites', async () => {
+  const prerequisiteId = 'wb_01Q4G4Q3G0207EXVQEXVQEXVQE';
+  const targetId = 'wb_01Q4JTHP40ZVEBN63PAGS11ZPW';
+  const prerequisite = `---
+schema_version: 2
+id: ${prerequisiteId}
+title: "Completed prerequisite"
+kind: task
+status: done
+created: 2030-01-14
+updated: 2030-01-15
+completed: 2030-01-15
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-14T12:00:00Z"
+depends_on: []
+related: []
+decisions:
+  - action: complete
+    date: 2030-01-15
+    summary: "Complete the prerequisite."
+    rationale: "The prerequisite evidence is complete."
+---
+`;
+  const target = `---
+schema_version: 2
+id: ${targetId}
+title: "Complete dependent work"
+kind: task
+status: in-progress
+created: 2030-01-15
+updated: 2030-01-15
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-15T13:00:00Z"
+depends_on: [${prerequisiteId}]
+related: []
+---
+`;
+
+  await withLedger({
+    [`${prerequisiteId}.md`]: prerequisite,
+    [`${targetId}.md`]: target,
+  }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: `sha256:${createHash('sha256').update(target).digest('hex')}`,
+      to_status: 'done',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Complete the dependent work.',
+        rationale: 'Every declared prerequisite is done.',
+      },
+    }));
+
+    const result = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = parseOutput(result);
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.state, 'committed');
+    assert.equal(output.result.item.core.status, 'done');
+    assert.deepEqual(output.result.item.core.depends_on, [prerequisiteId]);
+    assert.equal(await readFile(path.join(ledger, `${prerequisiteId}.md`), 'utf8'), prerequisite);
+    assert.match(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), new RegExp(`^depends_on: \\[\\s*${prerequisiteId}\\s*\\]$`, 'm'));
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('a schema version 2 done transition refuses a live prerequisite', async () => {
+  const prerequisiteId = 'wb_01Q4G4Q3G0207EXVQEXVQEXVQE';
+  const targetId = 'wb_01Q4JTHP40ZVEBN63PAGS11ZPW';
+  const prerequisite = `---
+schema_version: 2
+id: ${prerequisiteId}
+title: "Live prerequisite"
+kind: task
+status: backlog
+created: 2030-01-14
+updated: 2030-01-14
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-14T12:00:00Z"
+depends_on: []
+related: []
+---
+`;
+  const target = `---
+schema_version: 2
+id: ${targetId}
+title: "Blocked completion"
+kind: task
+status: in-progress
+created: 2030-01-15
+updated: 2030-01-15
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-15T13:00:00Z"
+depends_on: [${prerequisiteId}]
+related: []
+---
+`;
+
+  await withLedger({
+    [`${prerequisiteId}.md`]: prerequisite,
+    [`${targetId}.md`]: target,
+  }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: targetId,
+      expected_revision: `sha256:${createHash('sha256').update(target).digest('hex')}`,
+      to_status: 'done',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Attempt blocked completion.',
+        rationale: 'The live prerequisite must prevent completion.',
+      },
+    }));
+
+    const result = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = parseOutput(result);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.error.code, 'transition-precondition-failed');
+    assert.deepEqual(output.error.details.issues, [{
+      code: 'live-dependencies',
+      field: 'depends_on',
+      message: 'Completion requires every depends_on target to be done.',
+      related_ids: [prerequisiteId],
+    }]);
+    assert.equal(await readFile(path.join(ledger, `${prerequisiteId}.md`), 'utf8'), prerequisite);
+    assert.equal(await readFile(path.join(ledger, `${targetId}.md`), 'utf8'), target);
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
 test('a completed writer never removes a successor writer lock during repeated handoff', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
   for (let iteration = 0; iteration < 12; iteration += 1) {
@@ -240,6 +471,10 @@ depends_on: []
 related: []
 ---
 `;
+}
+
+function schemaSeed(id, schemaVersion) {
+  return triageSource(id).replace('schema_version: 1', `schema_version: ${schemaVersion}`);
 }
 
 function runCli(...argumentsList) {

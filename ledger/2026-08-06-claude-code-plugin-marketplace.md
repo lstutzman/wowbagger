@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZBT43RZSKMG8Z19RQQ43DDR
 number: 22
 title: "Publish wowbagger as a Claude Code plugin on the marketplace"

@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00YP7ZXJAKKGENZYHH
 number: 37
 title: "Validate the adapter under concurrent invokes"

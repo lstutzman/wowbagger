@@ -3,7 +3,7 @@
     {
       "id": "read-launch-failed",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-launch", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-launch", "command": "ready",
         "process": { "started": false, "process_tree_contained": true, "orphaned": false, "exit_code": null, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "", "stderr_base64": "" }
       },
       "expected_code": "core-launch-failed", "expected_mutation_outcome": null
@@ -11,7 +11,7 @@
     {
       "id": "read-observation-incomplete",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-observation", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-observation", "command": "ready",
         "process": { "started": true, "process_tree_contained": false, "orphaned": false, "exit_code": 0, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=", "stderr_base64": "" }
       },
       "expected_code": "core-observation-incomplete", "expected_mutation_outcome": null
@@ -19,7 +19,7 @@
     {
       "id": "mutation-timeout-complete",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-timeout", "command": "transition",
+        "adapter_contract_version": 2, "request_id": "mutation-timeout", "command": "transition",
         "item_id": "wb_01KDWPVNG00000000000000000", "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": null, "signal": null, "timed_out": true, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJvayI6dHJ1ZX0K", "stderr_base64": "" }
       },
@@ -28,7 +28,7 @@
     {
       "id": "mutation-signal-complete",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-signal", "command": "create",
+        "adapter_contract_version": 2, "request_id": "mutation-signal", "command": "create",
         "item_id": "wb_01KDWPVNG00000000000000001", "expected_revision": null,
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": null, "signal": "runner-terminated", "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJvayI6dHJ1ZX0K", "stderr_base64": "" }
       },
@@ -37,7 +37,7 @@
     {
       "id": "mutation-missing-envelope",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-envelope", "command": "create",
+        "adapter_contract_version": 2, "request_id": "mutation-envelope", "command": "create",
         "item_id": "wb_01KDWPVNG00000000000000002", "expected_revision": null,
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": 0, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "", "stderr_base64": "" }
       },
@@ -46,7 +46,7 @@
     {
       "id": "mutation-stdout-truncated",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-stdout", "command": "create",
+        "adapter_contract_version": 2, "request_id": "mutation-stdout", "command": "create",
         "item_id": "wb_01KDWPVNG00000000000000003", "expected_revision": null,
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": 0, "signal": null, "timed_out": false, "stdout_complete": false, "stderr_complete": true, "stdout_base64": "ew==", "stderr_base64": "" }
       },
@@ -55,7 +55,7 @@
     {
       "id": "mutation-stderr-truncated",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-stderr", "command": "transition",
+        "adapter_contract_version": 2, "request_id": "mutation-stderr", "command": "transition",
         "item_id": "wb_01KDWPVNG00000000000000000", "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": 0, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": false, "stdout_base64": "eyJvayI6dHJ1ZX0K", "stderr_base64": "" }
       },
@@ -64,7 +64,7 @@
     {
       "id": "read-timeout",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-timeout", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-timeout", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": null, "signal": "runner-timeout", "timed_out": true, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=", "stderr_base64": "" }
       },
       "expected_code": "core-timeout", "expected_mutation_outcome": null
@@ -72,7 +72,7 @@
     {
       "id": "read-signal",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-signal", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-signal", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": null, "signal": "runner-terminated", "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=", "stderr_base64": "" }
       },
       "expected_code": "core-signaled", "expected_mutation_outcome": null
@@ -80,7 +80,7 @@
     {
       "id": "read-missing-envelope",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-envelope", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-envelope", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": 0, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "", "stderr_base64": "" }
       },
       "expected_code": "core-protocol-error", "expected_mutation_outcome": null
@@ -88,7 +88,7 @@
     {
       "id": "read-stdout-truncated",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-stdout", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-stdout", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": 0, "signal": null, "timed_out": false, "stdout_complete": false, "stderr_complete": true, "stdout_base64": "ew==", "stderr_base64": "" }
       },
       "expected_code": "output-limit-exceeded", "expected_mutation_outcome": null
@@ -96,7 +96,7 @@
     {
       "id": "read-stderr-truncated",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-stderr", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-stderr", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": 0, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": false, "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=", "stderr_base64": "" }
       },
       "expected_code": "output-limit-exceeded", "expected_mutation_outcome": null
@@ -104,7 +104,7 @@
     {
       "id": "read-null-exit",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-null-exit", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-null-exit", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": null, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=", "stderr_base64": "" }
       },
       "expected_code": "core-observation-incomplete", "expected_mutation_outcome": null
@@ -112,7 +112,7 @@
     {
       "id": "mutation-null-exit",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-null-exit", "command": "create",
+        "adapter_contract_version": 2, "request_id": "mutation-null-exit", "command": "create",
         "item_id": "wb_01KDWPVNG00000000000000004", "expected_revision": null,
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": null, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJvayI6dHJ1ZX0K", "stderr_base64": "" }
       },
@@ -121,7 +121,7 @@
     {
       "id": "read-missing-exit",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-missing-exit", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-missing-exit", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=", "stderr_base64": "" }
       },
       "expected_code": "core-observation-incomplete", "expected_mutation_outcome": null
@@ -129,7 +129,7 @@
     {
       "id": "mutation-missing-exit",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-missing-exit", "command": "create",
+        "adapter_contract_version": 2, "request_id": "mutation-missing-exit", "command": "create",
         "item_id": "wb_01KDWPVNG00000000000000005", "expected_revision": null,
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJvayI6dHJ1ZX0K", "stderr_base64": "" }
       },
@@ -138,7 +138,7 @@
     {
       "id": "read-invalid-exit",
       "request": {
-        "adapter_contract_version": 1, "request_id": "read-invalid-exit", "command": "ready",
+        "adapter_contract_version": 2, "request_id": "read-invalid-exit", "command": "ready",
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": "0", "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=", "stderr_base64": "" }
       },
       "expected_code": "core-observation-incomplete", "expected_mutation_outcome": null
@@ -146,7 +146,7 @@
     {
       "id": "mutation-invalid-exit",
       "request": {
-        "adapter_contract_version": 1, "request_id": "mutation-invalid-exit", "command": "create",
+        "adapter_contract_version": 2, "request_id": "mutation-invalid-exit", "command": "create",
         "item_id": "wb_01KDWPVNG00000000000000006", "expected_revision": null,
         "process": { "started": true, "process_tree_contained": true, "orphaned": false, "exit_code": "0", "signal": null, "timed_out": false, "stdout_complete": true, "stderr_complete": true, "stdout_base64": "eyJvayI6dHJ1ZX0K", "stderr_base64": "" }
       },

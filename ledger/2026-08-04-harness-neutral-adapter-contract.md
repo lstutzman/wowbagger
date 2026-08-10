@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZ77NSW8CG8NMNZ726CFKWQE
 number: 6
 title: "Define the harness-neutral adapter contract"

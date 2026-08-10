@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00F59S35P71X9JGGB6
 number: 41
 title: "Fix the adapter defects three reviews confirmed"

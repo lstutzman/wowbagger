@@ -27,6 +27,6 @@
     { "id": "approval-binding-extra-field-is-refused", "type": "approval-schema", "scenario": "binding-extra" }
   ],
   "artifacts": [
-    { "path": "scenarios.json", "sha256": "sha256:a5edd53483bac72af72d74f80d9147292a7e0eb2e0bb5f22a8f0ae11b842923d" }
+    { "path": "scenarios.json", "sha256": "sha256:4dc0bda925eabe043fa7b08ecbec283c25b8c0b18a248cf8a8dc566274459810" }
   ]
 }

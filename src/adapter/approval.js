@@ -122,7 +122,9 @@ export function verifyTrustedApproval({
 }
 
 export function verifyMutationAuthority({ command, approval, approvalOptions }) {
-  if (command !== 'create' && command !== 'transition') return { ok: true, authority: [] };
+  if (command !== 'create' && command !== 'transition' && command !== 'patch') {
+    return { ok: true, authority: [] };
+  }
   if (approval === null || approval === undefined) {
     return refuse('consumer-approval-required', { command });
   }

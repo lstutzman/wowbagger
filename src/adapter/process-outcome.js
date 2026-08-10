@@ -1,5 +1,5 @@
 import { normalizeJsonValue, parseJsonRequest } from '../request.js';
-import { CORE_COMMAND_ORDER, verifyCoreProbe } from './core-probe.js';
+import { CORE_COMMAND_ORDER, CORE_CONTRACT_VERSION, verifyCoreProbe } from './core-probe.js';
 import { hasExactMembers, isNonNegativeSafeInteger } from './schema-helpers.js';
 
 const MESSAGES = Object.freeze({
@@ -67,7 +67,7 @@ function coreEnvelope(process, command) {
       && (value.valid ? process.exit_code === 0 : process.exit_code === 1);
   } else if (command === 'capabilities') {
     valid = verifyCoreProbe({
-      core: { required_core_contract_version: 1, commands: [...CORE_COMMAND_ORDER] },
+      core: { required_core_contract_version: CORE_CONTRACT_VERSION, commands: [...CORE_COMMAND_ORDER] },
       optional_features: {
         claims: value?.result?.operations?.work_claim?.supported === true,
         policy: false,
@@ -126,7 +126,7 @@ export function mapProcessOutcome({
   process,
 }) {
   const base = { ok: false, adapter_contract_version: adapterContractVersion, request_id: requestId };
-  const mutation = command === 'create' || command === 'transition';
+  const mutation = command === 'create' || command === 'transition' || command === 'patch';
   const issue = observationIssue(process);
   if (issue) {
     if (mutation && process?.started !== false) {

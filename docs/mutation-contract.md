@@ -1,15 +1,33 @@
 # Local mutation contract
 
-Status: implemented by the pre-alpha standalone local-filesystem runtime.
+Status: versions 1 and 2 are defined; the pre-alpha standalone
+local-filesystem runtime currently emits version 2.
 
 This document defines the machine contract implemented by the local-filesystem
 mutation backend. It supplements [SPEC.md](../SPEC.md) and
 [ADR 0003](adr/0003-local-mutation-and-cas.md); it does not relax schema version
-1 lifecycle invariants.
+1 or 2 lifecycle invariants.
 
 The executable supports `validate`, `ready`, and the commands below. Clients
 must still call `capabilities` and honor its advertised limits before assuming a
 backend can provide a particular write guarantee.
+
+## Contract versions
+
+Version 1 remains the frozen contract described by the version 1 envelopes and
+capability example below. Version 2 retains every version 1 request, response,
+state, exit, locking, CAS, publication, and recovery rule except for these
+explicit deltas:
+
+- every core command envelope in this contract carries `contract_version: 2`;
+- one non-empty ledger may use schema version 1 or schema version 2, but never a
+  mixture;
+- the capability envelope uses the fixed local mutation scope described in
+  section 4 and advertises `patch`; and
+- adapter contract version 2 may invoke `patch` as an approved mutation.
+
+The bootstrap wire, work-claim API, adapter approval, instruction, handoff, and
+fixture-format versions are separate version domains and remain version 1.
 
 ## 1. Scope
 
@@ -21,10 +39,12 @@ The contract keeps four concerns separate:
 - transition changes one existing item through a guarded lifecycle edge; and
 - patch changes one existing item's caller-supplied fields (section 9).
 
-Work claiming is unsupported. A write lock protects a short mutation attempt;
-it is not a claim, assignment, lease, or reservation. The separate [fenced
-work-claim contract](work-claim-contract.md) defines a future backend protocol;
-it does not add a member or guarantee to these version 1 requests.
+Fenced work claiming is unsupported. Advisory claims may be visible through a
+Git common directory, but they do not protect publication or coordinate a
+mutation. A write lock protects a short mutation attempt; it is not a claim,
+assignment, lease, or reservation. The separate [fenced work-claim
+contract](work-claim-contract.md) defines a future backend protocol; it does
+not add a fencing guarantee to either mutation-contract version.
 
 If a future backend advertises safely fenced claims while retaining these
 legacy entry points, it must run them through the same coordinator: transition
@@ -38,8 +58,15 @@ ledger directory in one working copy. It does not coordinate clones, worktrees,
 machines, hostile or non-cooperating writers, or Git operations. Its write
 scope is one Markdown item and it has no multi-item atomicity.
 
-Schema version 1 remains canonical Markdown. Revision and lock data are
-transport state and are not persisted in item frontmatter.
+Schema versions 1 and 2 remain canonical Markdown. One non-empty ledger must
+use one schema version; complete-ledger validation rejects a mixture. Revision
+and lock data are transport state and are not persisted in item frontmatter.
+
+Validation and ready selection use the versioned semantics in SPEC.md. Schema
+version 1 ready tasks have an empty depends_on list. Schema version 2 ready
+tasks may retain declared prerequisites, but every target must have status
+done. These schema rules do not change the version 1 request or response
+envelopes in this document.
 
 ## 2. Commands and transport
 
@@ -90,7 +117,7 @@ A successful read-only command has exactly:
 }
 ~~~
 
-A successful create or transition adds state:
+A successful create, transition, or patch adds state:
 
 ~~~json
 {
@@ -117,7 +144,7 @@ A read-only error has exactly:
 }
 ~~~
 
-Every create or transition error has a state member:
+Every create, transition, or patch error has a state member:
 
 ~~~json
 {
@@ -279,6 +306,28 @@ members above. This is the one input to `capabilities`, so the response is
 deterministic for a given working directory but not fixed across working
 directories.
 
+### Contract version 2 capability delta
+
+The preceding JSON and three-member Git-dependent coupling remain the exact
+version 1 definition. Version 2 changes only the following capability paths;
+all omitted paths retain their version 1 values:
+
+| Path | Version 2 value |
+|---|---|
+| `contract_version` | `2` |
+| `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
+| `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
+| `result.limits.cross_worktree_coordination` | `false` |
+
+`result.operations.work_claim.supported` remains independently derived from
+Git-common-directory discovery: it is `true` when advisory claims are visible
+there and `false` otherwise. That member does not elevate the fixed mutation
+scope. In particular, version 2 keeps
+`transition.write_scope: "single-item"`,
+`transition.cas_scope: "exact-byte-sha256"`, and
+`limits.multi_item_atomicity: false`. Claim visibility across worktrees is an
+`operations.work_claim` fact, never cross-worktree mutation coordination.
+
 Because capabilities takes no ledger content and does not write, it still
 cannot prove that a particular filesystem supports the required atomic
 no-clobber publication primitive. Create probes or attempts that primitive for
@@ -328,13 +377,13 @@ and body. Every frontmatter field is read from core. id is the single member
 present at both levels, because the item level must identify the resource it
 addresses; no other frontmatter field is promoted, and none will be.
 
-core contains only schema version 1 fields:
+core contains only fields defined by supported item schema versions:
 
 - schema_version, id, title, kind, status, created, updated;
 - provenance.source and provenance.recorded_at;
 - depends_on and related;
 - optional parent, snoozed_until, completed, killed, archived;
-- optional number and priority, the caller-supplied schema version 1 fields;
+- optional number and priority, the caller-supplied schema fields;
   and
 - decisions with only their defined action, date, summary, rationale, and
   optional rollup id/status members.
@@ -446,15 +495,15 @@ Create accepts exactly:
 |---|---:|---|
 | id | Yes | Caller-generated canonical Wowbagger ULID. |
 | item | Yes | Frontmatter draft mapping. |
-| item.title | Yes | Non-empty schema version 1 string. |
+| item.title | Yes | Non-empty schema string. |
 | item.kind | Yes | task or epic. |
 | item.provenance | Yes | Valid required provenance; extension members are preserved. |
 | item.depends_on | Yes | Valid relation list. |
 | item.related | No | Valid relation list; omitted means empty. |
 | item.parent | No | Valid epic ID. |
 | item.snoozed_until | No | Valid ISO calendar date. |
-| item.number | No | Positive integer; the caller-supplied schema version 1 handle. |
-| item.priority | No | Non-negative integer; the caller-supplied schema version 1 priority. |
+| item.number | No | Positive integer; the caller-supplied schema handle. |
+| item.priority | No | Non-negative integer; the caller-supplied schema priority. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
@@ -474,9 +523,11 @@ prints a canonical ID for now, `--date` selects another creation date, and
 shelling out.
 
 item must not supply schema_version, id, status, created, updated, completed,
-killed, archived, decisions, or body. Create inserts schema_version 1, status
-triage, created and updated equal to the UTC date encoded by id, and related []
-when omitted. It adds no terminal date or decision.
+killed, archived, decisions, or body. For a non-empty valid ledger, create
+inserts the schema_version already used by every existing item. For an empty
+ledger, it inserts schema_version 1. Create also inserts status triage, created
+and updated equal to the UTC date encoded by id, and related [] when omitted.
+It adds no terminal date or decision.
 
 The candidate complete ledger must validate before publication. After the
 requested-ID lock and locked revalidation, create applies this collision
@@ -632,7 +683,8 @@ which must already be done or killed, ordered by immutable ID.
 
 No other edge is supported. Epics never enter in-progress; done and killed
 items do not reopen; and transition cannot edit identity, title, relations,
-parent, snooze, body, or extension fields.
+parent, snooze, body, or extension fields. A schema version 2 done transition
+therefore retains the target's depends_on and related lists unchanged.
 
 ### Lossless preservation
 
@@ -665,7 +717,10 @@ validates it completely before publication.
 Every item whose depends_on contains the target is considered when the target
 would become done, killed, or archived, regardless of the referring item's own
 status. Every direct child is considered for an epic transition. The backend
-does not limit relation checks to ready or non-terminal referring items.
+does not limit relation checks to ready or non-terminal referring items. For a
+schema version 2 done transition, incoming depends_on references become
+satisfied and remain in place; they do not require another item mutation and
+do not create a multi-item blocker.
 
 ### Deterministic precondition issues
 
@@ -692,6 +747,13 @@ live-dependencies, or nonterminal-children. related_ids are unique immutable IDs
 sorted ascending. Issues sort by code, then field, then their related ID
 sequence. Date checks are all reported: a date earlier than both created and
 updated produces both date issues.
+
+For a schema version 1 done transition, any non-empty depends_on list produces
+live-dependencies and related_ids contains the complete list. For a schema
+version 2 done transition, only targets whose status is not done produce
+live-dependencies, and related_ids contains only those unsatisfied prerequisite
+IDs. A successful schema version 2 done transition retains every satisfied ID
+in depends_on and does not append it to related.
 
 ### Deterministic multi-item refusal
 
@@ -721,7 +783,7 @@ Blocker codes are:
 
 | Code | Condition |
 |---|---|
-| dependent-cleanup | A done target is still present in another item's depends_on, regardless of that item's status. |
+| dependent-cleanup | Schema version 1 only: a done target is still present in another item's depends_on, regardless of that item's status. Schema version 2 keeps this reference as satisfied prerequisite history and does not produce this blocker. |
 | dependent-disposition | A killed or archived target is still present in another item's depends_on, regardless of that item's status. |
 | child-disposition | A killed or archived epic has a direct triage, backlog, or in-progress child. |
 
@@ -779,8 +841,8 @@ operation without universal crash durability or hostile-writer protection.
 
 ## 9. Patch
 
-Patch changes the caller-supplied schema version 1 fields of one existing
-item — nothing else. It runs under the same per-ID lock, locked re-read,
+Patch changes the caller-supplied fields common to schema versions 1 and 2 of
+one existing item — nothing else. It runs under the same per-ID lock, locked re-read,
 exact-byte revision compare-and-swap, candidate complete-ledger validation,
 and atomic same-path publication protocol as transition (section 6), and it
 shares transition's envelopes, exits, and recovery rules except where this
@@ -837,9 +899,12 @@ extension nodes are preserved exactly as in transition.
 The version 1 capabilities envelope and the version 1 adapter core probe do
 not advertise patch. Their operation and command lists are pinned by the
 version 1 adapter contract, so widening them is an adapter contract version
-change, tracked as its own ledger item. The fail-closed direction is
-preserved: nothing advertises a capability that does not exist, and
-automation that plans from capabilities alone simply does not use patch.
+change. Version 2 makes that change: its capability envelope includes the exact
+`operations.patch` member from section 4 and adapter contract version 2 inserts
+`patch` between `inspect` and `ready` in the fixed core-command order. The
+fail-closed direction is preserved: a version 1 consumer never sees the wider
+surface, and automation that plans from version 1 capabilities does not use
+patch.
 
 ## 10. Errors, artifacts, and recovery
 
@@ -904,8 +969,8 @@ operation-failed is a mutation-only error. operation is exactly one of:
 reason is exactly retry-limit-exhausted, io-error, or verification-failed.
 retry-limit-exhausted is used only with lock-closure. verification-failed is
 used only when verification proves the expected publication is absent for
-create or proves the original bytes remain for transition. All other handled
-filesystem failures use io-error. Platform exception text, errno names,
+create or proves the original bytes remain for transition or patch. All other
+handled filesystem failures use io-error. Platform exception text, errno names,
 numeric OS error codes, and absolute paths are not members of the normative
 JSON envelope and cannot alter operation or reason.
 
@@ -916,8 +981,8 @@ response:
 
 - exact expected final bytes produce state committed; a remaining verify or
   cleanup problem is post-commit-recovery-required;
-- proven absence for create or exact original bytes for transition produce
-  operation-failed with state unchanged, operation publish or
+- proven absence for create or exact original bytes for transition or patch
+  produce operation-failed with state unchanged, operation publish or
   verify-publication as applicable, and reason io-error or
   verification-failed as applicable; and
 - unreadable, different, or otherwise indeterminate final bytes produce
@@ -944,9 +1009,11 @@ The matrix covers capability honesty; lossless inspect and failure envelopes;
 caller-known create identity, file/stdin equivalence, strict input, ID and path
 collision, candidate validation, body boundaries, publication limitation and
 recovery outcomes; transition revision, locking, date monotonicity, lifecycle
-edges, all three multi-item reasons, terminal referrers, combined blockers,
+edges, the schema version 1 dependent-cleanup blocker and the other two
+multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
-unchanged/committed/unknown states.
+unchanged/committed/unknown states; and patch field boundaries, CAS,
+serialization, and preconditions.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.

@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00VK34CWW9CVSN225F
 number: 45
 title: "Settle whether the backend coordinates worktrees"

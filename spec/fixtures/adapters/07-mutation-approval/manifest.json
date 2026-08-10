@@ -31,15 +31,15 @@
     },
     {
       "path": "approved-authority.json",
-      "sha256": "sha256:372eb7d552da0fb30bf94eb952c027139ccb14c8ea2da2e2ed7c6725fbf16af9"
+      "sha256": "sha256:11af6e2a749416f68284312c33506c5f73ce85f9ffbc31cfbf1ce83aadcb2184"
     },
     {
       "path": "expected-refusal.json",
-      "sha256": "sha256:6b1cf779c9244e72bc3ab4bfcc2782092e5e72c5483e1b2e0d7ab20b2e0b7b51"
+      "sha256": "sha256:0fff2ab69ff66357fbcff83a64e67f877b4df537bd749d894246cdb15e26cf55"
     },
     {
       "path": "invocation.json",
-      "sha256": "sha256:bc962c82afe5e275b52b04d01e5d48a8d02fd7924c95ae6611bc3289499f4857"
+      "sha256": "sha256:14623795a4c0df5eb5ec5058362b4389d55227e47475e475ab9f44adad634dc6"
     }
   ]
 }

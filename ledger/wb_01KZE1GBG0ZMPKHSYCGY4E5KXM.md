@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZE1GBG0ZMPKHSYCGY4E5KXM
 number: 30
 title: "Give the ledger a way to express priority"

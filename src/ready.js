@@ -1,3 +1,5 @@
+import { isDependencySatisfied } from './dependencies.js';
+
 export function selectReady(items, asOf) {
   const byId = new Map(items.map((item) => [item.data.id, item]));
   const ancestorsBacklogById = new Map();
@@ -37,8 +39,15 @@ function isReady(item, byId, ancestorsBacklogById, asOf) {
     && data.status === 'backlog'
     && (!data.snoozed_until || data.snoozed_until <= asOf)
     && Array.isArray(data.depends_on)
-    && data.depends_on.length === 0
+    && dependenciesAreSatisfied(data, byId)
     && ancestorsAreBacklog(data, byId, ancestorsBacklogById);
+}
+
+function dependenciesAreSatisfied(data, byId) {
+  if (data.schema_version === 1) {
+    return data.depends_on.length === 0;
+  }
+  return data.depends_on.every((id) => isDependencySatisfied(byId.get(id)?.data.status));
 }
 
 function ancestorsAreBacklog(data, byId, ancestorsBacklogById) {

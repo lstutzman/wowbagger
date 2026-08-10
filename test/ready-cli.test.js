@@ -51,6 +51,89 @@ test('validate prints the canonical valid-ledger result', () => {
   });
 });
 
+test('ready selects schema version 2 tasks only when every prerequisite is done', async () => {
+  await withLedger({
+    'done.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Done prerequisite"
+kind: task
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+completed: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: complete
+    date: 2026-01-02
+    summary: "Complete the prerequisite."
+    rationale: "The work is complete."
+---
+`,
+    'ready.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Ready dependent"
+kind: task
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
+---
+`,
+    'live.md': `---
+schema_version: 2
+id: wb_01KE1VN3G0HV9ZDBB8BEASXBBG
+title: "Live prerequisite"
+kind: task
+status: in-progress
+created: 2026-01-03
+updated: 2026-01-03
+provenance:
+  source: "test"
+  recorded_at: "2026-01-03T12:00:00Z"
+depends_on: []
+---
+`,
+    'blocked.md': `---
+schema_version: 2
+id: wb_01KE4E1TG0ZEEX37TTS82ME1JK
+title: "Blocked dependent"
+kind: task
+status: backlog
+created: 2026-01-04
+updated: 2026-01-04
+provenance:
+  source: "test"
+  recorded_at: "2026-01-04T12:00:00Z"
+depends_on: [wb_01KE1VN3G0HV9ZDBB8BEASXBBG]
+---
+`,
+  }, async (temporaryLedger) => {
+    const result = runCli(
+      'ready',
+      '--ledger',
+      temporaryLedger,
+      '--as-of',
+      '2030-01-15',
+      '--json',
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      as_of: '2030-01-15',
+      valid: true,
+      ready: ['wb_01KDZ98CG0YH769STZ754EKXSZ'],
+    });
+  });
+});
+
 test('ready surfaces validation failure without a partial ready list', () => {
   const result = spawnSync(
     process.execPath,

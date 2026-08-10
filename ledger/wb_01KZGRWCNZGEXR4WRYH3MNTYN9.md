@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZGRWCNZGEXR4WRYH3MNTYN9
 number: 36
 title: "Give the CLI --help and --version surfaces"

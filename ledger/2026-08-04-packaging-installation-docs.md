@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZ77NSW8TWW2KWJANZ2TC837
 number: 11
 title: "Package Wowbagger and document installation"

@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZ77NSW8PNA4S48NYT26AGMH
 number: 9
 title: "Deliver standalone Wowbagger v0"

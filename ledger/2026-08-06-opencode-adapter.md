@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZBT44T4EFEJH07G1AB07A1Y
 number: 24
 title: "Deliver the opencode adapter"

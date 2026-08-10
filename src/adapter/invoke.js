@@ -1,4 +1,4 @@
-import { describeAdapter } from './describe.js';
+import { ADAPTER_CONTRACT_VERSION, describeAdapter } from './describe.js';
 import { createHash } from 'node:crypto';
 import { verifyMutationAuthority } from './approval.js';
 import { validateInvokeContext } from './context.js';
@@ -10,6 +10,12 @@ import { hasExactMembers, isPositiveSafeInteger } from './schema-helpers.js';
 import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
 const SAFE_ID = /^[A-Za-z0-9._-]{1,128}$/;
+const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
+const DIGEST = /^sha256:[a-f0-9]{64}$/;
+
+function isMutationCommand(command) {
+  return command === 'create' || command === 'transition' || command === 'patch';
+}
 
 const MESSAGES = Object.freeze({
   'capability-unavailable': 'The configured host cannot invoke the Wowbagger core.',
@@ -39,7 +45,7 @@ function coreRequestIssue(coreRequest) {
       && typeof coreRequest.ledger === 'string' && typeof coreRequest.id === 'string'
       ? null : 'core_request';
   }
-  if (coreRequest?.command === 'create' || coreRequest?.command === 'transition') {
+  if (isMutationCommand(coreRequest?.command)) {
     return hasExactMembers(coreRequest, ['command', 'ledger', 'input_base64'])
       && typeof coreRequest.ledger === 'string'
       && typeof coreRequest.input_base64 === 'string'
@@ -55,6 +61,7 @@ function argumentVector(coreRequest, ledger) {
     case 'ready': return ['ready', '--ledger', ledger, '--as-of', coreRequest.as_of, '--json'];
     case 'inspect': return ['inspect', '--ledger', ledger, '--id', coreRequest.id, '--json'];
     case 'create': return ['create', '--ledger', ledger, '--input', '-', '--json'];
+    case 'patch': return ['patch', '--ledger', ledger, '--input', '-', '--json'];
     case 'transition': return ['transition', '--ledger', ledger, '--input', '-', '--json'];
     default: throw new TypeError('unsupported core command');
   }
@@ -87,7 +94,7 @@ function streamEnvelope(bytes) {
 function refusal(requestId, code, details) {
   return {
     ok: false,
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     error: {
       code,
@@ -138,6 +145,7 @@ export async function invokeAdapter(requestBytes, runtime) {
     });
   }
   const command = request.core_request?.command;
+  const mutation = isMutationCommand(command);
   const required = ['command-execution'];
   if (command !== 'capabilities') required.push('guarded-filesystem');
   const available = [];
@@ -203,7 +211,14 @@ export async function invokeAdapter(requestBytes, runtime) {
   }
 
   const argv = argumentVector(request.core_request, workspace?.ledger);
-  if (command === 'create' || command === 'transition') {
+  const mutationInput = mutation
+    ? Buffer.from(request.core_request.input_base64, 'base64')
+    : Buffer.alloc(0);
+  const parsedMutationRequest = mutation ? parseJsonRequest(mutationInput) : null;
+  const mutationRequest = parsedMutationRequest?.issues.length === 0
+    ? normalizeJsonValue(parsedMutationRequest.value)
+    : null;
+  if (mutation) {
     if (described.result.host.trusted_approval?.supported !== true) {
       return refusal(requestId, 'capability-unavailable', { missing: ['trusted-approval'] });
     }
@@ -247,18 +262,20 @@ export async function invokeAdapter(requestBytes, runtime) {
       command,
       argv,
       cwd: workspace?.cwd ?? runtime.package_root,
-      input: command === 'create' || command === 'transition'
-        ? Buffer.from(request.core_request.input_base64, 'base64')
-        : Buffer.alloc(0),
+      input: mutationInput,
       limits: request.limits,
     });
   } catch {
     processObservation = launchFailureObservation();
   }
   const processFailure = mapProcessOutcome({
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     command,
+    item_id: WOWBAGGER_ID.test(mutationRequest?.id) ? mutationRequest.id : null,
+    expected_revision: DIGEST.test(mutationRequest?.expected_revision)
+      ? mutationRequest.expected_revision
+      : null,
     stdout_limit_bytes: request.limits.stdout_bytes,
     stderr_limit_bytes: request.limits.stderr_bytes,
     process: processObservation,
@@ -269,7 +286,7 @@ export async function invokeAdapter(requestBytes, runtime) {
   const stderr = Buffer.from(processObservation.stderr_base64, 'base64');
   return {
     ok: true,
-    adapter_contract_version: 1,
+    adapter_contract_version: ADAPTER_CONTRACT_VERSION,
     request_id: requestId,
     result: {
       core_command: command,

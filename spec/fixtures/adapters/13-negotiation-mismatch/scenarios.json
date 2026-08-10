@@ -8,9 +8,9 @@
     "adapter_manifest_version": 1,
     "adapter_id": "example.reference",
     "adapter_version": "1.0.0",
-    "adapter_contract_versions": [1],
+    "adapter_contract_versions": [2],
     "bootstrap_wire_version": 1,
-    "required_core_contract_version": 1,
+    "required_core_contract_version": 2,
     "entrypoints": {
       "describe": { "kind": "command", "executable": "bin/adapter", "fixed_args": ["describe"] },
       "invoke": { "kind": "command", "executable": "bin/adapter", "fixed_args": ["invoke"] }
@@ -24,12 +24,12 @@
   "base_dynamic": {
     "ok": true,
     "bootstrap_wire_version": 1,
-    "selected_adapter_contract_version": 1,
+    "selected_adapter_contract_version": 2,
     "adapter_id": "example.reference",
     "adapter_version": "1.0.0",
     "core": {
-      "required_core_contract_version": 1,
-      "commands": ["capabilities", "create", "inspect", "ready", "transition", "validate"]
+      "required_core_contract_version": 2,
+      "commands": ["capabilities", "create", "inspect", "patch", "ready", "transition", "validate"]
     },
     "host": {
       "command_execution": {
@@ -154,7 +154,7 @@
   "invoke_cases": [
     {
       "id": "future-invoke-version",
-      "adapter_contract_version": 2,
+      "adapter_contract_version": 3,
       "expected": "adapter-contract-selection-mismatch"
     }
   ],
@@ -483,9 +483,9 @@
     },
     {
       "id": "future-shared-contract",
-      "request": { "supported_adapter_contract_versions": [2] },
-      "manifest": { "adapter_contract_versions": [2] },
-      "dynamic": { "selected_adapter_contract_version": 2 },
+      "request": { "supported_adapter_contract_versions": [3] },
+      "manifest": { "adapter_contract_versions": [3] },
+      "dynamic": { "selected_adapter_contract_version": 3 },
       "expected": "invalid-adapter-manifest"
     },
     {
@@ -500,12 +500,12 @@
     },
     {
       "id": "selected-contract",
-      "dynamic": { "selected_adapter_contract_version": 2 },
+      "dynamic": { "selected_adapter_contract_version": 3 },
       "expected": "invalid-describe-result"
     },
     {
       "id": "required-core-contract",
-      "dynamic": { "core": { "required_core_contract_version": 2 } },
+      "dynamic": { "core": { "required_core_contract_version": 1 } },
       "expected": "required-core-contract-version-mismatch"
     },
     {
@@ -522,8 +522,8 @@
     },
     {
       "id": "required-core-version",
-      "required_core_contract_version": 2,
-      "probed_core_contract_version": 1,
+      "required_core_contract_version": 1,
+      "probed_core_contract_version": 2,
       "expected": "core-contract-version-mismatch"
     }
   ]

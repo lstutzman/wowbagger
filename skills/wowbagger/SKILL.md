@@ -19,14 +19,16 @@ wowbagger capabilities --json
 ```
 
 Read `contract_version` from the result. **This skill requires
-`contract_version: 1`.**
+`contract_version: 2`.**
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to
   editing ledger files by hand — hand-edits bypass validation and atomic
   publication, which is the whole point of the tool.
-- `contract_version` is anything other than `1` → stop and say so plainly. A
-  newer core may have changed the request or response shape. Do not guess.
+- `contract_version` is anything other than `2` → stop and say so plainly. A
+  core reporting `1` predates schema version 2, where `depends_on` records
+  declared prerequisites rather than only live blockers; an older or newer core
+  may have changed the request or response shape. Do not guess.
 
 Run this once per session before the first ledger command, not before every
 command.

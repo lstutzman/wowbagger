@@ -9,6 +9,23 @@ consolidation. The first tagged release inherits this file.
 
 ### Behaviour changes
 
+- The shipped core mutation contract and adapter contract are version 2.
+  Version 1 of each remains defined and unchanged; a v1-only consumer now
+  receives `unsupported-adapter-contract-version` instead of silently
+  receiving the wider adapter surface.
+- Schema version 2 treats `depends_on` as retained prerequisite history: a
+  target satisfies the dependency exactly when it is `done`, completion keeps
+  the ID in `depends_on`, and it does not copy the ID to `related`. Mixed
+  schema-version ledgers remain invalid. The repository ledger is not migrated
+  by this change.
+- Core contract version 2 always reports mutation coordination as
+  `same-working-copy-cooperative-writers` and cross-worktree mutation
+  coordination as false. Advisory claim visibility may still cross worktrees
+  through the Git common directory under `operations.work_claim`; it does not
+  fence or widen mutation publication.
+- Adapter contract version 2 advertises and forwards approved `patch` requests
+  with exact stdin bytes and the same mutation-unknown recovery discipline as
+  create and transition.
 - A claim request carrying an own `__proto__` member is refused as
   `invalid-request`. Previously three of four drifted JSON normalizer copies
   silently erased the member, so the shipped adapter accepted a request its
@@ -31,6 +48,11 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- `scripts/migrate-schema-2.js` dry-runs a schema-version-1 ledger migration by
+  default and requires `--apply` to write. It refuses invalid schema-1 or
+  schema-2, mixed, already migrated, empty, or locked ledgers; reports each
+  item; validates the complete schema-version-2 result; and directs partial
+  failures to backup/Git recovery.
 - `wowbagger patch` changes an item's caller-supplied fields — `number` and
   `priority` — under the same per-ID lock, revision compare-and-swap, and
   candidate validation as transition. Mutation contract section 9.

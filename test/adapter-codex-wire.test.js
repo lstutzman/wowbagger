@@ -7,7 +7,7 @@ const entrypoint = fileURLToPath(new URL('../adapters/codex/entrypoint.js', impo
 
 const validRequest = JSON.stringify({
   bootstrap_wire_version: 1,
-  supported_adapter_contract_versions: [1],
+  supported_adapter_contract_versions: [2],
   request_id: 'codex-wire-test-0001',
 });
 
@@ -19,8 +19,8 @@ test('the codex adapter answers describe with its own identity on the shared wir
   assert.equal(response.ok, true);
   assert.equal(response.adapter_id, 'dev.wowbagger.adapter.codex');
   assert.equal(response.bootstrap_wire_version, 1);
-  assert.equal(response.selected_adapter_contract_version, 1);
-  assert.equal(response.core.required_core_contract_version, 1);
+  assert.equal(response.selected_adapter_contract_version, 2);
+  assert.equal(response.core.required_core_contract_version, 2);
   assert.equal(response.host.command_execution.shell, false);
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
 });

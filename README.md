@@ -14,8 +14,10 @@ putting a database or hosted service inside your repository.
 > scope is deliberately narrow: cooperative writers in one working copy, one
 > item at a time. A Claude Code adapter and plugin ship from this
 > repository; the adapter answers the negotiation surface of the harness-neutral
-> contract and evidences 79 of its 183 conformance assertions, so no platform is
-> claimed `supported` yet. The core implements advisory work claims (`acquire`,
+> contract and passes all 183 assertions across all 15 cases on native Darwin,
+> although no manifest platform is claimed `supported` yet. The shipped core
+> mutation contract and adapter contract are version 2; their frozen version 1
+> definitions are not silently negotiated. The core implements advisory work claims (`acquire`,
 > `renew`, `release`, `read`), visible across the worktrees of one repository.
 > They coordinate cooperating agents but enforce nothing: a non-cooperating
 > writer still wins. Fenced work claims still require a transactional
@@ -74,6 +76,19 @@ wowbagger capabilities --json
 `contract_version` is the compatibility gate. The plugin and adapter refuse a
 core that reports a version they do not support; if you automate against the
 core directly, do the same rather than guessing.
+
+The shipped adapter selects only adapter contract version 2 and requires core
+contract version 2. A v1-only consumer receives
+`unsupported-adapter-contract-version`; it does not receive v2 behavior. The
+schema-2 transport is available. Ledger migration remains a separate quiesced
+maintenance operation. The
+[schema-2 migration runbook](docs/schema-2-migration.md) documents the required
+backup, dry run, explicit `--apply`, lock refusal, and recovery procedure. The
+tool is dry-run-only by default:
+
+```sh
+TMPDIR=/tmp node scripts/migrate-schema-2.js --ledger path/to/ledger
+```
 
 Behaviour changes are recorded in [CHANGELOG.md](CHANGELOG.md) — read its
 Unreleased section on every upgrade. If you automated against an earlier
@@ -161,13 +176,15 @@ claims that API compatibility alone makes a harness compatible.
 This checkout ships three adapter packages on one shared entrypoint runtime:
 [`adapters/claude-code/`](adapters/claude-code/), [`adapters/codex/`](adapters/codex/),
 and [`adapters/opencode/`](adapters/opencode/). Each answers the section 3.3 bootstrap
-wire with its own identity and honest host declaration, and each evidences
-79 of the contract's 183 conformance assertions — run
-`node spec/run-adapter-implementation.js` (add `--target codex` or
-`--target opencode` for those reports) to see exactly which. Invocation forwarding, path and limit
-guards, and the approval and context surfaces are not yet evidenced for any
-adapter — that is the shared engine's Plans 2 and 3 — so section 10's status
-table still records every platform as `unverified`. The Kimi and
+wire with its own identity and honest host declaration. The native Darwin
+Claude Code report passes all 183 assertions across all 15 cases — run
+`node spec/run-adapter-implementation.js` to see the evidence. Codex and
+OpenCode share the version 2 engine and execute all 183 assertions with
+`--target codex` or `--target opencode`, but both target reports remain `fail`
+pending target-specific evidence. Invocation forwarding, path and limit guards,
+approval, and context all enter through the shared shipped engine. Platform
+declarations remain `unverified` until their separate release evidence is
+accepted. The Kimi and
 OpenAI-compatible harness adapters are not written.
 
 ## Core commands
@@ -290,6 +307,7 @@ skills/         Portable agent workflows shipped by the plugin
 spec/           Ledger schema, the adapter reference model, and normative fixtures
 test/           The test suite
 docs/           Contracts, integration guidance, and handoffs
+scripts/        Maintenance commands that stay outside the core mutation contract
 ledger/         This repository's own backlog, managed by wowbagger itself
 ```
 
@@ -326,13 +344,14 @@ It is the durable work ledger beneath those systems.
   pre-alpha and intentionally local in scope.**
 - Separate optional reusable mechanisms from consumer-specific policy.
 - Stabilize the machine-readable command contract and compatibility evidence.
-- Ship Claude Code and Codex adapters. **The Claude Code adapter answers
-  negotiation and is installable as a plugin; 79 of 183 conformance assertions
-  are evidenced. Codex is not started.**
+- Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
+  packages share the version 2 engine; the Claude Code Darwin target passes
+  all 183 assertions, while the other target reports and all manifest platform
+  declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses.
-- Complete and review the separate portable claim and resolution contract;
-  local mutation locks are not claims. **In progress on the claim branch; not
-  merged or implemented by the standalone CLI.**
+- Complete and review the separate fenced claim and resolution contract;
+  local mutation locks are not claims. **Advisory Git-common-directory claims
+  are implemented, but they do not fence publication or widen mutation scope.**
 - Treat any PropertyCompass adoption as a later, separately-scoped consumer
   project.
 

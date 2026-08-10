@@ -14,7 +14,7 @@ const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const validRequest = JSON.stringify({
   bootstrap_wire_version: 1,
-  supported_adapter_contract_versions: [1],
+  supported_adapter_contract_versions: [2],
   request_id: 'wire-test-0001',
 });
 
@@ -93,6 +93,20 @@ test('answers describe with exactly one JSON object and exits zero', async () =>
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
 });
 
+test('a version 1 consumer cannot negotiate with the version 2 adapter', async () => {
+  const versionOneRequest = JSON.stringify({
+    bootstrap_wire_version: 1,
+    supported_adapter_contract_versions: [1],
+    request_id: 'wire-v1-consumer-0001',
+  });
+  const { code, stdout } = await spawnEntrypoint(['describe'], versionOneRequest);
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'unsupported-adapter-contract-version');
+});
+
 test('does not accept a runtime scenario through the production environment', async (t) => {
   const env = await candidateEnvironment(t);
   const runtimeConfigPath = path.join(path.dirname(env.WOWBAGGER_ADAPTER_MANIFEST_PATH), 'runtime.json');
@@ -113,7 +127,7 @@ test('does not accept a runtime scenario through the production environment', as
 
 test('answers invoke through the bootstrap wire and refuses a future contract version', async () => {
   const request = JSON.stringify({
-    adapter_contract_version: 2,
+    adapter_contract_version: 3,
     request_id: 'wire-invoke-version-0001',
     core_request: { command: 'capabilities' },
     instruction_input: { instruction_input_version: 1, required: false, sources: [] },
@@ -132,7 +146,7 @@ test('answers invoke through the bootstrap wire and refuses a future contract ve
 test('forwards capabilities through the shipped entrypoint and real core', async (t) => {
   const env = await candidateEnvironment(t);
   const request = JSON.stringify({
-    adapter_contract_version: 1,
+    adapter_contract_version: 2,
     request_id: 'wire-capabilities-real-core-0001',
     core_request: { command: 'capabilities' },
     instruction_input: { instruction_input_version: 1, required: false, sources: [] },
@@ -329,7 +343,7 @@ test('refuses a describe request carrying a __proto__ member and still exits zer
 test('refuses a describe request carrying an ordinary unknown member and still exits zero', async () => {
   const unknownMemberRequest = JSON.stringify({
     bootstrap_wire_version: 1,
-    supported_adapter_contract_versions: [1],
+    supported_adapter_contract_versions: [2],
     request_id: 'wire-test-0005',
     unexpected_member: true,
   });
@@ -373,9 +387,9 @@ const STRUCTURALLY_INVALID_MANIFEST = JSON.stringify({
   adapter_manifest_version: 1,
   adapter_id: 'dev.wowbagger.adapter.claude-code',
   adapter_version: '0.1.0',
-  adapter_contract_versions: [1],
+  adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 1,
+  required_core_contract_version: 2,
   entrypoints: {
     describe: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['invoke'] },

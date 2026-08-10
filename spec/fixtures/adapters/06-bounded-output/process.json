@@ -1,6 +1,6 @@
 {
   "request": {
-    "adapter_contract_version": 1,
+    "adapter_contract_version": 2,
     "request_id": "bounded-output-0001",
     "command": "inspect",
     "process": {

@@ -1,3 +1,5 @@
+import { isDependencySatisfied } from './dependencies.js';
+
 const KINDS = new Set(['task', 'epic']);
 const STATUSES = new Set([
   'triage',
@@ -36,13 +38,14 @@ export function validateLedger(ledger) {
   const facts = ledger.items.map((item) => inspectItem(item, context));
   const index = buildIdentityIndex(facts);
 
+  validateUniformSchemaVersion(facts, context);
   validateDuplicateIds(index, context);
   validateDuplicateNumbers(facts, context);
 
   for (const fact of facts) {
     validateRelationLists(fact, context);
     validateTerminalDates(fact, context);
-    validateDoneDependencies(fact, context);
+    validateDoneDependencies(fact, index, context);
     validateDecisionRecords(fact, context);
   }
 
@@ -73,6 +76,7 @@ function inspectItem(item, context) {
   const fact = {
     item,
     data,
+    schemaVersion: null,
     id: null,
     kind: null,
     status: null,
@@ -86,7 +90,7 @@ function inspectItem(item, context) {
     matchingTerminalDecision: null,
   };
 
-  validateSchemaVersion(fact, context);
+  fact.schemaVersion = validateSchemaVersion(fact, context);
   fact.id = inspectId(fact, context);
   validateTitle(fact, context);
   fact.kind = inspectKind(fact, context);
@@ -115,16 +119,37 @@ function validateSchemaVersion(fact, context) {
   const { data } = fact;
   if (!hasOwn(data, 'schema_version')) {
     addError(fact, 'schema_version', 'missing-required-field', 'Field schema_version is required.', context);
-    return;
+    return null;
   }
 
   if (!Number.isInteger(data.schema_version)) {
-    addError(fact, 'schema_version', 'invalid-schema-version', 'schema_version must be the integer 1.', context);
+    addError(fact, 'schema_version', 'invalid-schema-version', 'schema_version must be the integer 1 or 2.', context);
+    return null;
+  }
+
+  if (data.schema_version !== 1 && data.schema_version !== 2) {
+    addError(fact, 'schema_version', 'unsupported-schema-version', 'schema_version must be 1 or 2.', context);
+    return null;
+  }
+
+  return data.schema_version;
+}
+
+function validateUniformSchemaVersion(facts, context) {
+  if (new Set(facts.map((fact) => fact.schemaVersion).filter(Boolean)).size < 2) {
     return;
   }
 
-  if (data.schema_version !== 1) {
-    addError(fact, 'schema_version', 'unsupported-schema-version', 'schema_version must be 1.', context);
+  for (const fact of facts) {
+    if (fact.schemaVersion !== null) {
+      addError(
+        fact,
+        'schema_version',
+        'mixed-schema-versions',
+        'Schema versions 1 and 2 must not be mixed in one ledger.',
+        context,
+      );
+    }
   }
 }
 
@@ -171,7 +196,7 @@ function inspectKind(fact, context) {
   }
 
   if (!KINDS.has(data.kind)) {
-    addError(fact, 'kind', 'unknown-kind', `Kind ${data.kind} is not one of the schema version 1 kinds.`, context);
+    addError(fact, 'kind', 'unknown-kind', `Kind ${data.kind} is not one of the schema version ${fact.schemaVersion ?? '1 or 2'} kinds.`, context);
     return null;
   }
 
@@ -195,7 +220,7 @@ function inspectStatus(fact, context) {
       fact,
       'status',
       'unknown-status',
-      `Status ${data.status} is not one of the schema version 1 statuses.`,
+      `Status ${data.status} is not one of the schema version ${fact.schemaVersion ?? '1 or 2'} statuses.`,
       context,
     );
     return null;
@@ -383,7 +408,7 @@ function inspectDecisions(fact, context) {
       addError(fact, `${field}.action`, 'missing-decision-field', 'Each decision requires action.', context);
     } else if (typeof decision.action !== 'string' || !DECISION_ACTIONS.has(decision.action)) {
       inspected.valid = false;
-      addError(fact, `${field}.action`, 'invalid-decision-action', 'Decision action is not recognized by schema version 1.', context);
+      addError(fact, `${field}.action`, 'invalid-decision-action', `Decision action is not recognized by schema version ${fact.schemaVersion ?? '1 or 2'}.`, context);
     } else {
       inspected.action = decision.action;
     }
@@ -605,7 +630,8 @@ function validateDependencies(fact, index, context) {
         `Dependency ${dependency} is archived and cannot remain a live blocker; restore it or explicitly disposition the dependent.`,
         context,
       );
-    } else if (target.status === 'done' || target.status === 'killed') {
+    } else if (target.status === 'killed'
+      || (isDependencySatisfied(target.status) && fact.schemaVersion === 1)) {
       addError(
         fact,
         'depends_on',
@@ -887,9 +913,27 @@ function validateForbiddenTerminalDates(fact, activeField, context) {
   }
 }
 
-function validateDoneDependencies(fact, context) {
+function validateDoneDependencies(fact, index, context) {
   if (fact.status !== 'done' || !Array.isArray(fact.data.depends_on)
     || fact.data.depends_on.length === 0) {
+    return;
+  }
+
+  if (fact.schemaVersion === 2) {
+    const hasUnsatisfiedDependency = fact.dependsOn.some((dependency) => {
+      const target = resolveReference(dependency, index);
+      return target !== null && target !== 'ambiguous' && !isDependencySatisfied(target.status);
+    });
+    if (!hasUnsatisfiedDependency) {
+      return;
+    }
+    addError(
+      fact,
+      'depends_on',
+      'done-item-has-dependencies',
+      `Done item ${fact.id ?? 'without a valid ID'} requires every depends_on target to be done.`,
+      context,
+    );
     return;
   }
 

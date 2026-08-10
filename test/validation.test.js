@@ -13,6 +13,309 @@ const expectedFixtureErrors = JSON.parse(readFileSync(
   new URL('../spec/fixtures/validation-errors/expected-errors.json', import.meta.url),
 ));
 
+test('validate accepts a uniform schema version 2 ledger', async () => {
+  await withLedger({
+    'item.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Versioned item"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { valid: true, errors: [] });
+  });
+});
+
+test('validate labels schema version 2 vocabulary errors with schema version 2', async () => {
+  await withLedger({
+    'bad-decision.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Invalid decision action"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: invent
+    date: 2026-01-01
+    summary: "Use invalid vocabulary."
+    rationale: "The validator must identify the schema it checked."
+---
+`,
+    'bad-kind.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Invalid kind"
+kind: story
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: []
+---
+`,
+    'bad-status.md': `---
+schema_version: 2
+id: wb_01KE1VN3G0HV9ZDBB8BEASXBBG
+title: "Invalid status"
+kind: task
+status: paused
+created: 2026-01-03
+updated: 2026-01-03
+provenance:
+  source: "test"
+  recorded_at: "2026-01-03T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/bad-decision.md',
+          field: 'decisions[0].action',
+          code: 'invalid-decision-action',
+          message: 'Decision action is not recognized by schema version 2.',
+        },
+        {
+          path: 'ledger/bad-kind.md',
+          field: 'kind',
+          code: 'unknown-kind',
+          message: 'Kind story is not one of the schema version 2 kinds.',
+        },
+        {
+          path: 'ledger/bad-status.md',
+          field: 'status',
+          code: 'unknown-status',
+          message: 'Status paused is not one of the schema version 2 statuses.',
+        },
+      ],
+    });
+  });
+});
+
+test('validate rejects a ledger that mixes schema versions 1 and 2', async () => {
+  await withLedger({
+    'version-1.md': `---
+schema_version: 1
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Version 1 item"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+    'version-2.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Version 2 item"
+kind: task
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: []
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [
+        {
+          path: 'ledger/version-1.md',
+          field: 'schema_version',
+          code: 'mixed-schema-versions',
+          message: 'Schema versions 1 and 2 must not be mixed in one ledger.',
+        },
+        {
+          path: 'ledger/version-2.md',
+          field: 'schema_version',
+          code: 'mixed-schema-versions',
+          message: 'Schema versions 1 and 2 must not be mixed in one ledger.',
+        },
+      ],
+    });
+  });
+});
+
+test('validate accepts a schema version 2 dependency on a done prerequisite', async () => {
+  await withLedger({
+    'prerequisite.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Completed prerequisite"
+kind: task
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+completed: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: complete
+    date: 2026-01-02
+    summary: "Complete the prerequisite."
+    rationale: "The prerequisite work is complete."
+---
+`,
+    'dependent.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Dependent work"
+kind: task
+status: backlog
+created: 2026-01-02
+updated: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { valid: true, errors: [] });
+  });
+});
+
+test('validate accepts a schema version 2 done item whose prerequisite is done', async () => {
+  await withLedger({
+    'prerequisite.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Completed prerequisite"
+kind: task
+status: done
+created: 2026-01-01
+updated: 2026-01-02
+completed: 2026-01-02
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+decisions:
+  - action: complete
+    date: 2026-01-02
+    summary: "Complete the prerequisite."
+    rationale: "The prerequisite work is complete."
+---
+`,
+    'dependent.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Completed dependent"
+kind: task
+status: done
+created: 2026-01-02
+updated: 2026-01-03
+completed: 2026-01-03
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
+decisions:
+  - action: complete
+    date: 2026-01-03
+    summary: "Complete the dependent."
+    rationale: "Its declared prerequisite is satisfied."
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { valid: true, errors: [] });
+  });
+});
+
+test('validate rejects a schema version 2 done item whose prerequisite is live', async () => {
+  await withLedger({
+    'prerequisite.md': `---
+schema_version: 2
+id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+title: "Live prerequisite"
+kind: task
+status: backlog
+created: 2026-01-01
+updated: 2026-01-01
+provenance:
+  source: "test"
+  recorded_at: "2026-01-01T12:00:00Z"
+depends_on: []
+---
+`,
+    'dependent.md': `---
+schema_version: 2
+id: wb_01KDZ98CG0YH769STZ754EKXSZ
+title: "Invalid completion"
+kind: task
+status: done
+created: 2026-01-02
+updated: 2026-01-03
+completed: 2026-01-03
+provenance:
+  source: "test"
+  recorded_at: "2026-01-02T12:00:00Z"
+depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
+decisions:
+  - action: complete
+    date: 2026-01-03
+    summary: "Attempt completion."
+    rationale: "The live prerequisite must keep this state invalid."
+---
+`,
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/dependent.md',
+        field: 'depends_on',
+        code: 'done-item-has-dependencies',
+        message: 'Done item wb_01KDZ98CG0YH769STZ754EKXSZ requires every depends_on target to be done.',
+      }],
+    });
+  });
+});
+
 test('validate rejects a status outside schema version 1', async () => {
   await withLedger({
     'item.md': `---

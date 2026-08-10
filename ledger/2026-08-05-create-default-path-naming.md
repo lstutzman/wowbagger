@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZA5VGVR0W5ZJMV6G8K5F77P
 number: 15
 title: "Reconcile create's default item path with repository naming"

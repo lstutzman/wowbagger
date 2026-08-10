@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZ77NSW8363H1V6QG1HZRG11
 number: 2
 title: "Evaluate PropertyCompass adoption after standalone release"

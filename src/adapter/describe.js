@@ -8,10 +8,11 @@ import {
 // section 3: "The request ID uses the safe opaque-ID syntax").
 const SAFE_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 
-// The version 1 manifest array is exactly [1] (contract section 3): a
+// The version 2 manifest array is exactly [2] (contract section 3): a
 // manifest or dynamic result advertising an unregistered future version has
 // no schema or handler to select, so it is refused rather than negotiated.
-const SUPPORTED_ADAPTER_CONTRACT_VERSIONS = Object.freeze([1]);
+export const ADAPTER_CONTRACT_VERSION = 2;
+const SUPPORTED_ADAPTER_CONTRACT_VERSIONS = Object.freeze([ADAPTER_CONTRACT_VERSION]);
 
 const INSTRUCTION_INPUT_MODES = new Set(['none', 'host-provided', 'configured-relative-paths']);
 const WORKSPACE_SELECTION_MODES = new Set(['none', 'guarded-relative']);
@@ -287,7 +288,7 @@ function dynamicDescribeIssue(dynamic) {
   if (dynamic.bootstrap_wire_version !== 1) {
     return 'bootstrap_wire_version';
   }
-  if (dynamic.selected_adapter_contract_version !== 1) {
+  if (dynamic.selected_adapter_contract_version !== ADAPTER_CONTRACT_VERSION) {
     return 'selected_adapter_contract_version';
   }
   if (!isNonEmptyString(dynamic.adapter_id)) {

@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZE1GBG0HA3MBWWZS6NQTW6E
 number: 29
 title: "Make inspect consistent about which fields are promoted onto item"

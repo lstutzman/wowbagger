@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZGKSC0SJTGRMMMKMQK9MSZC
 number: 35
 title: "Deduplicate the core command list across probe, runner, and adapter entrypoint"

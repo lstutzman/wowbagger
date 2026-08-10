@@ -17,3 +17,5 @@ One line per term. This is a glossary, not documentation.
 - **fenced claims** — the future transactional-coordinator protocol (item 17); unresolved design question.
 - **dogfood** — using wowbagger on its own backlog (maintainer-dogfood) or a consumer's (consumer-dogfood/tinydancer).
 - **decision record** — the `decisions:` entries on an item; why a lifecycle edge happened, written at transition time.
+- **schema migration** — the one-time maintenance tool that changes a complete ledger from schema version 1 to schema version 2.
+- **quiesced window** — a maintenance period in which all processes and people that can write the target ledger are stopped.
