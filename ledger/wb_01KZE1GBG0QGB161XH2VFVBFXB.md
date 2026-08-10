@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZE1GBG0QGB161XH2VFVBFXB
 number: 32
 title: "Decide whether ownership returns, after priority did"

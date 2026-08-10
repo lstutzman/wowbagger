@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZE1GBG0WTJCBR30QKM2GXMK
 number: 33
 title: "Let the CLI change an item's frontmatter, not just its status"

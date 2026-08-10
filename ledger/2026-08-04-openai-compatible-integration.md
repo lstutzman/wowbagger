@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZ77NSW8YFDJXSNTQ8FBB2F7
 number: 12
 title: "Document Kimi and OpenAI-compatible harness integration"

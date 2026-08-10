@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZGKSC0SYA74NQN3A5K72PMH
 number: 34
 title: "Fold patch into the adapter contract at its next version"

@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00Z81H2BT71FGP1CZY
 number: 44
 title: "No item with dependents can be closed"

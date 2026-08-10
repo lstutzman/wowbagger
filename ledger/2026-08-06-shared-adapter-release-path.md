@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZBT45ANXD8SX5X02F1KVKPJ
 number: 25
 title: "Define the shared adapter packaging and release path"

@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00ZH5SA7H0M3WNVP7N
 number: 38
 title: "Earn a supported platform claim on linux and win32"

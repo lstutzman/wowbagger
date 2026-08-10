@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZBNMT2WWV2BWM2QEJX18RX2
 number: 19
 title: "Reconcile the publish-claimed refusal with its normative transcript"

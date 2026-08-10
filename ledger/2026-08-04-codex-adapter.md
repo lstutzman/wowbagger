@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZ77NSW81FXZVAWQ8WT4KDCJ
 number: 1
 title: "Deliver the Codex adapter"

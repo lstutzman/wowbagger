@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZA1V3HN29SK5BS0P7RHS96R
 number: 14
 title: "Define the consumer configuration layer"

@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00MX94XA5EG7J4TXWQ
 number: 42
 title: "Decide which vectors drive a real child and which inject an observation"

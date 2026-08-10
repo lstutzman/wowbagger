@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZHX3E00RRK3X1WYTFCW70D4
 number: 43
 title: "Make the no-launch guard and output-limit coverage real"

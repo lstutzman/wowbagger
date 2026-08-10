@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01KZE1GBG0HARGNQVR1XCHQQKK
 number: 31
 title: "Release-note the claim request __proto__ behaviour change"
