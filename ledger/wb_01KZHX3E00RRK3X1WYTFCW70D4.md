@@ -5,15 +5,25 @@ number: 43
 title: "Make the no-launch guard and output-limit coverage real"
 kind: task
 priority: 1
-status: triage
+status: done
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T18:05:00.000Z"
 depends_on: []
-related: [wb_01KZ77NSW8ZP1289HFMN2ECNXD, wb_01KZHX3E00MX94XA5EG7J4TXWQ]
+related: [ wb_01KZ77NSW8ZP1289HFMN2ECNXD, wb_01KZHX3E00MX94XA5EG7J4TXWQ ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-10
+    summary: "Accepted; the work was delivered in the same session that filed it."
+    rationale: "The no-launch guard audits real process creation rather than the injection point, and a real writer child exercises the output limit. Both previously surviving mutations now turn the run red."
+  - action: complete
+    date: 2026-08-10
+    summary: "Delivered and verified."
+    rationale: "The no-launch guard audits real process creation rather than the injection point, and a real writer child exercises the output limit. Both previously surviving mutations now turn the run red."
 ---
 
 Item 42 made the conformance runner dispatch on each vector's declared mode, and

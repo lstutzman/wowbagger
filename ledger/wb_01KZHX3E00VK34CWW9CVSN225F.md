@@ -5,9 +5,10 @@ number: 45
 title: "Settle whether the backend coordinates worktrees"
 kind: task
 priority: 1
-status: backlog
+status: done
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T20:30:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-09
     summary: "Accepted and resolved: cross-worktree mutation coordination is advertised wrongly and becomes false."
     rationale: "Section 1 of the mutation contract says the backend coordinates cooperative writers using the same ledger directory in one working copy and does not coordinate worktrees. ADR 0003 records the same accepted decision, and the adapter contract forbids an adapter elevating a local mutation capability into a cross-worktree one. Three normative sources agree, so the capabilities envelope is the outlier: limits.cross_worktree_coordination true is wrong for mutation. Contract version 2 advertises local mutation scope as same-working-copy-cooperative-writers and sets cross-worktree mutation coordination false. Advisory claims may still be visible through the Git common directory, but that visibility belongs under operations.work_claim and is not mutation coordination. The item stays open because the envelope has not been changed yet; the decision it was blocked on is settled."
+  - action: complete
+    date: 2026-08-10
+    summary: "Cross-worktree mutation coordination is advertised false in contract version 2."
+    rationale: "Section 1, ADR 0003, and the adapter contract's ban on elevating a local capability all agreed, so the capabilities envelope was the outlier. Version 2 advertises local mutation scope as same-working-copy-cooperative-writers. Advisory claim visibility stays under operations.work_claim, which is not mutation coordination."
 ---
 
 The capabilities envelope advertises cross_worktree_coordination as true. Section 2

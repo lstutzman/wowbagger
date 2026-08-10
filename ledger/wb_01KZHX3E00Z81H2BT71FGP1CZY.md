@@ -5,9 +5,10 @@ number: 44
 title: "No item with dependents can be closed"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-09T19:20:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-09
     summary: "Accepted, taking the first option: give the backend multi-item atomic write scope."
     rationale: "Lee chose to build multi-item atomicity rather than redefine what depends_on means or push cleanup onto the dependent. That keeps the meaning of a dependency intact and closes the general defect rather than routing around it. The cost is larger than the three-option summary implied, and it is recorded here so nobody discovers it mid-implementation. This is not a bug fix. Section 2 states the backend's write scope is one Markdown item with no multi-item atomicity, and limits.multi_item_atomicity is advertised as false in the capabilities envelope, so consumers negotiate against it today. Delivering this flips a published capability, adds a write scope and a compare-and-set scope spanning N items, and needs crash recovery for a partially applied set. The hard part is publication: the contract's atomicity rests on same-path atomic replacement of one file, and no filesystem primitive replaces N files atomically, so the all-or-nothing guarantee has to be built from a journal or an equivalent recoverable protocol. Design comes before code."
+  - action: complete
+    date: 2026-08-10
+    summary: "Delivered as schema version 2 rather than multi-item atomicity."
+    rationale: "The item was filed because no item with dependents could reach a terminal status. Building multi-item atomic write scope was tried, reviewed, and rejected. Schema 2 instead defines depends_on as declared prerequisites, so a satisfied dependency stays recorded and the done transition remains a single-item compare-and-set. Item 13 closed immediately afterwards, which is the proof."
 ---
 
 Item 13 met every acceptance criterion, its work merged to main, and the close was

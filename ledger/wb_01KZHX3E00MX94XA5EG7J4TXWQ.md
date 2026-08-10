@@ -5,15 +5,25 @@ number: 42
 title: "Decide which vectors drive a real child and which inject an observation"
 kind: task
 priority: 1
-status: triage
+status: done
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T15:45:00.000Z"
 depends_on: []
-related: [wb_01KZ77NSW8ZP1289HFMN2ECNXD, wb_01KZHX3E00XVRADSYMHC29A88Y]
+related: [ wb_01KZ77NSW8ZP1289HFMN2ECNXD, wb_01KZHX3E00XVRADSYMHC29A88Y ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-10
+    summary: "Accepted; the work was delivered in the same session that filed it."
+    rationale: "The runner dispatches on each vector's declared mode: equivalence launches a real core child, negative-capability forbids one, protocol injects the declared input. Section 10 records the rule."
+  - action: complete
+    date: 2026-08-10
+    summary: "Delivered and verified."
+    rationale: "The runner dispatches on each vector's declared mode: equivalence launches a real core child, negative-capability forbids one, protocol injects the declared input. Section 10 records the rule."
 ---
 
 After item 40 made the conformance run drive the shipped entrypoint, three

@@ -5,15 +5,25 @@ number: 40
 title: "Make the conformance run evidence the shipped entrypoint"
 kind: task
 priority: 1
-status: triage
+status: done
 created: 2026-08-09
-updated: 2026-08-09
+updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T15:10:00.000Z"
 depends_on: []
-related: [wb_01KZ77NSW8ZP1289HFMN2ECNXD]
+related: [ wb_01KZ77NSW8ZP1289HFMN2ECNXD ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-10
+    summary: "Accepted; the work was delivered in the same session that filed it."
+    rationale: "The conformance run now drives the shipped entrypoint over the real wire, and the runner fails closed on unknown modes, corrupted artifact hashes, skipped assertions, and declared baseline evidence it previously ignored."
+  - action: complete
+    date: 2026-08-10
+    summary: "Delivered and verified."
+    rationale: "The conformance run now drives the shipped entrypoint over the real wire, and the runner fails closed on unknown modes, corrupted artifact hashes, skipped assertions, and declared baseline evidence it previously ignored."
 ---
 
 The implementation runner reports 183 of 183 assertions and 15 of 15 cases as
