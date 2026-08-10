@@ -5,9 +5,10 @@ number: 41
 title: "Fix the adapter defects three reviews confirmed"
 kind: task
 priority: 1
-status: backlog
+status: done
 created: 2026-08-09
 updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T15:12:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-10
     summary: "Accept into backlog: fix the adapter defects three reviews confirmed."
     rationale: "An applied mutation can be reported as core-launch-failed, invoking a retry; envelopes for inspect/create/transition are misclassified; several guards are untested. Highest-risk, accept first."
+  - action: complete
+    date: 2026-08-10
+    summary: "All confirmed adapter defects are fixed and mutation-pinned with oracle parity."
+    rationale: "Contradicted-mutation mapping, full envelope validation (inspect/mutations/as_of), schema-2 item acceptance, and the coercion and bootstrap-wire defects are fixed in shipped and reference code in lockstep, each pinned by a mutation-verified fixture or test. Suite 640/640 on node and node 20; conformance 187 assertions pass."
 ---
 
 Three independent reviews of the Plan 2 and Plan 3 work each confirmed their
