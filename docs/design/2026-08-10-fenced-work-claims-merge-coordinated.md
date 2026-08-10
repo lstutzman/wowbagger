@@ -317,13 +317,38 @@ false` keep the capability honest rather than false-advertising.
 
 ---
 
-## Part 4 — still to decide before implementation
+## Part 4 — decisions on the open items (settled 2026-08-10)
 
-- Whether `mode: "merge-coordinated"` and `fencing_enforced_at:
-  "git-history-reconciliation"` are added as new additive enum values to the
-  work-claim contract, or kept as a documented backend-local extension in the
-  capability envelope (recommend: additive contract values, so a consumer can
-  parse them).
-- Exact size limits for the journal/reconciliation log (max bytes, max
-  entries) to advertise.
-- Whether the reconcile log is a per-namespace file or one shared file.
+1. **Enum values → add to the work-claim contract as additive values.**
+   `mode: "merge-coordinated"` and `fencing_enforced_at:
+   "git-history-reconciliation"` become new *additive* enum values in the
+   work-claim contract, alongside the existing `advisory`/`fenced` and
+   `none`/`ledger-publication-commit-boundary`. Additive means: existing
+   values are unchanged, existing consumers keep parsing, and a consumer that
+   does not recognize the new values treats an unknown-mode capability as
+   `safe_exclusive_dispatch: false` (fail closed). This is what lets a
+   consumer parse the capability instead of guessing from free-form prose.
+   No existing vector or fixture changes; only documentation and, later, the
+   implementation's capability emission.
+2. **Size limits.** Reuse the contract's existing candidate-size ceiling for a
+   consistent bound: the journal and the tracked reconciliation log each admit
+   **at most 8,388,608 bytes (8 MiB)** per namespace, and **at most 65,536
+   entries**. A decision that would exceed either limit fails closed
+   (exit 6 `claim-store-unavailable`, reason `journal-capacity-exceeded`)
+   rather than truncating history. These are implementation-validated finite
+   values; the implementation tests pin the exact boundary and a mutation
+   confirms the guard fires red when the limit is clamped.
+3. **Per-namespace reconcile log.** The tracked, mergeable reconciliation log
+   is **one file per namespace** (`wowbagger/reconcile-<ns>.md` in the tracked
+   tree), mirroring the per-namespace journal layout
+   (`<gitCommonDir>/wowbagger/<namespace>/journal.ndjson`). Per-namespace keeps
+   merges isolated (a worktree touching namespace A does not contend the log
+   of namespace B) and matches the immutable claim tuple `(namespace, item)`.
+   A cross-namespace consumer merges N independent logs, each of which stays
+   small enough to reason over.
+
+With these settled, item 17 is actionable: the design, decision, adversarial
+review, and the three implementation-parameter decisions are all recorded. The
+remaining work is implementation (Part 1 §9 file/test map), which is a
+separate, code-facing change and stays deferred until this doc is approved as
+the implementation's specification.
