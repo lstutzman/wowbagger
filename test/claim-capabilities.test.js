@@ -4,15 +4,24 @@ import test from 'node:test';
 
 import { coordinationScope, resolveWorkClaimCapability } from '../src/claim-capabilities.js';
 
-test('the backend reports advisory and never claims safe dispatch', () => {
-  const capability = resolveWorkClaimCapability({ gitCommonDir: '/repo/.git' });
+test('a provisioned git backend reports merge-coordinated claims without claiming safe dispatch', () => {
+  const capability = resolveWorkClaimCapability({
+    gitCommonDir: '/repo/.git',
+    namespace: 'wbns_0123456789abcdef0123456789abcdef',
+  });
   assert.deepEqual(capability, {
     supported: true,
     api_version: 1,
-    mode: 'advisory',
-    claim_protected_publication: false,
-    fencing_enforced_at: 'none',
+    mode: 'merge-coordinated',
+    claim_protected_publication: true,
+    fencing_enforced_at: 'git-history-reconciliation',
     safe_exclusive_dispatch: false,
+    write_paths: {
+      alternate: 'none',
+      claimed_publication_v1: 'git-journal-fence',
+      legacy_create_v1: 'reject-claimed-id',
+      legacy_transition_v1: 'reject-active-claim',
+    },
   });
 });
 

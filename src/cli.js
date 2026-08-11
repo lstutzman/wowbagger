@@ -1,11 +1,33 @@
 import { readFileSync } from 'node:fs';
+import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { coordinationScope, resolveWorkClaimCapability } from './claim-capabilities.js';
+import { resolveClaimBackend, resolveWorkClaimCapability } from './claim-capabilities.js';
+import {
+  appendClaimEntry,
+  claimJournalPath,
+  claimReconcileLogPath,
+  replayClaimJournal,
+  writeReconcileLog,
+} from './claim-journal.js';
 import { claimAcquire, claimRead, claimRelease, claimRenew } from './claim-operations.js';
+import {
+  publishClaimed,
+  reconcileClaimJournal,
+  readPublicationOutcome,
+  validatePublicationReadRequest,
+  validatePublicationRequest,
+  verifyClaimJournal,
+} from './claim-publication.js';
 import { validateClaimRequest } from './claim-request.js';
-import { claimStorePath, readClaimState, resolveGitCommonDir, withClaimLock, writeClaimState } from './claim-store.js';
+import {
+  claimStorePath,
+  resolveGitCommonDir,
+  resolveVerifiedGitCommonDir,
+  withClaimLock,
+  writeClaimState,
+} from './claim-store.js';
 import { loadLedger } from './ledger.js';
 import {
   createItem,
@@ -25,6 +47,7 @@ import { isCalendarDate, validateLedger } from './validate.js';
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 2;
 
+const MAX_PUBLICATION_REQUEST_BYTES = 11 * 1024 * 1024;
 const DISTRIBUTION_VERSION = JSON.parse(
   readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
 ).version;
@@ -41,6 +64,7 @@ const COMMAND_SUMMARIES = {
   provision: 'Provision the work-claim namespace.',
   claim: 'Work-claim lifecycle operations on the provisioned store.',
   'publish-claimed': 'Publish claim-protected ledger results (unavailable on an advisory backend).',
+  'claim-verify': 'Reconcile pending and committed claim-protected publications.',
 };
 
 const KNOWN_COMMANDS = new Set([
@@ -55,6 +79,7 @@ const KNOWN_COMMANDS = new Set([
   'provision',
   'claim',
   'publish-claimed',
+  'claim-verify',
 ]);
 
 const CLAIM_SUBCOMMAND_SUMMARIES = {
@@ -63,6 +88,7 @@ const CLAIM_SUBCOMMAND_SUMMARIES = {
   acquire: 'Acquire a cooperative work claim.',
   renew: 'Renew an existing work claim.',
   release: 'Release an owned work claim.',
+  verify: 'Read a durable claimed-publication outcome.',
 };
 
 export async function runCli(argumentsList, { scenario } = {}) {
@@ -232,20 +258,87 @@ export async function runCli(argumentsList, { scenario } = {}) {
     return;
   }
 
+  if (command === 'claim-verify') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeClaimInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    const ledgerDirectory = parsedOptions.options.ledger;
+    const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory);
+    const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
+    const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
+    if (!capability.claim_protected_publication) {
+      writeClaimEnvelope(claimStoreUnavailable(command,
+        gitCommonDir ? 'ledger-namespace-unbound' : 'git-directory-not-found'));
+      return;
+    }
+    writeClaimEnvelope(await verifyClaimJournal({
+      ledgerDirectory,
+      gitCommonDir,
+      namespace,
+    }));
+    return;
+  }
+
   if (command === 'publish-claimed') {
-    process.stdout.write(`${JSON.stringify({
-      ok: false,
-      namespace: 'ledger-publication',
-      command: 'publish-claimed',
-      contract_version: 1,
-      state: 'unchanged',
-      error: {
-        code: 'capability-unavailable',
-        message: 'Claim-protected publication is unavailable on an advisory backend.',
-        details: { reason: 'advisory-capability' },
-      },
-    })}\n`);
-    process.exitCode = 2;
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writePublicationInvalidRequest(null, 'The request does not match publish-claimed version 1.', {
+        issues: parsedOptions.issues,
+      });
+      return;
+    }
+    const gitCommonDir = await resolveVerifiedGitCommonDir(parsedOptions.options.ledger);
+    const namespace = gitCommonDir ? await readNamespace(parsedOptions.options.ledger) : null;
+    const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
+    if (!capability.claim_protected_publication) {
+      writeClaimEnvelope({
+        exit: 2,
+        stdout: {
+          ok: false,
+          namespace: 'ledger-publication',
+          command: 'publish-claimed',
+          contract_version: 1,
+          state: 'unchanged',
+          error: {
+            code: 'capability-unavailable',
+            message: 'Claim-protected publication is unavailable on an advisory backend.',
+            details: { reason: 'advisory-capability' },
+          },
+        },
+      });
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input, MAX_PUBLICATION_REQUEST_BYTES);
+    } catch {
+      writePublicationInvalidRequest(null, 'The request does not match publish-claimed version 1.', {
+        field: 'input',
+      });
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    if (parsedRequest.issues.length > 0) {
+      writePublicationInvalidRequest(null, 'The request is not unique-key UTF-8 JSON.', {
+        issues: parsedRequest.issues,
+      });
+      return;
+    }
+    const request = normalizeJsonValue(parsedRequest.value);
+    const invalid = validatePublicationRequest(request);
+    if (invalid) {
+      writeClaimEnvelope(invalid);
+      return;
+    }
+    writeClaimEnvelope(await publishClaimed({
+      ledgerDirectory: parsedOptions.options.ledger,
+      gitCommonDir,
+      namespace,
+      request,
+      scenario,
+    }));
     return;
   }
 
@@ -255,12 +348,12 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeClaimInvalidRequest(command, parsedOptions.issues);
       return;
     }
-    const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
+    const gitCommonDir = await resolveVerifiedGitCommonDir(parsedOptions.options.ledger);
     if (!gitCommonDir) {
       writeClaimEnvelope(claimStoreUnavailable(command, 'git-directory-not-found'));
       return;
     }
-    const { namespace } = await provisionNamespace(path.dirname(gitCommonDir));
+    const { namespace } = await provisionNamespace(parsedOptions.options.ledger);
     writeClaimEnvelope({
       exit: 0,
       stdout: {
@@ -284,17 +377,23 @@ export async function runCli(argumentsList, { scenario } = {}) {
         writeClaimInvalidRequest(subcommand, parsedOptions.issues);
         return;
       }
-      const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
+      const gitCommonDir = await resolveVerifiedGitCommonDir(parsedOptions.options.ledger);
+      const namespace = gitCommonDir ? await readNamespace(parsedOptions.options.ledger) : null;
       process.stdout.write(`${JSON.stringify({
         ok: true,
         namespace: 'work-claim',
         command: subcommand,
         contract_version: 1,
         result: {
-          backend: { name: 'local-filesystem', coordination_scope: coordinationScope({ gitCommonDir }) },
-          operations: { work_claim: resolveWorkClaimCapability({ gitCommonDir }) },
+          backend: resolveClaimBackend({ gitCommonDir, namespace }),
+          operations: { work_claim: resolveWorkClaimCapability({ gitCommonDir, namespace }) },
         },
       })}\n`);
+      return;
+    }
+
+    if (subcommand === 'verify') {
+      await runPublicationReadCommand(argumentsList.slice(2));
       return;
     }
 
@@ -459,9 +558,11 @@ function parseContractOptions(command, argumentsList) {
   const valueFlags = command === 'inspect'
     ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
     : command === 'create' || command === 'transition' || command === 'patch'
-      || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew' || command === 'claim-release'
+      || command === 'publish-claimed' || command === 'publication-read'
+      || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
+      || command === 'claim-release'
       ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
-      : command === 'provision' || command === 'claim-capabilities'
+      : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
         ? new Map([['--ledger', 'ledger']])
         : command === 'mint-id'
           ? new Map([['--date', 'date']])
@@ -547,6 +648,10 @@ function issue(pathValue, code, message) {
 }
 
 function writeMutation(command, outcome) {
+  if (outcome.stdout) {
+    writeClaimEnvelope(outcome);
+    return;
+  }
   const envelope = outcome.ok
     ? {
       ok: true,
@@ -564,6 +669,74 @@ function writeMutation(command, outcome) {
     };
   process.stdout.write(`${JSON.stringify(envelope)}\n`);
   process.exitCode = outcome.exit;
+}
+
+
+async function runPublicationReadCommand(argumentsList) {
+  const parsedOptions = parseContractOptions('publication-read', argumentsList);
+  if (parsedOptions.issues.length > 0) {
+    writePublicationInvalidRequest(null, 'The request does not match ledger-publication.read version 1.', {
+      issues: parsedOptions.issues,
+    });
+    return;
+  }
+  let bytes;
+  try {
+    bytes = await requestSource(parsedOptions.options.input);
+  } catch {
+    writePublicationInvalidRequest(null, 'The request does not match ledger-publication.read version 1.', {
+      field: 'input',
+    });
+    return;
+  }
+  const parsedRequest = parseJsonRequest(bytes);
+  const request = normalizeJsonValue(parsedRequest.value);
+  const invalid = parsedRequest.issues.length > 0
+    ? {
+        exit: 2,
+        stdout: {
+          ok: false,
+          namespace: 'ledger-publication',
+          command: 'read',
+          contract_version: 1,
+          state: 'unchanged',
+          error: {
+            code: 'invalid-request',
+            message: 'The request is not unique-key UTF-8 JSON.',
+            details: { issues: parsedRequest.issues },
+          },
+        },
+      }
+    : validatePublicationReadRequest(request);
+  if (invalid) {
+    writeClaimEnvelope(invalid);
+    return;
+  }
+  const gitCommonDir = await resolveVerifiedGitCommonDir(parsedOptions.options.ledger);
+  const namespace = gitCommonDir ? await readNamespace(parsedOptions.options.ledger) : null;
+  if (!gitCommonDir || request.ledger_namespace !== namespace) {
+    writeClaimEnvelope({
+      exit: 2,
+      stdout: {
+        ok: false,
+        namespace: 'ledger-publication',
+        command: 'read',
+        contract_version: 1,
+        state: 'unchanged',
+        operation_id: request.operation_id,
+        error: {
+          code: 'ledger-namespace-unbound',
+          message: 'The ledger namespace is not provisioned for this endpoint.',
+          details: {
+            ledger_namespace: request.ledger_namespace,
+            item_id: request.item_id,
+          },
+        },
+      },
+    });
+    return;
+  }
+  writeClaimEnvelope(await readPublicationOutcome({ gitCommonDir, namespace, request }));
 }
 
 async function runClaimCommand(claimCommand, argumentsList) {
@@ -598,13 +771,13 @@ async function runClaimCommand(claimCommand, argumentsList) {
     return;
   }
 
-  const gitCommonDir = await resolveGitCommonDir(parsedOptions.options.ledger);
+  const gitCommonDir = await resolveVerifiedGitCommonDir(parsedOptions.options.ledger);
   if (!gitCommonDir) {
     writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'git-directory-not-found'));
     return;
   }
 
-  const namespace = await readNamespace(path.dirname(gitCommonDir));
+  const namespace = await readNamespace(parsedOptions.options.ledger);
   if (request.ledger_namespace !== namespace) {
     writeClaimEnvelope({
       exit: 2,
@@ -625,20 +798,66 @@ async function runClaimCommand(claimCommand, argumentsList) {
   }
 
   const storePath = claimStorePath(gitCommonDir, namespace);
+  const journalPath = claimJournalPath(gitCommonDir, namespace);
   const operation = CLAIM_OPERATIONS[claimCommand];
   try {
     const envelope = await withClaimLock(storePath, async () => {
-      let state;
+      let replayed;
       try {
-        state = await readClaimState(storePath, namespace);
+        replayed = await replayClaimJournal(journalPath, namespace);
       } catch (error) {
         throw taggedFailure('CLAIM_STORE_UNREADABLE', error);
       }
-      const applied = operation(state, request, new Date().toISOString());
+      const physicalNow = new Date().toISOString();
+      let reconciled;
       try {
-        await writeClaimState(storePath, applied.state);
+        reconciled = await reconcileClaimJournal({
+          ledgerDirectory: parsedOptions.options.ledger,
+          gitCommonDir,
+          namespace,
+          replayed,
+          physicalNow,
+        });
+      } catch (error) {
+        throw taggedFailure(
+          error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+            ? 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+            : 'CLAIM_RECONCILIATION_FAILED',
+          error,
+        );
+      }
+      if (reconciled.unsafe) {
+        return claimStoreUnavailable(claimCommand, 'publication-reconciliation-required', {
+          findings: reconciled.findings,
+        });
+      }
+      const applied = operation(reconciled.state, request, physicalNow);
+      let persisted;
+      try {
+        persisted = await appendClaimEntry(journalPath, {
+          type: 'claim',
+          command: claimCommand,
+          physical_now: physicalNow,
+          request,
+        });
       } catch (error) {
         throw taggedFailure('CLOCK_FLOOR_PERSISTENCE_FAILED', error);
+      }
+      try {
+        const repoRoot = path.dirname(path.resolve(parsedOptions.options.ledger));
+        await writeReconcileLog(
+          claimReconcileLogPath(repoRoot, namespace),
+          namespace,
+          [...reconciled.entries, persisted],
+        );
+      } catch {
+        // The tracked reconciliation log is derived. The fsync'd journal
+        // already committed the claim and the next operation can rebuild it.
+      }
+      try {
+        await writeClaimState(storePath, applied.state);
+      } catch {
+        // The snapshot is a rebuildable memo. The fsync'd journal is authoritative.
       }
       return applied.envelope;
     });
@@ -650,6 +869,10 @@ async function runClaimCommand(claimCommand, argumentsList) {
     }
     if (error?.code === 'CLAIM_STORE_UNREADABLE') {
       writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-unreadable'));
+      return;
+    }
+    if (error?.code === 'CLAIM_RECONCILIATION_FAILED') {
+      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'publication-reconciliation-required'));
       return;
     }
     if (error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED') {
@@ -681,7 +904,7 @@ function taggedFailure(code, cause) {
   return failure;
 }
 
-function claimStoreUnavailable(command, reason) {
+function claimStoreUnavailable(command, reason, details = {}) {
   return {
     exit: 6,
     stdout: {
@@ -693,7 +916,7 @@ function claimStoreUnavailable(command, reason) {
       error: {
         code: 'claim-store-unavailable',
         message: 'The durable claim store is unavailable.',
-        details: { reason },
+        details: { reason, ...details },
       },
     },
   };
@@ -718,6 +941,21 @@ function writeClaimInvalidRequest(claimCommand, issues) {
         message: `The ${claimCommand} request is invalid.`,
         details: { issues },
       },
+    },
+  });
+}
+
+function writePublicationInvalidRequest(operationId, message, details) {
+  writeClaimEnvelope({
+    exit: 2,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      ...(operationId ? { operation_id: operationId } : {}),
+      error: { code: 'invalid-request', message, details },
     },
   });
 }
@@ -749,6 +987,10 @@ function usage(command) {
 
   if (command === 'publish-claimed') {
     return 'Usage: wowbagger publish-claimed';
+  }
+
+  if (command === 'claim-verify') {
+    return 'Usage: wowbagger claim-verify --ledger <dir> --json';
   }
 
   if (command === 'claim') {
@@ -863,15 +1105,26 @@ function editDistance(left, right) {
   return previous[right.length];
 }
 
-async function requestSource(input) {
+async function requestSource(input, maxBytes = Number.POSITIVE_INFINITY) {
   if (input === '-') {
     const chunks = [];
+    let total = 0;
     for await (const chunk of process.stdin) {
+      total += chunk.length;
+      if (total > maxBytes) throw new Error('request input exceeds its byte limit');
       chunks.push(chunk);
     }
-    return Buffer.concat(chunks);
+    return Buffer.concat(chunks, total);
   }
 
-  const { readFile } = await import('node:fs/promises');
-  return readFile(input);
+  const handle = await open(input, 'r');
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > maxBytes) {
+      throw new Error('request input exceeds its byte limit');
+    }
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
 }

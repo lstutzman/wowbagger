@@ -322,9 +322,10 @@ the example. It MUST NOT imply an unbounded context, output, or execution time.
 `optional_features.claims` and `optional_features.policy` default to `false`.
 Claims become true only when the independently probed version 1 core reports
 `work_claim.supported: true`; policy remains false because version 1 advertises
-no policy feature. Work claims are advisory. They do not protect publication or
-fence writers: `fencing_enforced_at` is `"none"` and
-`safe_exclusive_dispatch` is `false`. A mutation lock remains a short local
+no policy feature. The mutation capability probe is advisory and cannot imply
+publication fencing or safe exclusive dispatch. Ledger-specific callers must
+use `claim capabilities` to distinguish an unprovisioned advisory ledger from
+a provisioned merge-coordinated ledger. A mutation lock remains a short local
 mutation lock, not a claim.
 
 ### 3.3 Bootstrap command wire
@@ -1229,10 +1230,11 @@ Its mutation backend scope is always
 `same-working-copy-cooperative-writers`,
 `limits.cross_worktree_coordination` is always `false`, and
 `limits.multi_item_atomicity` remains `false`. The separately probed
-`operations.work_claim.supported` may still be `true` when advisory claims are
-visible through the Git common directory. That visibility may set
-`optional_features.claims: true`; it MUST NOT elevate mutation coordination,
-publication fencing, or safe exclusive dispatch.
+`operations.work_claim.supported` may still be `true` when claims are visible
+through the Git common directory. That visibility may set
+`optional_features.claims: true`; it MUST NOT elevate mutation coordination or
+safe exclusive dispatch. Provisioned ledger-specific claim capabilities may
+separately advertise merge-coordinated claim-protected publication.
 
 Version 2 accepts a `patch` core request with exactly `command`, `ledger`, and
 `input_base64`. It launches the argument vector

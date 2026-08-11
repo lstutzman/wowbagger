@@ -1,6 +1,6 @@
 ---
 name: wowbagger
-description: Use when coordinating work through a wowbagger ledger — reading the ready queue, inspecting or filing an item, transitioning one through its lifecycle, or taking an advisory work claim. Triggers on "ready queue", "what should I work on", "file a ledger item", "close this item", "claim this work", or any mention of a wowbagger ledger. Not for general backlog talk where no wowbagger ledger exists.
+description: Use when coordinating work through a wowbagger ledger — reading the ready queue, inspecting or filing an item, transitioning one through its lifecycle, taking a work claim, or publishing claimed work. Triggers on "ready queue", "what should I work on", "file a ledger item", "close this item", "claim this work", "publish claimed work", or any mention of a wowbagger ledger. Not for general backlog talk where no wowbagger ledger exists.
 ---
 
 # Wowbagger
@@ -74,25 +74,52 @@ wowbagger transition --ledger <dir> --input request.json --json
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
 
-## Work claims are advisory
+## Work claims are merge-coordinated
 
 ```sh
 wowbagger provision --ledger <dir> --json
-wowbagger claim capabilities --json
-wowbagger claim read|acquire|renew|release --json
+wowbagger claim capabilities --ledger <dir> --json
+wowbagger claim read|acquire|renew|release --ledger <dir> --input request.json --json
+wowbagger publish-claimed --ledger <dir> --input request.json --json
+wowbagger claim-verify --ledger <dir> --json
 ```
 
-`claim capabilities` reports `mode: "advisory"` and
-`safe_exclusive_dispatch: false`. **Say that plainly whenever claims come up.**
+The Git-backed capability reports `mode: "merge-coordinated"` and
+`safe_exclusive_dispatch: false`. Say both facts plainly. An acquire uses
+observed-state compare-and-swap, and a claimed publication checks the active
+owner generation and expected item revision. This protects cooperating
+worktrees that use the protocol.
 
-An advisory claim is a courtesy note that someone is working on an item. It
-enforces nothing. Two agents can hold the same claim. Do not tell a user a claim
-makes concurrent work safe, and do not build a dispatch loop on top of one.
-Fenced claims — the kind that actually enforce — are unimplemented.
+It is not exclusive coordination. Direct filesystem writes, hostile processes,
+other clones, and alternate tools can bypass the protocol. Never present a
+claim as a lock or build a dispatch loop that requires exclusive ownership.
 
-`publish-claimed` exists and always refuses. Do not offer it.
+Use the claimed write path as one complete loop:
 
-## Working the loop
+1. Run `provision` once for the ledger. Keep its `ledger_namespace`.
+2. Run `claim capabilities --ledger <dir> --json`. Stop if the namespace is
+   absent or the mode is not `merge-coordinated`.
+3. Read the current claim record. Acquire with its observed state in
+   `expected`; keep the returned `owner_id`, `epoch`, and expiry as the fence.
+4. Renew before the lease expires if the work continues.
+5. Inspect the item again. Build the complete desired item bytes.
+6. Call `publish-claimed` with a unique operation ID, the exact inspected
+   revision, the candidate bytes and digest, and the active claim fence. Never
+   retry with only the operation ID; retry the complete request.
+7. Commit the item change, or merge the worker commit into the coordinating
+   branch.
+8. Run `claim-verify` after the commit or merge. It finalizes the Git outcome,
+   repairs response-loss cases, and reports later revision drift. Run it again
+   before the next fenced operation if the prior outcome was not final.
+9. Release the claim with its current observed state.
+10. Run `validate` and show the resulting diff.
+
+Legacy `create` refuses an ID with claim history. Legacy `transition` refuses an
+item with an active claim. Do not bypass those refusals. Read
+`docs/work-claim-contract.md` in the wowbagger repository for exact request and
+response envelopes, refusal precedence, and recovery rules.
+
+## Working the unclaimed loop
 
 1. `validate` the ledger.
 2. `ready --as-of <today>` to see what is actually workable.

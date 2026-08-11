@@ -4,13 +4,13 @@ import path from 'node:path';
 
 const NAMESPACE = /^wbns_[a-f0-9]{32}$/;
 
-function namespaceFile(repoRoot) {
-  return path.join(repoRoot, '.wowbagger', 'namespace');
+function namespaceFile(ledgerDirectory) {
+  return path.join(path.resolve(ledgerDirectory), '.wowbagger', 'namespace');
 }
 
-export async function readNamespace(repoRoot) {
+export async function readNamespace(ledgerDirectory) {
   try {
-    const text = await readFile(namespaceFile(repoRoot), 'utf8');
+    const text = await readFile(namespaceFile(ledgerDirectory), 'utf8');
     const value = text.trim();
     return NAMESPACE.test(value) ? value : null;
   } catch (error) {
@@ -19,12 +19,12 @@ export async function readNamespace(repoRoot) {
   }
 }
 
-export async function provisionNamespace(repoRoot) {
-  const existing = await readNamespace(repoRoot);
+export async function provisionNamespace(ledgerDirectory) {
+  const existing = await readNamespace(ledgerDirectory);
   if (existing) return { namespace: existing, created: false };
-  await mkdir(path.dirname(namespaceFile(repoRoot)), { recursive: true });
+  await mkdir(path.dirname(namespaceFile(ledgerDirectory)), { recursive: true });
   const namespace = `wbns_${randomBytes(16).toString('hex')}`;
-  const handle = await open(namespaceFile(repoRoot), 'wx');
+  const handle = await open(namespaceFile(ledgerDirectory), 'wx');
   try {
     await handle.writeFile(`${namespace}\n`, 'utf8');
     await handle.sync();

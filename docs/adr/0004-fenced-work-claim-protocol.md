@@ -1,7 +1,7 @@
 # ADR 0004: Fenced work claims use a separate coordination namespace
 
-Status: accepted protocol design; the standalone CLI implementation remains
-deferred. This branch adds a no-I/O reference model and conformance fixtures.
+Status: accepted protocol design; amended by the merge-coordinated Git-journal
+profile implemented in the standalone CLI.
 
 ## Context
 
@@ -45,13 +45,14 @@ A future claimed-mutation API uses a new command or request version. This
 prevents an old backend from ignoring a field that callers could mistake for
 enforcement.
 
-Backends that cannot atomically bind fence validation to publication may expose
-advisory claims, but they must state `safe_exclusive_dispatch: false` and
-reject claim-protected publications before preflight or commit. Publication
-operation identities bind to a canonical-request SHA-256 digest and are
-readable for response-loss recovery. Current local filesystem behavior remains
-unsupported for work claims. Git remains audit history, never a lock or claim
-authority.
+Backends that cannot provide strict transactional fencing may expose a lower
+merge-coordinated profile when they durably serialize claim decisions, protect
+the claimed publication path, reconcile Git history, close the named legacy
+paths, and report `safe_exclusive_dispatch: false`. The shipped provisioned
+Git-journal profile uses that bar. Unprovisioned Git ledgers remain advisory and
+reject claim-protected publication. Strictly fenced backends still require the
+shared transactional coordinator defined by the contract. Git is audit and
+reconciliation history in the shipped profile; it is not an exclusive lock.
 
 A fenced backend also closes all other mutation entry points: legacy
 transition rejects active claimed items, legacy create rejects an identity with

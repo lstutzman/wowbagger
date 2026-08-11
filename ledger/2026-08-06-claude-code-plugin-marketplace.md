@@ -4,9 +4,10 @@ id: wb_01KZBT43RZSKMG8Z19RQQ43DDR
 number: 22
 title: "Publish wowbagger as a Claude Code plugin on the marketplace"
 kind: task
-status: backlog
+status: deferred
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-11
+deferred: 2026-08-11
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T15:12:29Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-06
     summary: "Accept into the productization epic."
     rationale: "Filed so the work is tracked in wowbagger's own ledger rather than in a session transcript."
+  - action: defer
+    date: 2026-08-11
+    summary: "Defer marketplace publication until the standalone release and installed-skill dogfood evidence exist."
+    rationale: "Publishing the plugin before a versioned distribution channel and consumer dogfood would advertise an install path that has not been proven end to end."
 ---
 
 Publish wowbagger as an installable Claude Code plugin so a consumer can add it

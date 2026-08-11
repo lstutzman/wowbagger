@@ -14,9 +14,10 @@ OpenAI-compatible API can send prompts to a model. It does not prove that the
 host can inspect repository instructions, resolve safe filesystem paths, run a
 local command, preserve standard streams, or obtain approval for a mutation.
 
-The current core also has deliberate limits. Its local mutation backend is not
-a work-claim service, a policy engine, a distributed lock, or Git authority.
-An adapter must not turn those limits into implied guarantees.
+The core has deliberate limits. Its mutation backend is not a policy engine,
+distributed lock, or Git authority. Work claims are a separate capability, and
+the shipped profile is merge-coordinated rather than exclusive. An adapter must
+not turn those limits into implied guarantees.
 
 ## Decision
 
@@ -43,10 +44,13 @@ does not assume any filename, command syntax, hook, MCP server, daemon, or
 model vendor. Session handoff is an explicit non-authoritative record, not
 hidden persistent memory.
 
-Claims and policy are optional feature names. They are unsupported and absent
-unless a future core contract and the adapter both advertise a dedicated
-versioned feature. Git commit, push, install, setup, and instruction-override
-authority are absent by default and require separate consumer approval.
+Claims and policy are optional feature names. They are absent unless the core
+contract and adapter both advertise the dedicated versioned feature. A caller
+must separately inspect the ledger-specific claim capability before it treats
+publication as claim-protected; the shipped merge-coordinated profile still
+reports `safe_exclusive_dispatch: false`. Git commit, push, install, setup, and
+instruction-override authority are absent by default and require separate
+consumer approval.
 
 Synthetic fixtures under `spec/fixtures/adapters/` define the common
 conformance target. An executable reference runner makes direct-core output

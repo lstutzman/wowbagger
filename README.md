@@ -17,11 +17,15 @@ putting a database or hosted service inside your repository.
 > contract and passes all 183 assertions across all 15 cases on native Darwin,
 > although no manifest platform is claimed `supported` yet. The shipped core
 > mutation contract and adapter contract are version 2; their frozen version 1
-> definitions are not silently negotiated. The core implements advisory work claims (`acquire`,
-> `renew`, `release`, `read`), visible across the worktrees of one repository.
-> They coordinate cooperating agents but enforce nothing: a non-cooperating
-> writer still wins. Fenced work claims still require a transactional
-> coordinator and are not available from the core CLI.
+> definitions are not silently negotiated.
+>
+> On Git-backed ledgers, work claims coordinate cooperating agents through a
+> durable journal in Git's shared common directory. `claim acquire` uses
+> observed-state compare-and-swap. `publish-claimed` fences one item against
+> the active owner generation and expected revision. `claim-verify` reconciles
+> response-loss and post-merge outcomes. This is **merge-coordinated**, not
+> `safe_exclusive_dispatch`: direct writes, hostile processes, other clones,
+> and non-claim-aware tools can still bypass the protocol.
 
 ## Start here
 
@@ -88,16 +92,19 @@ whether a core supports your request.
 
 - **Read-only by default.** `validate`, `ready`, `inspect`, `capabilities`, and
   `mint-id` never modify anything. Every mutation (`create`, `transition`,
-  `patch`) is an explicit, reviewable write.
-- **Lock is not a claim.** A short mutation lock serializes writers during a
-  single operation; it is not a work claim and grants no coordination
-  guarantee.
-- **Claims are advisory.** `claim` operations record a courtesy note that
-  someone is working on an item; they enforce nothing and two agents can hold
-  the same claim. Fenced claims are unimplemented.
-- **Local authority only.** The core coordinates within a Git working copy; it
-  does not mediate across machines, clones, or uncooperative writers. It is
-  not a sandbox against a process racing the filesystem.
+  `patch`, and `publish-claimed`) is an explicit, reviewable write.
+- **Lock is not a claim.** A short mutation lock serializes writers during one
+  operation. It does not grant a work claim.
+- **Claims are merge-coordinated, not exclusive.** `claim acquire` uses
+  compare-and-swap against the observed claim state. `publish-claimed` checks
+  the active owner generation and expected ledger revision before it writes
+  one item. `claim-verify` records the final Git outcome and detects later
+  revision drift. Legacy `create` and `transition` refuse claim conflicts.
+- **Local authority only.** The protocol protects cooperating worktrees in one
+  Git repository. It does not stop direct filesystem writes, hostile
+  processes, other clones, or alternate write paths. Capability discovery
+  therefore reports `mode: "merge-coordinated"` and
+  `safe_exclusive_dispatch: false`.
 - **Supply chain.** Install only from the npm registry or this repository's
   git tags, and verify the `contract_version` your adapter or script requires.
 
@@ -264,6 +271,14 @@ npm ci
 ./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js transition --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js patch --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js provision --ledger path/to/ledger --json
+./bin/wowbagger.js claim capabilities --ledger path/to/ledger --json
+./bin/wowbagger.js claim acquire --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js claim read --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js claim renew --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js claim release --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js publish-claimed --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
 ```
 
 `validate` writes exactly one JSON result to standard output. A valid ledger
@@ -296,10 +311,19 @@ by hand. `transition` compares the inspected revision while cooperative
 per-ID locks are held, then changes one lifecycle item or refuses the request
 if dependent cleanup or child disposition would require changing another
 item. `patch` changes the caller-supplied `number` and `priority` fields —
-nothing else — under the same lock and compare-and-swap. See [the mutation contract](docs/mutation-contract.md) for the
-JSON request, response, recovery, and scope details. A lock is never a work
-claim. See [the fenced work-claim contract](docs/work-claim-contract.md) for
-the separate future claim protocol and its strict backend boundary.
+nothing else — under the same lock and compare-and-swap. See
+[the mutation contract](docs/mutation-contract.md) for the JSON request,
+response, recovery, and scope details.
+
+`provision` binds one ledger namespace to the repository. `claim` manages
+durable acquire, read, renew, and release decisions. `publish-claimed` accepts
+the exact candidate item bytes and fences their publication against the active
+owner generation and expected revision. `claim-verify` reconciles pending
+publication outcomes against the working tree and Git `HEAD`; run it after a
+claimed publication is committed or merged, and before the next fenced
+operation. See [the work-claim contract](docs/work-claim-contract.md) for the
+request envelopes, refusal precedence, recovery rules, and the difference
+between strict fenced and merge-coordinated backends.
 
 The `contract_version` reported by `capabilities` is what an adapter or plugin
 declares it requires. A consumer pairing one with a core that reports a
@@ -321,9 +345,10 @@ git diff --check
 ./bin/wowbagger.js validate --ledger ledger --json
 ```
 
-The claim/fencing contract has its own normative documentation and fixtures in
-[`docs/work-claim-contract.md`](docs/work-claim-contract.md); it remains an
-in-progress protocol until merged and implemented by a supported backend.
+The work-claim contract has normative documentation and fixtures in
+[`docs/work-claim-contract.md`](docs/work-claim-contract.md). The shipped
+Git-backed profile is merge-coordinated and deliberately does not claim
+`safe_exclusive_dispatch`.
 
 ## This repository's ledger
 
@@ -332,7 +357,8 @@ Wowbagger dogfoods its own draft format in the repository-local
 clean: if it changes what the core does it belongs to standalone v0; if it
 changes how the core reaches a consumer it belongs to productization. A
 separate, triage-only item records a possible future PropertyCompass backlog
-migration as a deferred consumer decision, gated on fenced claims. From a
+migration as a deferred consumer decision, gated on merge-coordinated work
+claims and an explicit adoption decision. From a
 checkout, query the ledger with the current UTC date in place of `YYYY-MM-DD`:
 
 ```sh
@@ -411,9 +437,11 @@ It is the durable work ledger beneath those systems.
   all 183 assertions, while the other target reports and all manifest platform
   declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses.
-- Complete and review the separate fenced claim and resolution contract;
-  local mutation locks are not claims. **Advisory Git-common-directory claims
-  are implemented, but they do not fence publication or widen mutation scope.**
+- Implement merge-coordinated work claims for cooperating Git worktrees.
+  **Implemented with durable claim operations, claim-protected single-item
+  publication, and Git reconciliation. It deliberately reports
+  `safe_exclusive_dispatch: false`; direct writes and other uncoordinated paths
+  remain bypasses.**
 - Treat any PropertyCompass adoption as a later, separately-scoped consumer
   project.
 

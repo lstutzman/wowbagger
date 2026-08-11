@@ -1,6 +1,7 @@
 // test/claim-cli.test.js
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -24,10 +25,40 @@ async function capture(argumentsList) {
 
 async function repository() {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-cli-'));
-  await mkdir(path.join(root, '.git'));
+  assert.equal(spawnSync('git', ['init', '--quiet', root]).status, 0);
   await mkdir(path.join(root, 'ledger'));
   return root;
 }
+
+test('provision binds distinct namespaces to distinct ledgers in one repository', async () => {
+  const root = await repository();
+  const secondLedger = path.join(root, 'other-ledger');
+  await mkdir(secondLedger);
+
+  const first = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const second = await capture(['provision', '--ledger', secondLedger, '--json']);
+
+  assert.equal(first.exit, 0, JSON.stringify(first.envelope));
+  assert.equal(second.exit, 0, JSON.stringify(second.envelope));
+  assert.notEqual(first.envelope.result.ledger_namespace, second.envelope.result.ledger_namespace);
+});
+
+test('claim capabilities stay advisory for a fake git directory', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-fake-git-'));
+  await mkdir(path.join(root, '.git'));
+  const ledger = path.join(root, 'ledger');
+  await mkdir(ledger);
+  await mkdir(path.join(ledger, '.wowbagger'), { recursive: true });
+  await writeFile(
+    path.join(ledger, '.wowbagger', 'namespace'),
+    'wbns_0123456789abcdef0123456789abcdef\n',
+  );
+
+  const capabilities = await capture(['claim', 'capabilities', '--ledger', ledger, '--json']);
+
+  assert.equal(capabilities.exit, 0, JSON.stringify(capabilities.envelope));
+  assert.equal(capabilities.envelope.result.operations.work_claim.mode, 'advisory');
+});
 
 test('a claim acquired through the CLI is visible to a later read', async () => {
   const root = await repository();
@@ -52,6 +83,109 @@ test('a claim acquired through the CLI is visible to a later read', async () => 
   const observed = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', readRequest, '--json']);
   assert.equal(observed.envelope.result.read_back.active.owner_id, 'agent-a');
   assert.equal(observed.envelope.result.read_back.last_epoch, '1');
+});
+
+test('a full reconciliation log cannot hide a committed claim', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const request = {
+    ledger_namespace: namespace,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    owner_id: 'agent-a',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  };
+  const requestPath = path.join(root, 'acquire-log-capacity.json');
+  await writeFile(requestPath, JSON.stringify(request));
+  const clockLine = `${JSON.stringify({
+    seq: 2,
+    type: 'clock',
+    now: new Date().toISOString(),
+    floor: '2030-01-11T09:00:00.000Z',
+  })}\n`;
+  const claimLine = `${JSON.stringify({
+    seq: 3,
+    type: 'claim',
+    command: 'acquire',
+    physical_now: new Date().toISOString(),
+    request,
+  })}\n`;
+  const maxBytes = 8 * 1024 * 1024;
+  const baseClock = {
+    seq: 1,
+    type: 'clock',
+    now: '2030-01-11T09:00:00.000Z',
+    floor: '2030-01-11T09:00:00.000Z',
+    padding: '',
+  };
+  const baseLine = `${JSON.stringify(baseClock)}\n`;
+  baseClock.padding = 'x'.repeat(
+    maxBytes - Buffer.byteLength(clockLine) - Buffer.byteLength(claimLine) - Buffer.byteLength(baseLine),
+  );
+  const journalPath = path.join(root, '.git', 'wowbagger', namespace, 'journal.ndjson');
+  await mkdir(path.dirname(journalPath), { recursive: true });
+  await writeFile(journalPath, `${JSON.stringify(baseClock)}\n`);
+
+  const acquired = await capture([
+    'claim', 'acquire', '--ledger', ledger, '--input', requestPath, '--json',
+  ]);
+
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+  assert.equal(acquired.envelope.state, 'committed');
+  assert.equal(acquired.envelope.result.claim.owner_id, 'agent-a');
+});
+
+test('claim reads rebuild a corrupted snapshot memo from the journal', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const itemId = 'wb_01Q4837BM01W70T30B184GG1R6';
+  const acquireRequest = path.join(root, 'acquire.json');
+  await writeFile(acquireRequest, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: itemId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = await capture(['claim', 'acquire', '--ledger', ledger, '--input', acquireRequest, '--json']);
+  assert.equal(acquired.exit, 0);
+
+  await writeFile(path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`), '{corrupt');
+  const readRequest = path.join(root, 'read.json');
+  await writeFile(readRequest, JSON.stringify({ ledger_namespace: namespace, item_id: itemId }));
+  const observed = await capture(['claim', 'read', '--ledger', ledger, '--input', readRequest, '--json']);
+
+  assert.equal(observed.exit, 0);
+  assert.equal(observed.envelope.result.read_back.active.owner_id, 'agent-a');
+  assert.equal(observed.envelope.result.read_back.last_epoch, '1');
+});
+
+test('claim decisions materialize a per-namespace tracked reconciliation log', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const request = path.join(root, 'acquire.json');
+  await writeFile(request, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    owner_id: 'agent-a',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  }));
+
+  const acquired = await capture(['claim', 'acquire', '--ledger', ledger, '--input', request, '--json']);
+
+  assert.equal(acquired.exit, 0);
+  const log = await readFile(path.join(root, 'wowbagger', `reconcile-${namespace}.md`), 'utf8');
+  assert.match(log, new RegExp(`^# Wowbagger reconciliation log \`${namespace}\`\\n`, 'u'));
+  assert.match(log, /"seq":1/u);
+  assert.match(log, /"type":"claim"/u);
+  assert.match(log, /"command":"acquire"/u);
 });
 
 test('claim commands refuse outside a git repository', async () => {
@@ -109,6 +243,36 @@ test('claim capabilities reports the contract-shaped envelope, distinct from top
           safe_exclusive_dispatch: false,
         },
       },
+    },
+  });
+});
+
+test('a provisioned namespace advertises merge-coordinated claim capabilities', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+
+  const capabilities = await capture(['claim', 'capabilities', '--ledger', ledger, '--json']);
+
+  assert.equal(capabilities.exit, 0);
+  assert.deepEqual(capabilities.envelope.result.backend, {
+    name: 'local-filesystem-git-journal',
+    coordination_scope: 'shared-git-common-dir-serialized-journal',
+    ledger_binding: { mode: 'explicit-allowlist', namespaces: [namespace] },
+  });
+  assert.deepEqual(capabilities.envelope.result.operations.work_claim, {
+    supported: true,
+    api_version: 1,
+    mode: 'merge-coordinated',
+    claim_protected_publication: true,
+    fencing_enforced_at: 'git-history-reconciliation',
+    safe_exclusive_dispatch: false,
+    write_paths: {
+      alternate: 'none',
+      claimed_publication_v1: 'git-journal-fence',
+      legacy_create_v1: 'reject-claimed-id',
+      legacy_transition_v1: 'reject-active-claim',
     },
   });
 });
@@ -212,12 +376,14 @@ test('a read request missing item_id is rejected without persisting a junk recor
   await assert.rejects(stat(storePath), { code: 'ENOENT' });
 });
 
-test('a claim store that cannot be written returns clock-floor-persistence-failed', async () => {
+test('a claim journal that cannot be appended returns clock-floor-persistence-failed', async () => {
   const root = await repository();
   const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
   const namespace = provisioned.envelope.result.ledger_namespace;
-  const storePath = path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`);
-  await mkdir(`${storePath}.tmp`, { recursive: true });
+  const journalPath = path.join(root, '.git', 'wowbagger', namespace, 'journal.ndjson');
+  await mkdir(path.dirname(journalPath), { recursive: true });
+  await writeFile(journalPath, '');
+  await chmod(journalPath, 0o400);
 
   const request = path.join(root, 'read.json');
   await writeFile(request, JSON.stringify({
@@ -231,13 +397,13 @@ test('a claim store that cannot be written returns clock-floor-persistence-faile
   assert.equal(refused.envelope.state, 'unchanged');
 });
 
-test('a corrupted claim store returns claim-store-unavailable, not a crash', async () => {
+test('a corrupted claim journal returns claim-store-unavailable, not a crash', async () => {
   const root = await repository();
   const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
   const namespace = provisioned.envelope.result.ledger_namespace;
-  const storePath = path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`);
-  await mkdir(path.dirname(storePath), { recursive: true });
-  await writeFile(storePath, '{ not json');
+  const journalPath = path.join(root, '.git', 'wowbagger', namespace, 'journal.ndjson');
+  await mkdir(path.dirname(journalPath), { recursive: true });
+  await writeFile(journalPath, '{ not json');
 
   const request = path.join(root, 'read.json');
   await writeFile(request, JSON.stringify({

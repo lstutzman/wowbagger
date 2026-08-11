@@ -31,7 +31,7 @@ operations:
 | inspect | Read one validated item and issue its revision token. | Supported. |
 | create | Publish one new triage item under a caller-generated ID. | Supported. |
 | transition | Compare and replace one existing item through an allowed lifecycle edge. | Supported only when the whole change writes that one item. |
-| work claim | Reserve existing work for a worker. | Unsupported and not implemented. |
+| work claim | Reserve existing work for a worker. | Separate from this mutation backend; now implemented for provisioned Git ledgers by the merge-coordinated profile in ADR 0004. |
 
 The machine interface is specified in
 [the local mutation contract](../mutation-contract.md). This ADR defines the

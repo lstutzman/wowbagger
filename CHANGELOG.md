@@ -8,6 +8,14 @@ consolidation. The first tagged release inherits this file.
 ## Unreleased
 
 ### Behaviour changes
+- **Merge-coordinated work claims (item 17):** Provisioned Git-backed ledgers
+  now expose durable claim acquire/read/renew/release operations in Git's shared
+  common directory. `publish-claimed` fences one-item publication against the
+  active owner generation and expected revision, and `claim-verify` reconciles
+  committed, merged, response-loss, and later-revision outcomes. The capability
+  reports `mode: "merge-coordinated"`, `claim_protected_publication: true`, and
+  `safe_exclusive_dispatch: false`; direct writes, other clones, and
+  non-claim-aware tools remain bypasses.
 
 - **Bootstrap wire (item 39):** `describe` and `invoke` both bound their stdin
   read to the configured `max_request_bytes` (describe was unbounded before).
@@ -27,9 +35,10 @@ consolidation. The first tagged release inherits this file.
   by this change.
 - Core contract version 2 always reports mutation coordination as
   `same-working-copy-cooperative-writers` and cross-worktree mutation
-  coordination as false. Advisory claim visibility may still cross worktrees
-  through the Git common directory under `operations.work_claim`; it does not
-  fence or widen mutation publication.
+  coordination as false. Work-claim coordination is a separate capability:
+  unprovisioned Git ledgers remain advisory, while provisioned Git ledgers can
+  report merge-coordinated claim-protected publication. Neither profile widens
+  the mutation backend's fixed scope or advertises safe exclusive dispatch.
 - Adapter contract version 2 advertises and forwards approved `patch` requests
   with exact stdin bytes and the same mutation-unknown recovery discipline as
   create and transition.

@@ -427,15 +427,17 @@ Any later backend MUST report a missing capability rather than pretending a
 local or Git write is globally atomic. Before transition publication the local
 backend validates the complete one-item proposed ledger and refuses every
 required dependent cleanup or child disposition when it lacks multi-item
-atomicity when the selected schema requires such cleanup. The current local
-backend may expose advisory claim visibility through the Git common directory.
-That capability is reported only under `operations.work_claim`; it does not
-widen the fixed same-working-copy mutation scope, cross-worktree mutation
-coordination remains false, and publication is not fenced. A future fenced
-claim backend MUST implement the separate [fenced work-claim
-contract](docs/work-claim-contract.md) and [ADR
-0004](docs/adr/0004-fenced-work-claim-protocol.md); it MUST NOT add claim state
-to schema version 1 or 2 Markdown merely because that backend can coordinate it.
+atomicity when the selected schema requires such cleanup. Work-claim
+coordination is a separate capability from the fixed same-working-copy mutation
+scope. An unprovisioned Git ledger exposes advisory claim visibility. A
+provisioned Git ledger exposes the merge-coordinated Git-journal profile:
+durable claims, claim-protected single-item publication, and Git history
+reconciliation, with `safe_exclusive_dispatch: false`. Direct filesystem
+writes, hostile processes, other clones, and non-claim-aware tools remain
+bypasses. The profile implements the lower merge-coordinated bar in the
+separate [work-claim contract](docs/work-claim-contract.md) and [ADR
+0004](docs/adr/0004-fenced-work-claim-protocol.md); it does not add claim state
+to schema version 1 or 2 Markdown.
 
 Contract version 2 accepts a uniformly schema-1 or uniformly schema-2 ledger
 and rejects a mixture. Schema version 2 uses the prerequisite satisfaction and
@@ -469,9 +471,10 @@ tests:
 - work-claims defines executable normative reference-model vectors with strict
   JSON, exact base64 source bytes and hashes, immutable ledger namespaces,
   capability honesty across every write path, epochs, leases, publication
-  fencing, faults, restart recovery, and monotonic clock-floor evidence. A
-  reference-model pass is not backend conformance and is not evidence that the
-  current local runtime supports claims.
+  fencing, faults, restart recovery, and monotonic clock-floor evidence. The
+  shipped Git-journal profile implements the merge-coordinated subset for
+  provisioned ledgers. The no-I/O vectors remain the oracle for a future
+  backend that advertises strict fencing and safe exclusive dispatch.
 
 They contain no consumer product data and MUST remain suitable for any
 Wowbagger installation.

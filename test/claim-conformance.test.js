@@ -1,5 +1,6 @@
 // test/claim-conformance.test.js
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,7 +29,7 @@ async function capture(argumentsList) {
 
 async function repository() {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-conformance-cli-'));
-  await mkdir(path.join(root, '.git'));
+  assert.equal(spawnSync('git', ['init', '--quiet', root]).status, 0);
   await mkdir(path.join(root, 'ledger'));
   return root;
 }

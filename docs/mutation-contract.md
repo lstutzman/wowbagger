@@ -320,13 +320,16 @@ all omitted paths retain their version 1 values:
 | `result.limits.cross_worktree_coordination` | `false` |
 
 `result.operations.work_claim.supported` remains independently derived from
-Git-common-directory discovery: it is `true` when advisory claims are visible
-there and `false` otherwise. That member does not elevate the fixed mutation
-scope. In particular, version 2 keeps
+Git-common-directory discovery: it is `true` when claims are visible there and
+`false` otherwise. This top-level mutation capability does not read a
+provisioned ledger namespace, so its work-claim profile remains advisory. Use
+`claim capabilities --ledger <dir> --json` to discover whether that ledger is
+unprovisioned and advisory or provisioned and merge-coordinated. Neither result
+elevates the fixed mutation scope. Version 2 keeps
 `transition.write_scope: "single-item"`,
 `transition.cas_scope: "exact-byte-sha256"`, and
-`limits.multi_item_atomicity: false`. Claim visibility across worktrees is an
-`operations.work_claim` fact, never cross-worktree mutation coordination.
+`limits.multi_item_atomicity: false`. Work-claim visibility across worktrees is
+never cross-worktree mutation coordination.
 
 Because capabilities takes no ledger content and does not write, it still
 cannot prove that a particular filesystem supports the required atomic

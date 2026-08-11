@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
+import { withLegacyMutationFence } from './claim-coordinator.js';
 import { link, lstat, mkdir, open, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -185,6 +186,15 @@ export function validateCreateRequest(request, parseIssues = []) {
 }
 
 export async function createItem(ledgerDirectory, request, scenario) {
+  return withLegacyMutationFence(
+    ledgerDirectory,
+    request.id,
+    'create-v1',
+    () => createItemUnfenced(ledgerDirectory, request, scenario),
+  );
+}
+
+async function createItemUnfenced(ledgerDirectory, request, scenario) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
 
@@ -431,10 +441,29 @@ export function validateTransitionRequest(request, parseIssues = []) {
 }
 
 export async function transitionItem(ledgerDirectory, request, scenario) {
-  return mutateExistingItem(ledgerDirectory, request, scenario, {
-    name: 'transition',
-    lockIds: lockIdsForTransition,
-    build: buildTransition,
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', () => (
+    mutateExistingItem(ledgerDirectory, request, scenario, {
+      name: 'transition',
+      lockIds: lockIdsForTransition,
+      build: buildTransition,
+    })
+  ));
+}
+
+export async function publishClaimedCandidate(ledgerDirectory, request, scenario) {
+  return mutateExistingItem(ledgerDirectory, {
+    ...request,
+    id: request.item_id,
+  }, scenario, {
+    name: 'publish-claimed',
+    lockIds: (_target, ledger) => ledger.items
+      .map((item) => item.data.id)
+      .sort(compareText),
+    build: (_target, _ledger, publicationRequest) => {
+      const bytes = Buffer.from(publicationRequest.candidate_source_base64, 'base64');
+      const parsed = parseLedgerItemSource(bytes.toString('utf8'));
+      return { successor: parsed.data, bytes };
+    },
   });
 }
 
@@ -703,11 +732,13 @@ function isPatchableInteger(value, minimum) {
 }
 
 export async function patchItem(ledgerDirectory, request, scenario) {
-  return mutateExistingItem(ledgerDirectory, request, scenario, {
-    name: 'patch',
-    lockIds: (target) => [target.data.id],
-    build: buildPatch,
-  });
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', () => (
+    mutateExistingItem(ledgerDirectory, request, scenario, {
+      name: 'patch',
+      lockIds: (target) => [target.data.id],
+      build: buildPatch,
+    })
+  ));
 }
 
 function buildPatch(lockedTarget, ledger, request) {

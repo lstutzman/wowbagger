@@ -4,9 +4,10 @@ id: wb_01KZBMBEZKPE7D15HKW9Q3GSZV
 number: 17
 title: "Implement fenced work claims with a transactional coordinator"
 kind: task
-status: backlog
+status: done
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-11
+completed: 2026-08-11
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T13:31:39Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-06
     summary: "Accept the fenced work-claim coordinator item."
     rationale: "Advisory claims are shipped; fencing is a distinct, unresolved design problem worth tracking on its own."
+  - action: complete
+    date: 2026-08-11
+    summary: "Implemented the accepted merge-coordinated work-claim profile with durable claim operations, claim-protected publication, and Git reconciliation."
+    rationale: "The implementation passes the normative fixtures, both supported Node runtimes, adapter conformance, a real provision-acquire-publish-commit-verify smoke flow, and keeps safe_exclusive_dispatch false for the documented cooperative-only trust model."
 ---
 
 Advisory claims coordinate cooperating agents but enforce nothing. Fenced

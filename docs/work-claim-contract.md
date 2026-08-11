@@ -1,13 +1,15 @@
-# Fenced work-claim contract
+# Work-claim contract
 
-Status: accepted protocol design. The standalone Wowbagger CLI does not
-implement this contract; this branch contains the no-I/O reference model and
-conformance fixtures only.
+Status: accepted protocol design. The standalone Wowbagger CLI implements the
+version 1 claim operations and the merge-coordinated Git-journal profile for
+provisioned Git-backed ledgers. The no-I/O reference model and conformance
+fixtures remain the oracle for the strict fenced protocol.
 
-This document defines version 1 of a future, transport-neutral work-claim and
-claimed-publication API. The words MUST, MUST NOT, SHOULD, and MAY are
-normative. JSON examples show objects before compact serialization; a CLI
-prints exactly one compact JSON object followed by LF.
+This document defines version 1 of the transport-neutral work-claim and
+claimed-publication API, plus the merge-coordinated capability profile. The
+words MUST, MUST NOT, SHOULD, and MAY are normative. JSON examples show objects
+before compact serialization; a CLI prints exactly one compact JSON object
+followed by LF.
 
 ## 1. Safety boundary
 
@@ -29,6 +31,12 @@ A backend is safely fenced only if one transactional coordinator serializes
 claim decisions, the monotonic clock floor, every write path that can mutate a
 claimed item, the ledger publication, and its idempotency outcome. A separate
 claim service plus an ordinary file rename is advisory.
+
+The shipped Git-journal profile is intentionally weaker. It serializes
+cooperating claim decisions and records publication intent before the item
+write. Git history and `claim-verify` then finalize or reject the outcome. It
+does not make the claim decision and Git commit one atomic transaction, so it
+MUST report `safe_exclusive_dispatch: false`.
 
 ## 2. Ledger namespace and identity
 
@@ -61,7 +69,7 @@ most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
 
 ## 3. Capability discovery and write-path closure
 
-`work-claim.capabilities` accepts exactly `{}`. A fenced response is:
+`work-claim.capabilities` accepts exactly `{}`. A strictly fenced response is:
 
 ```json
 {
@@ -116,15 +124,56 @@ binding MUST be an explicit non-empty allowlist, and the advertised binding
 must cover the provisioned namespaces. A `local-filesystem` scope or an empty
 allowlist is advisory even when the four write-path values otherwise match.
 
-The backend MUST enumerate every entry point. An unknown, uncoordinated,
-plugin, maintenance, import, alternate, or direct-write path is a bypass. Any
-bypass forces `mode: "advisory"`,
-`claim_protected_publication: false`, `fencing_enforced_at: "none"`, and
-`safe_exclusive_dispatch: false`. An advisory endpoint MUST reject
-`publish-claimed`; a caller must never upgrade an advisory capability locally.
+For a strictly fenced capability, the backend MUST enumerate every entry point.
+An unknown, uncoordinated, plugin, maintenance, import, alternate, or
+direct-write path is a bypass. Any bypass prevents `mode: "fenced"` and
+`safe_exclusive_dispatch: true`.
 
-The current filesystem mutation runtime is unchanged and remains
-claim-unsupported.
+A provisioned Git-journal backend MAY instead report:
+
+```json
+{
+  "backend": {
+    "name": "local-filesystem-git-journal",
+    "coordination_scope": "shared-git-common-dir-serialized-journal",
+    "ledger_binding": {
+      "mode": "explicit-allowlist",
+      "namespaces": ["wbns_11111111111111111111111111111111"]
+    }
+  },
+  "operations": {
+    "work_claim": {
+      "supported": true,
+      "api_version": 1,
+      "mode": "merge-coordinated",
+      "claim_protected_publication": true,
+      "fencing_enforced_at": "git-history-reconciliation",
+      "safe_exclusive_dispatch": false,
+      "write_paths": {
+        "alternate": "none",
+        "claimed_publication_v1": "git-journal-fence",
+        "legacy_create_v1": "reject-claimed-id",
+        "legacy_transition_v1": "reject-active-claim"
+      }
+    }
+  }
+}
+```
+
+`merge-coordinated` means that one shared Git common-directory journal
+serializes cooperating claim decisions, publication intents, and terminal
+outcomes. `publish-claimed` MUST validate the active fence and expected
+revision under that journal lock before it writes the item. It MUST record the
+intent durably before the item write. `claim-verify` MUST reconcile the working
+tree and Git history before a later fenced operation proceeds.
+
+This profile does not control direct writes, hostile processes, other clones,
+or alternate tools. A caller MUST NOT use it for exclusive dispatch. A
+Git-backed ledger without a provisioned namespace remains advisory:
+`mode: "advisory"`, `claim_protected_publication: false`,
+`fencing_enforced_at: "none"`, and `safe_exclusive_dispatch: false`.
+An advisory endpoint MUST reject `publish-claimed`; a caller must never upgrade
+an advisory capability locally.
 
 ## 4. Durable claim and authoritative time
 
@@ -287,6 +336,11 @@ canonical padded RFC 4648 base64 without whitespace and decodes to at most
 8,388,608 bytes. Its SHA-256 MUST equal `candidate_sha256`. The candidate is
 the complete replacement ledger source, not a patch.
 
+The CLI bounds the complete serialized `publish-claimed` request at 11,534,336
+bytes before end-of-stream or JSON parsing. This limit admits every valid
+8,388,608-byte candidate plus the bounded envelope fields. Larger input returns
+exit 2 `invalid-request`.
+
 Every public commit attempt, including a retry after response loss, MUST carry
 the complete request. An operation ID alone is not a retry request and returns
 exit 2 `invalid-request` with message `The publish-claimed retry must include
@@ -301,12 +355,14 @@ Validation and decision precedence is normative:
    stored terminal envelope; a different digest is exit 4
    `idempotency-conflict`;
 5. ordinary candidate-ledger validation;
-6. begin the coordinator transaction and persist authoritative decision time;
+6. enter the backend's serialized decision boundary and persist authoritative
+   decision time;
 7. require fence namespace equal request namespace, then fence item equal
    request item, then an active claim, then matching owner, then matching epoch,
    then an unexpired claim;
 8. require the durable ledger revision equal `expected_revision`; and
-9. atomically publish the exact candidate bytes and store the success envelope.
+9. publish the exact candidate bytes and store or journal the outcome as the
+   selected capability profile requires.
 
 The first failure wins. Publication errors use these exact codes and messages:
 
@@ -338,11 +394,11 @@ The `operation_id` member of that refusal depends on when the backend
 refuses. A backend that has read and validated the request — the
 `advisory-publication-rejection` reference transcript's coordinator-backed
 model — echoes the request's `operation_id`. A backend that refuses
-categorically before reading any input, as the local CLI does, MUST omit
-`operation_id`: it cannot echo what it never read, and inventing one would
-be a guess. A conformance comparison against the reference transcript
-therefore excludes `operation_id` when the backend under test refuses
-before reading.
+categorically before reading any input, as the unprovisioned local CLI does,
+MUST omit `operation_id`: it cannot echo what it never read, and inventing one
+would be a guess. A conformance comparison against the reference transcript
+therefore excludes `operation_id` when the backend under test refuses before
+reading.
 
 Steps 1 through 3 use `state: "unchanged"` and deterministic `details` naming
 the first invalid JSON pointer or namespace. Step 5 details are the ordered
@@ -350,10 +406,11 @@ ledger validation issues. Steps 6 through 8 include `ledger_namespace` and
 `item_id`; fence details additionally use the fields and reason defined below,
 and revision details contain `expected_revision` then `actual_revision`.
 
-Steps 6 through 9 are one serialized commit boundary. No takeover can occur
-between the fence decision and publication. A preflight read or candidate
-validation never authorizes a write. A worker paused after preflight at epoch N
-is rejected at commit after epoch N+1 takes over.
+For a strictly fenced backend, steps 6 through 9 are one serialized commit
+boundary. No takeover can occur between the fence decision and publication. A
+preflight read or candidate validation never authorizes a write. A worker
+paused after preflight at epoch N is rejected at commit after epoch N+1 takes
+over.
 
 Fence rejection uses exit 4 `claim-fence-rejected`, message `The supplied
 claim fence is not the active owner generation.`, and one of these ordered
@@ -367,6 +424,36 @@ A success envelope contains `operation_id` at top level and result fields
 `ledger_namespace`, `item_id`, `committed_revision`, the exact `claim_fence`,
 and `claim_read_back`. Publication does not renew or release the claim.
 
+For a merge-coordinated backend, the same public request and decision
+precedence apply, but Git commit is outside the journal lock. Under the lock,
+the backend reconciles prior intents, persists the clock floor, checks
+idempotency, fence, and revision, then fsyncs a `publish-intent` before writing
+the candidate item bytes. Before the first journal append, it fsyncs each new
+journal-directory entry and the empty journal file. It then appends a terminal
+`publish-final` outcome.
+The caller commits or merges the resulting item change and runs
+`claim-verify`.
+
+The namespace lock records its process owner before publication. A later
+process MAY recover the lock only when the operating system reports that owner
+process as absent. A live or malformed lock remains `claim-store-unavailable`;
+elapsed time alone never authorizes lock recovery.
+
+`claim-verify` takes the ledger path and no request body. Under the namespace
+lock, it replays the journal, advances and persists the clock floor, and
+reconciles pending intents against the exact item revision. It also compares
+successful publications with Git `HEAD`. When `HEAD` contains the committed
+revision, it appends one idempotent `publish-finalization` entry that records
+the Git commit. It writes a per-namespace reconciliation log outside the shared
+journal; that log is a derived audit artifact, not authority.
+
+A clean verification returns exit 0 and `state: "committed"`. Findings named
+`pending-intent-resolved` are clean recovery. Any
+`publication-outcome-unknown`, `revision-regression`, or
+`stale-write-detected` finding returns exit 6 and `state: "unknown"`. A caller
+MUST stop publication work and inspect those findings. Repeating verification
+MUST NOT duplicate a publication finalization.
+
 `ledger-publication.read` accepts exactly
 `{"operation_id":"...","ledger_namespace":"...","item_id":"..."}`
 and returns the durable operation identity, `operation_digest`, and terminal
@@ -378,19 +465,20 @@ without a second ledger write.
 
 ## 7. Legacy and alternate writes
 
-For a fenced capability, legacy transition MUST check the active claim inside
-the coordinator transaction and return exit 4
+For a fenced or merge-coordinated capability, legacy transition MUST check the
+active claim under the same namespace lock and return exit 4
 `active-claim-write-refused` before changing an active claimed item. Legacy
 create MUST reject any item identity whose tuple has claim history with exit 4
 `claimed-item-write-refused`; this prevents recreation from bypassing an epoch
 high-water mark. Both checks persist authoritative decision time before their
 response.
 
-An implementation may instead route a legacy write through
-`publish-claimed`, but it cannot silently omit a fence. Administrative repair,
-bulk import, plugins, direct database writes, and filesystem writers count as
-alternate mutation paths. Unless absent, transactionally fenced, or refused
-for claimed tuples, they make the capability advisory.
+An implementation may instead route a legacy write through `publish-claimed`,
+but it cannot silently omit a fence. Administrative repair, bulk import,
+plugins, direct database writes, and filesystem writers count as alternate
+mutation paths. Their presence prevents a strict fenced capability. A
+merge-coordinated backend may still operate for cooperating writers, but it
+MUST report `safe_exclusive_dispatch: false`.
 
 ## 8. Errors, exits, and recovery
 
@@ -446,14 +534,14 @@ This code was added after the version 1 vectors were written. It is additive:
 it names a condition the original text did not model, changes no existing code,
 message, or envelope, and no reference vector emits it.
 
-The publication outcome and ledger change are one atomic record. If the commit
-succeeds but the response is lost, retrying the identical `operation_id` and
-request returns the stored success without writing twice. Reusing the identity
-with different bytes or fence fails. If failure occurs before the atomic
-commit, ledger and outcome remain unchanged. If an implementation cannot
-establish which side of its commit boundary occurred, it returns exit 6
-`publication-outcome-unknown`; the caller reads the outcome by operation ID
-before attempting anything else.
+For a strictly fenced backend, the publication outcome and ledger change are
+one atomic record. If the commit succeeds but the response is lost, retrying
+the identical `operation_id` and request returns the stored success without
+writing twice. Reusing the identity with different bytes or fence fails. If
+failure occurs before the atomic commit, ledger and outcome remain unchanged.
+If an implementation cannot establish which side of its commit boundary
+occurred, it returns exit 6 `publication-outcome-unknown`; the caller reads the
+outcome by operation ID before attempting anything else.
 
 ## 9. Reference vectors and backend conformance
 
@@ -478,8 +566,9 @@ envelopes, durable read-back, and exact ledger bytes to the manifest.
 
 ## 10. Current compatibility
 
-This design adds no members to schema version 1 Markdown items and changes no
-current create or transition request. Existing parsers continue to reject
-unknown claim members. The current local capability remains unsupported, and
-callers must treat it as unsafe for exclusive dispatch until an implementation
-passes backend conformance.
+This contract adds no members to schema version 1 Markdown items and changes no
+create or transition request shape. Existing parsers continue to reject
+unknown claim members. The shipped CLI implements the merge-coordinated
+Git-journal profile for provisioned ledgers and reports
+`safe_exclusive_dispatch: false`. Unprovisioned Git ledgers remain advisory,
+and non-Git ledgers remain claim-unsupported.
