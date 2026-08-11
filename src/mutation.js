@@ -126,7 +126,7 @@ export function validateCreateRequest(request, parseIssues = []) {
   }
   const controlled = new Set([
     'schema_version', 'id', 'status', 'created', 'updated', 'completed',
-    'killed', 'archived', 'decisions', 'body',
+    'killed', 'archived', 'deferred', 'decisions', 'body',
   ]);
   for (const field of Object.keys(item)) {
     if (controlled.has(field)) {
