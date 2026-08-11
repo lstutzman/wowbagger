@@ -269,3 +269,201 @@ Has deferred field but not deferred status.
     assert.equal(hasError, true, 'Should have terminal-date-not-allowed error');
   });
 });
+
+test('transition from deferred to in-progress is rejected', async () => {
+  // Create a deferred item
+  const source = `---
+schema_version: 2
+id: wb_01KZMFG500B234567890123456
+title: "Deferred item"
+kind: task
+status: deferred
+created: 2026-08-10
+updated: 2026-08-11
+deferred: 2026-08-11
+provenance:
+  source: "test"
+  recorded_at: "2026-08-10T12:00:00Z"
+depends_on: []
+related: []
+decisions:
+  - action: defer
+    date: 2026-08-11
+    summary: "Deferred"
+    rationale: "Test"
+---
+
+Test body.
+`;
+
+  const id = 'wb_01KZMFG500B234567890123456';
+  const request = {
+    id,
+    expected_revision: null,
+    to_status: 'in-progress',
+    date: '2026-08-12',
+    decision: {
+      summary: 'Should fail',
+      rationale: 'Cannot transition directly from deferred to in-progress',
+    },
+  };
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    // Get revision
+    const inspectResult = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    assert.equal(inspectResult.status, 0, inspectResult.stderr);
+    const inspect = JSON.parse(inspectResult.stdout);
+    request.expected_revision = inspect.result.item.revision;
+
+    // Try to transition - should fail
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(requestPath, JSON.stringify(request));
+
+    const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    assert.notEqual(result.status, 0, 'Transition should be rejected');
+
+    const response = JSON.parse(result.stdout);
+    assert.equal(response.ok, false);
+    // The transition fails with precondition-failed and invalid-edge code
+    assert.equal(response.error.details.issues?.[0]?.code, 'invalid-edge',
+      'Should reject with invalid-edge');
+  });
+});
+
+test('transition from deferred to backlog without decision is rejected', async () => {
+  const source = `---
+schema_version: 2
+id: wb_01KZMFG500C234567890123456
+title: "Deferred item no decision"
+kind: task
+status: deferred
+created: 2026-08-10
+updated: 2026-08-11
+deferred: 2026-08-11
+provenance:
+  source: "test"
+  recorded_at: "2026-08-10T12:00:00Z"
+depends_on: []
+related: []
+decisions:
+  - action: defer
+    date: 2026-08-11
+    summary: "Deferred"
+    rationale: "Test"
+---
+
+Test body.
+`;
+
+  const id = 'wb_01KZMFG500C234567890123456';
+  const request = {
+    id,
+    expected_revision: null,
+    to_status: 'backlog',
+    date: '2026-08-12',
+    // No decision - should be rejected
+  };
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    // Get revision
+    const inspectResult = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    assert.equal(inspectResult.status, 0, inspectResult.stderr);
+    const inspect = JSON.parse(inspectResult.stdout);
+    request.expected_revision = inspect.result.item.revision;
+
+    // Try to transition without decision - should fail
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(requestPath, JSON.stringify(request));
+
+    const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    assert.notEqual(result.status, 0, 'Transition without decision should be rejected');
+
+    const response = JSON.parse(result.stdout);
+    assert.equal(response.ok, false);
+    // The transition fails with invalid-value for decision
+    assert.equal(response.error.details.issues?.[0]?.code, 'invalid-value',
+      'Should require decision field');
+  });
+});
+
+test('validate rejects deferred item when deferred date does not match updated', async () => {
+  const invalidItem = `---
+schema_version: 2
+id: wb_01KZMFG500D234567890123456
+title: "Mismatch deferred date"
+kind: task
+status: deferred
+created: 2026-08-10
+updated: 2026-08-12
+deferred: 2026-08-11
+provenance:
+  source: "test"
+  recorded_at: "2026-08-10T12:00:00Z"
+depends_on: []
+related: []
+decisions:
+  - action: defer
+    date: 2026-08-11
+    summary: "Deferred"
+    rationale: "Test"
+---
+
+Test body.
+`;
+
+  await withLedger({ 'item.md': invalidItem }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+    assert.equal(result.status, 1, result.stderr);
+
+    const validation = JSON.parse(result.stdout);
+    assert.equal(validation.valid, false);
+
+    // Should have terminal-date-must-match-updated error
+    const hasError = validation.errors.some((e) =>
+      e.code === 'terminal-date-must-match-updated' && e.field === 'deferred'
+    );
+    assert.equal(hasError, true, 'Should have terminal-date-must-match-updated error');
+  });
+});
+
+test('validate rejects deferred item without matching defer decision', async () => {
+  const invalidItem = `---
+schema_version: 2
+id: wb_01KZMFG500E234567890123456
+title: "Missing defer decision"
+kind: task
+status: deferred
+created: 2026-08-10
+updated: 2026-08-11
+deferred: 2026-08-11
+provenance:
+  source: "test"
+  recorded_at: "2026-08-10T12:00:00Z"
+depends_on: []
+related: []
+decisions:
+  - action: some_other_action
+    date: 2026-08-11
+    summary: "Not a defer decision"
+    rationale: "Wrong"
+---
+
+Test body.
+`;
+
+  await withLedger({ 'item.md': invalidItem }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+    assert.equal(result.status, 1, result.stderr);
+
+    const validation = JSON.parse(result.stdout);
+    assert.equal(validation.valid, false);
+
+    // Should have missing-matching-terminal-decision error
+    const hasError = validation.errors.some((e) =>
+      e.code === 'missing-matching-terminal-decision'
+    );
+    assert.equal(hasError, true, 'Should have missing-matching-terminal-decision error');
+  });
+});
