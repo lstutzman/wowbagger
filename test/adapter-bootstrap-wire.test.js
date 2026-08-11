@@ -36,6 +36,20 @@ function spawnEntrypoint(args, stdinInput, { env = process.env } = {}) {
   });
 }
 
+// Like spawnEntrypoint but leaves the child's stdin open after writing
+// `stdinInput` (no end()). Used to prove a refusal does not block waiting on
+// a host that never closes stdin.
+function spawnEntrypointOpenStdin(args, stdinInput, { env = process.env } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = execFile(process.execPath, [entrypoint, ...args], { encoding: 'buffer', env });
+    let stdout = Buffer.alloc(0);
+    child.stdout.on('data', (chunk) => { stdout = Buffer.concat([stdout, chunk]); });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code, stdout }));
+    child.stdin.write(stdinInput);
+  });
+}
+
 function execFileBytes(file, args, options = {}) {
   return new Promise((resolve, reject) => {
     execFile(file, args, { ...options, encoding: 'buffer' }, (error, stdout, stderr) => {
@@ -247,6 +261,37 @@ test('bounds invoke bytes before parsing the request', async () => {
   assert.equal(response.request_id, null);
 });
 
+// Item 39 D2: the shipped wire's refusal message is pinned so it cannot
+// silently diverge from the reference model and the contract. The expected
+// text is asserted here independent of both copies; if anyone changes it in
+// the entrypoint, invocation table, or reference model, this goes red.
+test('pins the wire refusal message to the reference model and contract', async () => {
+  const oversizedInvalidJson = Buffer.alloc(65537, 0x20);
+
+  const { code, stdout } = await spawnEntrypoint(['invoke'], oversizedInvalidJson);
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.error.code, 'invalid-invocation');
+  assert.equal(response.error.message, 'The adapter invocation is invalid.');
+});
+
+// Item 39 D1: describe reads share the configured byte ceiling so the first
+// call any host makes is not an unbounded surface. The observable property is
+// the bounded reader bails as soon as the limit is crossed without waiting
+// for the stream to end — an unbounded describe reader would block forever on
+// a never-ending oversized stream.
+test('describe reads stop consuming an oversized stream that never ends', async () => {
+  const oversizedSpaces = Buffer.alloc(65537, 0x20);
+
+  const { code, stdout } = await spawnEntrypointOpenStdin(['describe'], oversizedSpaces);
+
+  assert.equal(code, 0);
+  const response = assertSingleJsonObject(stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-describe-request');
+});
+
 test('refuses with a stream-error detail instead of throwing when stdin errors', async () => {
   const failingStream = new Readable({
     read() {
@@ -394,12 +439,29 @@ test('refuses an unknown operation and still exits zero', async () => {
   assert.equal(response.error.code, 'invalid-invocation');
 });
 
-test('reports the request read failure, not invalid-invocation, for an unknown operation with malformed stdin', async () => {
+// Item 39 D3: an unknown operation is refused BEFORE reading stdin, so a
+// malformed or never-closed stdin cannot hang the entrypoint or be
+// misreported as a describe read failure. The invalid-invocation refusal
+// must win regardless of what arrives on stdin.
+test('refuses an unknown operation before reading stdin, even with malformed stdin', async () => {
   const { code, stdout } = await spawnEntrypoint(['bogus-operation'], '{"bootstrap_wire_version":1}{"extra":true}');
   assert.equal(code, 0);
   const response = assertSingleJsonObject(stdout);
   assert.equal(response.ok, false);
-  assert.equal(response.error.code, 'invalid-describe-request');
+  assert.equal(response.error.code, 'invalid-invocation');
+});
+
+test('refuses an unknown operation before reading stdin, even with never-closing stdin', async () => {
+  // Leave stdin open (never end it) to prove the D3 guarantee: an unknown
+  // operation is refused without blocking on a host that never closes stdin.
+  const result = await spawnEntrypointOpenStdin(
+    ['bogus-operation'],
+    Buffer.from(validRequest),
+  );
+  assert.equal(result.code, 0);
+  const response = assertSingleJsonObject(result.stdout);
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, 'invalid-invocation');
 });
 
 const STRUCTURALLY_INVALID_MANIFEST = JSON.stringify({

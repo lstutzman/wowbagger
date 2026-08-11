@@ -4,9 +4,10 @@ id: wb_01KZHX3E001CSCENR21QMTDJFN
 number: 39
 title: "Close the bootstrap wire's duplicated refusal paths"
 kind: task
-status: backlog
+status: done
 created: 2026-08-09
 updated: 2026-08-10
+completed: 2026-08-10
 provenance:
   source: "code-review"
   recorded_at: "2026-08-09T14:05:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-10
     summary: "Accept into backlog: close the bootstrap wire's duplicated and unreachable refusal paths."
     rationale: "A review found the entrypoint's inner refusal branches unreachable and message/shape duplication across tables and the reference model; the work is a contract decision, not a silence."
+  - action: complete
+    date: 2026-08-10
+    summary: "Closed the bootstrap wire's duplicated refusal paths and bounded describe reads."
+    rationale: "D1: describe and invoke both read under the configured request byte ceiling (was unbounded for describe, the first call any host makes), with a mutation-guarded test proving the bounded reader bails on an oversized never-ending stream instead of hanging. D2: refusal messages moved to a single src/adapter/messages.js source (INVOKE_MESSAGES) consumed by both invoke.js and the entrypoint, with a wire-level test pinning the shipped message so it cannot silently diverge from the reference model; oracle untouched. D3: unknown operations are refused before reading stdin (previously they read stdin, misreported malformed reads as describe errors, and hung on a host that never closes stdin), with mutation-guarded tests. Also fixed the readBootstrapRequest detail asymmetry (parse branch now returns detail {member: request_json}). Suite 657/657 on current node and node 20; adapter conformance pass; ledger valid."
 ---
 
 A review of the Plan 2 work found six issues that were deliberately left unfixed,

@@ -8,6 +8,7 @@ import { resolveInvocationPaths } from './paths.js';
 import { mapProcessOutcome } from './process-outcome.js';
 import { hasExactMembers, isPositiveSafeInteger } from './schema-helpers.js';
 import { normalizeJsonValue, parseJsonRequest } from '../request.js';
+import { INVOKE_MESSAGES } from './messages.js';
 
 const SAFE_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
@@ -17,15 +18,7 @@ function isMutationCommand(command) {
   return command === 'create' || command === 'transition' || command === 'patch';
 }
 
-const MESSAGES = Object.freeze({
-  'capability-unavailable': 'The configured host cannot invoke the Wowbagger core.',
-  'consumer-approval-required': 'The consumer must approve this ledger mutation.',
-  'invalid-invocation': 'The adapter invocation is invalid.',
-  'mutation-outcome-unknown': 'The mutation may have been applied; inspect current state before retrying.',
-  'output-limit-exceeded': 'The core output exceeded the requested bound.',
-  'path-rejected': 'The requested ledger path is not a guarded real directory.',
-  'path-replaced': 'A guarded path component changed before core launch.',
-});
+const MESSAGES = INVOKE_MESSAGES;
 
 function coreRequestIssue(coreRequest) {
   if (coreRequest?.command === 'capabilities') {

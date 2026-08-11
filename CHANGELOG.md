@@ -9,6 +9,13 @@ consolidation. The first tagged release inherits this file.
 
 ### Behaviour changes
 
+- **Bootstrap wire (item 39):** `describe` and `invoke` both bound their stdin
+  read to the configured `max_request_bytes` (describe was unbounded before).
+  An unknown operation is refused as `invalid-invocation` before any stdin is
+  read, instead of reading stdin and hanging or misreporting a malformed read
+  as a describe error. Refusal messages moved to a single
+  `src/adapter/messages.js` source; the wire no longer carries a bare literal.
+  The split refusal message now appears in exactly one shipped place. Item 39.
 - The shipped core mutation contract and adapter contract are version 2.
   Version 1 of each remains defined and unchanged; a v1-only consumer now
   receives `unsupported-adapter-contract-version` instead of silently

@@ -7,6 +7,7 @@ import { CORE_COMMAND_ORDER, CORE_CONTRACT_VERSION } from './core-probe.js';
 import { ADAPTER_CONTRACT_VERSION, describeAdapter } from './describe.js';
 import { invokeAdapter } from './invoke.js';
 import { validateAdapterManifest } from './manifest.js';
+import { INVOKE_MESSAGES } from './messages.js';
 import { isSafeLogicalPath } from './paths.js';
 import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
@@ -265,10 +266,23 @@ export async function runAdapterEntrypoint({
     ? await probeCore(coreExecutable, packageRoot)
     : suppliedCoreProbe;
   const dynamic = dynamicResult(manifest, coreProbe);
-  const incoming = await readBootstrapRequest(process.stdin, operation === 'invoke' ? {
+
+  // §3.3 (item 39): an unknown operation is refused without reading stdin.
+  // Reading would otherwise wait on a host that never closes stdin, and a
+  // malformed read would misreport as a describe error instead of an
+  // invalid-invocation. Only describe and invoke are valid bootstrap ops.
+  if (operation !== 'describe' && operation !== 'invoke') {
+    await writeBootstrapResponse(process.stdout, { ok: false, error: { code: 'invalid-invocation' } });
+    return;
+  }
+
+  // Both describe and invoke reads share the configured request byte ceiling
+  // (item 39, D1). describe was previously unbounded — the first call any
+  // host makes is the more exposed surface, so it must be bounded too.
+  const incoming = await readBootstrapRequest(process.stdin, {
     maxBytes: dynamic.limits.max_request_bytes,
-    errorCode: 'invalid-invocation',
-  } : undefined);
+    errorCode: operation === 'invoke' ? 'invalid-invocation' : 'invalid-describe-request',
+  });
   if (!incoming.ok) {
     const response = operation === 'invoke'
       ? {
@@ -277,8 +291,9 @@ export async function runAdapterEntrypoint({
           request_id: null,
           error: {
             code: incoming.error_code,
-            message: 'The adapter invocation is invalid.',
-            details: incoming.detail ?? { member: 'request_json' },
+            message: INVOKE_MESSAGES[incoming.error_code]
+              ?? 'The adapter invocation is invalid.',
+            details: incoming.detail,
           },
         }
       : { ok: false, error: { code: incoming.error_code } };
@@ -317,6 +332,4 @@ export async function runAdapterEntrypoint({
     await writeBootstrapResponse(process.stdout, response);
     return;
   }
-
-  await writeBootstrapResponse(process.stdout, { ok: false, error: { code: 'invalid-invocation' } });
 }

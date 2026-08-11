@@ -30,7 +30,7 @@ export async function readBootstrapRequest(stream, { maxBytes, errorCode = 'inva
   const bytes = Buffer.concat(chunks);
   const parsed = parseJsonRequest(bytes);
   if (parsed.issues.length > 0) {
-    return { ok: false, error_code: errorCode };
+    return { ok: false, error_code: errorCode, detail: { member: 'request_json' } };
   }
   return { ok: true, request: normalizeJsonValue(parsed.value), bytes };
 }
