@@ -4,9 +4,9 @@ id: wb_01KZ77NSW8R8C26CEJPJKHVPBT
 number: 10
 title: "Prepare a versioned standalone Wowbagger release"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-11
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
