@@ -989,6 +989,7 @@ function serializeTransition(source, successor, edge) {
     document.delete('completed');
     document.delete('killed');
     document.delete('archived');
+    document.delete('deferred');
     const terminal = terminalField(successor.status);
     if (terminal) {
       insertRootAfter(document, 'updated', terminal, successor[terminal]);
@@ -1076,7 +1077,7 @@ function nextLine(source, start) {
 }
 
 function terminalField(status) {
-  return { done: 'completed', killed: 'killed', archived: 'archived' }[status] ?? null;
+  return { done: 'completed', killed: 'killed', archived: 'archived', deferred: 'deferred' }[status] ?? null;
 }
 
 async function loadedValidLedger(root) {
