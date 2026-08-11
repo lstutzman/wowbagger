@@ -32,9 +32,9 @@ putting a database or hosted service inside your repository.
 Install the core CLI, then verify it:
 
 ```sh
-npm install -g wowbagger   # public npm registry (released versions)
-# or, from this repository's git tag:
-# npm install -g github:lstutzman/wowbagger
+npm install -g wowbagger@next   # public npm prerelease
+# or, from this release's Git tag:
+# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.1
 wowbagger capabilities --json
 ```
 
@@ -61,10 +61,12 @@ To use the core directly from a clone instead, see
 Wowbagger ships as an npm package with a single `wowbagger` binary. There are
 two supported install routes:
 
-- **npm registry** — `npm install -g wowbagger` installs a released version.
-- **git tag** — `npm install -g github:lstutzman/wowbagger` installs this
-  repository at a ref. A release is a git tag; installing at a ref installs the
-  core and every adapter that ref carries.
+- **npm registry** — `npm install -g wowbagger@next` installs the current
+  prerelease.
+- **git tag** —
+  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.1` installs this
+  release. Installing at a ref installs the core and every adapter that ref
+  carries.
 
 Either route installs the core and the `wowbagger` command. The Claude Code
 plugin is a separate artifact (see [Start here](#start-here)); the core and the

@@ -1,6 +1,6 @@
 {
   "name": "wowbagger",
-  "version": "0.1.0-prealpha",
+  "version": "0.1.0-alpha.1",
   "description": "Plain-Markdown, Git-native work ledger for coordinating agents — validate, ready-select, and mutate a task ledger from the CLI.",
   "type": "module",
   "license": "MIT",
@@ -29,7 +29,7 @@
     "node": ">=20"
   },
   "bin": {
-    "wowbagger": "./bin/wowbagger.js"
+    "wowbagger": "bin/wowbagger.js"
   },
   "files": [
     "bin",

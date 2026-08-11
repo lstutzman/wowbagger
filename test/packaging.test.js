@@ -11,7 +11,7 @@ const manifest = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'),
 test('the npm package is public and installable under the wowbagger name', () => {
   assert.equal(manifest.name, 'wowbagger');
   assert.notEqual(manifest.private, true, 'a public distribution must not be private');
-  assert.equal(manifest.bin.wowbagger, './bin/wowbagger.js');
+  assert.equal(manifest.bin.wowbagger, 'bin/wowbagger.js');
   assert.ok(manifest.files.includes('bin'), 'bin must ship');
   assert.ok(manifest.files.includes('src'), 'src must ship');
   assert.equal(typeof manifest.dependencies.yaml, 'string', 'yaml runtime dependency required');

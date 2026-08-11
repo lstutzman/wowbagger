@@ -26,11 +26,20 @@ async function capture(argumentsList) {
   };
 }
 
+async function advisoryLedger() {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-advisory-'));
+  assert.equal(spawnSync('git', ['init', '--quiet', root]).status, 0);
+  const ledger = path.join(root, 'ledger');
+  await mkdir(ledger);
+  return ledger;
+}
+
 // The comparison the spec promised: the CLI's refusal is held against the
 // normative advisory-publication-rejection transcript, excluding only
 // `operation_id` — the documented exclusion for a backend that refuses
 // before reading any input (work-claim contract, advisory rejection).
 test('the refusal matches the normative transcript except the documented operation_id exclusion', async () => {
+  const ledger = await advisoryLedger();
   const manifest = JSON.parse(readFileSync(fileURLToPath(new URL(
     '../spec/fixtures/work-claims/advisory-publication-rejection/manifest.json',
     import.meta.url,
@@ -39,14 +48,15 @@ test('the refusal matches the normative transcript except the documented operati
   const { operation_id, ...expectedEnvelope } = expected.stdout;
   assert.equal(typeof operation_id, 'string');
 
-  const refused = await capture(['publish-claimed', '--ledger', 'ledger', '--input', '/dev/null', '--json']);
+  const refused = await capture(['publish-claimed', '--ledger', ledger, '--input', '/dev/null', '--json']);
 
   assert.deepEqual(refused.envelope, expectedEnvelope);
   assert.equal(refused.exit, expected.exit);
 });
 
 test('publish-claimed refuses with the contract capability-unavailable envelope', async () => {
-  const refused = await capture(['publish-claimed', '--ledger', 'ledger', '--input', '/dev/null', '--json']);
+  const ledger = await advisoryLedger();
+  const refused = await capture(['publish-claimed', '--ledger', ledger, '--input', '/dev/null', '--json']);
   const envelope = refused.envelope;
   assert.equal(envelope.ok, false);
   assert.equal(envelope.namespace, 'ledger-publication');
@@ -59,9 +69,10 @@ test('publish-claimed refuses with the contract capability-unavailable envelope'
 });
 
 test('publish-claimed refuses without reading its input file', async () => {
+  const ledger = await advisoryLedger();
   const missingDir = await mkdtemp(path.join(tmpdir(), 'wb-pub-'));
   const missingInput = path.join(missingDir, 'definitely-absent.json');
-  const refused = await capture(['publish-claimed', '--ledger', 'ledger', '--input', missingInput, '--json']);
+  const refused = await capture(['publish-claimed', '--ledger', ledger, '--input', missingInput, '--json']);
   const envelope = refused.envelope;
   assert.equal(envelope.ok, false);
   assert.equal(envelope.namespace, 'ledger-publication');

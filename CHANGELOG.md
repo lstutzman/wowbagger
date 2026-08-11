@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.1 - 2026-08-11
+
 ### Behaviour changes
 - **Merge-coordinated work claims (item 17):** Provisioned Git-backed ledgers
   now expose durable claim acquire/read/renew/release operations in Git's shared
