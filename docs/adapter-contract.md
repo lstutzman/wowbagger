@@ -1184,6 +1184,29 @@ This contract does not:
   authority; or
 - implement a Claude Code, Codex, Kimi, or generic adapter.
 
+## 11.1 Concurrency
+
+The adapter is a **one-shot CLI process**: each invocation runs to completion and
+exits. There is no daemon, no server socket, and no shared mutable state between
+invocations. This has three consequences:
+
+1. **One adapter process cannot serve overlapping invokes.** It reads one request,
+   processes it, writes one response, and exits. If a host needs concurrent
+   execution, it must spawn multiple adapter processes.
+
+2. **Concurrent adapter processes against the same ledger are independent.** The
+   adapter has no concurrency control; serialization happens at the core level
+   through the lock file. Two simultaneous mutations may both pass approval and
+   launch, but the core's lock serializes writes.
+
+3. **Each invocation enforces its own stdout/stderr limits independently.**
+   Buffer state is per-process; one invocation hitting its limit does not affect
+   another's limit enforcement.
+
+This behavior is verified by the concurrent-invocation test suite. The contract
+does not require the host to serialize invokes; it simply provides no coordination
+beyond what the core offers.
+
 ## 12. Adapter contract version 2
 
 Version 2 retains sections 1 through 11, including the strict bootstrap wire,
