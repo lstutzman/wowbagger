@@ -59,13 +59,13 @@
       "path": "ledger/13-done-missing-completed.md",
       "field": "completed",
       "code": "missing-terminal-date",
-      "message": "Status done requires completed and forbids killed and archived."
+      "message": "Status done requires completed and forbids killed and archived and deferred."
     },
     {
       "path": "ledger/14-backlog-terminal-date.md",
       "field": "completed",
       "code": "terminal-date-not-allowed",
-      "message": "Status backlog forbids completed, killed, and archived."
+      "message": "Status backlog forbids completed, killed, archived, and deferred."
     },
     {
       "path": "ledger/15-self-parent.md",

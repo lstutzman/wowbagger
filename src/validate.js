@@ -8,19 +8,24 @@ const STATUSES = new Set([
   'done',
   'killed',
   'archived',
+  'deferred',
 ]);
 const TERMINAL_STATES = new Map([
   ['done', { field: 'completed', action: 'complete' }],
   ['killed', { field: 'killed', action: 'kill' }],
   ['archived', { field: 'archived', action: 'archive' }],
+  ['deferred', { field: 'deferred', action: 'defer' }],
 ]);
-const TERMINAL_DATE_FIELDS = ['completed', 'killed', 'archived'];
+const TERMINAL_DATE_FIELDS = ['completed', 'killed', 'archived', 'deferred'];
 const DECISION_ACTIONS = new Set([
   'accept',
   'complete',
+  'resolve',
   'kill',
   'archive',
   'restore',
+  'defer',
+  'undefer',
   'replace-dependency',
   'waive-dependency',
   'reparent',
@@ -862,7 +867,7 @@ function validateTerminalDates(fact, context) {
           fact,
           field,
           'terminal-date-not-allowed',
-          `Status ${fact.status} forbids completed, killed, and archived.`,
+          `Status ${fact.status} forbids completed, killed, archived, and deferred.`,
           context,
         );
       }

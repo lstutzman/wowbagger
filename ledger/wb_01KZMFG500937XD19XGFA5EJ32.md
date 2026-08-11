@@ -5,9 +5,10 @@ number: 46
 title: "Allow an item to be marked deferred/held after creation"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-10
-updated: 2026-08-10
+updated: 2026-08-11
+completed: 2026-08-11
 provenance:
   source: "consumer-dogfood/wowbagger-self"
   recorded_at: "2026-08-10T19:30:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-10
     summary: "Accepted from wowbagger self-dogfood: the ledger cannot mark an item deferred/held."
     rationale: "Raised by item 22's deferral, which could not be recorded in-band. No deferred status, no defer edge, snoozed_until is create-only. Files the deferral gap so it is tracked rather than left in a transcript."
+  - action: complete
+    date: 2026-08-11
+    summary: "Implemented deferred status with defer/undefer transitions."
+    rationale: "Added 'deferred' to STATUSES, TERMINAL_STATES, DECISION_ACTIONS, and TERMINAL_DATE_FIELDS. Added transition edges for backlog<->deferred with 'defer' and 'undefer' actions. Deferred items are excluded from ready (status !== 'backlog'). Deferral reason recorded via decision (requiresDecision: true). Item 22 can now be deferred in-band."
 ---
 The ledger has no supported way to mark an existing item deferred or on hold.
 

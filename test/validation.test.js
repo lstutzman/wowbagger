@@ -481,7 +481,7 @@ decisions:
         path: 'ledger/item.md',
         field: 'completed',
         code: 'missing-terminal-date',
-        message: 'Status done requires completed and forbids killed and archived.',
+        message: 'Status done requires completed and forbids killed and archived and deferred.',
       }],
     });
   });
@@ -746,7 +746,7 @@ decisions:
           path: 'ledger/item.md',
           field: 'completed',
           code: 'missing-terminal-date',
-          message: 'Status done requires completed and forbids killed and archived.',
+          message: 'Status done requires completed and forbids killed and archived and deferred.',
         },
         {
           path: 'ledger/item.md',
@@ -864,7 +864,7 @@ depends_on: []
           path: 'ledger/item.md',
           field: 'completed',
           code: 'missing-terminal-date',
-          message: 'Status done requires completed and forbids killed and archived.',
+          message: 'Status done requires completed and forbids killed and archived and deferred.',
         },
         {
           path: 'ledger/item.md',

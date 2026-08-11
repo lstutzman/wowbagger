@@ -24,6 +24,7 @@ const OPTIONAL_CORE_FIELDS = [
   'completed',
   'killed',
   'archived',
+  'deferred',
 ];
 // Schema-1 fields a caller supplies and create must keep accepting; they join
 // the core view but must stay out of CONTROLLED_ITEM_FIELDS.
@@ -848,6 +849,10 @@ function transitionEdge(kind, from, to) {
     'epic:triage:backlog': 'accept',
     'task:triage:killed': 'kill',
     'epic:triage:killed': 'kill',
+    'task:backlog:deferred': 'defer',
+    'epic:backlog:deferred': 'defer',
+    'task:deferred:backlog': 'undefer',
+    'epic:deferred:backlog': 'undefer',
     'task:backlog:archived': 'archive',
     'task:backlog:killed': 'kill',
     'task:in-progress:done': 'complete',
@@ -859,7 +864,8 @@ function transitionEdge(kind, from, to) {
     'epic:archived:backlog': 'restore',
   }[`${kind}:${from}:${to}`] ?? null;
   const allowed = (from === 'triage' && (to === 'backlog' || to === 'killed'))
-    || (kind === 'task' && from === 'backlog' && ['in-progress', 'archived', 'killed'].includes(to))
+    || (from === 'backlog' && (to === 'in-progress' || to === 'archived' || to === 'killed' || to === 'deferred'))
+    || (from === 'deferred' && to === 'backlog')
     || (kind === 'task' && from === 'in-progress' && ['backlog', 'done', 'killed'].includes(to))
     || (kind === 'epic' && from === 'backlog' && ['done', 'archived', 'killed'].includes(to))
     || (from === 'archived' && to === 'backlog');
@@ -948,12 +954,15 @@ function transitionData(data, request, edge, ledger) {
   delete successor.completed;
   delete successor.killed;
   delete successor.archived;
+  delete successor.deferred;
   if (request.to_status === 'done') {
     successor.completed = request.date;
   } else if (request.to_status === 'killed') {
     successor.killed = request.date;
   } else if (request.to_status === 'archived') {
     successor.archived = request.date;
+  } else if (request.to_status === 'deferred') {
+    successor.deferred = request.date;
   }
   if (edge.requiresDecision) {
     const decision = {

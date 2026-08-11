@@ -7,6 +7,7 @@ kind: task
 status: done
 created: 2026-08-09
 updated: 2026-08-11
+completed: 2026-08-11
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-09T13:30:00.000Z"
@@ -18,7 +19,7 @@ decisions:
     date: 2026-08-10
     summary: "Accept into backlog: prove or contract what concurrent adapter invocation may mean."
     rationale: "The adapter boundary was only ever exercised one invoke at a time; concurrent safety is an assumption, not a finding. Valid follow-on scope distinct from core item 7."
-  - action: resolve
+  - action: complete
     date: 2026-08-11
     summary: "Done: adapter is a one-shot CLI with no concurrent state. Concurrent invokes are independent; serialization happens at core level through lock file."
     rationale: "Five tests prove: (1) concurrent invokeAdapter calls don't interfere, (2) each invocation enforces its own stdout/stderr limits, (3) approval state is per-invocation, (4) shared runtime objects don't cause race conditions, (5) adapter is a one-shot CLI with no state persistence. Contract section 11.1 documents these findings. Commit 652d468."
