@@ -113,6 +113,14 @@ test('capability help names the core and work-claim version fields', () => {
   assert.match(claim.stdout, /top-level claim contract_version.*legacy envelope marker/);
 });
 
+test('provision help exposes the Git prerequisite and its capability preflight', () => {
+  const result = runCli('provision', '--help');
+
+  assert.match(result.stdout, /Requires a Git checkout/);
+  assert.match(result.stdout, /claim capabilities --ledger <dir> --json/);
+  assert.match(result.stdout, /operations\.work_claim\.supported: true/);
+});
+
 test('a typo suggestion turns an unknown command into a did-you-mean instead of the bare usage throw', () => {
   const result = runCli('transitio');
 

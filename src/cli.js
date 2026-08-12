@@ -1077,6 +1077,19 @@ function commandHelp(command) {
     ].join('\n');
   }
 
+  if (command === 'provision') {
+    return [
+      header,
+      '',
+      `${usage(command)}`,
+      '',
+      'Requires a Git checkout; the namespace and claim journal use its shared Git directory.',
+      'Preflight with claim capabilities --ledger <dir> --json.',
+      'Require result.operations.work_claim.supported: true before provisioning.',
+      '',
+    ].join('\n');
+  }
+
   if (command === 'publish-claimed') {
     return [
       header,

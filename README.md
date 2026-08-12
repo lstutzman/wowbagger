@@ -93,7 +93,10 @@ whether a core supports your request.
   with release evidence). Do not assume a platform is officially supported just
   because the CLI starts.
 - **Other tooling:** `wowbagger` manages a Git-tracked Markdown ledger. It
-  needs `git` present for work-claim and namespace operations.
+  needs an accessible Git checkout for work-claim and namespace operations.
+  Before `provision`, run
+  `wowbagger claim capabilities --ledger <dir> --json` and require
+  `result.operations.work_claim.supported: true`.
 
 ### Security
 

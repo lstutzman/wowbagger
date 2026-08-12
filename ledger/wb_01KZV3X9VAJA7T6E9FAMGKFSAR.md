@@ -5,7 +5,8 @@ number: 50
 title: "Expose the Git prerequisite before provisioning claims"
 kind: task
 priority: 20
-status: backlog
+status: done
+completed: 2026-08-12
 created: 2026-08-12
 updated: 2026-08-12
 provenance:
@@ -15,6 +16,10 @@ depends_on: []
 related: [ wb_01KZBT447HVZ9798DXV1NTT515 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
 decisions:
+  - action: complete
+    date: 2026-08-12
+    summary: "Expose the Git prerequisite before claim provisioning."
+    rationale: "Provision command help now names the Git-checkout prerequisite and directs operators and automation to the ledger-specific claim capability preflight. The shipped skill runs that preflight before provision and stops when work claims are unsupported. README gives the same gate. A CLI test pins the help contract, and an end-to-end smoke check confirmed supported false outside Git, supported true in this checkout, and the unchanged exit-6 git-directory-not-found provision refusal."
   - action: accept
     date: 2026-08-12
     summary: "Accept the Git-prerequisite discovery defect at priority 20."
