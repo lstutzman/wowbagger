@@ -55,7 +55,7 @@ const DISTRIBUTION_VERSION = JSON.parse(
 const COMMAND_SUMMARIES = {
   validate: 'Validate a ledger and print the single JSON validation result.',
   ready: 'Validate a ledger and print the readiness queue for a date.',
-  capabilities: "Describe the backend's capabilities and versioned contract surface.",
+  capabilities: 'Describe the core contract and unbound default claim profile.',
   inspect: 'Inspect one ledger item as a lossless raw-byte snapshot.',
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
@@ -63,7 +63,7 @@ const COMMAND_SUMMARIES = {
   'mint-id': 'Mint a canonical item ID.',
   provision: 'Provision the work-claim namespace.',
   claim: 'Work-claim lifecycle operations on the provisioned store.',
-  'publish-claimed': 'Publish claim-protected ledger results (unavailable on an advisory backend).',
+  'publish-claimed': 'Publish ledger results when its claim profile enables protected publication.',
   'claim-verify': 'Reconcile pending and committed claim-protected publications.',
 };
 
@@ -83,7 +83,7 @@ const KNOWN_COMMANDS = new Set([
 ]);
 
 const CLAIM_SUBCOMMAND_SUMMARIES = {
-  capabilities: 'Describe the work-claim backend and its coordination scope.',
+  capabilities: "Describe the provisioned ledger's work-claim profile.",
   read: 'Read the current claims from the provisioned store.',
   acquire: 'Acquire a cooperative work claim.',
   renew: 'Renew an existing work claim.',
@@ -1055,6 +1055,32 @@ function commandHelp(command) {
       ...Object.keys(CLAIM_SUBCOMMAND_SUMMARIES).map((name) => (
         `  ${name.padEnd(12)} ${CLAIM_SUBCOMMAND_SUMMARIES[name]}`
       )),
+      '',
+      'Use claim capabilities --ledger <dir> --json to gate work on one provisioned ledger.',
+      'The namespace and backend members identify the work-claim capability context.',
+      '',
+    ].join('\n');
+  }
+
+  if (command === 'capabilities') {
+    return [
+      header,
+      '',
+      `${usage(command)}`,
+      '',
+      'Use this probe to negotiate the core mutation contract.',
+      'Use claim capabilities --ledger <dir> --json to gate claimed work for one ledger.',
+      '',
+    ].join('\n');
+  }
+
+  if (command === 'publish-claimed') {
+    return [
+      header,
+      '',
+      `${usage(command)}`,
+      '',
+      'Requires the ledger-specific claim capability claim_protected_publication: true.',
       '',
     ].join('\n');
   }

@@ -321,10 +321,12 @@ all omitted paths retain their version 1 values:
 
 `result.operations.work_claim.supported` remains independently derived from
 Git-common-directory discovery: it is `true` when claims are visible there and
-`false` otherwise. This top-level mutation capability does not read a
-provisioned ledger namespace, so its work-claim profile remains advisory. Use
+`false` otherwise. This core capability envelope reports the unbound default
+claim profile. It does not read a provisioned ledger namespace and does not
+prove that a ledger is provisioned. Use
 `claim capabilities --ledger <dir> --json` to discover whether that ledger is
-unprovisioned and advisory or provisioned and merge-coordinated. Neither result
+unprovisioned and advisory or provisioned and merge-coordinated. Automation
+MUST gate `publish-claimed` on that ledger-specific response. Neither result
 elevates the fixed mutation scope. Version 2 keeps
 `transition.write_scope: "single-item"`,
 `transition.cas_scope: "exact-byte-sha256"`, and

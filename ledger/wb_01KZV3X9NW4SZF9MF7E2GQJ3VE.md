@@ -5,7 +5,8 @@ number: 47
 title: "Disambiguate core and provisioned claim capabilities"
 kind: task
 priority: 1
-status: backlog
+status: done
+completed: 2026-08-12
 created: 2026-08-12
 updated: 2026-08-12
 provenance:
@@ -15,6 +16,10 @@ depends_on: []
 related: [ wb_01KZBT447HVZ9798DXV1NTT515 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
 decisions:
+  - action: complete
+    date: 2026-08-12
+    summary: "Clarify capability context on machine and human surfaces."
+    rationale: "Core help now names the unbound default claim profile and directs operators to the ledger-specific probe. Claim and publication help name the provisioned gate. The normative contracts identify namespace and backend as the existing machine discriminator without changing the version-2 wire."
   - action: accept
     date: 2026-08-12
     summary: "Accept the capability-context defect at priority 1."

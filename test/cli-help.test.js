@@ -90,6 +90,19 @@ test('claim --help lists the claim subcommands', () => {
   }
 });
 
+test('capability help identifies the core and ledger-specific claim profiles', () => {
+  const core = runCli('capabilities', '--help');
+  const claim = runCli('claim', '--help');
+  const publish = runCli('publish-claimed', '--help');
+
+  assert.match(core.stdout, /unbound default claim profile/);
+  assert.match(core.stdout, /claim capabilities --ledger <dir> --json/);
+  assert.match(claim.stdout, /provisioned ledger's work-claim profile/);
+  assert.match(claim.stdout, /namespace.*backend/);
+  assert.match(publish.stdout, /claim_protected_publication: true/);
+  assert.doesNotMatch(publish.stdout, /unavailable on an advisory backend/);
+});
+
 test('a typo suggestion turns an unknown command into a did-you-mean instead of the bare usage throw', () => {
   const result = runCli('transitio');
 

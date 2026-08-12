@@ -106,6 +106,13 @@ most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
 }
 ```
 
+The work-claim capability envelope reports one ledger's provisioned claim
+profile. Its `namespace: "work-claim"` member and ledger-bound `backend`
+identify this capability context. It is distinct from the unbound default claim
+profile in the core `capabilities --json` response. A caller MUST use
+`claim capabilities --ledger <dir> --json` and MUST gate `publish-claimed` on
+that ledger-specific response.
+
 `safe_exclusive_dispatch` may be `true` only when all of the following hold:
 
 1. claim state, epoch high-water marks, clock floors, and operation outcomes
