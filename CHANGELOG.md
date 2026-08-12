@@ -12,6 +12,17 @@ consolidation. The first tagged release inherits this file.
 - The Claude Code plugin manifest and marketplace metadata now use the same
   distribution version as `package.json`. The packaging gate rejects release
   identity drift before npm, Git, or marketplace publication. Item 48.
+- Capability help now distinguishes the core's unbound default claim profile
+  from one provisioned ledger's work-claim profile. It names
+  `contract_version` as the core version and
+  `operations.work_claim.api_version` as the work-claim API version. Items 47
+  and 51.
+- `provision --help`, README, and the shipped skill now expose the accessible
+  Git-checkout prerequisite and the pre-provision
+  `claim capabilities --ledger <dir> --json` gate. Item 50.
+- The isolated consumer dogfood runbook now creates or selects the disposable
+  worktree before agent launch and requires a session-root Git preflight before
+  installation or ledger mutation. Item 52.
 
 ## 0.1.0-alpha.1 - 2026-08-11
 
