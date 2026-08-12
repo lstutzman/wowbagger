@@ -11,6 +11,17 @@ words MUST, MUST NOT, SHOULD, and MAY are normative. JSON examples show objects
 before compact serialization; a CLI prints exactly one compact JSON object
 followed by LF.
 
+Work-claim version negotiation uses
+`result.operations.work_claim.api_version` from
+`claim capabilities --ledger <dir> --json`. The top-level
+`contract_version: 1` remains the legacy claim-envelope marker. It is not the
+core mutation contract version and MUST NOT be compared with the
+`contract_version` from core `capabilities --json`.
+
+Generic consumers migrate without a wire change: they first identify the
+work-claim envelope by `namespace: "work-claim"`, then require the advertised
+`api_version`. Existing version 1 consumers can keep exact-member validation.
+
 ## 1. Safety boundary
 
 A claim is a durable lease for one work item in one ledger. It is not a Git

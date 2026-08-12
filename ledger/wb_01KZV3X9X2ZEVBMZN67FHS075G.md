@@ -5,7 +5,8 @@ number: 51
 title: "Give core and claim contracts distinct version fields"
 kind: task
 priority: 1
-status: backlog
+status: done
+completed: 2026-08-12
 created: 2026-08-12
 updated: 2026-08-12
 provenance:
@@ -15,6 +16,10 @@ depends_on: []
 related: [ wb_01KZBT447HVZ9798DXV1NTT515 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
 decisions:
+  - action: complete
+    date: 2026-08-12
+    summary: "Use distinct existing fields for version negotiation."
+    rationale: "Core consumers now negotiate with top-level contract_version. Work-claim consumers negotiate with result.operations.work_claim.api_version. Help, contracts, the README, and the shipped skill explain that the top-level claim contract_version remains a legacy envelope marker, so exact version 1 consumers remain compatible."
   - action: accept
     date: 2026-08-12
     summary: "Accept the version-domain ambiguity at priority 1."

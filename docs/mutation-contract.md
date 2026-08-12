@@ -29,6 +29,17 @@ explicit deltas:
 The bootstrap wire, work-claim API, adapter approval, instruction, handoff, and
 fixture-format versions are separate version domains and remain version 1.
 
+Version negotiation uses distinct existing fields. A core consumer MUST read
+the top-level `contract_version` from `capabilities --json`. A work-claim
+consumer MUST read `result.operations.work_claim.api_version` from
+`claim capabilities --ledger <dir> --json`. It MUST NOT compare a claim
+response's top-level `contract_version` with the core version. That claim member
+remains the version 1 envelope marker for exact version 1 consumers.
+
+This rule is the migration path for generic consumers: dispatch by command
+namespace first, then check the version field for that domain. No envelope
+member changes, so existing exact-member consumers remain compatible.
+
 ## 1. Scope
 
 The contract keeps four concerns separate:

@@ -103,6 +103,16 @@ test('capability help identifies the core and ledger-specific claim profiles', (
   assert.doesNotMatch(publish.stdout, /unavailable on an advisory backend/);
 });
 
+test('capability help names the core and work-claim version fields', () => {
+  const core = runCli('capabilities', '--help');
+  const claim = runCli('claim', '--help');
+
+  assert.match(core.stdout, /contract_version.*core contract/);
+  assert.match(core.stdout, /operations\.work_claim\.api_version.*work-claim API/);
+  assert.match(claim.stdout, /operations\.work_claim\.api_version/);
+  assert.match(claim.stdout, /top-level claim contract_version.*legacy envelope marker/);
+});
+
 test('a typo suggestion turns an unknown command into a did-you-mean instead of the bare usage throw', () => {
   const result = runCli('transitio');
 

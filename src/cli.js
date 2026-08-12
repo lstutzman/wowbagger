@@ -1058,6 +1058,8 @@ function commandHelp(command) {
       '',
       'Use claim capabilities --ledger <dir> --json to gate work on one provisioned ledger.',
       'The namespace and backend members identify the work-claim capability context.',
+      'Use operations.work_claim.api_version to negotiate the work-claim API.',
+      'The top-level claim contract_version is a legacy envelope marker.',
       '',
     ].join('\n');
   }
@@ -1068,7 +1070,8 @@ function commandHelp(command) {
       '',
       `${usage(command)}`,
       '',
-      'Use this probe to negotiate the core mutation contract.',
+      'Use contract_version to negotiate the core contract.',
+      'Use operations.work_claim.api_version to negotiate the work-claim API.',
       'Use claim capabilities --ledger <dir> --json to gate claimed work for one ledger.',
       '',
     ].join('\n');

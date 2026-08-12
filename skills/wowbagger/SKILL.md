@@ -18,8 +18,8 @@ so a version mismatch is detectable rather than silent.
 wowbagger capabilities --json
 ```
 
-Read `contract_version` from the result. **This skill requires
-`contract_version: 2`.**
+Read the top-level `contract_version` from this core response. **This skill
+requires core `contract_version: 2`.**
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to
@@ -97,8 +97,11 @@ claim as a lock or build a dispatch loop that requires exclusive ownership.
 Use the claimed write path as one complete loop:
 
 1. Run `provision` once for the ledger. Keep its `ledger_namespace`.
-2. Run `claim capabilities --ledger <dir> --json`. Stop if the namespace is
-   absent or the mode is not `merge-coordinated`.
+2. Run `claim capabilities --ledger <dir> --json`. Require
+   `result.operations.work_claim.api_version: 1`. Do not compare the claim
+   response's top-level `contract_version` with the core version; it is the
+   legacy claim-envelope marker. Stop if the namespace is absent or the mode is
+   not `merge-coordinated`.
 3. Read the current claim record. Acquire with its observed state in
    `expected`; keep the returned `owner_id`, `epoch`, and expiry as the fence.
 4. Renew before the lease expires if the work continues.

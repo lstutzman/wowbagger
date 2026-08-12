@@ -141,9 +141,9 @@ Then verify, exactly as on first install:
 wowbagger capabilities --json
 ```
 
-`contract_version` is the compatibility gate. The plugin and adapter refuse a
-core that reports a version they do not support; if you automate against the
-core directly, do the same rather than guessing.
+The top-level `contract_version` is the core compatibility gate. The plugin
+and adapter refuse a core that reports a version they do not support; if you
+automate against the core directly, do the same rather than guessing.
 
 The shipped adapter selects only adapter contract version 2 and requires core
 contract version 2. A v1-only consumer receives
@@ -327,11 +327,14 @@ operation. See [the work-claim contract](docs/work-claim-contract.md) for the
 request envelopes, refusal precedence, recovery rules, and the difference
 between strict fenced and merge-coordinated backends.
 
-The `contract_version` reported by `capabilities` is what an adapter or plugin
-declares it requires. A consumer pairing one with a core that reports a
-different contract version gets a refusal, not a guess. Direct checkout use —
-`./bin/wowbagger.js` from a clone — remains supported and is what this
-repository's own ledger uses.
+Core and work-claim versions use distinct negotiation fields. Read the
+top-level `contract_version` from core `capabilities`. Read
+`result.operations.work_claim.api_version` from
+`claim capabilities --ledger <dir> --json`. A claim response's top-level
+`contract_version` is the legacy claim-envelope marker; do not compare it with
+the core version. A consumer that receives an unsupported version refuses
+rather than guessing. Direct checkout use—`./bin/wowbagger.js` from a
+clone—remains supported and is what this repository's own ledger uses.
 
 ## Verify a checkout
 
