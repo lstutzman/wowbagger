@@ -4,9 +4,10 @@ id: wb_01KZ77NSW8R8C26CEJPJKHVPBT
 number: 10
 title: "Prepare a versioned standalone Wowbagger release"
 kind: task
-status: in-progress
+status: done
 created: 2026-08-04
-updated: 2026-08-11
+updated: 2026-08-12
+completed: 2026-08-12
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -23,6 +24,10 @@ decisions:
     date: 2026-08-06
     summary: "Moved from the standalone v0 epic to the productization epic."
     rationale: "This is consumability work, not core work. Separating them lets the v0 epic close when the core is done instead of dragging distribution along with it."
+  - action: complete
+    date: 2026-08-12
+    summary: "Publish and verify wowbagger 0.1.0-alpha.1."
+    rationale: "The package is public on npm under the next tag, installs and runs from a clean registry install, passes 713 tests on current Node and Node 20, passes adapter conformance, and is tagged v0.1.0-alpha.1 in Git."
 ---
 
 Produce and verify the first versioned standalone release only after the
