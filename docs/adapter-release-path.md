@@ -60,7 +60,8 @@ distribution versions to equal the `package.json` version before publication:
 - `.claude-plugin/marketplace.json` `metadata.version`; and
 - the `wowbagger` marketplace entry's `version`.
 
-Validate the plugin and marketplace manifests in the release checkout. Then
-confirm that the npm version, Git tag, and all three plugin metadata values are
-the same release candidate. A mismatch blocks the npm publish, Git tag, and
-marketplace update.
+Validate the plugin and marketplace manifests in the release checkout. The
+marketplace source `ref` must name `v<package version>`. The prepublish gate
+requires that tag to resolve to the clean release checkout, so the npm version,
+Git tag, and all three plugin metadata values name the same bytes. A mismatch
+blocks npm publication.

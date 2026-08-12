@@ -140,6 +140,7 @@ async function collectMarkdownFiles(root, directory, fileSystem) {
   const errors = [];
 
   for (const entry of entries.sort((left, right) => compareText(left.name, right.name))) {
+    if (directory === root && entry.name === '.wowbagger') continue;
     const entryPath = path.join(directory, entry.name);
     let entryType = entry;
 

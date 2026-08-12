@@ -181,7 +181,7 @@ test('claim decisions materialize a per-namespace tracked reconciliation log', a
   const acquired = await capture(['claim', 'acquire', '--ledger', ledger, '--input', request, '--json']);
 
   assert.equal(acquired.exit, 0);
-  const log = await readFile(path.join(root, 'wowbagger', `reconcile-${namespace}.md`), 'utf8');
+  const log = await readFile(path.join(ledger, '.wowbagger', `reconcile-${namespace}.md`), 'utf8');
   assert.match(log, new RegExp(`^# Wowbagger reconciliation log \`${namespace}\`\\n`, 'u'));
   assert.match(log, /"seq":1/u);
   assert.match(log, /"type":"claim"/u);

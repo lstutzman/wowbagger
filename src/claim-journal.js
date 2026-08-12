@@ -21,8 +21,8 @@ export function claimJournalPath(commonDir, namespace) {
   return path.join(commonDir, 'wowbagger', namespace, 'journal.ndjson');
 }
 
-export function claimReconcileLogPath(repoRoot, namespace) {
-  return path.join(repoRoot, 'wowbagger', `reconcile-${namespace}.md`);
+export function claimReconcileLogPath(ledgerDirectory, namespace) {
+  return path.join(ledgerDirectory, '.wowbagger', `reconcile-${namespace}.md`);
 }
 
 export async function appendClaimEntry(journalPath, entry) {

@@ -67,6 +67,9 @@ wowbagger transition --ledger <dir> --input request.json --json
 
 - `create` publishes only a caller-supplied canonical ID, atomically and
   no-clobber. It will not invent an ID for you.
+- `create` starts an empty ledger on schema version 2 and returns the selected
+  version at `result.item.core.schema_version`. A non-empty schema-version-1
+  ledger stays on version 1 until its complete ledger is migrated.
 - `transition` changes **one** item. If the change would require touching a
   dependent or a child, it refuses. That refusal is correct — make it a
   reviewable multi-file Git change instead of forcing it.
@@ -94,6 +97,10 @@ worktrees that use the protocol.
 It is not exclusive coordination. Direct filesystem writes, hostile processes,
 other clones, and alternate tools can bypass the protocol. Never present a
 claim as a lock or build a dispatch loop that requires exclusive ownership.
+
+An item stays in `backlog` while claimed work runs. The active claim is the work-in-flight signal.
+Do not use legacy `transition` to set `in-progress` after acquiring a claim; it
+correctly refuses with `active-claim-write-refused`.
 
 Use the claimed write path as one complete loop:
 

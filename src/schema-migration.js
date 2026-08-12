@@ -52,7 +52,7 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
   if (inputValidation.valid && ledger.items.length === 0) {
     throw new SchemaMigrationError(
       'empty-ledger',
-      'An empty ledger has no schema_version stamp to migrate and still defaults to schema version 1. No files were changed.',
+      'An empty ledger has no schema_version stamp to migrate; its first create defaults to schema version 2. No files were changed.',
     );
   }
   if (ledger.items.length > 0 && schemaVersions.size === 1 && schemaVersions.has(2)) {

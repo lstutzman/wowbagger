@@ -477,7 +477,7 @@ export async function reconcileClaimJournal({
   }
 
   await writeReconcileLog(
-    claimReconcileLogPath(path.dirname(path.resolve(ledgerDirectory)), namespace),
+    claimReconcileLogPath(path.resolve(ledgerDirectory), namespace),
     namespace,
     entries,
   );
@@ -494,6 +494,28 @@ export async function reconcileClaimJournal({
     unsafe: findings.some((finding) => finding.code !== 'pending-intent-resolved'),
   };
 }
+
+function publicationStatuses(entries) {
+  const finalizations = new Map(entries
+    .filter((entry) => entry.type === 'publish-finalization')
+    .map((entry) => [`${entry.operation_id}\0${entry.item_id}`, entry]));
+  return entries
+    .filter((entry) => (
+      entry.type === 'publish-final'
+        && entry.outcome?.stdout?.state === 'committed'
+    ))
+    .map((entry) => {
+      const finalization = finalizations.get(`${entry.operation_id}\0${entry.item_id}`);
+      return {
+        operation_id: entry.operation_id,
+        item_id: entry.item_id,
+        committed_revision: entry.outcome.stdout.result.committed_revision,
+        git_finalized: finalization !== undefined,
+        git_commit: finalization?.git_commit ?? null,
+      };
+    });
+}
+
 
 export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace }) {
   const storePath = claimStorePath(gitCommonDir, namespace);
@@ -519,6 +541,7 @@ export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namesp
             ledger_namespace: namespace,
             observed_at: reconciled.observedAt,
             findings: reconciled.findings,
+            publications: publicationStatuses(reconciled.entries),
           },
         },
       };
@@ -560,8 +583,11 @@ async function persistTerminal(entries, journalPath, ledgerDirectory, namespace,
     outcome,
   });
   entries.push(terminal);
-  const repoRoot = path.dirname(path.resolve(ledgerDirectory));
-  await writeReconcileLog(claimReconcileLogPath(repoRoot, namespace), namespace, entries);
+  await writeReconcileLog(
+    claimReconcileLogPath(path.resolve(ledgerDirectory), namespace),
+    namespace,
+    entries,
+  );
   try {
     await writeClaimState(storePath, state);
   } catch {

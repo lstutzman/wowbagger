@@ -85,8 +85,8 @@ The refusals are deliberate:
   finish the remaining stamps by hand.
 - `already-schema-2` means the complete ledger is already valid schema version
   2 and this tool will not run again.
-- `empty-ledger` means there is no schema stamp to change. An empty ledger still
-  defaults to schema version 1.
+- `empty-ledger` means there is no schema stamp to change. The first create in
+  an empty ledger now defaults to schema version 2.
 - `lock-held` means the window is not quiesced. Stop the writer and use audited
   lock recovery before another dry run.
 - `lock-state-unknown` means the lock directory could not be inspected. Fix the

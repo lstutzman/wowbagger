@@ -12,7 +12,7 @@ const GIT_ENVIRONMENT = Object.fromEntries(
 export async function readGitHeadLedger(ledgerDirectory) {
   const root = (await gitText(ledgerDirectory, ['rev-parse', '--show-toplevel'])).trim();
   const relativeLedger = path.relative(root, await realpath(ledgerDirectory));
-  if (relativeLedger === '' || relativeLedger.startsWith(`..${path.sep}`) || path.isAbsolute(relativeLedger)) {
+  if (relativeLedger.startsWith(`..${path.sep}`) || path.isAbsolute(relativeLedger)) {
     throw new Error(`ledger is outside the git worktree: ${relativeLedger}`);
   }
   let commit;
@@ -23,12 +23,16 @@ export async function readGitHeadLedger(ledgerDirectory) {
     throw error;
   }
   const gitLedger = toGitPath(relativeLedger);
-  const listing = await gitBuffer(root, [
-    'ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', gitLedger,
-  ]);
-  const prefix = `${gitLedger}/`;
+  const treeArguments = ['ls-tree', '-r', '-z', '--name-only', 'HEAD'];
+  if (gitLedger !== '') treeArguments.push('--', gitLedger);
+  const listing = await gitBuffer(root, treeArguments);
+  const prefix = gitLedger === '' ? '' : `${gitLedger}/`;
   const files = listing.toString('utf8').split('\0')
-    .filter((name) => name.startsWith(prefix) && name.endsWith('.md'));
+    .filter((name) => (
+      name.startsWith(prefix)
+        && !name.slice(prefix.length).startsWith('.wowbagger/')
+        && name.endsWith('.md')
+    ));
   const items = new Map();
   for (const file of files) {
     const bytes = await gitBuffer(root, ['show', `HEAD:${file}`]);

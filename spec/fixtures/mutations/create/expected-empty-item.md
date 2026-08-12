@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 2
 id: wb_01Q45V47G0205ANANANANANANA
 title: "Record an empty fictional observation"
 kind: task

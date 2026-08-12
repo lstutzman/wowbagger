@@ -1,6 +1,6 @@
 {
   "name": "wowbagger",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Plain-Markdown, Git-native work ledger for coordinating agents — validate, ready-select, and mutate a task ledger from the CLI.",
   "type": "module",
   "license": "MIT",
@@ -36,6 +36,8 @@
     "src",
     "skills",
     "adapters",
+    "docs/mutation-contract.md",
+    "docs/work-claim-contract.md",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
@@ -43,7 +45,7 @@
   "scripts": {
     "check": "npm test && git diff --check && git diff --cached --check",
     "test": "node --test test/*.test.js",
-    "prepublishOnly": "node bin/wowbagger.js validate --ledger ledger --json >/dev/null && node --check bin/wowbagger.js"
+    "prepublishOnly": "node bin/wowbagger.js validate --ledger ledger --json >/dev/null && node --check bin/wowbagger.js && node scripts/verify-release-tag.js"
   },
   "dependencies": {
     "yaml": "^2.9.0"

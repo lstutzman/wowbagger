@@ -5,9 +5,10 @@ number: 55
 title: "Expose Git finalization in claim-verify output"
 kind: task
 priority: 1
-status: backlog
+status: done
 created: 2026-08-12
 updated: 2026-08-12
+completed: 2026-08-12
 provenance:
   source: "propertycompass-consumer-dogfood"
   recorded_at: "2026-08-12T20:16:45Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-12
     summary: "Accept the Git-finalization observability defect at priority 10."
     rationale: "The same successful JSON describes both an uncommitted working-tree publication and a Git-finalized publication, which makes an automation durability gate impossible."
+  - action: complete
+    date: 2026-08-12
+    summary: "Complete Git finalization reporting."
+    rationale: "claim-verify now reports git_finalized and git_commit for each successful publication, and the finalization suite passes."
 ---
 
 The pilot ran `claim-verify` immediately after `publish-claimed` while the item was untracked, then again after committing it. Both calls returned `ok: true`, top-level `state: "committed"`, and `findings: []`; only `observed_at` differed. The journal records `publish-finalization` only after Git `HEAD` contains the revision, but the command response does not expose that distinction. Automation can therefore mistake a clean check for Git durability.

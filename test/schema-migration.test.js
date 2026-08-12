@@ -283,14 +283,13 @@ test('reports exact progress and recovery after a partial write failure', async 
   });
 });
 
-test('refuses an empty ledger because it cannot carry a schema version 2 stamp', async () => {
+test('refuses an empty ledger because its first create already selects schema version 2', async () => {
   await withLedger({}, async (ledger) => {
     const result = runMigration('--ledger', ledger);
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /^ERROR \[empty-ledger\]:/);
-    assert.match(result.stderr, /has no schema_version stamp to migrate/);
-    assert.match(result.stderr, /still defaults to schema version 1/);
+    assert.match(result.stderr, /first create defaults to schema version 2/);
     assert.doesNotMatch(result.stdout, /WOULD CHANGE|CHANGED|Summary:/);
   });
 });

@@ -9,6 +9,16 @@ consolidation. The first tagged release inherits this file.
 
 ### Fixed
 
+- `claim-verify` now reports `git_finalized` and `git_commit` for each successful
+  claimed publication. Reconciliation logs stay inside the configured ledger,
+  including repository-root ledgers. Items 55-57.
+- A new empty ledger now starts on schema version 2. Existing non-empty
+  schema-version-1 ledgers remain compatible until migration. Item 54.
+- The installed skill now identifies the active claim as the work-in-flight
+  signal while the item remains in `backlog`. Item 58.
+- The npm package now ships the mutation and work-claim contract documents that
+  the installed skill references. Item 59.
+
 - The Claude Code plugin manifest and marketplace metadata now use the same
   distribution version as `package.json`. The packaging gate rejects release
   identity drift before npm, Git, or marketplace publication. Item 48.

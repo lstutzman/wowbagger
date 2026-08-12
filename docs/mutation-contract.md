@@ -541,7 +541,8 @@ shelling out.
 item must not supply schema_version, id, status, created, updated, completed,
 killed, archived, decisions, or body. For a non-empty valid ledger, create
 inserts the schema_version already used by every existing item. For an empty
-ledger, it inserts schema_version 1. Create also inserts status triage, created
+ledger, it inserts schema_version 2. Create returns that selection in
+`result.item.core.schema_version`. It also inserts status triage, created
 and updated equal to the UTC date encoded by id, and related [] when omitted.
 It adds no terminal date or decision.
 

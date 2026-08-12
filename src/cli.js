@@ -844,9 +844,8 @@ async function runClaimCommand(claimCommand, argumentsList) {
         throw taggedFailure('CLOCK_FLOOR_PERSISTENCE_FAILED', error);
       }
       try {
-        const repoRoot = path.dirname(path.resolve(parsedOptions.options.ledger));
         await writeReconcileLog(
-          claimReconcileLogPath(repoRoot, namespace),
+          claimReconcileLogPath(path.resolve(parsedOptions.options.ledger), namespace),
           namespace,
           [...reconciled.entries, persisted],
         );

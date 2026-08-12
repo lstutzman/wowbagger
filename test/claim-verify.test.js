@@ -180,6 +180,31 @@ test('claim-verify recovers a publication whose ledger write committed before re
   assert.equal(read.envelope.result.outcome.state, 'committed');
 });
 
+test('claim-verify exposes whether each successful publication is finalized in Git', async () => {
+  const fixture = await pendingPublicationFixture();
+  const published = capture(['claim-verify', '--ledger', fixture.ledger, '--json']);
+
+  assert.deepEqual(published.envelope.result.publications, [{
+    operation_id: fixture.request.operation_id,
+    item_id: fixture.request.item_id,
+    committed_revision: fixture.request.candidate_sha256,
+    git_finalized: false,
+    git_commit: null,
+  }]);
+
+  assert.equal(spawnSync('git', ['add', fixture.itemPath], { cwd: fixture.root }).status, 0);
+  assert.equal(spawnSync('git', [
+    '-c', 'user.name=Wowbagger Test',
+    '-c', 'user.email=wowbagger@example.test',
+    'commit', '--quiet', '-m', 'Commit claimed publication',
+  ], { cwd: fixture.root }).status, 0);
+
+  const finalized = capture(['claim-verify', '--ledger', fixture.ledger, '--json']);
+  assert.equal(finalized.envelope.result.publications.length, 1);
+  assert.equal(finalized.envelope.result.publications[0].git_finalized, true);
+  assert.match(finalized.envelope.result.publications[0].git_commit, /^[0-9a-f]{40}$/);
+});
+
 test('claim-verify reports a revision regression after a committed claimed publication', async () => {
   const fixture = await pendingPublicationFixture();
   const resolved = capture(['claim-verify', '--ledger', fixture.ledger, '--json']);

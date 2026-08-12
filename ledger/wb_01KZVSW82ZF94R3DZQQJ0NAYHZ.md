@@ -5,9 +5,10 @@ number: 54
 title: "Let new consumer ledgers start on schema version 2"
 kind: task
 priority: 10
-status: backlog
+status: done
 created: 2026-08-12
 updated: 2026-08-12
+completed: 2026-08-12
 provenance:
   source: "propertycompass-consumer-dogfood"
   recorded_at: "2026-08-12T20:16:45Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-12
     summary: "Accept the schema bootstrap defect at priority 10."
     rationale: "A package-only consumer cannot start on the current ledger schema or run the unshipped migration path."
+  - action: complete
+    date: 2026-08-12
+    summary: "Complete schema-version-2 bootstrap."
+    rationale: "Create now selects schema version 2 for an empty ledger, preserves schema version 1 for non-empty version-1 ledgers, and the mutation, migration, and adapter suites pass."
 ---
 
 `create` stamps `schema_version: 1` when a ledger is empty. The request has no schema selector. The only schema-2 migration tool is `scripts/migrate-schema-2.js`, but `scripts/` is absent from the npm package and the tool refuses an empty ledger. A package-only consumer therefore cannot start on or migrate to schema 2 before its first item, even though the installed skill documents schema-2 dependency semantics.

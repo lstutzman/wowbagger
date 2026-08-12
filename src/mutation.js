@@ -277,7 +277,7 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
         return await finishUncommitted(mutationError('path-collision', 'The default item path is occupied by a different item.', 'unchanged', 4, details));
       }
 
-      const schemaVersion = current.ledger.items[0]?.data.schema_version ?? 1;
+      const schemaVersion = current.ledger.items[0]?.data.schema_version ?? 2;
       const bytes = createCandidateSource(request, schemaVersion);
       const candidateValidation = validateSerializedCandidate(
         current.ledger,

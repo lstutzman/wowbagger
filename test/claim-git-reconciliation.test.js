@@ -101,7 +101,7 @@ test('claim-verify finalizes a committed publication observed in git HEAD', asyn
   assert.equal(finalized.committed_revision, sha256(candidate));
   assert.equal(finalized.git_commit, commit);
   assert.equal(await readFile(fixture.itemPath, 'utf8'), candidate.toString('utf8'));
-  const reconcileLog = await readFile(claimReconcileLogPath(fixture.root, fixture.namespace), 'utf8');
+  const reconcileLog = await readFile(claimReconcileLogPath(fixture.ledger, fixture.namespace), 'utf8');
   assert.doesNotMatch(reconcileLog, /publish-finalization/);
 });
 
@@ -265,7 +265,7 @@ test('claim-verify refuses a reconciliation log symlink without changing its tar
   const victimPath = path.join(fixture.root, 'victim.txt');
   const victim = Buffer.from('must stay unchanged\n');
   await writeFile(victimPath, victim);
-  const reconcilePath = claimReconcileLogPath(fixture.root, fixture.namespace);
+  const reconcilePath = claimReconcileLogPath(fixture.ledger, fixture.namespace);
   await unlink(reconcilePath);
   await symlink(victimPath, reconcilePath);
 
@@ -274,4 +274,24 @@ test('claim-verify refuses a reconciliation log symlink without changing its tar
   assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
   assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
   assert.deepEqual(await readFile(victimPath), victim);
+});
+
+test('a repository-root ledger provisions and verifies inside its own metadata directory', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-root-ledger-'));
+  git(root, 'init', '-q');
+  git(root, 'config', 'user.email', 'test@example.com');
+  git(root, 'config', 'user.name', 'Wowbagger Test');
+  const provisioned = run(root, 'provision', '--ledger', root, '--json');
+  assert.equal(provisioned.exit, 0, JSON.stringify(provisioned.envelope));
+  git(root, 'add', '.wowbagger/namespace');
+  git(root, 'commit', '-qm', 'Provision root ledger');
+
+  const verified = run(root, 'claim-verify', '--ledger', root, '--json');
+
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  const reconcilePath = claimReconcileLogPath(
+    root,
+    provisioned.envelope.result.ledger_namespace,
+  );
+  assert.match(await readFile(reconcilePath, 'utf8'), /# Wowbagger reconciliation log/);
 });

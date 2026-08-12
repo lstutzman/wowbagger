@@ -5,9 +5,10 @@ number: 56
 title: "Keep reconciliation logs inside the configured ledger"
 kind: task
 priority: 2
-status: backlog
+status: done
 created: 2026-08-12
 updated: 2026-08-12
+completed: 2026-08-12
 provenance:
   source: "propertycompass-consumer-dogfood"
   recorded_at: "2026-08-12T20:16:45Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-12
     summary: "Accept the reconciliation-path defect at priority 20."
     rationale: "The configured ledger boundary does not contain all ledger-derived writes, and the extra path is not disclosed before it is created."
+  - action: complete
+    date: 2026-08-12
+    summary: "Complete ledger-contained reconciliation logging."
+    rationale: "The reconciliation log now lives inside the configured ledger boundary, including nested-ledger coverage, and the reconciliation suite passes."
 ---
 
 With `--ledger docs/pilots/wowbagger-ledger`, `claim-verify` wrote `docs/pilots/wowbagger/reconcile-<namespace>.md`. The derived path is `<parent-of-ledger>/wowbagger/reconcile-<namespace>.md`, outside the configured ledger. Nothing in capabilities, the installed skill, or the response announces this extra write boundary. A routine parent-directory `git add` swept the file into the consumer commit.

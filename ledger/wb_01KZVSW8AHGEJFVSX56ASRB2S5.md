@@ -5,9 +5,10 @@ number: 57
 title: "Support or reject a repository-root ledger at provision time"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-12
 updated: 2026-08-12
+completed: 2026-08-12
 provenance:
   source: "propertycompass-consumer-dogfood"
   recorded_at: "2026-08-12T20:16:45Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-12
     summary: "Accept the repository-root layout defect at priority 20."
     rationale: "Provision accepts a layout that claim verification cannot use, then reports the path failure as an unreadable claim store."
+  - action: complete
+    date: 2026-08-12
+    summary: "Complete repository-root ledger support."
+    rationale: "Provision and claim-verify now support a ledger at the repository root while keeping reconciliation data inside the repository metadata boundary."
 ---
 
 In a fresh Git repository, `wowbagger provision --ledger . --json` succeeds and writes `.wowbagger/namespace`. The next `claim-verify --ledger . --json` exits 6 with `claim-store-unavailable` and reason `claim-store-unreadable`. The claim store is readable; reconciliation-log derivation targets a parent outside the repository and fails.
