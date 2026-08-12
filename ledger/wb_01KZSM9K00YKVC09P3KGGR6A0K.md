@@ -5,9 +5,10 @@ number: 65
 title: "Publish immutable 0.1.0-alpha.3 release"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-12
 updated: 2026-08-12
+completed: 2026-08-12
 provenance:
   source: "propertycompass-consumer-dogfood-final"
   recorded_at: "2026-08-12T22:45:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-12
     summary: "Accept alpha.3 release after pilot corrections."
     rationale: "Items 62 and 64 correct published consumer guidance and detect plugin/core release mismatch; both require immutable artifact proof."
+  - action: complete
+    date: 2026-08-12
+    summary: "Publish and prove 0.1.0-alpha.3."
+    rationale: "Tag v0.1.0-alpha.3 peels to release commit 5c1b074; npm next serves the matching package; clean PropertyCompass consumer dogfood passed G4, G5, and the claimed lifecycle with no open findings."
 ---
 ## Acceptance criteria
 
