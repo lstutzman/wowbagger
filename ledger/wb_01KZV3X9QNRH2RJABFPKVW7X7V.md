@@ -4,15 +4,21 @@ id: wb_01KZV3X9QNRH2RJABFPKVW7X7V
 number: 48
 title: "Align plugin release identity with the core release"
 kind: task
-status: triage
+priority: 10
+status: backlog
 created: 2026-08-12
 updated: 2026-08-12
 provenance:
   source: "propertycompass-dogfood-pilot"
   recorded_at: "2026-08-12T13:52:27Z"
 depends_on: []
-related: [wb_01KZBT43RZSKMG8Z19RQQ43DDR, wb_01KZBT447HVZ9798DXV1NTT515]
+related: [ wb_01KZBT43RZSKMG8Z19RQQ43DDR, wb_01KZBT447HVZ9798DXV1NTT515 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-12
+    summary: "Accept the release-identity defect at priority 10."
+    rationale: "The shipped plugin metadata says prealpha while the released core and repository tag say alpha.1. This violates the recorded single-repository release path and must be corrected before marketplace publication or another consumer install."
 ---
 
 The first installed-skill dogfood used `npm install -g wowbagger@next`, which installed core `0.1.0-alpha.1`. `claude plugin details wowbagger@wowbagger` reported plugin `0.1.0-prealpha` from Git commit `28a3740d08b288d49402c7851011638cb51f2a9b`.

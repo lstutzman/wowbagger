@@ -4,15 +4,21 @@ id: wb_01KZV3X9YRFSEVRB1G8M28921R
 number: 52
 title: "Make dogfood setup work in an isolated agent worktree"
 kind: task
-status: triage
+priority: 10
+status: backlog
 created: 2026-08-12
 updated: 2026-08-12
 provenance:
   source: "propertycompass-dogfood-pilot"
   recorded_at: "2026-08-12T13:52:27Z"
 depends_on: []
-related: [wb_01KZBT447HVZ9798DXV1NTT515]
+related: [ wb_01KZBT447HVZ9798DXV1NTT515 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-12
+    summary: "Accept the dogfood topology defect at priority 10."
+    rationale: "The prescribed reversible setup created a sibling worktree after agent launch, but the harness could not run Git there. This is not a core failure; it is a repeatable productization/runbook defect that blocks the supported pilot unless setup happens before agent launch."
 ---
 
 The first dogfood prompt told an agent to create a disposable sibling worktree and keep all changes there. The harness refused Git commands against that sibling worktree before execution, including `cd <pilot-worktree> && git status` and `git -C <pilot-worktree> rev-parse HEAD`. Non-Git commands there succeeded, but each shell call reset to the session root. This blocked every required checkpoint, implementation, and ledger commit.
