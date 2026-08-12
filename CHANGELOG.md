@@ -7,6 +7,12 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- The Claude Code plugin manifest and marketplace metadata now use the same
+  distribution version as `package.json`. The packaging gate rejects release
+  identity drift before npm, Git, or marketplace publication. Item 48.
+
 ## 0.1.0-alpha.1 - 2026-08-11
 
 ### Behaviour changes

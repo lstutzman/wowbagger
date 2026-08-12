@@ -7,6 +7,12 @@ import { runCli } from './support.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+const pluginManifest = JSON.parse(
+  readFileSync(path.join(projectRoot, '.claude-plugin', 'plugin.json'), 'utf8'),
+);
+const marketplaceManifest = JSON.parse(
+  readFileSync(path.join(projectRoot, '.claude-plugin', 'marketplace.json'), 'utf8'),
+);
 
 test('the npm package is public and installable under the wowbagger name', () => {
   assert.equal(manifest.name, 'wowbagger');
@@ -21,6 +27,14 @@ test('the published binary prints the distribution version', () => {
   const result = runCli('--version');
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, `${manifest.version}\n`);
+});
+
+test('the npm package, plugin, and marketplace publish one distribution version', () => {
+  const marketplacePlugin = marketplaceManifest.plugins.find(({ name }) => name === manifest.name);
+
+  assert.equal(pluginManifest.version, manifest.version);
+  assert.equal(marketplaceManifest.metadata.version, manifest.version);
+  assert.equal(marketplacePlugin?.version, manifest.version);
 });
 
 test('a broken package cannot ship: prepublishOnly refuses a failed validation', () => {

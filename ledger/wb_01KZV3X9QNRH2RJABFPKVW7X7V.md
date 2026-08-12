@@ -5,7 +5,8 @@ number: 48
 title: "Align plugin release identity with the core release"
 kind: task
 priority: 10
-status: backlog
+status: done
+completed: 2026-08-12
 created: 2026-08-12
 updated: 2026-08-12
 provenance:
@@ -15,6 +16,10 @@ depends_on: []
 related: [ wb_01KZBT43RZSKMG8Z19RQQ43DDR, wb_01KZBT447HVZ9798DXV1NTT515 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
 decisions:
+  - action: complete
+    date: 2026-08-12
+    summary: "Align plugin and marketplace metadata with core release 0.1.0-alpha.1."
+    rationale: "The plugin manifest, marketplace metadata, marketplace plugin entry, npm package, and Git release now use one distribution version. A packaging test and the release runbook make version drift a release-blocking failure. Claude plugin validation passes."
   - action: accept
     date: 2026-08-12
     summary: "Accept the release-identity defect at priority 10."

@@ -52,3 +52,15 @@ silently selects the other version's behavior.
 normative vectors against the shipped engine for each adapter target before
 a tag is cut, alongside the full suite on Node 26 and Node 20 and
 `npm audit --omit=dev`. A target whose evidence regresses does not ship.
+
+The same release gate also runs `test/packaging.test.js`. It requires these
+distribution versions to equal the `package.json` version before publication:
+
+- `.claude-plugin/plugin.json` `version`;
+- `.claude-plugin/marketplace.json` `metadata.version`; and
+- the `wowbagger` marketplace entry's `version`.
+
+Validate the plugin and marketplace manifests in the release checkout. Then
+confirm that the npm version, Git tag, and all three plugin metadata values are
+the same release candidate. A mismatch blocks the npm publish, Git tag, and
+marketplace update.
