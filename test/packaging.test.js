@@ -15,6 +15,7 @@ const pluginManifest = JSON.parse(
 const marketplaceManifest = JSON.parse(
   readFileSync(path.join(projectRoot, '.claude-plugin', 'marketplace.json'), 'utf8'),
 );
+const readme = readFileSync(path.join(projectRoot, 'README.md'), 'utf8');
 const installedSkill = readFileSync(path.join(projectRoot, 'skills', 'wowbagger', 'SKILL.md'), 'utf8');
 const installedWorkClaimContract = readFileSync(
   path.join(projectRoot, 'docs', 'work-claim-contract.md'),
@@ -50,6 +51,16 @@ test('the marketplace installs the plugin from its immutable release tag', () =>
   assert.equal(marketplacePlugin?.source.ref, `v${manifest.version}`);
 });
 
+test('published README points prerelease consumers at the current tag and channel', () => {
+  const channel = manifest.version.includes('-') ? 'next' : 'latest';
+  const releaseTagVersions = [...readme.matchAll(
+    /github:lstutzman\/wowbagger#v([0-9A-Za-z.-]+)/g,
+  )].map((match) => match[1]);
+
+  assert.deepEqual(new Set(releaseTagVersions), new Set([manifest.version]));
+  assert.match(readme, new RegExp(`npm install -g wowbagger@${channel}\\s+# public npm registry`));
+});
+
 test('the installed skill defines the lifecycle signal for claimed work', () => {
   assert.match(installedSkill, /active claim is the work-in-flight signal/i);
   assert.match(installedSkill, /item stays in `backlog` while claimed work runs/i);
@@ -60,6 +71,14 @@ test('the npm package ships every contract document referenced by the installed 
     assert.match(installedSkill, new RegExp(contract.replaceAll('.', '\\.')));
     assert.ok(manifest.files.includes(contract), `${contract} must ship`);
   }
+});
+
+test('the installed skill requires the core distribution that shipped with it', () => {
+  const version = manifest.version.replaceAll('.', '\\.');
+
+  assert.match(installedSkill, /wowbagger --version/);
+  assert.match(installedSkill, new RegExp(`requires distribution version\\s+\`${version}\``));
+  assert.match(installedSkill, /distribution version.*missing or.*different.*stop/is);
 });
 
 test('the npm package ships the documented schema version 2 migration entrypoint', () => {

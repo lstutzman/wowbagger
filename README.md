@@ -34,7 +34,7 @@ Install the core CLI, then verify it:
 ```sh
 npm install -g wowbagger@next   # public npm prerelease
 # or, from this release's Git tag:
-# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.1
+# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.3
 wowbagger capabilities --json
 ```
 
@@ -45,11 +45,12 @@ In Claude Code, add the plugin:
 /plugin install wowbagger@wowbagger
 ```
 
-The plugin drives the installed core rather than bundling one, so a version
-mismatch is detectable instead of silent: it reads `contract_version` from
-`capabilities` and refuses when the core is absent or reports anything it does
-not support. It will not fall back to editing ledger files by hand, because that
-would bypass validation and atomic publication.
+The plugin drives the installed core rather than bundling one, so a mismatch is
+detectable instead of silent. Its skill reads `wowbagger --version` and
+`capabilities`; it requires the same distribution version as the plugin and
+core contract version 2. It refuses an absent or incompatible core. It will not
+fall back to editing ledger files by hand, because that would bypass validation
+and atomic publication.
 
 For an isolated consumer pilot, create or select the disposable worktree before
 the agent starts. Then launch a new session with that worktree as its project
@@ -69,22 +70,23 @@ two supported install routes:
 - **npm registry** — `npm install -g wowbagger@next` installs the current
   prerelease.
 - **git tag** —
-  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.1` installs this
+  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.3` installs this
   release. Installing at a ref installs the core and every adapter that ref
   carries.
 
 Either route installs the core and the `wowbagger` command. The Claude Code
 plugin is a separate artifact (see [Start here](#start-here)); the core and the
-plugin are installed and versioned independently, and a mismatch is refused by
-`contract_version` rather than guessed.
+plugin are installed independently. Install their matching distribution
+versions.
 
 ### Compatibility
 
-The behavioural version is `contract_version`, reported by
+The contract version is top-level `contract_version`, reported by
 `wowbagger capabilities --json`. Contracts change it; refactors do not. The
-distribution version is the npm/git version, which names bytes, not behaviour.
-Match on `contract_version` — never on the package version — when you decide
-whether a core supports your request.
+npm/Git distribution version names release bytes. General API consumers
+negotiate the contract version. The shipped plugin skill additionally requires
+the exact core distribution version that shipped with it, because its
+instructions can depend on additive behavior from that release.
 
 - **Node.js:** 20 and later. The adapter conformance vectors run against Node
   20 and the current runtime before each release.
@@ -131,8 +133,8 @@ wowbagger core, this is how you move forward safely.
 Upgrade the pieces you installed:
 
 ```sh
-npm install -g wowbagger@latest                # public npm registry
-npm install -g github:lstutzman/wowbagger      # or: a direct git-tag install
+npm install -g wowbagger@next                  # public npm registry
+npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.3  # immutable Git release
 git pull && npm ci                            # or: a direct checkout
 ```
 
@@ -143,15 +145,15 @@ In Claude Code, update the plugin the same way it was installed:
 /plugin update wowbagger@wowbagger
 ```
 
-Then verify, exactly as on first install:
-
 ```sh
+wowbagger --version
 wowbagger capabilities --json
 ```
 
-The top-level `contract_version` is the core compatibility gate. The plugin
-and adapter refuse a core that reports a version they do not support; if you
-automate against the core directly, do the same rather than guessing.
+The plugin requires its exact core distribution version and top-level core
+`contract_version: 2`. Direct API consumers must check the contract version
+they support; installed plugin users must also keep the plugin and core
+distribution versions equal.
 
 The shipped adapter selects only adapter contract version 2 and requires core
 contract version 2. A v1-only consumer receives
@@ -340,8 +342,9 @@ top-level `contract_version` from core `capabilities`. Read
 `result.operations.work_claim.api_version` from
 `claim capabilities --ledger <dir> --json`. A claim response's top-level
 `contract_version` is the legacy claim-envelope marker; do not compare it with
-the core version. A consumer that receives an unsupported version refuses
-rather than guessing. Direct checkout use—`./bin/wowbagger.js` from a
+the core version. A contract consumer that receives an unsupported version
+refuses rather than guessing. The shipped plugin skill also requires its exact
+core distribution version. Direct checkout use—`./bin/wowbagger.js` from a
 clone—remains supported and is what this repository's own ledger uses.
 
 ## Verify a checkout

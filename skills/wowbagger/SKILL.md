@@ -15,23 +15,29 @@ This skill does **not** bundle the wowbagger core. It drives an installed one,
 so a version mismatch is detectable rather than silent.
 
 ```sh
+wowbagger --version
 wowbagger capabilities --json
 ```
 
-Read the top-level `contract_version` from this core response. **This skill
-requires core `contract_version: 2`.**
+Read the plain distribution version from the first command and the top-level
+`contract_version` from the second. **This skill requires distribution version
+`0.1.0-alpha.3` and core `contract_version: 2`.**
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to
   editing ledger files by hand — hand-edits bypass validation and atomic
   publication, which is the whole point of the tool.
+- If the distribution version is missing or is different, stop and report the
+  installed and required versions. An older core can share contract version 2
+  while still lacking behavior this skill requires. Do not guess from the
+  contract version alone.
 - `contract_version` is anything other than `2` → stop and say so plainly. A
   core reporting `1` predates schema version 2, where `depends_on` records
   declared prerequisites rather than only live blockers; an older or newer core
   may have changed the request or response shape. Do not guess.
 
-Run this once per session before the first ledger command, not before every
-command.
+Run both commands once per session before the first ledger command, not before
+every command.
 
 ## Reading
 

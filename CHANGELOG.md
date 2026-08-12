@@ -7,6 +7,18 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.3 - 2026-08-12
+
+### Fixed
+
+- Published install and upgrade guidance now names this release's immutable Git
+  tag and uses the prerelease `next` npm channel instead of the older `latest`
+  artifact. Item 62.
+- The installed plugin skill now requires the exact core distribution version
+  that shipped with it, in addition to core contract version 2. This detects an
+  older core that shares the contract number but lacks behavior required by the
+  newer skill. Item 64; item 63 records the rejected capability-schema change.
+
 ## 0.1.0-alpha.2 - 2026-08-12
 
 ### Fixed
