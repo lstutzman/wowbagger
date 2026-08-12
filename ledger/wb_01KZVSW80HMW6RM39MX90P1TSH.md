@@ -5,9 +5,10 @@ number: 53
 title: "Publish an immutable plugin release artifact"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-12
 updated: 2026-08-12
+completed: 2026-08-12
 provenance:
   source: "propertycompass-consumer-dogfood"
   recorded_at: "2026-08-12T20:16:45Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-12
     summary: "Accept the immutable-release defect at priority 10."
     rationale: "The named alpha.1 tag and the plugin bytes installed from main disagree, so the consumer run is attributable but not reproducible."
+  - action: complete
+    date: 2026-08-12
+    summary: "Publish immutable 0.1.0-alpha.2 release."
+    rationale: "The annotated v0.1.0-alpha.2 tag resolves to commit ae53e5d19439191ca4715079dd61def7e33bfbc2, npm serves wowbagger@0.1.0-alpha.2, and the next dist-tag points to that version."
 ---
 
 The PropertyCompass2 consumer dogfood installed plugin version `0.1.0-alpha.1` from unpinned `main` at commit `c2447d6e18df77657ca022281d5d9be89c46bc7f`. The release tag `v0.1.0-alpha.1` points at `faee90c695dfc57a8c2376352ef0035f7494c2fa`, where `.claude-plugin/plugin.json` still reports `0.1.0-prealpha`. The npm release is named, but the plugin install is attributable only by a moving branch SHA and cannot be reproduced from the named tag.
