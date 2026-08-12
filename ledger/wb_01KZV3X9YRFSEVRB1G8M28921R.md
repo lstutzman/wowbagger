@@ -5,7 +5,8 @@ number: 52
 title: "Make dogfood setup work in an isolated agent worktree"
 kind: task
 priority: 10
-status: backlog
+status: done
+completed: 2026-08-12
 created: 2026-08-12
 updated: 2026-08-12
 provenance:
@@ -15,6 +16,10 @@ depends_on: []
 related: [ wb_01KZBT447HVZ9798DXV1NTT515 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
 decisions:
+  - action: complete
+    date: 2026-08-12
+    summary: "Document the pre-launch worktree setup and session-root Git preflight."
+    rationale: "The isolated pilot runbook now creates or selects the disposable worktree before agent launch, starts a new session from that root, verifies Git access before installation or ledger mutation, separates harness/setup findings from Wowbagger product defects, and uses non-forced cleanup. A real disposable worktree smoke run proved the documented session-root preflight on macOS."
   - action: accept
     date: 2026-08-12
     summary: "Accept the dogfood topology defect at priority 10."

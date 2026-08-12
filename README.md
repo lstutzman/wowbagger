@@ -51,6 +51,11 @@ mismatch is detectable instead of silent: it reads `contract_version` from
 not support. It will not fall back to editing ledger files by hand, because that
 would bypass validation and atomic publication.
 
+For an isolated consumer pilot, create or select the disposable worktree before
+the agent starts. Then launch a new session with that worktree as its project
+root. Follow the [isolated dogfood pilot runbook](docs/isolated-dogfood-pilot.md);
+do not try to drive a sibling worktree from an already-running agent session.
+
 To use the core directly from a clone instead, see
 [Core commands](#core-commands).
 
