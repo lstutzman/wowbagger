@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -16,6 +16,10 @@ const marketplaceManifest = JSON.parse(
   readFileSync(path.join(projectRoot, '.claude-plugin', 'marketplace.json'), 'utf8'),
 );
 const installedSkill = readFileSync(path.join(projectRoot, 'skills', 'wowbagger', 'SKILL.md'), 'utf8');
+const installedWorkClaimContract = readFileSync(
+  path.join(projectRoot, 'docs', 'work-claim-contract.md'),
+  'utf8',
+);
 
 test('the npm package is public and installable under the wowbagger name', () => {
   assert.equal(manifest.name, 'wowbagger');
@@ -56,6 +60,29 @@ test('the npm package ships every contract document referenced by the installed 
     assert.match(installedSkill, new RegExp(contract.replaceAll('.', '\\.')));
     assert.ok(manifest.files.includes(contract), `${contract} must ship`);
   }
+});
+
+test('the npm package ships the documented schema version 2 migration entrypoint', () => {
+  assert.ok(
+    manifest.files.includes('scripts/migrate-schema-2.js'),
+    'scripts/migrate-schema-2.js must ship',
+  );
+  assert.notEqual(
+    statSync(path.join(projectRoot, 'scripts', 'migrate-schema-2.js')).mode & 0o111,
+    0,
+    'scripts/migrate-schema-2.js must be executable',
+  );
+});
+
+test('the installed contract distinguishes reconciliation from Git finalization', () => {
+  assert.match(
+    installedWorkClaimContract,
+    /top-level `state: "committed"` describes durable reconciliation state/i,
+  );
+  assert.match(
+    installedWorkClaimContract,
+    /gate Git\s+completion on.*`git_finalized`.*`git_commit`/is,
+  );
 });
 
 test('the release gate rejects plugin bytes that differ from the version tag', () => {

@@ -472,6 +472,13 @@ A clean verification returns exit 0 and `state: "committed"`. Findings named
 MUST stop publication work and inspect those findings. Repeating verification
 MUST NOT duplicate a publication finalization.
 
+The top-level `state: "committed"` describes durable reconciliation state, not
+Git finalization of every successful publication. A caller MUST gate Git
+completion on each `result.publications` entry's `git_finalized` and
+`git_commit` values. `git_finalized: false` with `git_commit: null` means the
+publication outcome is durable but the committed revision is not yet present
+in Git `HEAD`.
+
 `ledger-publication.read` accepts exactly
 `{"operation_id":"...","ledger_namespace":"...","item_id":"..."}`
 and returns the durable operation identity, `operation_digest`, and terminal

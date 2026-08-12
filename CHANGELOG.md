@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.2 - 2026-08-12
+
 ### Fixed
 
 - `claim-verify` now reports `git_finalized` and `git_commit` for each successful
@@ -18,6 +20,10 @@ consolidation. The first tagged release inherits this file.
   signal while the item remains in `backlog`. Item 58.
 - The npm package now ships the mutation and work-claim contract documents that
   the installed skill references. Item 59.
+- The npm package now ships the documented schema-version-2 migration
+  entrypoint for package-only consumers. Item 60.
+- The installed work-claim contract now distinguishes durable reconciliation
+  state from per-publication Git finalization. Item 61.
 
 - The Claude Code plugin manifest and marketplace metadata now use the same
   distribution version as `package.json`. The packaging gate rejects release
