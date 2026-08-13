@@ -171,7 +171,16 @@
       "id": "request-missing",
       "target": "request",
       "delete": "request_id",
-      "expected": "invalid-describe-request"
+      "expected": "invalid-describe-request",
+      "expected_result": {
+        "ok": false,
+        "bootstrap_wire_version": 1,
+        "error": {
+          "code": "invalid-describe-request",
+          "message": "The adapter describe request is invalid.",
+          "details": { "member": "members" }
+        }
+      }
     },
     {
       "id": "request-extra",

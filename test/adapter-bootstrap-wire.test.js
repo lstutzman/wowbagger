@@ -8,8 +8,11 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readBootstrapRequest } from '../src/adapter/bootstrap.js';
 import { launchCoreProcess } from '../src/adapter/entrypoint-main.js';
+import { describeAdapter as referenceDescribeAdapter } from '../spec/adapter-reference.js';
 
 const entrypoint = fileURLToPath(new URL('../adapters/claude-code/entrypoint.js', import.meta.url));
+const adapterEntrypoints = ['claude-code', 'codex', 'opencode']
+  .map((adapter) => fileURLToPath(new URL(`../adapters/${adapter}/entrypoint.js`, import.meta.url)));
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const validRequest = JSON.stringify({
@@ -21,9 +24,12 @@ const validRequest = JSON.stringify({
 // Spawns `adapters/claude-code/entrypoint.js` for real (never calling its
 // exported functions directly) so the wire assertions exercise the actual
 // process boundary: real stdin, real stdout, real exit code.
-function spawnEntrypoint(args, stdinInput, { env = process.env } = {}) {
+function spawnEntrypoint(args, stdinInput, {
+  env = process.env,
+  entrypointPath = entrypoint,
+} = {}) {
   return new Promise((resolve, reject) => {
-    const child = execFile(process.execPath, [entrypoint, ...args], { encoding: 'buffer', env });
+    const child = execFile(process.execPath, [entrypointPath, ...args], { encoding: 'buffer', env });
     let stdout = Buffer.alloc(0);
     child.stdout.on('data', (chunk) => { stdout = Buffer.concat([stdout, chunk]); });
     child.on('error', reject);
@@ -105,6 +111,25 @@ test('answers describe with exactly one JSON object and exits zero', async () =>
     JSON.parse(baseline.stdout).result.operations.work_claim.supported,
   );
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
+});
+
+test('all adapter entrypoints return the contracted malformed describe refusal bytes', async () => {
+  const request = {
+    bootstrap_wire_version: 1,
+    supported_adapter_contract_versions: [2],
+    request_id: 'has a space',
+  };
+  const expected = Buffer.from(`${JSON.stringify(referenceDescribeAdapter(request, null, null))}\n`);
+
+  for (const entrypointPath of adapterEntrypoints) {
+    const { code, stdout } = await spawnEntrypoint(
+      ['describe'],
+      JSON.stringify(request),
+      { entrypointPath },
+    );
+    assert.equal(code, 0, entrypointPath);
+    assert.deepEqual(stdout, expected, entrypointPath);
+  }
 });
 
 test('a version 1 consumer cannot negotiate with the version 2 adapter', async () => {

@@ -247,6 +247,18 @@ function matchesExpectation(result, scenario) {
   if (!Object.hasOwn(scenario, 'expected')) {
     throw new Error(`scenario ${scenario.id} declares no expected error code`);
   }
+  if (Object.hasOwn(scenario, 'expected_result')) {
+    return result.error_code === 'invalid-describe-request'
+      && sameJson({
+        ok: false,
+        bootstrap_wire_version: 1,
+        error: {
+          code: result.error_code,
+          message: 'The adapter describe request is invalid.',
+          details: { member: result.detail },
+        },
+      }, scenario.expected_result);
+  }
   return result.error_code === scenario.expected;
 }
 

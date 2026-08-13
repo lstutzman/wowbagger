@@ -99,6 +99,26 @@ Malformed request, manifest, and dynamic objects are refused as
 `invalid-describe-result`, respectively; validation never depends on host
 array methods or property access before the containing schema has passed.
 
+The bootstrap wire version 1 refusal for a malformed `describe` request is the
+exact envelope below. `message` is stable. For a parsed request that fails the
+describe schema, `details.member` names the first failing member check. For an
+input read or parse failure, `details` preserves the reader's complete
+diagnostic object.
+
+```json
+{
+  "ok": false,
+  "bootstrap_wire_version": 1,
+  "error": {
+    "code": "invalid-describe-request",
+    "message": "The adapter describe request is invalid.",
+    "details": {
+      "member": "request_id"
+    }
+  }
+}
+```
+
 Bootstrap is deliberately non-circular. Wire version 1 is fixed independently
 of the adapter versions being negotiated. The client sends its supported
 adapter versions; `describe` selects one or refuses. An implementation MUST

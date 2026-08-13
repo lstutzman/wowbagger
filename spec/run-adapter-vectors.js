@@ -353,7 +353,11 @@ async function evaluateAssertion(directory, caseName, assertion) {
             referenceCoreCapabilities(),
           )
         : describeAdapter(request, manifest, dynamic);
-      assert.equal(result.error.code, scenario.expected);
+      if (Object.hasOwn(scenario, 'expected_result')) {
+        assert.deepEqual(result, scenario.expected_result);
+      } else {
+        assert.equal(result.error.code, scenario.expected);
+      }
       return evidenceWithResult(
         scenario.id === 'required-core-version' ? 'verifyCoreProbe' : 'describeAdapter', result,
       );

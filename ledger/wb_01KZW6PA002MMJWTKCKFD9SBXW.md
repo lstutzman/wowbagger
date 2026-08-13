@@ -5,9 +5,10 @@ number: 68
 title: "Make adapter describe refusals actionable"
 kind: task
 priority: 30
-status: backlog
+status: done
 created: 2026-08-13
 updated: 2026-08-13
+completed: 2026-08-13
 provenance:
   source: "propertycompass-consumer-dogfood-run-5"
   recorded_at: "2026-08-13T09:30:22Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-13
     summary: "Accept the describe refusal usability defect."
     rationale: "The describe wire drops available request diagnostics and leaves a malformed caller without actionable guidance."
+  - action: complete
+    date: 2026-08-13
+    summary: "Return the documented actionable describe refusal from every adapter entrypoint."
+    rationale: "The bootstrap wire now preserves stable guidance and precise diagnostics, while the independent oracle, conformance fixture, and dual-runtime process tests agree on the exact envelope."
 ---
 ## Problem
 

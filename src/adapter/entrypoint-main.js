@@ -26,6 +26,18 @@ const STANDARD_LIMITS = Object.freeze({
 });
 const PROBE_LIVE_CORE = Symbol('probe-live-core');
 
+function invalidDescribeResponse(details) {
+  return {
+    ok: false,
+    bootstrap_wire_version: 1,
+    error: {
+      code: 'invalid-describe-request',
+      message: 'The adapter describe request is invalid.',
+      details,
+    },
+  };
+}
+
 export function standardDynamicResult(manifest, coreProbe) {
   return {
     ok: true,
@@ -296,17 +308,19 @@ export async function runAdapterEntrypoint({
             details: incoming.detail,
           },
         }
-      : { ok: false, error: { code: incoming.error_code } };
+      : invalidDescribeResponse(incoming.detail);
     await writeBootstrapResponse(process.stdout, response);
     return;
   }
 
   if (operation === 'describe') {
     const described = describeAdapter(incoming.request, manifest, dynamic);
-    await writeBootstrapResponse(
-      process.stdout,
-      described.ok ? described.result : { ok: false, error: { code: described.error_code } },
-    );
+    const response = described.ok
+      ? described.result
+      : described.error_code === 'invalid-describe-request'
+        ? invalidDescribeResponse({ member: described.detail })
+        : { ok: false, error: { code: described.error_code } };
+    await writeBootstrapResponse(process.stdout, response);
     return;
   }
 

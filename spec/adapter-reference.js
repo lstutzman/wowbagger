@@ -449,7 +449,7 @@ export function validateInvocationLimits(requested, advertised) {
 export function describeAdapter(request, manifest, suppliedDynamic) {
   const requestError = describeRequestSchemaError(request);
   if (requestError) {
-    return refusalWithWire(1, 'invalid-describe-request', { member: requestError });
+    return describeRequestRefusal(1, { member: requestError });
   }
   const manifestError = adapterManifestSchemaError(manifest);
   if (manifestError) {
@@ -2468,6 +2468,18 @@ function refusal(code, details) {
 
 function refusalWithWire(bootstrapWireVersion, code, details) {
   return { ok: false, bootstrap_wire_version: bootstrapWireVersion, error: adapterError(code, details) };
+}
+
+function describeRequestRefusal(bootstrapWireVersion, details) {
+  return {
+    ok: false,
+    bootstrap_wire_version: bootstrapWireVersion,
+    error: {
+      code: 'invalid-describe-request',
+      message: 'The adapter describe request is invalid.',
+      details,
+    },
+  };
 }
 
 function adapterError(code, details) {
