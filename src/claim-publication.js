@@ -24,17 +24,28 @@ const EPOCH = /^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-
 const MAX_CANDIDATE_BYTES = 8388608;
 const MAX_CANDIDATE_BASE64_CHARS = Math.ceil(MAX_CANDIDATE_BYTES / 3) * 4;
 
+const PUBLICATION_MEMBERS = [
+  'candidate_sha256',
+  'candidate_source_base64',
+  'claim_fence',
+  'expected_revision',
+  'item_id',
+  'ledger_namespace',
+  'operation_id',
+];
+
 export function validatePublicationRequest(request) {
-  const required = [
-    'candidate_sha256',
-    'candidate_source_base64',
-    'claim_fence',
-    'expected_revision',
-    'item_id',
-    'ledger_namespace',
-    'operation_id',
-  ];
-  if (!isExactObject(request, required)
+  if (isExactObject(request, ['operation_id'])
+    && OPERATION_ID.test(request.operation_id)) {
+    return publicationError(
+      request,
+      'invalid-request',
+      'The publish-claimed retry must include its complete request.',
+      {},
+      2,
+    );
+  }
+  if (!isExactObject(request, PUBLICATION_MEMBERS)
     || !OPERATION_ID.test(request.operation_id)
     || !NAMESPACE_ID.test(request.ledger_namespace)
     || !ITEM_ID.test(request.item_id)

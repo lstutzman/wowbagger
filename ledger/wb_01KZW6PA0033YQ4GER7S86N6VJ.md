@@ -5,9 +5,10 @@ number: 66
 title: "Return the contracted publish-claimed retry guidance"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-13
 updated: 2026-08-13
+completed: 2026-08-13
 provenance:
   source: "propertycompass-consumer-dogfood-run-5"
   recorded_at: "2026-08-13T09:30:22Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-13
     summary: "Accept the publish retry guidance defect."
     rationale: "The alpha.3 CLI contradicts the stable recovery message in the installed work-claim contract."
+  - action: complete
+    date: 2026-08-13
+    summary: "Return the contracted retry guidance for operation-ID-only publication requests."
+    rationale: "The validator now distinguishes response-loss retries from other malformed requests, and dual-runtime behavior tests protect the exact stable message."
 ---
 ## Problem
 

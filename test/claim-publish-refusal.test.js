@@ -186,6 +186,24 @@ before
   };
 }
 
+test('publish-claimed tells an operation-ID-only retry to resend the complete request', async () => {
+  const fixture = await publicationFixture();
+  const retryPath = path.join(fixture.root, 'operation-id-only.json');
+  await writeFile(retryPath, JSON.stringify({ operation_id: 'pub_agent-a_retry_0001' }));
+
+  const refused = await capture([
+    'publish-claimed', '--ledger', fixture.ledger, '--input', retryPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 2);
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'invalid-request');
+  assert.equal(
+    refused.envelope.error.message,
+    'The publish-claimed retry must include its complete request.',
+  );
+});
+
 test('publish-claimed writes exact candidate bytes for the active claim fence', async () => {
   const fixture = await publicationFixture();
 
