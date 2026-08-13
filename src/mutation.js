@@ -895,7 +895,10 @@ function transitionEdge(kind, from, to) {
     'epic:archived:backlog': 'restore',
   }[`${kind}:${from}:${to}`] ?? null;
   const allowed = (from === 'triage' && (to === 'backlog' || to === 'killed'))
-    || (from === 'backlog' && (to === 'in-progress' || to === 'archived' || to === 'killed' || to === 'deferred'))
+    || (from === 'backlog' && (
+      (kind === 'task' && to === 'in-progress')
+      || ['archived', 'killed', 'deferred'].includes(to)
+    ))
     || (from === 'deferred' && to === 'backlog')
     || (kind === 'task' && from === 'in-progress' && ['backlog', 'done', 'killed'].includes(to))
     || (kind === 'epic' && from === 'backlog' && ['done', 'archived', 'killed'].includes(to))

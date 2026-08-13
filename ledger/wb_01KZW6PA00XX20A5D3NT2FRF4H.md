@@ -5,9 +5,10 @@ number: 69
 title: "Align unsupported epic edge refusal with the contract"
 kind: task
 priority: 30
-status: backlog
+status: done
 created: 2026-08-13
 updated: 2026-08-13
+completed: 2026-08-13
 provenance:
   source: "propertycompass-consumer-dogfood-run-5"
   recorded_at: "2026-08-13T09:30:22Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-13
     summary: "Accept the unsupported epic edge contract defect."
     rationale: "The implementation reaches candidate validation before applying the documented invalid-edge transition precondition."
+  - action: complete
+    date: 2026-08-13
+    summary: "Reject unsupported epic edges before candidate validation."
+    rationale: "The kind-aware backlog predicate now excludes epic to in-progress, so the transition returns the documented transition-precondition-failed invalid-edge refusal without writing the item. The regression test verifies the exact envelope, unchanged source bytes, and clean artifacts."
 ---
 ## Problem
 

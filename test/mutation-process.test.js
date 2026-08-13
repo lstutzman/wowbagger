@@ -396,6 +396,49 @@ related: []
   });
 });
 
+test('an epic cannot enter in-progress before candidate validation', async () => {
+  const id = 'wb_01Q4JTHP40ZVEBN63PAGS11ZPW';
+  const source = `---
+schema_version: 2
+id: ${id}
+title: "Unsupported epic edge"
+kind: epic
+status: backlog
+created: 2030-01-15
+updated: 2030-01-15
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-15T13:00:00Z"
+depends_on: []
+related: []
+---
+`;
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: `sha256:${createHash('sha256').update(source).digest('hex')}`,
+      to_status: 'in-progress',
+      date: '2030-01-16',
+    }));
+
+    const result = await runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = parseOutput(result);
+
+    assert.equal(result.status, 2, `${result.stderr}\n${result.stdout}`);
+    assert.equal(output.error.code, 'transition-precondition-failed');
+    assert.deepEqual(output.error.details.issues, [{
+      code: 'invalid-edge',
+      field: 'to_status',
+      message: 'The requested lifecycle edge is not allowed for this item.',
+      related_ids: [],
+    }]);
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
 test('a completed writer never removes a successor writer lock during repeated handoff', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
   for (let iteration = 0; iteration < 12; iteration += 1) {
