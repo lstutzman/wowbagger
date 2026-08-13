@@ -4,9 +4,10 @@ id: wb_01KZ77NSW8363H1V6QG1HZRG11
 number: 2
 title: "Evaluate PropertyCompass adoption after standalone release"
 kind: task
-status: triage
+status: deferred
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-13
+deferred: 2026-08-13
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -27,6 +28,14 @@ decisions:
     date: 2026-08-06
     summary: "Parented to the productization epic and given the migration shape; still triage."
     rationale: "The item recorded that adoption was deferred but not what adoption involves, so a reader learned only that it was not yet authorized. It now carries the current PropertyCompass state, the hard gate, the migration steps and the rollback. Status stays triage: adoption remains unauthorized."
+  - action: accept
+    date: 2026-08-13
+    summary: "Accept the full PropertyCompass adoption decision for deliberate deferral."
+    rationale: "The pilot proved installed use, but full migration remains unauthorized and unsafe for many concurrent worktrees because current claims are merge-coordinated, not exclusive."
+  - action: defer
+    date: 2026-08-13
+    summary: "Defer full PropertyCompass adoption."
+    rationale: "PropertyCompass has not authorized the full migration, and its concurrent-worktree write pattern needs exclusive dispatch that current merge-coordinated claims do not provide."
 ---
 
 Migrate PropertyCompass's backlog onto wowbagger. This item is the FULL

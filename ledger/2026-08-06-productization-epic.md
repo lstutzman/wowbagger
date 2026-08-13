@@ -4,9 +4,10 @@ id: wb_01KZBT435CG4HMTP0H6F3CTTNA
 number: 21
 title: "Deliver wowbagger as a consumable product"
 kind: epic
-status: backlog
+status: deferred
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-13
+deferred: 2026-08-13
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T15:12:29Z"
@@ -17,6 +18,10 @@ decisions:
     date: 2026-08-06
     summary: "Accept into the productization epic."
     rationale: "Filed so the work is tracked in wowbagger's own ledger rather than in a session transcript."
+  - action: defer
+    date: 2026-08-13
+    summary: "Defer the remaining productization epic."
+    rationale: "The released product and consumer dogfood satisfy the first distribution milestone, but native Linux and Windows support evidence remains open and full PropertyCompass migration remains unauthorized."
 ---
 
 Make wowbagger consumable by repositories and harnesses other than this one.

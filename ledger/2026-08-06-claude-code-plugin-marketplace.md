@@ -4,10 +4,10 @@ id: wb_01KZBT43RZSKMG8Z19RQQ43DDR
 number: 22
 title: "Publish wowbagger as a Claude Code plugin on the marketplace"
 kind: task
-status: deferred
+status: done
 created: 2026-08-06
-updated: 2026-08-11
-deferred: 2026-08-11
+updated: 2026-08-13
+completed: 2026-08-13
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-06T15:12:29Z"
@@ -23,6 +23,14 @@ decisions:
     date: 2026-08-11
     summary: "Defer marketplace publication until the standalone release and installed-skill dogfood evidence exist."
     rationale: "Publishing the plugin before a versioned distribution channel and consumer dogfood would advertise an install path that has not been proven end to end."
+  - action: undefer
+    date: 2026-08-13
+    summary: "Restore marketplace publication after release proof."
+    rationale: "Version 0.1.0-alpha.3 now ships through npm and immutable Git marketplace metadata, and clean PropertyCompass dogfood proved the consumer installation path."
+  - action: complete
+    date: 2026-08-13
+    summary: "Complete marketplace publication."
+    rationale: "The self-hosted Git marketplace, immutable v0.1.0-alpha.3 source, exact core and plugin version gate, and clean consumer dogfood satisfy the distribution and compatibility scope."
 ---
 
 Publish wowbagger as an installable Claude Code plugin so a consumer can add it
