@@ -19,8 +19,9 @@ putting a database or hosted service inside your repository.
 > mutation contract and adapter contract are version 2; their frozen version 1
 > definitions are not silently negotiated.
 >
-> On Git-backed ledgers, work claims coordinate cooperating agents through a
-> durable journal in Git's shared common directory. `claim acquire` uses
+> A work claim is not a lock or an exclusive dispatch lease. On Git-backed
+> ledgers, claims coordinate cooperating agents through a durable journal in
+> Git's shared common directory. `claim acquire` uses
 > observed-state compare-and-swap. `publish-claimed` fences one item against
 > the active owner generation and expected revision. `claim-verify` reconciles
 > response-loss and post-merge outcomes. This is **merge-coordinated**, not
