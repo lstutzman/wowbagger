@@ -694,7 +694,8 @@ test('reports fail when the negotiation evaluator disagrees with the fixture', a
     t,
     '13-negotiation-mismatch', ({ id }) => id === 'request-missing-is-refused', 'scenarios.json',
     (data) => {
-      data.cases.find(({ id }) => id === 'request-missing').expected = 'invalid-describe-result';
+      data.cases.find(({ id }) => id === 'request-missing')
+        .expected_result.error.details.member = 'request_id';
     },
   );
   assert.equal(status, 'fail');
