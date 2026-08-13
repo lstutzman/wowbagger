@@ -5,9 +5,10 @@ number: 67
 title: "Ship the adapter contract with npm adapters"
 kind: task
 priority: 30
-status: backlog
+status: done
 created: 2026-08-13
 updated: 2026-08-13
+completed: 2026-08-13
 provenance:
   source: "propertycompass-consumer-dogfood-run-5"
   recorded_at: "2026-08-13T09:30:22Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-13
     summary: "Accept the missing adapter contract defect."
     rationale: "The npm artifact ships adapter executables without the contract needed by npm-only consumers."
+  - action: complete
+    date: 2026-08-13
+    summary: "Ship the adapter contract in the npm package."
+    rationale: "The package allowlist now contains all three public contracts, and the dry-run tarball test verifies those contracts and every adapter executable while the existing exclusion gate remains intact."
 ---
 ## Problem
 

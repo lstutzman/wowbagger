@@ -73,6 +73,26 @@ test('the npm package ships every contract document referenced by the installed 
   }
 });
 
+test('the npm tarball ships all public contracts with every adapter executable', () => {
+  const packed = spawnSync('npm', ['pack', '--dry-run', '--json'], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+  });
+  assert.equal(packed.status, 0, packed.stderr);
+  const files = new Set(JSON.parse(packed.stdout)[0].files.map(({ path: file }) => file));
+
+  for (const contract of [
+    'docs/adapter-contract.md',
+    'docs/mutation-contract.md',
+    'docs/work-claim-contract.md',
+  ]) {
+    assert.ok(files.has(contract), `${contract} must ship`);
+  }
+  for (const adapter of ['claude-code', 'codex', 'opencode']) {
+    assert.ok(files.has(`adapters/${adapter}/entrypoint.js`), `${adapter} entrypoint must ship`);
+  }
+});
+
 test('the installed skill requires the core distribution that shipped with it', () => {
   const version = manifest.version.replaceAll('.', '\\.');
 
