@@ -5,9 +5,10 @@ number: 70
 title: "Fix seven verified mutation and claim defects"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-13
 updated: 2026-08-14
+completed: 2026-08-14
 provenance:
   source: "standard-code-review"
   recorded_at: "2026-08-13T12:40:29.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-14
     summary: "Accept the seven verified mutation and claim defects into backlog."
     rationale: "Each defect has a public reproduction and bounded acceptance criteria. Several can invalidate a ledger or bypass an active claim, so priority 1 is justified and no unresolved design dependency blocks implementation."
+  - action: complete
+    date: 2026-08-14
+    summary: "Complete the verified mutation and claim fixes."
+    rationale: "All item 70 defects and review findings are fixed. The focused suites, full current and Node 20 suites, adapter oracle, ledger validation, whitespace check, and final blocker review pass."
 ---
 # Problem
 
