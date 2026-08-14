@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { appendClaimEntry, claimJournalPath } from '../src/claim-journal.js';
 import { operationDigest, publishClaimed } from '../src/claim-publication.js';
 import { resolveGitCommonDir } from '../src/claim-store.js';
+import { runReferenceVector } from './work-claim-reference.js';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 
@@ -31,7 +32,7 @@ async function pendingPublicationFixture({ durableCandidate = true, pending = tr
   await mkdir(ledger);
   const itemId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
   const itemPath = path.join(ledger, 'item.md');
-  const before = Buffer.from(`---\nschema_version: 2\nid: ${itemId}\nnumber: 1\ntitle: "Before"\nkind: task\nstatus: backlog\ncreated: 2026-08-06\nupdated: 2026-08-11\nprovenance:\n  source: "test"\n  recorded_at: "2026-08-11T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nbefore\n`);
+  const before = Buffer.from(`---\nschema_version: 1\nid: ${itemId}\nnumber: 1\ntitle: "Before"\nkind: task\nstatus: backlog\ncreated: 2026-08-06\nupdated: 2026-08-11\nprovenance:\n  source: "test"\n  recorded_at: "2026-08-11T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nbefore\n`);
   const candidate = Buffer.from(before.toString('utf8').replace('title: "Before"', 'title: "After"'));
   await writeFile(itemPath, before);
   const provisioned = capture(['provision', '--ledger', ledger, '--json']);
@@ -75,7 +76,17 @@ async function pendingPublicationFixture({ durableCandidate = true, pending = tr
     });
   }
   await writeFile(itemPath, pending && durableCandidate ? candidate : before);
-  return { before, candidate, gitCommonDir, itemPath, ledger, namespace, request, root };
+  return {
+    before,
+    candidate,
+    claim: acquired.envelope.result.claim,
+    gitCommonDir,
+    itemPath,
+    ledger,
+    namespace,
+    request,
+    root,
+  };
 }
 
 test('claim-verify rolls forward a pending publication whose candidate bytes are durable', async () => {
@@ -96,7 +107,7 @@ test('claim-verify rolls forward a pending publication whose candidate bytes are
   }));
   const read = capture(['claim', 'verify', '--ledger', fixture.ledger, '--input', readPath, '--json']);
   assert.equal(read.exit, 0, JSON.stringify(read.envelope));
-  assert.equal(read.envelope.result.outcome.state, 'committed');
+  assert.equal(read.envelope.result.outcome.stdout.state, 'committed');
 });
 
 test('claim-verify rolls back a pending publication whose candidate bytes were not written', async () => {
@@ -114,20 +125,24 @@ test('claim-verify rolls back a pending publication whose candidate bytes were n
   }));
   const read = capture(['claim', 'verify', '--ledger', fixture.ledger, '--input', readPath, '--json']);
   assert.equal(read.exit, 0, JSON.stringify(read.envelope));
-  assert.equal(read.envelope.result.outcome.error.code, 'ledger-revision-conflict');
+  assert.equal(read.envelope.result.outcome.stdout.error.code, 'ledger-revision-conflict');
 });
 
 test('a fenced operation reconciles a pending publication before making its decision', async () => {
   const fixture = await pendingPublicationFixture();
-  const claimReadPath = path.join(fixture.root, 'claim-read-after-pending.json');
-  await writeFile(claimReadPath, JSON.stringify({
+  const renewPath = path.join(fixture.root, 'claim-renew-after-pending.json');
+  await writeFile(renewPath, JSON.stringify({
     ledger_namespace: fixture.namespace,
     item_id: fixture.request.item_id,
+    owner_id: fixture.claim.owner_id,
+    epoch: fixture.claim.epoch,
+    expected_expires_at: fixture.claim.expires_at,
+    lease_duration_ms: 300000,
   }));
 
-  const claimRead = capture(['claim', 'read', '--ledger', fixture.ledger, '--input', claimReadPath, '--json']);
+  const renewed = capture(['claim', 'renew', '--ledger', fixture.ledger, '--input', renewPath, '--json']);
 
-  assert.equal(claimRead.exit, 0, JSON.stringify(claimRead.envelope));
+  assert.equal(renewed.exit, 0, JSON.stringify(renewed.envelope));
   const publicationReadPath = path.join(fixture.root, 'publication-read-after-pending.json');
   await writeFile(publicationReadPath, JSON.stringify({
     operation_id: fixture.request.operation_id,
@@ -138,7 +153,7 @@ test('a fenced operation reconciles a pending publication before making its deci
     'claim', 'verify', '--ledger', fixture.ledger, '--input', publicationReadPath, '--json',
   ]);
   assert.equal(publicationRead.exit, 0, JSON.stringify(publicationRead.envelope));
-  assert.equal(publicationRead.envelope.result.outcome.state, 'committed');
+  assert.equal(publicationRead.envelope.result.outcome.stdout.state, 'committed');
 });
 
 test('publish-claimed reconciles its own pending intent before retrying', async () => {
@@ -177,7 +192,103 @@ test('claim-verify recovers a publication whose ledger write committed before re
   }));
   const read = capture(['claim', 'verify', '--ledger', fixture.ledger, '--input', readPath, '--json']);
   assert.equal(read.exit, 0, JSON.stringify(read.envelope));
-  assert.equal(read.envelope.result.outcome.state, 'committed');
+  assert.equal(read.envelope.result.outcome.stdout.state, 'committed');
+});
+
+test('publication replay survives an unrelated later Git commit and matches the reference read', async () => {
+  const fixture = await pendingPublicationFixture({ pending: false });
+  const interrupted = await publishClaimed({
+    ledgerDirectory: fixture.ledger,
+    gitCommonDir: fixture.gitCommonDir,
+    namespace: fixture.namespace,
+    request: fixture.request,
+    scenario: 'fail:after-ledger-commit',
+  });
+  assert.equal(interrupted.exit, 6, JSON.stringify(interrupted));
+
+  assert.equal(spawnSync('git', ['add', fixture.itemPath], { cwd: fixture.root }).status, 0);
+  assert.equal(spawnSync('git', [
+    '-c', 'user.name=Wowbagger Test',
+    '-c', 'user.email=wowbagger@example.test',
+    'commit', '--quiet', '-m', 'Commit claimed candidate',
+  ], { cwd: fixture.root }).status, 0);
+  await writeFile(path.join(fixture.root, 'unrelated.txt'), 'later\n');
+  assert.equal(spawnSync('git', ['add', 'unrelated.txt'], { cwd: fixture.root }).status, 0);
+  assert.equal(spawnSync('git', [
+    '-c', 'user.name=Wowbagger Test',
+    '-c', 'user.email=wowbagger@example.test',
+    'commit', '--quiet', '-m', 'Commit unrelated file',
+  ], { cwd: fixture.root }).status, 0);
+
+  const requestPath = path.join(fixture.root, 'replay.json');
+  await writeFile(requestPath, JSON.stringify(fixture.request));
+  const replayed = capture([
+    'publish-claimed', '--ledger', fixture.ledger, '--input', requestPath, '--json',
+  ]);
+  assert.equal(replayed.exit, 0, JSON.stringify(replayed.envelope));
+
+  const readPath = path.join(fixture.root, 'read-replayed.json');
+  await writeFile(readPath, JSON.stringify({
+    operation_id: fixture.request.operation_id,
+    ledger_namespace: fixture.namespace,
+    item_id: fixture.request.item_id,
+  }));
+  const read = capture(['claim', 'verify', '--ledger', fixture.ledger, '--input', readPath, '--json']);
+  const expected = runReferenceVector({
+    initial: {
+      backend: {
+        name: 'reference-backend',
+        coordination_scope: 'shared-transactional-coordinator',
+        durability: 'durable-coordinator',
+        ledger_binding: {
+          mode: 'explicit-allowlist',
+          namespaces: [fixture.namespace],
+        },
+        write_paths: {
+          alternate: 'none',
+          claimed_publication_v1: 'atomic-fence',
+          legacy_create_v1: 'reject-claimed-id',
+          legacy_transition_v1: 'reject-active-claim',
+        },
+      },
+      durable: {
+        clock_floors: [],
+        claims: [{
+          ledger_namespace: fixture.namespace,
+          item_id: fixture.request.item_id,
+          last_epoch: fixture.claim.epoch,
+          active: fixture.claim,
+        }],
+        ledgers: [{
+          ledger_namespace: fixture.namespace,
+          item_id: fixture.request.item_id,
+          revision: fixture.request.expected_revision,
+          source_base64: fixture.before.toString('base64'),
+        }],
+        publication_outcomes: [],
+      },
+      process: { preflights: [] },
+    },
+    actions: [
+      { operation: 'ledger-publication.preflight', request: fixture.request },
+      {
+        operation: 'ledger-publication.commit',
+        operation_id: fixture.request.operation_id,
+        physical_now: replayed.envelope.result.claim_read_back.observed_at,
+        request: fixture.request,
+      },
+      {
+        operation: 'ledger-publication.read',
+        request: {
+          operation_id: fixture.request.operation_id,
+          ledger_namespace: fixture.namespace,
+          item_id: fixture.request.item_id,
+        },
+      },
+    ],
+  });
+  assert.equal(read.exit, 0, JSON.stringify(read.envelope));
+  assert.deepEqual(read.envelope, expected.transcript[2].stdout);
 });
 
 test('claim-verify exposes whether each successful publication is finalized in Git', async () => {
@@ -224,8 +335,8 @@ test('claim-verify reports a revision regression after a committed claimed publi
     item_id: fixture.request.item_id,
   }));
   const claimRead = capture(['claim', 'read', '--ledger', fixture.ledger, '--input', readPath, '--json']);
-  assert.equal(claimRead.exit, 6, JSON.stringify(claimRead.envelope));
-  assert.equal(claimRead.envelope.error.details.reason, 'publication-reconciliation-required');
+  assert.equal(claimRead.exit, 0, JSON.stringify(claimRead.envelope));
+  assert.equal(claimRead.envelope.result.read_back.item_id, fixture.request.item_id);
   const transitionPath = path.join(fixture.root, 'transition.json');
   await writeFile(transitionPath, JSON.stringify({
     id: fixture.request.item_id,

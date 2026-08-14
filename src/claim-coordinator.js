@@ -1,5 +1,11 @@
+import { randomUUID } from 'node:crypto';
 
-import { claimJournalPath, replayClaimJournal } from './claim-journal.js';
+import {
+  appendClaimEntry,
+  assertClaimJournalCapacity,
+  claimJournalPath,
+  replayClaimJournal,
+} from './claim-journal.js';
 import { resolveWorkClaimCapability } from './claim-capabilities.js';
 import { readBack } from './claim-operations.js';
 import { reconcileClaimJournal } from './claim-publication.js';
@@ -7,13 +13,19 @@ import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './cl
 import { readNamespace } from './namespace.js';
 
 export async function withLegacyMutationFence(ledgerDirectory, itemId, command, write) {
-  const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory);
+  let gitCommonDir;
+  try {
+    gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory, { failClosed: true });
+  } catch {
+    return claimStoreUnavailable(command, 'git-verification-failed');
+  }
   const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
   const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
   if (!capability.claim_protected_publication) return write();
 
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
+  let intent = null;
   try {
     return await withClaimLock(storePath, async () => {
       const replayed = await replayClaimJournal(journalPath, namespace);
@@ -35,13 +47,107 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
       const mustRefuse = command === 'create-v1'
         ? record.last_epoch !== '0'
         : record.active !== null && observedAt < record.active.expires_at;
-      if (!mustRefuse) return write();
-      return legacyRefusal(command, namespace, itemId, observedAt, record);
+      if (mustRefuse) return legacyRefusal(command, namespace, itemId, observedAt, record);
+
+      const authorize = async (expectedRevision, candidateRevision) => {
+        const attemptId = randomUUID();
+        const intentEntry = {
+          type: 'legacy-mutation-intent',
+          attempt_id: attemptId,
+          ledger_namespace: namespace,
+          item_id: itemId,
+          command,
+          expected_revision: expectedRevision,
+          candidate_revision: candidateRevision,
+          observed_at: observedAt,
+        };
+        const terminalEntry = {
+          type: 'legacy-mutation',
+          attempt_id: attemptId,
+          ledger_namespace: namespace,
+          item_id: itemId,
+          command,
+          committed_revision: candidateRevision,
+          observed_at: observedAt,
+        };
+        const abortEntry = {
+          type: 'legacy-mutation-abort',
+          attempt_id: attemptId,
+          ledger_namespace: namespace,
+          item_id: itemId,
+          observed_revision: expectedRevision,
+          observed_at: observedAt,
+        };
+        const resolutionEntry = Buffer.byteLength(JSON.stringify(terminalEntry))
+          >= Buffer.byteLength(JSON.stringify(abortEntry))
+          ? terminalEntry
+          : abortEntry;
+        await assertClaimJournalCapacity(journalPath, [
+          intentEntry,
+          { type: 'clock', now: observedAt, floor: observedAt },
+          resolutionEntry,
+        ]);
+        intent = await appendClaimEntry(journalPath, intentEntry);
+      };
+      let outcome;
+      try {
+        outcome = await write(authorize);
+      } catch (error) {
+        if (intent) {
+          return claimStoreUnavailable(command, 'legacy-mutation-outcome-unknown', {
+            attempt_id: intent.attempt_id,
+            candidate_revision: intent.candidate_revision,
+          }, 'unknown');
+        }
+        throw error;
+      }
+      if (!intent) return outcome;
+      if (outcome?.state === 'committed') {
+        const committedRevision = outcome.ok === true
+          ? outcome.item?.revision
+          : outcome.error?.details?.revision;
+        if (committedRevision !== intent.candidate_revision) {
+          return claimStoreUnavailable(command, 'legacy-mutation-outcome-unknown', {
+            attempt_id: intent.attempt_id,
+            candidate_revision: intent.candidate_revision,
+          }, 'unknown');
+        }
+        try {
+          await appendClaimEntry(journalPath, {
+            type: 'legacy-mutation',
+            attempt_id: intent.attempt_id,
+            ledger_namespace: namespace,
+            item_id: itemId,
+            command,
+            committed_revision: committedRevision,
+            observed_at: observedAt,
+          });
+        } catch {
+          return claimStoreUnavailable(command, 'legacy-mutation-record-failed', {
+            attempt_id: intent.attempt_id,
+            committed_revision: committedRevision,
+          }, 'unknown');
+        }
+      } else if (outcome?.state === 'unchanged') {
+        try {
+          await appendClaimEntry(journalPath, {
+            type: 'legacy-mutation-abort',
+            attempt_id: intent.attempt_id,
+            ledger_namespace: namespace,
+            item_id: itemId,
+            observed_revision: intent.expected_revision,
+            observed_at: observedAt,
+          });
+        } catch {
+          return claimStoreUnavailable(command, 'legacy-mutation-record-failed');
+        }
+      }
+      return outcome;
     });
   } catch (error) {
     return claimStoreUnavailable(command, error?.code === 'CLAIM_LOCK_HELD'
       ? 'claim-store-locked'
-      : 'claim-store-unreadable');
+      : 'claim-store-unreadable', {}, intent ? 'unknown' : 'unchanged');
   }
 }
 
@@ -66,7 +172,7 @@ function legacyRefusal(command, namespace, itemId, observedAt, record) {
   };
 }
 
-function claimStoreUnavailable(command, reason, details = {}) {
+function claimStoreUnavailable(command, reason, details = {}, state = 'unchanged') {
   return {
     exit: 6,
     stdout: {
@@ -74,7 +180,7 @@ function claimStoreUnavailable(command, reason, details = {}) {
       namespace: 'ledger-mutation',
       command,
       contract_version: 1,
-      state: 'unchanged',
+      state,
       error: {
         code: 'claim-store-unavailable',
         message: 'The durable claim store is unavailable.',

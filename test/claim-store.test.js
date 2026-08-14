@@ -108,6 +108,35 @@ test('claim journal replay rebuilds the exact acquired state after restart', asy
   });
 });
 
+test('journal replay ignores historical claim reads when rebuilding the clock floor', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-read-floor-'));
+  const journalPath = claimJournalPath(root, NS);
+  const itemId = 'wb_01Q4837BM01W70T30B184GG1R6';
+  await appendClaimEntry(journalPath, {
+    type: 'claim',
+    command: 'acquire',
+    physical_now: '2030-01-11T09:00:00.000Z',
+    request: {
+      ledger_namespace: NS,
+      item_id: itemId,
+      owner_id: 'agent-a-run-1',
+      lease_duration_ms: 300000,
+      expected: { last_epoch: '0', active: null },
+    },
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'claim',
+    command: 'read',
+    physical_now: '2030-01-11T10:00:00.000Z',
+    request: { ledger_namespace: NS, item_id: itemId },
+  });
+
+  const replayed = await replayClaimJournal(journalPath, NS);
+
+  assert.equal(replayed.entries.length, 2);
+  assert.equal(replayed.state.clock_floor, '2030-01-11T09:00:00.000Z');
+});
+
 test('claim journal replay retains a later durable clock floor', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-floor-'));
   const journalPath = claimJournalPath(root, NS);

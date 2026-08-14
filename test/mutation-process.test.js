@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,36 @@ const testCli = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
 const fixtures = new URL('../spec/fixtures/mutations/', import.meta.url);
 const CREATE_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
 
+
+test('a mutation temporary file is never wider than the source item', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09A';
+  await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
+    const itemPath = path.join(ledger, `${id}.md`);
+    await chmod(itemPath, 0o600);
+    const requestPath = path.join(path.dirname(ledger), 'patch-mode-window.json');
+    const before = await readFile(itemPath);
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+      date: '2030-01-15',
+      set: { priority: 2 },
+    }));
+    const suffix = 'restrict-mode';
+    const command = runTestCli(
+      `pause-after-temporary-open:${suffix}`,
+      'patch', '--ledger', ledger, '--input', requestPath, '--json',
+    );
+    await waitForFile(path.join(ledger, `.wowbagger-test-${suffix}-temporary-open`));
+    const temporary = (await readdir(ledger)).find((entry) => entry.startsWith('.wowbagger-tmp-'));
+    assert.ok(temporary);
+    assert.equal((await stat(path.join(ledger, temporary))).mode & 0o777, 0o600);
+    await writeFile(path.join(ledger, `.wowbagger-test-${suffix}-continue`), 'continue\n');
+
+    const result = await command;
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  });
+});
 test('two create processes leave one complete item and no temporary or lock files', async () => {
   await withLedger({}, async (ledger) => {
     const firstRequest = path.join(path.dirname(ledger), 'first.json');
@@ -54,6 +84,74 @@ test('two create processes leave one complete item and no temporary or lock file
     const expected = Buffer.from(successes[0].result.item.source_base64, 'base64');
     assert.deepEqual(finalBytes, expected);
     assert.ok(observations.every((entry) => entry.size === finalBytes.length && entry.sha256 === fingerprint(finalBytes).sha256));
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('concurrent creates cannot commit the same number', async () => {
+  const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
+  const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HP';
+  await withLedger({}, async (ledger) => {
+    const firstRequest = path.join(path.dirname(ledger), 'number-first.json');
+    const secondRequest = path.join(path.dirname(ledger), 'number-second.json');
+    const body = `\n${'x'.repeat(1024 * 1024)}\n`;
+    const first = createRequest(firstId, body);
+    const second = createRequest(secondId, body);
+    first.item.number = 42;
+    second.item.number = 42;
+    await writeFile(firstRequest, JSON.stringify(first));
+    await writeFile(secondRequest, JSON.stringify(second));
+
+    const results = await Promise.all([
+      runCli('create', '--ledger', ledger, '--input', firstRequest, '--json'),
+      runCli('create', '--ledger', ledger, '--input', secondRequest, '--json'),
+    ]);
+    const outputs = results.map(parseOutput);
+    const validation = await runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(outputs.filter((entry) => entry.ok).length, 1);
+    assert.equal(outputs.filter((entry) => !entry.ok).length, 1);
+    assert.equal(validation.status, 0, validation.stdout);
+    assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('concurrent patches cannot commit the same number', async () => {
+  const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HQ';
+  const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HR';
+  const firstSource = numberedBacklogSource(firstId, 1);
+  const secondSource = numberedBacklogSource(secondId, 2);
+  await withLedger({
+    [`${firstId}.md`]: firstSource,
+    [`${secondId}.md`]: secondSource,
+  }, async (ledger) => {
+    const firstRequest = path.join(path.dirname(ledger), 'patch-number-first.json');
+    const secondRequest = path.join(path.dirname(ledger), 'patch-number-second.json');
+    await writeFile(firstRequest, JSON.stringify({
+      id: firstId,
+      expected_revision: `sha256:${fingerprint(Buffer.from(firstSource)).sha256}`,
+      date: '2030-01-11',
+      set: { number: 42 },
+    }));
+    await writeFile(secondRequest, JSON.stringify({
+      id: secondId,
+      expected_revision: `sha256:${fingerprint(Buffer.from(secondSource)).sha256}`,
+      date: '2030-01-11',
+      set: { number: 42 },
+    }));
+
+    const results = await Promise.all([
+      runCli('patch', '--ledger', ledger, '--input', firstRequest, '--json'),
+      runCli('patch', '--ledger', ledger, '--input', secondRequest, '--json'),
+    ]);
+    const outputs = results.map(parseOutput);
+    const validation = await runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(outputs.filter((entry) => entry.ok).length, 1);
+    assert.equal(outputs.filter((entry) => !entry.ok).length, 1);
+    assert.equal(validation.status, 0, validation.stdout);
+    assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
     await assertNoOwnArtifacts(ledger);
   });
 });
@@ -496,6 +594,27 @@ function createRequest(id, body) {
     },
     body,
   };
+}
+
+function numberedBacklogSource(id, number) {
+  return `---
+schema_version: 1
+id: ${id}
+number: ${number}
+title: "Coordinate ledger-wide number uniqueness"
+kind: task
+status: backlog
+created: 2030-01-10
+updated: 2030-01-10
+provenance:
+  source: "test/mutation-process"
+  recorded_at: "2030-01-10T12:34:56.789Z"
+depends_on: []
+related: []
+---
+
+${'x'.repeat(1024 * 1024)}
+`;
 }
 
 function triageSource(id) {

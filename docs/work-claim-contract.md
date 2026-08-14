@@ -263,6 +263,10 @@ It returns `result.read_back` with exactly `ledger_namespace`, `item_id`,
 reservation. It is the recovery operation after a lost claim response: the
 caller reads the tuple before retrying an acquire, renew, or release.
 
+`work-claim.read`, capability discovery, and `ledger-publication.read` are
+observational. They MUST NOT take the namespace write lock, advance the durable
+clock floor, reconcile publications, or change coordinator files.
+
 ### Acquire and takeover
 
 `work-claim.acquire` accepts exactly:
@@ -467,10 +471,11 @@ journal; that log is a derived audit artifact, not authority.
 
 A clean verification returns exit 0 and `state: "committed"`. Findings named
 `pending-intent-resolved` are clean recovery. Any
-`publication-outcome-unknown`, `revision-regression`, or
-`stale-write-detected` finding returns exit 6 and `state: "unknown"`. A caller
-MUST stop publication work and inspect those findings. Repeating verification
-MUST NOT duplicate a publication finalization.
+`legacy-mutation-outcome-unknown`, `publication-outcome-unknown`,
+`revision-regression`, or `stale-write-detected` finding returns exit 6 and
+`state: "unknown"`. A caller MUST stop publication work and inspect those
+findings. Repeating verification MUST NOT duplicate a publication
+finalization.
 
 The top-level `state: "committed"` describes durable reconciliation state, not
 Git finalization of every successful publication. A caller MUST gate Git
@@ -497,6 +502,18 @@ create MUST reject any item identity whose tuple has claim history with exit 4
 `claimed-item-write-refused`; this prevents recreation from bypassing an epoch
 high-water mark. Both checks persist authoritative decision time before their
 response.
+
+Before a merge-coordinated backend permits a legacy transition or patch to
+write bytes, it MUST fsync a `legacy-mutation-intent` with the expected and
+candidate revisions. Under the same namespace lock, it MUST reserve journal
+capacity for that intent, one recovery clock entry, and one terminal entry. A
+committed write appends `legacy-mutation`; an unchanged write appends
+`legacy-mutation-abort`. Reconciliation resolves a pending intent to the
+committed terminal when the candidate revision is present, or to the abort
+terminal when the expected revision remains. Any third revision produces
+`legacy-mutation-outcome-unknown`. The latest committed terminal is the
+authorized expected revision. A later unrecorded revision remains a stale
+write.
 
 An implementation may instead route a legacy write through `publish-claimed`,
 but it cannot silently omit a fence. Administrative repair, bulk import,

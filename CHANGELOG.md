@@ -7,6 +7,15 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- `report` validates a ledger and atomically writes a deterministic,
+  self-contained HTML report from `.wowbagger/report.json`. The report includes
+  canonical readiness, semantic-field search, filters, sorting, grouping,
+  three detail levels, terminal history, and optional area-diverse swarm
+  batches. This repository includes a local report configuration and ignores
+  the generated artifact.
+
 ## 0.1.0-alpha.3 - 2026-08-12
 
 ### Fixed

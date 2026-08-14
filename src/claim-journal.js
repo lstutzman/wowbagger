@@ -3,7 +3,7 @@ import { mkdir, open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { validateClaimRequest } from './claim-request.js';
 
-import { advanceClockFloor, claimAcquire, claimRead, claimRelease, claimRenew } from './claim-operations.js';
+import { advanceClockFloor, claimAcquire, claimRelease, claimRenew } from './claim-operations.js';
 import { emptyClaimState } from './claim-store.js';
 
 const MAX_JOURNAL_ENTRIES = 65536;
@@ -12,6 +12,9 @@ const MAX_RECONCILE_LOG_BYTES = MAX_JOURNAL_BYTES + 1024;
 const JOURNAL_ENTRY_TYPES = new Set([
   'claim',
   'clock',
+  'legacy-mutation',
+  'legacy-mutation-abort',
+  'legacy-mutation-intent',
   'publish-final',
   'publish-finalization',
   'publish-intent',
@@ -43,10 +46,23 @@ export async function appendClaimEntry(journalPath, entry) {
   return persisted;
 }
 
+export async function assertClaimJournalCapacity(journalPath, plannedEntries) {
+  const entries = await readJournalEntries(journalPath);
+  if (entries.length + plannedEntries.length > MAX_JOURNAL_ENTRIES) {
+    throw journalCapacityExceeded();
+  }
+  let plannedBytes = await fileSize(journalPath);
+  for (const [index, entry] of plannedEntries.entries()) {
+    const persisted = { seq: entries.length + index + 1, ...entry };
+    plannedBytes += Buffer.byteLength(`${JSON.stringify(persisted)}\n`);
+  }
+  if (plannedBytes > MAX_JOURNAL_BYTES) throw journalCapacityExceeded();
+}
+
 export async function replayClaimJournal(journalPath, namespace) {
   const entries = await readJournalEntries(journalPath, namespace);
   let state = emptyClaimState(namespace);
-  const operations = { acquire: claimAcquire, read: claimRead, release: claimRelease, renew: claimRenew };
+  const operations = { acquire: claimAcquire, release: claimRelease, renew: claimRenew };
   for (const entry of entries) {
     if (entry.type === 'clock') {
       advanceClockFloor(state, entry.floor);
@@ -176,6 +192,33 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.physical_now === 'string'
       && validateClaimRequest(entry.command, entry.request).length === 0
       && (namespace === null || entry.request.ledger_namespace === namespace);
+  }
+  if (entry.type === 'legacy-mutation-intent') {
+    return typeof entry.attempt_id === 'string'
+      && typeof entry.ledger_namespace === 'string'
+      && (namespace === null || entry.ledger_namespace === namespace)
+      && typeof entry.item_id === 'string'
+      && ['patch-v1', 'transition-v1'].includes(entry.command)
+      && typeof entry.expected_revision === 'string'
+      && typeof entry.candidate_revision === 'string'
+      && typeof entry.observed_at === 'string';
+  }
+  if (entry.type === 'legacy-mutation') {
+    return (!Object.hasOwn(entry, 'attempt_id') || typeof entry.attempt_id === 'string')
+      && typeof entry.ledger_namespace === 'string'
+      && (namespace === null || entry.ledger_namespace === namespace)
+      && typeof entry.item_id === 'string'
+      && ['patch-v1', 'transition-v1'].includes(entry.command)
+      && typeof entry.committed_revision === 'string'
+      && typeof entry.observed_at === 'string';
+  }
+  if (entry.type === 'legacy-mutation-abort') {
+    return typeof entry.attempt_id === 'string'
+      && typeof entry.ledger_namespace === 'string'
+      && (namespace === null || entry.ledger_namespace === namespace)
+      && typeof entry.item_id === 'string'
+      && typeof entry.observed_revision === 'string'
+      && typeof entry.observed_at === 'string';
   }
   if (entry.type === 'publish-intent') {
     return typeof entry.operation_id === 'string'

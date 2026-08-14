@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, symlink, unlink, writeFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -15,10 +15,11 @@ import { appendClaimEntry, claimJournalPath } from '../src/claim-journal.js';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 
-async function capture(argumentsList) {
+async function capture(argumentsList, options = {}) {
   const result = spawnSync(process.execPath, [CLI, ...argumentsList], {
     cwd: process.cwd(),
     encoding: 'utf8',
+    env: options.env ?? process.env,
   });
   return {
     envelope: JSON.parse(result.stdout),
@@ -346,7 +347,10 @@ test('claim verify returns the durable publication outcome', async () => {
   assert.equal(verified.envelope.command, 'read');
   assert.equal(verified.envelope.result.operation_id, published.envelope.operation_id);
   assert.match(verified.envelope.result.operation_digest, /^sha256:[a-f0-9]{64}$/);
-  assert.deepEqual(verified.envelope.result.outcome, published.envelope);
+  assert.deepEqual(verified.envelope.result.outcome, {
+    exit: published.exit,
+    stdout: published.envelope,
+  });
 });
 
 test('claim verify rejects a publication read for another ledger namespace', async () => {
@@ -424,6 +428,47 @@ test('claim verify distinguishes a stale fenced write from an unknown revision r
   assert.equal(verified.envelope.result.findings[0].stale_fence.epoch, fixture.claim.epoch);
 });
 
+test('publish-claimed rejects and records an old fence after release', async () => {
+  const fixture = await publicationFixture();
+  const releasePath = path.join(fixture.root, 'release-before-publish.json');
+  await writeFile(releasePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: fixture.itemId,
+    owner_id: fixture.claim.owner_id,
+    epoch: fixture.claim.epoch,
+    expected_expires_at: fixture.claim.expires_at,
+  }));
+  const released = await capture([
+    'claim', 'release', '--ledger', fixture.ledger, '--input', releasePath, '--json',
+  ]);
+  assert.equal(released.exit, 0, JSON.stringify(released.envelope));
+
+  const published = await capture([
+    'publish-claimed', '--ledger', fixture.ledger, '--input', fixture.requestPath, '--json',
+  ]);
+
+  assert.equal(published.exit, 4, JSON.stringify(published.envelope));
+  assert.equal(published.envelope.state, 'unchanged');
+  assert.equal(published.envelope.error.code, 'claim-fence-rejected');
+  assert.equal(published.envelope.error.details.reason, 'no-active-claim');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+
+  const verifyPath = path.join(fixture.root, 'verify-rejected-publication.json');
+  await writeFile(verifyPath, JSON.stringify({
+    operation_id: 'pub_agent-a_0001',
+    ledger_namespace: fixture.namespace,
+    item_id: fixture.itemId,
+  }));
+  const verified = await capture([
+    'claim', 'verify', '--ledger', fixture.ledger, '--input', verifyPath, '--json',
+  ]);
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.outcome, {
+    exit: published.exit,
+    stdout: published.envelope,
+  });
+});
+
 test('publish-claimed rejects a stale claim fence before changing ledger bytes', async () => {
   const fixture = await publicationFixture();
   const releasePath = path.join(fixture.root, 'release.json');
@@ -480,6 +525,131 @@ test('legacy transition refuses an item with an active fenced claim', async () =
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
 });
 
+test('legacy transition fails closed when Git verification cannot run', async () => {
+  const fixture = await publicationFixture();
+  const transitionPath = path.join(fixture.root, 'transition-git-failure.json');
+  const emptyPath = path.join(fixture.root, 'empty-path');
+  await mkdir(emptyPath);
+  await writeFile(transitionPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    to_status: 'in-progress',
+    date: '2026-08-11',
+  }));
+
+  const refused = await capture(
+    ['transition', '--ledger', fixture.ledger, '--input', transitionPath, '--json'],
+    { env: { ...process.env, PATH: emptyPath } },
+  );
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'git-verification-failed');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
+test('legacy transition fails closed for a malformed Git directory marker', async () => {
+  const fixture = await publicationFixture();
+  const transitionPath = path.join(fixture.root, 'transition-malformed-git.json');
+  await writeFile(transitionPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    to_status: 'in-progress',
+    date: '2026-08-11',
+  }));
+  await rename(path.join(fixture.root, '.git'), path.join(fixture.root, '.git-real'));
+  await writeFile(path.join(fixture.root, '.git'), 'not a gitdir marker\n');
+
+  const refused = await capture([
+    'transition', '--ledger', fixture.ledger, '--input', transitionPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'git-verification-failed');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
+test('legacy transition fails closed for a dangling Git directory marker', async () => {
+  const fixture = await publicationFixture();
+  const transitionPath = path.join(fixture.root, 'transition-dangling-git.json');
+  await writeFile(transitionPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    to_status: 'in_progress',
+    date: '2026-08-11',
+    decision: { summary: 'Start.', rationale: 'Exercise fail-closed Git discovery.' },
+  }));
+  await rename(path.join(fixture.root, '.git'), path.join(fixture.root, '.git-real'));
+  await symlink('missing-git-directory', path.join(fixture.root, '.git'));
+
+  const refused = await capture([
+    'transition', '--ledger', fixture.ledger, '--input', transitionPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'git-verification-failed');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
+
+test('legacy patch does not publish when its journal authorization cannot be reserved', async () => {
+  const fixture = await publicationFixture();
+  const journalPath = claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace);
+  const clock = '2020-01-01T00:00:00.000Z';
+  const entries = Array.from({ length: 65535 }, (_entry, index) => JSON.stringify({
+    seq: index + 1,
+    type: 'clock',
+    now: clock,
+    floor: clock,
+  }));
+  await writeFile(journalPath, `${entries.join('\n')}\n`);
+  const patchPath = path.join(fixture.root, 'patch-full-journal.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    date: '2026-08-11',
+    set: { priority: 1 },
+  }));
+
+  const refused = await capture([
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
+test('legacy patch reserves journal capacity for crash recovery before publishing', async () => {
+  const fixture = await publicationFixture();
+  const journalPath = claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace);
+  const entries = Array.from({ length: 65534 }, (_, index) => JSON.stringify({
+    seq: index + 1,
+    type: 'clock',
+    now: '2030-01-11T09:00:00.000Z',
+    floor: '2030-01-11T09:00:00.000Z',
+  })).join('\n');
+  await writeFile(journalPath, `${entries}\n`);
+  const patchPath = path.join(fixture.root, 'legacy-capacity-reserve-patch.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    date: '2026-08-11',
+    set: { priority: 2 },
+  }));
+
+  const refused = await capture([
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
 
 test('legacy create refuses an item identity with fenced claim history', async () => {
   const fixture = await publicationFixture();
@@ -523,5 +693,6 @@ test('legacy patch refuses an item with an active fenced claim', async () => {
 
   assert.equal(refused.exit, 4, JSON.stringify(refused.envelope));
   assert.equal(refused.envelope.error.code, 'active-claim-write-refused');
+  assert.equal(refused.envelope.command, 'patch-v1');
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
 });

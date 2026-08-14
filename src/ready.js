@@ -1,11 +1,46 @@
 import { isDependencySatisfied } from './dependencies.js';
 
-export function selectReady(items, asOf) {
+export function projectReadiness(items, asOf) {
   const byId = new Map(items.map((item) => [item.data.id, item]));
-  const ancestorsBacklogById = new Map();
+  const ancestorReasonsById = new Map();
+  const projection = new Map();
+
+  for (const item of items) {
+    const reasons = [];
+    if (item.data.kind !== 'task') {
+      reasons.push({ code: 'kind-not-task' });
+    }
+    if (item.data.status !== 'backlog') {
+      reasons.push({ code: 'status-not-backlog' });
+    }
+    if (item.data.snoozed_until && item.data.snoozed_until > asOf) {
+      reasons.push({ code: 'snoozed' });
+    }
+    const ineligible = reasons.length > 0;
+    if (Array.isArray(item.data.depends_on)) {
+      for (const dependencyId of item.data.depends_on) {
+        const dependencyIsSatisfied = item.data.schema_version !== 1
+          && isDependencySatisfied(byId.get(dependencyId)?.data.status);
+        if (!dependencyIsSatisfied) {
+          reasons.push({ code: 'dependency-unsatisfied', item_id: dependencyId });
+        }
+      }
+    }
+    reasons.push(...ancestorReasons(item.data.parent, byId, ancestorReasonsById));
+    projection.set(item.data.id, {
+      state: ineligible ? 'ineligible' : reasons.length > 0 ? 'blocked' : 'ready',
+      reasons,
+    });
+  }
+
+  return projection;
+}
+
+export function selectReady(items, asOf) {
+  const projection = projectReadiness(items, asOf);
 
   return items
-    .filter((item) => isReady(item, byId, ancestorsBacklogById, asOf))
+    .filter((item) => projection.get(item.data.id).state === 'ready')
     .sort((left, right) => comparePriority(left.data, right.data)
       || compareText(left.data.created, right.data.created)
       || compareText(left.data.id, right.data.id))
@@ -32,54 +67,45 @@ function comparePriority(left, right) {
   return left.priority - right.priority;
 }
 
-function isReady(item, byId, ancestorsBacklogById, asOf) {
-  const { data } = item;
-
-  return data.kind === 'task'
-    && data.status === 'backlog'
-    && (!data.snoozed_until || data.snoozed_until <= asOf)
-    && Array.isArray(data.depends_on)
-    && dependenciesAreSatisfied(data, byId)
-    && ancestorsAreBacklog(data, byId, ancestorsBacklogById);
-}
-
-function dependenciesAreSatisfied(data, byId) {
-  if (data.schema_version === 1) {
-    return data.depends_on.length === 0;
+function ancestorReasons(startId, byId, cache) {
+  if (!startId) {
+    return [];
   }
-  return data.depends_on.every((id) => isDependencySatisfied(byId.get(id)?.data.status));
-}
+  if (cache.has(startId)) {
+    return cache.get(startId);
+  }
 
-function ancestorsAreBacklog(data, byId, ancestorsBacklogById) {
-  let parentId = data.parent;
-  const visited = new Set();
   const path = [];
-  let result = true;
+  const visited = new Set();
+  let ancestorId = startId;
+  let suffix = [];
 
-  while (parentId) {
-    if (ancestorsBacklogById.has(parentId)) {
-      result = ancestorsBacklogById.get(parentId);
+  while (ancestorId) {
+    if (cache.has(ancestorId)) {
+      suffix = cache.get(ancestorId);
       break;
     }
-
-    if (visited.has(parentId)) {
-      result = false;
+    if (visited.has(ancestorId)) {
+      suffix = [{ code: 'ancestor-not-backlog', item_id: ancestorId }];
       break;
     }
-    visited.add(parentId);
-    path.push(parentId);
+    visited.add(ancestorId);
 
-    const parent = byId.get(parentId);
-    if (!parent || parent.data.status !== 'backlog') {
-      result = false;
+    const ancestor = byId.get(ancestorId);
+    path.push({ id: ancestorId, item: ancestor });
+    if (!ancestor) {
       break;
     }
-    parentId = parent.data.parent;
+    ancestorId = ancestor.data.parent;
   }
 
-  for (const id of path) {
-    ancestorsBacklogById.set(id, result);
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const entry = path[index];
+    if (!entry.item || entry.item.data.status !== 'backlog') {
+      suffix = [{ code: 'ancestor-not-backlog', item_id: entry.id }, ...suffix];
+    }
+    cache.set(entry.id, suffix);
   }
 
-  return result;
+  return cache.get(startId) ?? suffix;
 }

@@ -4,7 +4,7 @@ import { withLegacyMutationFence } from './claim-coordinator.js';
 import { link, lstat, mkdir, open, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar } from 'yaml';
+import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, visit } from 'yaml';
 import { isDependencySatisfied } from './dependencies.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
@@ -51,6 +51,8 @@ const CORE_OWNED_FIELDS = new Set([
 const ULID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const ULID_PATTERN = /^wb_([0-7][0-9A-HJKMNP-TV-Z]{25})$/;
 const MAX_LOCK_CLOSURE_RETRIES = 3;
+const NUMBER_INDEX_LOCK_ID = '__number-index__';
+const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 
 export async function inspectItem(ledgerDirectory, id) {
   const ledger = await loadLedger(ledgerDirectory);
@@ -72,12 +74,18 @@ export function revisionFor(bytes) {
 }
 
 function inspectedPublishedItem(id, displayPath, bytes) {
-  const parsed = parseLedgerItemSource(bytes.toString('utf8'));
+  const parsed = parseLedgerItemSource(decodedItemSource(bytes));
   if (parsed.error) {
     throw new Error('Published bytes could not be parsed.');
   }
   return inspectedItem(id, displayPath, bytes, parsed.data, parsed.body);
 }
+function decodedItemSource(bytes) {
+  return bytes.subarray(0, UTF8_BOM.length).equals(UTF8_BOM)
+    ? bytes.subarray(UTF8_BOM.length).toString('utf8')
+    : bytes.toString('utf8');
+}
+
 
 function inspectedItem(id, displayPath, bytes, data, body) {
   return {
@@ -278,7 +286,13 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
       }
 
       const schemaVersion = current.ledger.items[0]?.data.schema_version ?? 2;
-      const bytes = createCandidateSource(request, schemaVersion);
+      let bytes;
+      try {
+        failCandidateSerializationForTest(scenario);
+        bytes = createCandidateSource(request, schemaVersion);
+      } catch {
+        return await finishUncommitted(operationFailed(id, 'serialize-candidate', 'serialization-failed'));
+      }
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         null,
@@ -303,7 +317,7 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
       }
 
       temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
-      const temporaryFailure = await prepareTemporary(temporaryPath, bytes, scenario);
+      const temporaryFailure = await prepareTemporary(temporaryPath, bytes, null, scenario);
       if (temporaryFailure) {
         const artifacts = await cleanupTemporary(temporaryPath, root, scenario);
         temporaryPath = artifacts.length > 0 ? temporaryPath : null;
@@ -441,11 +455,12 @@ export function validateTransitionRequest(request, parseIssues = []) {
 }
 
 export async function transitionItem(ledgerDirectory, request, scenario) {
-  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', () => (
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', (authorize) => (
     mutateExistingItem(ledgerDirectory, request, scenario, {
       name: 'transition',
       lockIds: lockIdsForTransition,
       build: buildTransition,
+      authorize,
     })
   ));
 }
@@ -485,7 +500,7 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
     if (!target) {
       return mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id });
     }
-    const nextIds = operation.lockIds(target, initial.ledger);
+    const nextIds = operation.lockIds(target, initial.ledger, request);
     if (scenario === 'expand-lock-closure-through-bounded-retry-limit') {
       return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
     }
@@ -531,7 +546,7 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
       if (!lockedTarget) {
         return await finishUncommitted(mutationError('item-not-found', 'The requested item was not found.', 'unchanged', 2, { id }));
       }
-      const stableIds = operation.lockIds(lockedTarget, current.ledger);
+      const stableIds = operation.lockIds(lockedTarget, current.ledger, request);
       if (!sameIds(nextIds, stableIds)) {
         const cleanupFailure = await finishUncommitted(null);
         if (cleanupFailure) {
@@ -549,7 +564,7 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
         }));
       }
 
-      const built = operation.build(lockedTarget, current.ledger, request);
+      const built = operation.build(lockedTarget, current.ledger, request, scenario);
       if (built.outcome) {
         return await finishUncommitted(built.outcome);
       }
@@ -569,8 +584,21 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
           validation_errors: candidateValidation.errors,
         }));
       }
+      if (operation.authorize) {
+        await operation.authorize(actualRevision, revisionFor(bytes));
+      }
 
       const targetDirectory = path.dirname(lockedTarget.file);
+      let targetMode;
+      try {
+        const targetStat = await lstat(lockedTarget.file);
+        if (!targetStat.isFile() || targetStat.isSymbolicLink()) {
+          throw new Error('The target is not a regular file.');
+        }
+        targetMode = targetStat.mode & 0o7777;
+      } catch {
+        return await finishUncommitted(operationFailed(id, 'prepare-temporary', 'io-error'));
+      }
       temporaryPath = path.join(targetDirectory, `.wowbagger-tmp-${id}-${randomSuffix()}`);
       if (scenarioName(scenario) === 'transition-rename-applied-then-error') {
         await writeFile(path.join(root, '.wowbagger-test-transition-paths.json'), JSON.stringify({
@@ -579,7 +607,7 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
           synced_directory: null,
         }));
       }
-      const temporaryFailure = await prepareTemporary(temporaryPath, bytes, scenario);
+      const temporaryFailure = await prepareTemporary(temporaryPath, bytes, targetMode, scenario);
       if (temporaryFailure) {
         const artifacts = await cleanupTemporary(temporaryPath, root, scenario);
         temporaryPath = artifacts.length > 0 ? temporaryPath : null;
@@ -732,16 +760,20 @@ function isPatchableInteger(value, minimum) {
 }
 
 export async function patchItem(ledgerDirectory, request, scenario) {
-  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', () => (
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize) => (
     mutateExistingItem(ledgerDirectory, request, scenario, {
       name: 'patch',
-      lockIds: (target) => [target.data.id],
+      lockIds: (target, _ledger, patchRequest) => [
+        target.data.id,
+        ...(hasOwn(patchRequest.set, 'number') ? [NUMBER_INDEX_LOCK_ID] : []),
+      ],
       build: buildPatch,
+      authorize,
     })
   ));
 }
 
-function buildPatch(lockedTarget, ledger, request) {
+function buildPatch(lockedTarget, ledger, request, scenario) {
   const issues = [];
   if (request.date < lockedTarget.data.created) {
     issues.push(transitionIssue('date-before-created', 'date', 'Patch date must not be earlier than the current created date.', []));
@@ -756,8 +788,13 @@ function buildPatch(lockedTarget, ledger, request) {
     }) };
   }
   const successor = patchData(lockedTarget.data, request);
-  const bytes = Buffer.from(serializePatch(lockedTarget.source, successor, request), 'utf8');
-  return { successor, bytes };
+  try {
+    failCandidateSerializationForTest(scenario);
+    const bytes = serializedMutationBytes(lockedTarget, serializePatch(lockedTarget.source, successor, request));
+    return { successor, bytes };
+  } catch {
+    return { outcome: operationFailed(request.id, 'serialize-candidate', 'serialization-failed') };
+  }
 }
 
 function patchData(data, request) {
@@ -778,12 +815,27 @@ function patchData(data, request) {
   return successor;
 }
 
+function failCandidateSerializationForTest(scenario) {
+  if (scenarioName(scenario) === 'candidate-serialization-fails') {
+    throw new Error('Fixture candidate serialization failure.');
+  }
+}
+function serializedMutationBytes(lockedTarget, source) {
+  const serialized = Buffer.from(source, 'utf8');
+  if (lockedTarget.bytes.length < UTF8_BOM.length
+    || !lockedTarget.bytes.subarray(0, UTF8_BOM.length).equals(UTF8_BOM)) {
+    return serialized;
+  }
+  return Buffer.concat([UTF8_BOM, serialized]);
+}
+
+
 function serializePatch(source, successor, request) {
   return rewriteFrontmatter(source, (document) => {
     setRootScalar(document, 'updated', successor.updated);
     for (const field of Object.keys(request.set)) {
       if (!Object.hasOwn(successor, field)) {
-        document.delete(field);
+        deleteRootFieldPreservingAliases(document, field);
       } else if (document.has(field)) {
         setRootScalar(document, field, successor[field]);
       } else {
@@ -817,7 +869,7 @@ function rewriteFrontmatter(source, edit) {
   return `${source.slice(0, bounds.start)}${serialized}${source.slice(bounds.end)}`;
 }
 
-function buildTransition(lockedTarget, ledger, request) {
+function buildTransition(lockedTarget, ledger, request, scenario) {
   const id = lockedTarget.data.id;
   const edge = transitionEdge(lockedTarget.data.kind, lockedTarget.data.status, request.to_status);
   const issues = transitionPreconditions(lockedTarget, ledger, request, edge);
@@ -843,8 +895,13 @@ function buildTransition(lockedTarget, ledger, request) {
   }
 
   const successor = transitionData(lockedTarget.data, request, edge, ledger);
-  const bytes = Buffer.from(serializeTransition(lockedTarget.source, successor, edge), 'utf8');
-  return { successor, bytes };
+  try {
+    failCandidateSerializationForTest(scenario);
+    const bytes = serializedMutationBytes(lockedTarget, serializeTransition(lockedTarget.source, successor, edge));
+    return { successor, bytes };
+  } catch {
+    return { outcome: operationFailed(request.id, 'serialize-candidate', 'serialization-failed') };
+  }
 }
 
 function invalidTransitionDecision() {
@@ -1020,10 +1077,10 @@ function serializeTransition(source, successor, edge) {
   return rewriteFrontmatter(source, (document) => {
     setRootScalar(document, 'status', successor.status);
     setRootScalar(document, 'updated', successor.updated);
-    document.delete('completed');
-    document.delete('killed');
-    document.delete('archived');
-    document.delete('deferred');
+    deleteRootFieldPreservingAliases(document, 'completed');
+    deleteRootFieldPreservingAliases(document, 'killed');
+    deleteRootFieldPreservingAliases(document, 'archived');
+    deleteRootFieldPreservingAliases(document, 'deferred');
     const terminal = terminalField(successor.status);
     if (terminal) {
       insertRootAfter(document, 'updated', terminal, successor[terminal]);
@@ -1041,6 +1098,21 @@ function setRootScalar(document, key, value) {
     return;
   }
   document.set(key, value);
+}
+
+function deleteRootFieldPreservingAliases(document, key) {
+  const node = document.get(key, true);
+  if (node?.anchor) {
+    visit(document, {
+      Alias(_key, alias) {
+        if (alias.resolve(document) !== node) return undefined;
+        const replacement = node.clone(document.schema);
+        replacement.anchor = undefined;
+        return replacement;
+      },
+    });
+  }
+  document.delete(key);
 }
 
 function insertRootAfter(document, afterKey, key, value) {
@@ -1121,13 +1193,16 @@ async function loadedValidLedger(root) {
 }
 
 function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file, expectedData, expectedSource) {
-  const source = bytes.toString('utf8');
+  const source = decodedItemSource(bytes);
   const parsed = parseLedgerItemSource(source);
   const errors = parsed.error ? [{ path: displayPath, ...parsed.error }] : [];
   const coreMatches = parsed.error || !expectedData
     || isDeepStrictEqual(coreView(parsed.data), coreView(expectedData));
   const extensionsMatch = parsed.error || !expectedSource
-    || isDeepStrictEqual(extensionNodeIdentity(source), extensionNodeIdentity(expectedSource));
+    || isDeepStrictEqual(
+      extensionNodeIdentity(source),
+      expectedExtensionNodeIdentity(expectedSource, expectedData),
+    );
   if (!parsed.error && (!coreMatches || !extensionsMatch)) {
     errors.push({
       path: displayPath,
@@ -1148,6 +1223,25 @@ function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, 
     ? ledger.items.map((item) => item.data.id === replacementId ? candidate : item)
     : [...ledger.items, candidate];
   return validateLedger({ items: items.filter(Boolean), errors });
+}
+
+function expectedExtensionNodeIdentity(source, expectedData) {
+  const bounds = frontmatterBounds(source);
+  const document = parseDocument(source.slice(bounds.start, bounds.end), {
+    schema: 'core',
+    uniqueKeys: true,
+  });
+  const removedAnchors = [...CORE_OWNED_FIELDS].filter((field) => (
+    !Object.hasOwn(expectedData, field)
+    && document.get(field, true)?.anchor
+  ));
+  if (removedAnchors.length === 0) return extensionNodeIdentity(source);
+  const normalized = rewriteFrontmatter(source, (normalizedDocument) => {
+    for (const field of removedAnchors) {
+      deleteRootFieldPreservingAliases(normalizedDocument, field);
+    }
+  });
+  return extensionNodeIdentity(normalized);
 }
 
 function extensionNodeIdentity(source) {
@@ -1203,7 +1297,8 @@ function lockIdsForCreate(request, ledger) {
   const existingIds = new Set(ledger.items.map((item) => item.data.id));
   const references = [request.item.parent, ...(request.item.depends_on ?? [])]
     .filter((id) => existingIds.has(id));
-  return [request.id, ...references].sort(compareText);
+  const numberLock = hasOwn(request.item, 'number') ? [NUMBER_INDEX_LOCK_ID] : [];
+  return [request.id, ...references, ...numberLock].sort(compareText);
 }
 
 async function acquireLocks(root, ids, operation, scenario) {
@@ -1695,6 +1790,10 @@ async function testCheckpoint(root, scenario, point) {
     await writeFile(path.join(root, `.wowbagger-test-${suffix}-acquired`), 'acquired\n');
     await waitForTestMarker(path.join(root, `.wowbagger-test-${suffix}-allow-successor`));
   }
+  if (name === 'pause-after-temporary-open' && point === 'after-temporary-open') {
+    await writeFile(path.join(root, `.wowbagger-test-${suffix}-temporary-open`), 'open\n');
+    await waitForTestMarker(path.join(root, `.wowbagger-test-${suffix}-continue`));
+  }
 }
 
 async function waitForTestMarker(file) {
@@ -1870,19 +1969,36 @@ function randomSuffix() {
   return createHash('sha256').update(`${process.pid}:${Date.now()}:${Math.random()}`).digest('hex').slice(0, 24);
 }
 
-async function prepareTemporary(file, bytes, scenario) {
+async function prepareTemporary(file, bytes, mode, scenario) {
   let handle;
   try {
-    handle = await open(file, 'wx');
+    handle = await open(file, 'wx', (mode ?? 0o666) & 0o777);
   } catch {
     return 'prepare-temporary';
   }
+  await testCheckpoint(path.dirname(file), scenario, 'after-temporary-open');
 
   let failure = null;
-  try {
-    await handle.writeFile(bytes);
-  } catch {
-    failure = 'prepare-temporary';
+  if (mode !== null) {
+    try {
+      await handle.chmod(mode);
+    } catch {
+      failure = 'prepare-temporary';
+    }
+  }
+  if (!failure) {
+    try {
+      await handle.writeFile(bytes);
+    } catch {
+      failure = 'prepare-temporary';
+    }
+  }
+  if (!failure && mode !== null) {
+    try {
+      await handle.chmod(mode);
+    } catch {
+      failure = 'prepare-temporary';
+    }
   }
   if (!failure) {
     try {

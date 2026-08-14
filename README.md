@@ -278,6 +278,7 @@ npm ci
 ./bin/wowbagger.js validate --ledger path/to/ledger --json
 ./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15 --json
 ./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15
+./bin/wowbagger.js report --ledger path/to/ledger --as-of 2030-01-15 --json
 ./bin/wowbagger.js capabilities --json
 ./bin/wowbagger.js mint-id --json
 ./bin/wowbagger.js inspect --ledger path/to/ledger --id wb_... --json
@@ -316,6 +317,39 @@ paths, and `.md` special files rather than returning a partial view. Real
 directories ending in `.md` remain containers and are traversed. These checks
 provide deterministic read hygiene; they are not a sandbox against a privileged
 process racing filesystem changes.
+
+`report` validates the complete ledger, reads `.wowbagger/report.json`, and
+atomically publishes one self-contained HTML file. The output must be outside
+the ledger. Relative configured output paths resolve from `.wowbagger/`;
+relative `--out` overrides resolve from the caller's working directory.
+
+```json
+{
+  "report_version": 1,
+  "repository": { "name": "Example repository", "logo": "logo.svg" },
+  "title": "Ledger report",
+  "output": "../../ledger-report.html",
+  "fields": {
+    "area": "/priority_area",
+    "complexity": "/complexity",
+    "rank": "/priority_rank"
+  },
+  "swarm": { "eligible_complexities": ["small", "medium"] }
+}
+```
+
+`repository.logo`, `fields`, and `swarm` are optional. Field values resolve
+from parsed frontmatter with RFC 6901 JSON Pointers. A swarm requires mapped
+`area` and `complexity` fields. The report shows canonical readiness, filters,
+sorting, grouping, three detail levels, terminal history, and area-diverse
+ready batches. It contains no external runtime dependency.
+
+This repository keeps its report configuration in
+`ledger/.wowbagger/report.json`. Generate the ignored local report with:
+
+```sh
+npm run report -- --as-of 2026-08-14
+```
 
 `inspect` returns a lossless raw-byte snapshot and its SHA-256 revision.
 `create` publishes only a caller-supplied canonical ID through atomic

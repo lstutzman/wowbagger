@@ -30,6 +30,14 @@ import {
 } from './claim-store.js';
 import { loadLedger } from './ledger.js';
 import {
+  assertReportOutputOutsideLedger,
+  buildReportModel,
+  loadReportConfig,
+  readLogoDataUrl,
+  writeReportFile,
+} from './report.js';
+import { renderReportHtml } from './report-html.js';
+import {
   createItem,
   inspectItem,
   patchItem,
@@ -55,6 +63,7 @@ const DISTRIBUTION_VERSION = JSON.parse(
 const COMMAND_SUMMARIES = {
   validate: 'Validate a ledger and print the single JSON validation result.',
   ready: 'Validate a ledger and print the readiness queue for a date.',
+  report: 'Render one validated ledger as a self-contained HTML report.',
   capabilities: 'Describe the core contract and unbound default claim profile.',
   inspect: 'Inspect one ledger item as a lossless raw-byte snapshot.',
   create: 'Create one ledger item through atomic, no-clobber publication.',
@@ -70,6 +79,7 @@ const COMMAND_SUMMARIES = {
 const KNOWN_COMMANDS = new Set([
   'validate',
   'ready',
+  'report',
   'capabilities',
   'inspect',
   'create',
@@ -121,6 +131,21 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
     process.stdout.write(`${JSON.stringify(await capabilities(parsedOptions.options.ledger))}\n`);
+    return;
+  }
+
+  if (command === 'report') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.options.asOf !== undefined
+      && !isCalendarDate(parsedOptions.options.asOf)) {
+      parsedOptions.issues.push(argumentIssue(-1, 'invalid-value', 'Argument --as-of must be an ISO calendar date.'));
+    }
+    parsedOptions.issues = sortIssues(parsedOptions.issues);
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    await runReportCommand(parsedOptions.options);
     return;
   }
 
@@ -444,6 +469,69 @@ export async function runCli(argumentsList, { scenario } = {}) {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
+async function runReportCommand(options) {
+  const ledger = await loadLedger(options.ledger);
+  const validation = validateLedger(ledger);
+  if (!validation.valid) {
+    writeReportFailure('ledger-invalid', 'The configured ledger is invalid.', {
+      errors: validation.errors,
+    }, 1);
+    return;
+  }
+
+  try {
+    const config = await loadReportConfig(options.ledger, options.out);
+    const model = buildReportModel(ledger.items, config, options.asOf);
+    const logoDataUrl = await readLogoDataUrl(config.repository.logo);
+    const html = renderReportHtml(model, { logoDataUrl });
+    await assertReportOutputOutsideLedger(options.ledger, config.outputPath);
+    await writeReportFile(config.outputPath, html);
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      command: 'report',
+      contract_version: MUTATION_CONTRACT_VERSION,
+      result: {
+        report_version: config.reportVersion,
+        as_of: options.asOf,
+        output: config.outputPath,
+        item_count: ledger.items.length,
+        ready_count: selectReady(ledger.items, options.asOf).length,
+      },
+    })}\n`);
+  } catch (error) {
+    const code = error?.code === 'report-config-invalid'
+      || error?.code === 'report-read-failed'
+      || error?.code === 'report-write-failed'
+      ? error.code
+      : 'report-write-failed';
+    const exit = code === 'report-config-invalid' ? 2 : 1;
+    const details = code === 'report-config-invalid'
+      ? { issues: [issue('/configuration', code, error?.message ?? 'Report configuration is invalid.')] }
+      : error?.details ?? {};
+    writeReportFailure(code, reportFailureMessage(code), details, exit);
+  }
+}
+
+function reportFailureMessage(code) {
+  if (code === 'report-config-invalid') {
+    return 'The report configuration is invalid.';
+  }
+  if (code === 'report-read-failed') {
+    return 'A report input could not be read.';
+  }
+  return 'The report could not be published.';
+}
+
+function writeReportFailure(code, message, details, exit) {
+  process.stdout.write(`${JSON.stringify({
+    ok: false,
+    command: 'report',
+    contract_version: MUTATION_CONTRACT_VERSION,
+    error: { code, message, details },
+  })}\n`);
+  process.exitCode = exit;
+}
+
 async function capabilities(ledger) {
   const gitCommonDir = await resolveGitCommonDir(ledger ?? process.cwd());
   return {
@@ -557,17 +645,23 @@ function parseContractOptions(command, argumentsList) {
   const seen = new Set();
   const valueFlags = command === 'inspect'
     ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
-    : command === 'create' || command === 'transition' || command === 'patch'
-      || command === 'publish-claimed' || command === 'publication-read'
-      || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
-      || command === 'claim-release'
-      ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
-      : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
-        ? new Map([['--ledger', 'ledger']])
-        : command === 'mint-id'
-          ? new Map([['--date', 'date']])
-          : new Map();
-  const optionalFlags = command === 'mint-id' ? new Set(['--date']) : new Set();
+    : command === 'report'
+      ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out']])
+      : command === 'create' || command === 'transition' || command === 'patch'
+        || command === 'publish-claimed' || command === 'publication-read'
+        || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
+        || command === 'claim-release'
+        ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
+        : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
+          ? new Map([['--ledger', 'ledger']])
+          : command === 'mint-id'
+            ? new Map([['--date', 'date']])
+            : new Map();
+  const optionalFlags = command === 'mint-id'
+    ? new Set(['--date'])
+    : command === 'report'
+      ? new Set(['--out'])
+      : new Set();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--json') {
@@ -800,6 +894,15 @@ async function runClaimCommand(claimCommand, argumentsList) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   const operation = CLAIM_OPERATIONS[claimCommand];
+  if (claimCommand === 'read') {
+    try {
+      const replayed = await replayClaimJournal(journalPath, namespace);
+      writeClaimEnvelope(operation(replayed.state, request, new Date().toISOString()).envelope);
+    } catch {
+      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-unreadable'));
+    }
+    return;
+  }
   try {
     const envelope = await withClaimLock(storePath, async () => {
       let replayed;
@@ -974,6 +1077,10 @@ function usage(command) {
 
   if (command === 'ready') {
     return 'Usage: wowbagger ready --ledger <dir> --as-of YYYY-MM-DD [--json]';
+  }
+
+  if (command === 'report') {
+    return 'Usage: wowbagger report --ledger <dir> --as-of YYYY-MM-DD [--out <file>] --json';
   }
 
   if (command === 'capabilities') {

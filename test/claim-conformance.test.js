@@ -149,9 +149,10 @@ test('the durable clock floor advances even when an operation is rejected', asyn
     `expected clock_floor to strictly advance after a REJECTED operation (was ${floorAfterAcquire}, now ${floorAfterRejection})`);
 });
 
-test('a contended claim store lock is refused as claim-store-unavailable', async () => {
+test('claim reads bypass a contended lock while claim decisions fail closed', async () => {
   const root = await repository();
-  const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
   const namespace = provisioned.envelope.result.ledger_namespace;
   const storePath = path.join(root, '.git', 'wowbagger', `claims-${namespace}.json`);
   await mkdir(path.dirname(storePath), { recursive: true });
@@ -159,11 +160,27 @@ test('a contended claim store lock is refused as claim-store-unavailable', async
   await writeFile(lockPath, '');
 
   try {
-    const request = path.join(root, 'read.json');
-    await writeFile(request, JSON.stringify({
+    const readRequest = path.join(root, 'read-contended.json');
+    await writeFile(readRequest, JSON.stringify({
       ledger_namespace: namespace, item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
     }));
-    const refused = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+    const observed = await capture([
+      'claim', 'read', '--ledger', ledger, '--input', readRequest, '--json',
+    ]);
+    assert.equal(observed.exit, 0, JSON.stringify(observed.envelope));
+    assert.equal(observed.envelope.result.read_back.active, null);
+
+    const acquireRequest = path.join(root, 'acquire-contended.json');
+    await writeFile(acquireRequest, JSON.stringify({
+      ledger_namespace: namespace,
+      item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+      owner_id: 'agent-contended',
+      lease_duration_ms: 300000,
+      expected: { last_epoch: '0', active: null },
+    }));
+    const refused = await capture([
+      'claim', 'acquire', '--ledger', ledger, '--input', acquireRequest, '--json',
+    ]);
     assert.equal(refused.exit, 6);
     assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
     assert.equal(refused.envelope.error.details.reason, 'claim-store-locked');

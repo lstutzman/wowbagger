@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { link, mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
+import { link, lstat, mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -9,13 +9,13 @@ const GIT_ENVIRONMENT = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
 );
 
-export async function resolveGitCommonDir(startDir) {
+export async function resolveGitCommonDir(startDir, options = {}) {
   let current = path.resolve(startDir);
   for (;;) {
     const candidate = path.join(current, '.git');
     let info = null;
     try {
-      info = await stat(candidate);
+      info = await lstat(candidate);
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
     }
@@ -23,7 +23,10 @@ export async function resolveGitCommonDir(startDir) {
     if (info?.isFile()) {
       const text = await readFile(candidate, 'utf8');
       const match = /^gitdir:\s*(.+)\s*$/m.exec(text);
-      if (!match) return null;
+      if (!match) {
+        if (options.failClosed) throw gitVerificationFailed();
+        return null;
+      }
       const gitDir = path.resolve(current, match[1].trim());
       try {
         const commonText = await readFile(path.join(gitDir, 'commondir'), 'utf8');
@@ -33,14 +36,15 @@ export async function resolveGitCommonDir(startDir) {
         return gitDir;
       }
     }
+    if (info && options.failClosed) throw gitVerificationFailed();
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;
   }
 }
 
-export async function resolveVerifiedGitCommonDir(startDir) {
-  const discovered = await resolveGitCommonDir(startDir);
+export async function resolveVerifiedGitCommonDir(startDir, options = {}) {
+  const discovered = await resolveGitCommonDir(startDir, options);
   if (!discovered) return null;
   try {
     const { stdout } = await execFileAsync(
@@ -57,10 +61,18 @@ export async function resolveVerifiedGitCommonDir(startDir) {
       realpath(stdout.trim()),
       realpath(discovered),
     ]);
-    return reported === expected ? discovered : null;
-  } catch {
+    if (reported === expected) return discovered;
+  } catch (error) {
+    if (options.failClosed) throw error;
     return null;
   }
+  if (options.failClosed) throw gitVerificationFailed();
+  return null;
+}
+function gitVerificationFailed() {
+  const error = new Error('Git common directory verification failed.');
+  error.code = 'GIT_VERIFICATION_FAILED';
+  return error;
 }
 
 export function claimStorePath(commonDir, namespace) {

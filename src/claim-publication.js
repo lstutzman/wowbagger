@@ -100,43 +100,40 @@ export function validatePublicationReadRequest(request) {
 }
 
 export async function readPublicationOutcome({ gitCommonDir, namespace, request }) {
-  const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
-    return await withClaimLock(storePath, async () => {
-      const replayed = await replayClaimJournal(journalPath, namespace);
-      const outcome = replayed.entries.find((entry) => (
-        entry.type === 'publish-final'
-          && entry.operation_id === request.operation_id
-          && entry.item_id === request.item_id
-      ));
-      if (!outcome) {
-        return publicationReadError(request, 'operation-not-found',
-          'The publication operation outcome was not found.', {
-            operation_id: request.operation_id,
-            ledger_namespace: request.ledger_namespace,
-            item_id: request.item_id,
-          });
-      }
-      return {
-        exit: 0,
-        stdout: {
-          ok: true,
-          namespace: 'ledger-publication',
-          command: 'read',
-          contract_version: 1,
-          state: 'committed',
+    const replayed = await replayClaimJournal(journalPath, namespace);
+    const outcome = replayed.entries.find((entry) => (
+      entry.type === 'publish-final'
+        && entry.operation_id === request.operation_id
+        && entry.item_id === request.item_id
+    ));
+    if (!outcome) {
+      return publicationReadError(request, 'operation-not-found',
+        'The publication operation outcome was not found.', {
           operation_id: request.operation_id,
-          result: {
-            operation_id: request.operation_id,
-            ledger_namespace: request.ledger_namespace,
-            item_id: request.item_id,
-            operation_digest: outcome.operation_digest,
-            outcome: structuredClone(outcome.outcome.stdout),
-          },
+          ledger_namespace: request.ledger_namespace,
+          item_id: request.item_id,
+        });
+    }
+    return {
+      exit: 0,
+      stdout: {
+        ok: true,
+        namespace: 'ledger-publication',
+        command: 'read',
+        contract_version: 1,
+        state: 'committed',
+        operation_id: request.operation_id,
+        result: {
+          operation_id: request.operation_id,
+          ledger_namespace: request.ledger_namespace,
+          item_id: request.item_id,
+          operation_digest: outcome.operation_digest,
+          outcome: structuredClone(outcome.outcome),
         },
-      };
-    });
+      },
+    };
   } catch (error) {
     return publicationReadError(request, 'claim-store-unavailable',
       'The durable claim store is unavailable.', {
@@ -293,6 +290,49 @@ export async function reconcileClaimJournal({
     error.code = 'CLOCK_FLOOR_PERSISTENCE_FAILED';
     throw error;
   }
+  const legacyMutationTerminals = new Set(entries
+    .filter((entry) => (
+      ['legacy-mutation', 'legacy-mutation-abort'].includes(entry.type)
+        && typeof entry.attempt_id === 'string'
+    ))
+    .map((entry) => entry.attempt_id));
+  const pendingLegacyMutations = entries.filter((entry) => (
+    entry.type === 'legacy-mutation-intent'
+      && !legacyMutationTerminals.has(entry.attempt_id)
+  ));
+  for (const intent of pendingLegacyMutations) {
+    const item = items.get(intent.item_id);
+    const actualRevision = item ? revisionFor(item.bytes) : null;
+    if (actualRevision === intent.candidate_revision) {
+      entries.push(await appendClaimEntry(journalPath, {
+        type: 'legacy-mutation',
+        attempt_id: intent.attempt_id,
+        ledger_namespace: namespace,
+        item_id: intent.item_id,
+        command: intent.command,
+        committed_revision: actualRevision,
+        observed_at: observedAt,
+      }));
+    } else if (actualRevision === intent.expected_revision) {
+      entries.push(await appendClaimEntry(journalPath, {
+        type: 'legacy-mutation-abort',
+        attempt_id: intent.attempt_id,
+        ledger_namespace: namespace,
+        item_id: intent.item_id,
+        observed_revision: actualRevision,
+        observed_at: observedAt,
+      }));
+    } else {
+      findings.push({
+        code: 'legacy-mutation-outcome-unknown',
+        item_id: intent.item_id,
+        attempt_id: intent.attempt_id,
+        actual_revision: actualRevision,
+        expected_revision: intent.expected_revision,
+        candidate_revision: intent.candidate_revision,
+      });
+    }
+  }
 
   for (const intent of pending) {
     const item = items.get(intent.item_id);
@@ -405,29 +445,40 @@ export async function reconcileClaimJournal({
     }
   }
 
-  const finalizedItems = new Set(entries
-    .filter((entry) => entry.type === 'publish-finalization')
+  const coordinatedItems = new Set(entries
+    .filter((entry) => (
+      entry.type === 'publish-finalization'
+        || entry.type === 'legacy-mutation'
+    ))
     .map((entry) => entry.item_id));
-  for (const itemId of finalizedItems) {
-    const published = entries.filter((entry) => (
-      entry.type === 'publish-final'
+  for (const itemId of coordinatedItems) {
+    const authorized = entries.filter((entry) => (
+      (entry.type === 'publish-final'
         && entry.item_id === itemId
-        && entry.outcome?.stdout?.state === 'committed'
+        && entry.outcome?.stdout?.state === 'committed')
+        || (entry.type === 'legacy-mutation' && entry.item_id === itemId)
     ));
-    const finalizations = entries.filter((entry) => (
-      entry.type === 'publish-finalization' && entry.item_id === itemId
-    ));
-    const expectedRevision = published.at(-1)?.outcome.stdout.result.committed_revision;
-    const finalizedRevision = finalizations.at(-1)?.committed_revision;
-    if (!expectedRevision || !finalizedRevision) continue;
+    const latestAuthorized = authorized.at(-1);
+    const expectedRevision = latestAuthorized?.type === 'legacy-mutation'
+      ? latestAuthorized.committed_revision
+      : latestAuthorized?.outcome.stdout.result.committed_revision;
+    const authorizedRevisions = new Set(authorized.map((entry) => (
+      entry.type === 'legacy-mutation'
+        ? entry.committed_revision
+        : entry.outcome.stdout.result.committed_revision
+    )));
+    for (const intent of entries) {
+      if (intent.type === 'legacy-mutation-intent' && intent.item_id === itemId) {
+        authorizedRevisions.add(intent.expected_revision);
+      }
+    }
+    if (!expectedRevision) continue;
     const item = items.get(itemId);
     const actualRevision = item ? revisionFor(item.bytes) : null;
     const headItem = headItems.get(itemId);
     const headRevision = headItem ? revisionFor(headItem.bytes) : null;
     const workingTreeChanged = actualRevision !== expectedRevision;
-    const gitHeadChanged = gitHead !== null
-      && headRevision !== expectedRevision
-      && headRevision !== finalizedRevision;
+    const gitHeadChanged = gitHead !== null && !authorizedRevisions.has(headRevision);
     if (!workingTreeChanged && !gitHeadChanged) continue;
     const record = replayed.state.claims.find((entry) => entry.item_id === itemId);
     findings.push({
@@ -449,7 +500,7 @@ export async function reconcileClaimJournal({
 
 
   for (const record of replayed.state.claims) {
-    if (finalizedItems.has(record.item_id)) continue;
+    if (coordinatedItems.has(record.item_id)) continue;
     if (record.active === null || observedAt >= record.active.expires_at) continue;
     const committed = entries.filter((entry) => (
       entry.type === 'publish-final'

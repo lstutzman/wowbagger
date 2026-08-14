@@ -14,7 +14,7 @@ One line per term. This is a glossary, not documentation.
 - **plugin** — the Claude Code distribution wrapper (marketplace + skill + adapter), self-hosted from this repo.
 - **oracle** — `spec/adapter-reference.js` (and `test/work-claim-reference.js`): independent re-implementations that conformance tests compare against; never merged with `src/`.
 - **claim (advisory)** — "who is touching this right now"; visible across worktrees, enforces nothing.
-- **fenced claims** — the future transactional-coordinator protocol (item 17); unresolved design question.
+- **fenced claims** — item 17's accepted work-claim protocol; provisioned Git ledgers implement the `merge-coordinated` profile with claim-protected publication and `safe_exclusive_dispatch: false`, not the strict transactional `fenced` profile.
 - **dogfood** — using wowbagger on its own backlog (maintainer-dogfood) or a consumer's (consumer-dogfood/tinydancer).
 - **decision record** — the `decisions:` entries on an item; why a lifecycle edge happened, written at transition time.
 - **schema migration** — the one-time maintenance tool that changes a complete ledger from schema version 1 to schema version 2.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import test from 'node:test';
@@ -121,6 +122,101 @@ test('transition preserves CRLF extension comments and every body byte', async (
     const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
     assert.ok(rewritten.includes(extension));
     assert.ok(rewritten.endsWith(body));
+  });
+});
+
+test('patch and transition preserve one leading UTF-8 BOM', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY099';
+  const source = `\uFEFF${triageSource(id)}`;
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const itemPath = path.join(ledger, `${id}.md`);
+    const patchPath = path.join(path.dirname(ledger), 'patch-bom.json');
+    await writeFile(patchPath, JSON.stringify({
+      id,
+      expected_revision: `sha256:${createHash('sha256').update(source).digest('hex')}`,
+      date: '2030-01-15',
+      set: { priority: 1 },
+    }));
+
+    const patched = runCli('patch', '--ledger', ledger, '--input', patchPath, '--json');
+    assert.equal(patched.status, 0, `${patched.stderr}\n${patched.stdout}`);
+    assertSingleUtf8Bom(await readFile(itemPath));
+
+    const patchedRevision = JSON.parse(patched.stdout).result.item.revision;
+    const transitionPath = path.join(path.dirname(ledger), 'transition-bom.json');
+    await writeFile(transitionPath, JSON.stringify({
+      id,
+      expected_revision: patchedRevision,
+      to_status: 'backlog',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Accept the BOM item.',
+        rationale: 'The encoding marker must remain unchanged.',
+      },
+    }));
+
+    const transitioned = runCli('transition', '--ledger', ledger, '--input', transitionPath, '--json');
+    assert.equal(transitioned.status, 0, `${transitioned.stderr}\n${transitioned.stdout}`);
+    assertSingleUtf8Bom(await readFile(itemPath));
+  });
+});
+
+test('patch and transition preserve restrictive item permissions', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09A';
+  await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
+    const itemPath = path.join(ledger, `${id}.md`);
+    await chmod(itemPath, 0o600);
+    const patchPath = path.join(path.dirname(ledger), 'patch-mode.json');
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    assert.equal(inspected.status, 0, inspected.stderr);
+    await writeFile(patchPath, JSON.stringify({
+      id,
+      expected_revision: JSON.parse(inspected.stdout).result.item.revision,
+      date: '2030-01-15',
+      set: { priority: 1 },
+    }));
+
+    const patched = runCli('patch', '--ledger', ledger, '--input', patchPath, '--json');
+    assert.equal(patched.status, 0, `${patched.stderr}\n${patched.stdout}`);
+    assert.equal((await stat(itemPath)).mode & 0o777, 0o600);
+
+    const transitionPath = path.join(path.dirname(ledger), 'transition-mode.json');
+    await writeFile(transitionPath, JSON.stringify({
+      id,
+      expected_revision: JSON.parse(patched.stdout).result.item.revision,
+      to_status: 'backlog',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Accept the permission-preserving item.',
+        rationale: 'A mutation must not make a private ledger item readable.',
+      },
+    }));
+
+    const transitioned = runCli('transition', '--ledger', ledger, '--input', transitionPath, '--json');
+    assert.equal(transitioned.status, 0, `${transitioned.stderr}\n${transitioned.stdout}`);
+    assert.equal((await stat(itemPath)).mode & 0o777, 0o600);
+  });
+});
+
+test('patch reapplies source special permission bits after writing', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09B';
+  await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
+    const itemPath = path.join(ledger, `${id}.md`);
+    await chmod(itemPath, 0o4700);
+    const patchPath = path.join(path.dirname(ledger), 'patch-special-mode.json');
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    assert.equal(inspected.status, 0, inspected.stderr);
+    await writeFile(patchPath, JSON.stringify({
+      id,
+      expected_revision: JSON.parse(inspected.stdout).result.item.revision,
+      date: '2030-01-15',
+      set: { priority: 1 },
+    }));
+
+    const patched = runCli('patch', '--ledger', ledger, '--input', patchPath, '--json');
+
+    assert.equal(patched.status, 0, `${patched.stderr}\n${patched.stdout}`);
+    assert.equal((await stat(itemPath)).mode & 0o7777, 0o4700);
   });
 });
 
@@ -317,6 +413,151 @@ test('transition preserves aliases to changing controlled anchors without changi
       assert.deepEqual(data.extension_alias, { label: 'stable' });
     });
   }
+});
+
+test('patch preserves extension values when removing an anchored number', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY094';
+  const source = [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    'number: &item_number 7',
+    'title: "Remove an anchored controlled field"',
+    'kind: task',
+    'status: backlog',
+    'created: 2030-01-14',
+    'updated: 2030-01-14',
+    'provenance:',
+    '  source: "test/mutation-hardening"',
+    '  recorded_at: "2030-01-14T12:00:00Z"',
+    'depends_on: []',
+    'related: []',
+    'number_mirror: *item_number',
+    '---',
+    '',
+  ].join('\n');
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'patch.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      date: '2030-01-16',
+      set: { number: null },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+    const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
+    const data = document.toJS();
+    assert.equal(Object.hasOwn(data, 'number'), false);
+    assert.equal(data.number_mirror, 7);
+    assert.doesNotMatch(rewritten, /\*item_number/);
+  });
+});
+
+test('patch preserves aliases bound to a reused anchor name', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09B';
+  const source = [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    'number: &shared 7',
+    'title: "Preserve reused anchors"',
+    'kind: task',
+    'status: backlog',
+    'created: 2030-01-14',
+    'updated: 2030-01-14',
+    'provenance:',
+    '  source: "test/mutation-hardening"',
+    '  recorded_at: "2030-01-14T12:00:00Z"',
+    'depends_on: []',
+    'related: []',
+    'number_mirror: *shared',
+    'extension_anchor: &shared "extension value"',
+    'extension_mirror: *shared',
+    '---',
+    '',
+  ].join('\n');
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const requestPath = path.join(path.dirname(ledger), 'patch-reused-anchor.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: JSON.parse(inspected.stdout).result.item.revision,
+      date: '2030-01-16',
+      set: { number: null },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+    const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
+    const data = document.toJS();
+    assert.equal(data.number_mirror, 7);
+    assert.equal(data.extension_anchor, 'extension value');
+    assert.equal(data.extension_mirror, 'extension value');
+  });
+});
+
+test('transition preserves extension values when removing an anchored lifecycle date', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY095';
+  const source = [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    'title: "Restore an item with an anchored lifecycle date"',
+    'kind: task',
+    'status: archived',
+    'created: 2030-01-14',
+    'updated: 2030-01-15',
+    'archived: &archive_date 2030-01-15',
+    'provenance:',
+    '  source: "test/mutation-hardening"',
+    '  recorded_at: "2030-01-14T12:00:00Z"',
+    'depends_on: []',
+    'related: []',
+    'archive_mirror: *archive_date',
+    'decisions:',
+    '  - action: archive',
+    '    date: 2030-01-15',
+    '    summary: "Archive the item."',
+    '    rationale: "The item is no longer active."',
+    '---',
+    '',
+  ].join('\n');
+
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'transition-restore.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: revision,
+      to_status: 'backlog',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Restore the archived item.',
+        rationale: 'The lifecycle date is no longer active, but its extension value remains data.',
+      },
+    }));
+
+    const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+    const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
+    const data = document.toJS();
+    assert.equal(Object.hasOwn(data, 'archived'), false);
+    assert.equal(data.archive_mirror, '2030-01-15');
+    assert.doesNotMatch(rewritten, /\*archive_date/);
+  });
 });
 
 test('transition appends to direct and aliased controlled decision sequences without mutating extensions', async () => {
@@ -539,6 +780,115 @@ test('a temporary-file sync failure is classified before any final item is publi
   });
 });
 
+test('patch returns a JSON envelope when candidate serialization fails', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY096';
+  const source = triageSource(id);
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'patch-serialization.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: `sha256:${createHash('sha256').update(source).digest('hex')}`,
+      date: '2030-01-16',
+      set: { priority: 1 },
+    }));
+
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./mutation-runner.js', import.meta.url)),
+      'patch', '--ledger', ledger, '--input', requestPath, '--json',
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        WOWBAGGER_TEST_SCENARIO: 'candidate-serialization-fails',
+      },
+    });
+
+    assert.equal(result.status, 6, `${result.stderr}\n${result.stdout}`);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.error.code, 'operation-failed');
+    assert.equal(output.error.details.operation, 'serialize-candidate');
+    assert.equal(output.error.details.reason, 'serialization-failed');
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+  });
+});
+test('transition returns a JSON envelope when candidate serialization fails', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY097';
+  const source = triageSource(id);
+  await withLedger({ [`${id}.md`]: source }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'transition-serialization.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: `sha256:${createHash('sha256').update(source).digest('hex')}`,
+      to_status: 'backlog',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Serialize the transition candidate.',
+        rationale: 'Exercise structured handling of a serializer failure.',
+      },
+    }));
+
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./mutation-runner.js', import.meta.url)),
+      'transition', '--ledger', ledger, '--input', requestPath, '--json',
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        WOWBAGGER_TEST_SCENARIO: 'candidate-serialization-fails',
+      },
+    });
+
+    assert.equal(result.status, 6, `${result.stderr}\n${result.stdout}`);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.error.code, 'operation-failed');
+    assert.equal(output.error.details.operation, 'serialize-candidate');
+    assert.equal(output.error.details.reason, 'serialization-failed');
+    assert.equal(await readFile(path.join(ledger, `${id}.md`), 'utf8'), source);
+  });
+});
+
+
+test('create returns a JSON envelope when candidate serialization fails', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY098';
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'create-serialization.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      item: {
+        title: 'Serialize the create candidate',
+        kind: 'task',
+        provenance: {
+          source: 'test/mutation-hardening',
+          recorded_at: '2030-01-10T12:34:56.789Z',
+        },
+        depends_on: [],
+      },
+      body: '',
+    }));
+
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('./mutation-runner.js', import.meta.url)),
+      'create', '--ledger', ledger, '--input', requestPath, '--json',
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        WOWBAGGER_TEST_SCENARIO: 'candidate-serialization-fails',
+      },
+    });
+
+    assert.equal(result.status, 6, `${result.stderr}\n${result.stdout}`);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.error.code, 'operation-failed');
+    assert.equal(output.error.details.operation, 'serialize-candidate');
+    assert.equal(output.error.details.reason, 'serialization-failed');
+    assert.deepEqual((await readdir(ledger)).filter((entry) => entry.endsWith('.md')), []);
+  });
+});
+
 test('the production CLI ignores test fault-injection environment variables', async () => {
   const id = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
   await withLedger({}, async (ledger) => {
@@ -573,6 +923,12 @@ test('the production CLI ignores test fault-injection environment variables', as
     assert.equal(JSON.parse(result.stdout).state, 'committed');
   });
 });
+
+function assertSingleUtf8Bom(bytes) {
+  const bom = Buffer.from([0xef, 0xbb, 0xbf]);
+  assert.deepEqual(bytes.subarray(0, bom.length), bom);
+  assert.equal(bytes.indexOf(bom, bom.length), -1);
+}
 
 function triageSource(id) {
   return `---

@@ -5,14 +5,19 @@ number: 70
 title: "Fix seven verified mutation and claim defects"
 kind: task
 priority: 1
-status: triage
+status: in-progress
 created: 2026-08-13
-updated: 2026-08-13
+updated: 2026-08-14
 provenance:
   source: "standard-code-review"
   recorded_at: "2026-08-13T12:40:29.000Z"
 depends_on: []
-related: [wb_01KZ77NSW8P89118K6D6FSBFX2, wb_01KZBMBEZKPE7D15HKW9Q3GSZV]
+related: [ wb_01KZ77NSW8P89118K6D6FSBFX2, wb_01KZBMBEZKPE7D15HKW9Q3GSZV ]
+decisions:
+  - action: accept
+    date: 2026-08-14
+    summary: "Accept the seven verified mutation and claim defects into backlog."
+    rationale: "Each defect has a public reproduction and bounded acceptance criteria. Several can invalidate a ledger or bypass an active claim, so priority 1 is justified and no unresolved design dependency blocks implementation."
 ---
 # Problem
 

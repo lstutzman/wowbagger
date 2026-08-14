@@ -1,6 +1,6 @@
 ---
 name: wowbagger
-description: Use when coordinating work through a wowbagger ledger — reading the ready queue, inspecting or filing an item, transitioning one through its lifecycle, taking a work claim, or publishing claimed work. Triggers on "ready queue", "what should I work on", "file a ledger item", "close this item", "claim this work", "publish claimed work", or any mention of a wowbagger ledger. Not for general backlog talk where no wowbagger ledger exists.
+description: Use when coordinating work through a wowbagger ledger — reading the ready queue, inspecting or filing an item, generating an HTML ledger report, transitioning one through its lifecycle, taking a work claim, or publishing claimed work. Triggers on "ready queue", "ledger report", "backlog report", "what should I work on", "file a ledger item", "close this item", "claim this work", "publish claimed work", or any mention of a wowbagger ledger. Not for general backlog talk where no wowbagger ledger exists.
 ---
 
 # Wowbagger
@@ -60,6 +60,32 @@ wowbagger capabilities --json
 - `inspect` returns a lossless byte snapshot plus a SHA-256 revision. That
   revision is what `transition` compares against, so inspect immediately before
   transitioning.
+
+## Generating an HTML report
+
+The report is read-only derived output. Its configuration is
+`<ledger>/.wowbagger/report.json`.
+
+```sh
+wowbagger report --ledger <dir> --as-of <YYYY-MM-DD> --json
+```
+
+Use today's date for `--as-of`. Use `--out <file>` only when the caller needs to
+override the configured output. The resolved output must stay outside the
+ledger. Do not use an npm script as a machine protocol; invoke `wowbagger`
+directly so standard output contains exactly one compact JSON object.
+
+On success, require exit `0`, `ok: true`, `command: "report"`,
+`contract_version: 2`, `result.report_version: 1`, and the requested
+`result.as_of`. Read the generated file from the absolute `result.output`.
+On failure, require `ok: false` and inspect `error.code`; do not treat an
+existing output as fresh because failed publication preserves the prior report.
+
+The generated HTML does not authorize transitions, claims, or parallel work.
+It has no live ledger revision. Its readiness state is the canonical projection
+at generation time, but the file is only a static view. Area-diverse batches are
+scheduling hints. Use `inspect` plus `transition` for lifecycle changes and the
+claim commands below for coordination.
 
 ## Writing
 

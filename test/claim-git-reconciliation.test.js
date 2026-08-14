@@ -7,7 +7,12 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { claimJournalPath, claimReconcileLogPath, replayClaimJournal } from '../src/claim-journal.js';
+import {
+  appendClaimEntry,
+  claimJournalPath,
+  claimReconcileLogPath,
+  replayClaimJournal,
+} from '../src/claim-journal.js';
 import { resolveGitCommonDir } from '../src/claim-store.js';
 import { readGitHeadLedger } from '../src/git-reconciliation.js';
 
@@ -103,6 +108,187 @@ test('claim-verify finalizes a committed publication observed in git HEAD', asyn
   assert.equal(await readFile(fixture.itemPath, 'utf8'), candidate.toString('utf8'));
   const reconcileLog = await readFile(claimReconcileLogPath(fixture.ledger, fixture.namespace), 'utf8');
   assert.doesNotMatch(reconcileLog, /publish-finalization/);
+});
+
+test('claim-verify accepts an authorized legacy patch after claim release', async () => {
+  const fixture = await repository();
+  const acquirePath = path.join(fixture.root, 'acquire-release.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-release-run',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root,
+    'claim', 'acquire', '--ledger', fixture.ledger, '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const candidate = Buffer.from(fixture.before.toString('utf8').replace('title: "Before"', 'title: "After"'));
+  const publishPath = path.join(fixture.root, 'publish-release.json');
+  await writeFile(publishPath, JSON.stringify({
+    operation_id: 'pub_release_legacy_0001',
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    claim_fence: {
+      ledger_namespace: fixture.namespace,
+      item_id: ITEM_ID,
+      owner_id: 'agent-release-run',
+      epoch: acquired.envelope.result.claim.epoch,
+    },
+    expected_revision: sha256(fixture.before),
+    candidate_sha256: sha256(candidate),
+    candidate_source_base64: candidate.toString('base64'),
+  }));
+  const published = run(
+    fixture.root,
+    'publish-claimed', '--ledger', fixture.ledger, '--input', publishPath, '--json',
+  );
+  assert.equal(published.exit, 0, JSON.stringify(published.envelope));
+  git(fixture.root, 'add', 'ledger/item.md');
+  git(fixture.root, 'commit', '-qm', 'Commit claimed publication before release');
+  const initialVerify = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(initialVerify.exit, 0, JSON.stringify(initialVerify.envelope));
+
+  const releasePath = path.join(fixture.root, 'release.json');
+  await writeFile(releasePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-release-run',
+    epoch: acquired.envelope.result.claim.epoch,
+    expected_expires_at: acquired.envelope.result.claim.expires_at,
+  }));
+  const released = run(
+    fixture.root,
+    'claim', 'release', '--ledger', fixture.ledger, '--input', releasePath, '--json',
+  );
+  assert.equal(released.exit, 0, JSON.stringify(released.envelope));
+
+  const patchPath = path.join(fixture.root, 'patch.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: ITEM_ID,
+    expected_revision: published.envelope.result.committed_revision,
+    date: '2026-08-11',
+    set: { priority: 1 },
+  }));
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'add', 'ledger/item.md');
+  git(fixture.root, 'commit', '-qm', 'Commit authorized legacy patch');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+
+  const secondPatchPath = path.join(fixture.root, 'second-patch.json');
+  await writeFile(secondPatchPath, JSON.stringify({
+    id: ITEM_ID,
+    expected_revision: patched.envelope.result.item.revision,
+    date: '2026-08-11',
+    set: { priority: 2 },
+  }));
+  const secondPatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', secondPatchPath, '--json',
+  );
+  assert.equal(secondPatch.exit, 0, JSON.stringify(secondPatch.envelope));
+
+  const verifiedWithEarlierHead = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verifiedWithEarlierHead.exit, 0, JSON.stringify(verifiedWithEarlierHead.envelope));
+  assert.deepEqual(verifiedWithEarlierHead.envelope.result.findings, []);
+});
+
+test('claim-verify resolves a committed legacy mutation intent after response loss', async () => {
+  const fixture = await repository();
+  const candidate = Buffer.from(fixture.before.toString('utf8')
+    .replace('title: "Before"', 'title: "Recovered"')
+    .replace('\nBefore\n', '\nRecovered\n'));
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const journalPath = claimJournalPath(gitCommonDir, fixture.namespace);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'legacy_response_loss_0001',
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    command: 'patch-v1',
+    expected_revision: sha256(fixture.before),
+    candidate_revision: sha256(candidate),
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await writeFile(fixture.itemPath, candidate);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+  const replayed = await replayClaimJournal(journalPath, fixture.namespace);
+  assert.ok(replayed.entries.some((entry) => (
+    entry.type === 'legacy-mutation'
+      && entry.attempt_id === 'legacy_response_loss_0001'
+      && entry.committed_revision === sha256(candidate)
+  )));
+});
+
+test('claim-verify rejects an unrecorded revision after a legacy-only mutation', async () => {
+  const fixture = await repository();
+  const acquirePath = path.join(fixture.root, 'acquire-legacy-only.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-legacy-only-run',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root,
+    'claim', 'acquire', '--ledger', fixture.ledger, '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+  const releasePath = path.join(fixture.root, 'release-legacy-only.json');
+  await writeFile(releasePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-legacy-only-run',
+    epoch: acquired.envelope.result.claim.epoch,
+    expected_expires_at: acquired.envelope.result.claim.expires_at,
+  }));
+  const released = run(
+    fixture.root,
+    'claim', 'release', '--ledger', fixture.ledger, '--input', releasePath, '--json',
+  );
+  assert.equal(released.exit, 0, JSON.stringify(released.envelope));
+  const patchPath = path.join(fixture.root, 'legacy-only-patch.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: ITEM_ID,
+    expected_revision: sha256(fixture.before),
+    date: '2026-08-11',
+    set: { priority: 2 },
+  }));
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  const direct = Buffer.from(Buffer.from(
+    patched.envelope.result.item.source_base64,
+    'base64',
+  ).toString('utf8').replace('priority: 2', 'priority: 3'));
+  await writeFile(fixture.itemPath, direct);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].code, 'stale-write-detected');
+  assert.equal(verified.envelope.result.findings[0].actual_revision, sha256(direct));
+  assert.equal(
+    verified.envelope.result.findings[0].expected_revision,
+    patched.envelope.result.item.revision,
+  );
 });
 
 test('Git HEAD reconciliation includes nested ledger items', async () => {

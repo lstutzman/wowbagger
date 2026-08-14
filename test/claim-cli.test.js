@@ -85,6 +85,66 @@ test('a claim acquired through the CLI is visible to a later read', async () => 
   assert.equal(observed.envelope.result.read_back.last_epoch, '1');
 });
 
+test('claim capabilities, read, and verify do not write or reconcile', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const itemId = 'wb_01Q4837BM01W70T30B184GG1R6';
+  const acquirePath = path.join(root, 'acquire-observational.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: itemId,
+    owner_id: 'agent-observational',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = await capture(['claim', 'acquire', '--ledger', ledger, '--input', acquirePath, '--json']);
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const claimRoot = path.join(root, '.git', 'wowbagger');
+  const journalPath = path.join(claimRoot, namespace, 'journal.ndjson');
+  const statePath = path.join(claimRoot, `claims-${namespace}.json`);
+  const reconcilePath = path.join(ledger, '.wowbagger', `reconcile-${namespace}.md`);
+  const before = await Promise.all([
+    readFile(journalPath),
+    readFile(statePath),
+    readFile(reconcilePath),
+    stat(claimRoot, { bigint: true }),
+    stat(path.dirname(journalPath), { bigint: true }),
+  ]);
+
+  const capabilities = await capture(['claim', 'capabilities', '--ledger', ledger, '--json']);
+  assert.equal(capabilities.exit, 0, JSON.stringify(capabilities.envelope));
+
+  const readPath = path.join(root, 'read-observational.json');
+  await writeFile(readPath, JSON.stringify({ ledger_namespace: namespace, item_id: itemId }));
+  const observed = await capture(['claim', 'read', '--ledger', ledger, '--input', readPath, '--json']);
+  assert.equal(observed.exit, 0, JSON.stringify(observed.envelope));
+  assert.equal(observed.envelope.result.read_back.active.owner_id, 'agent-observational');
+
+  const verifyPath = path.join(root, 'verify-observational.json');
+  await writeFile(verifyPath, JSON.stringify({
+    operation_id: 'pub_observational_0001',
+    ledger_namespace: namespace,
+    item_id: itemId,
+  }));
+  const verified = await capture(['claim', 'verify', '--ledger', ledger, '--input', verifyPath, '--json']);
+  assert.equal(verified.exit, 2, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.error.code, 'operation-not-found');
+
+  const after = await Promise.all([
+    readFile(journalPath),
+    readFile(statePath),
+    readFile(reconcilePath),
+    stat(claimRoot, { bigint: true }),
+    stat(path.dirname(journalPath), { bigint: true }),
+  ]);
+  assert.deepEqual(after.slice(0, 3), before.slice(0, 3));
+  assert.equal(after[3].mtimeNs, before[3].mtimeNs);
+  assert.equal(after[4].mtimeNs, before[4].mtimeNs);
+});
+
 test('a full reconciliation log cannot hide a committed claim', async () => {
   const root = await repository();
   const ledger = path.join(root, 'ledger');
@@ -376,7 +436,7 @@ test('a read request missing item_id is rejected without persisting a junk recor
   await assert.rejects(stat(storePath), { code: 'ENOENT' });
 });
 
-test('a claim journal that cannot be appended returns clock-floor-persistence-failed', async () => {
+test('a claim decision whose journal cannot be appended fails closed', async () => {
   const root = await repository();
   const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
   const namespace = provisioned.envelope.result.ledger_namespace;
@@ -385,11 +445,17 @@ test('a claim journal that cannot be appended returns clock-floor-persistence-fa
   await writeFile(journalPath, '');
   await chmod(journalPath, 0o400);
 
-  const request = path.join(root, 'read.json');
+  const request = path.join(root, 'acquire-read-only-journal.json');
   await writeFile(request, JSON.stringify({
-    ledger_namespace: namespace, item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    ledger_namespace: namespace,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    owner_id: 'agent-read-only-journal',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
   }));
-  const refused = await capture(['claim', 'read', '--ledger', path.join(root, 'ledger'), '--input', request, '--json']);
+  const refused = await capture([
+    'claim', 'acquire', '--ledger', path.join(root, 'ledger'), '--input', request, '--json',
+  ]);
 
   assert.equal(refused.exit, 6);
   assert.equal(refused.envelope.error.code, 'clock-floor-persistence-failed');
