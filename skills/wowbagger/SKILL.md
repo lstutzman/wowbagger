@@ -21,7 +21,7 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.3` and core `contract_version: 2`.**
+`0.1.0-alpha.4` and core `contract_version: 2`.**
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to

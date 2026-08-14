@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.4 - 2026-08-14
+
 ### Added
 
 - `report` validates a ledger and atomically writes a deterministic,
@@ -15,6 +17,12 @@ consolidation. The first tagged release inherits this file.
   three detail levels, terminal history, and optional area-diverse swarm
   batches. This repository includes a local report configuration and ignores
   the generated artifact.
+
+### Fixed
+
+- The Claude Code adapter now declares Darwin `supported`. Native Darwin
+  conformance passes all 183 common-vector assertions across all 15 cases, so
+  configured consumer workspaces can invoke the published adapter read path.
 
 ## 0.1.0-alpha.3 - 2026-08-12
 

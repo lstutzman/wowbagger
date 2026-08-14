@@ -14,10 +14,11 @@ putting a database or hosted service inside your repository.
 > scope is deliberately narrow: cooperative writers in one working copy, one
 > item at a time. A Claude Code adapter and plugin ship from this
 > repository; the adapter answers the negotiation surface of the harness-neutral
-> contract and passes all 183 assertions across all 15 cases on native Darwin,
-> although no manifest platform is claimed `supported` yet. The shipped core
-> mutation contract and adapter contract are version 2; their frozen version 1
-> definitions are not silently negotiated.
+> contract and passes all 183 assertions across all 15 cases on native Darwin.
+> The Claude Code adapter declares Darwin `supported`; all other shipped adapter
+> platform declarations remain `unverified`. The shipped core mutation contract
+> and adapter contract are version 2; their frozen version 1 definitions are not
+> silently negotiated.
 >
 > A work claim is not a lock or an exclusive dispatch lease. On Git-backed
 > ledgers, claims coordinate cooperating agents through a durable journal in
@@ -35,7 +36,7 @@ Install the core CLI, then verify it:
 ```sh
 npm install -g wowbagger@next   # public npm prerelease
 # or, from this release's Git tag:
-# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.3
+# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4
 wowbagger capabilities --json
 ```
 
@@ -71,7 +72,7 @@ two supported install routes:
 - **npm registry** — `npm install -g wowbagger@next` installs the current
   prerelease.
 - **git tag** —
-  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.3` installs this
+  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4` installs this
   release. Installing at a ref installs the core and every adapter that ref
   carries.
 
@@ -91,10 +92,10 @@ instructions can depend on additive behavior from that release.
 
 - **Node.js:** 20 and later. The adapter conformance vectors run against Node
   20 and the current runtime before each release.
-- **Platforms:** the core runs wherever Node.js runs, but a formal `supported`
-  platform claim is still `unverified` (they become verified per-platform only
-  with release evidence). Do not assume a platform is officially supported just
-  because the CLI starts.
+- **Platforms:** the core runs wherever Node.js runs. The Claude Code adapter
+  declares Darwin `supported` from native common-vector evidence. Linux,
+  Windows, and the other shipped adapter targets remain `unverified`; do not
+  infer support only because the CLI starts.
 - **Other tooling:** `wowbagger` manages a Git-tracked Markdown ledger. It
   needs an accessible Git checkout for work-claim and namespace operations.
   Before `provision`, run
@@ -135,7 +136,7 @@ Upgrade the pieces you installed:
 
 ```sh
 npm install -g wowbagger@next                  # public npm registry
-npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.3  # immutable Git release
+npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4  # immutable Git release
 git pull && npm ci                            # or: a direct checkout
 ```
 
@@ -484,9 +485,9 @@ It is the durable work ledger beneath those systems.
 - Separate optional reusable mechanisms from consumer-specific policy.
 - Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
-  packages share the version 2 engine; the Claude Code Darwin target passes
-  all 183 assertions, while the other target reports and all manifest platform
-  declarations remain unverified.**
+  packages share the version 2 engine; the Claude Code manifest declares Darwin
+  `supported` after passing all 183 native assertions. Other adapter targets and
+  platform declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses.
 - Implement merge-coordinated work claims for cooperating Git worktrees.
   **Implemented with durable claim operations, claim-protected single-item

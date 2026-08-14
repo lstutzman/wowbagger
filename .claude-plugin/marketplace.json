@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Wowbagger — a plain-Markdown, Git-native work ledger for coordinating agents",
-    "version": "0.1.0-alpha.3"
+    "version": "0.1.0-alpha.4"
   },
   "plugins": [
     {
@@ -13,10 +13,10 @@
       "source": {
         "source": "url",
         "url": "https://github.com/lstutzman/wowbagger.git",
-        "ref": "v0.1.0-alpha.3"
+        "ref": "v0.1.0-alpha.4"
       },
       "description": "Coordinate work across agents through a plain-Markdown, Git-native ledger. Requires a separately installed matching wowbagger core distribution; the skill refuses absent or incompatible core and contract versions.",
-      "version": "0.1.0-alpha.3",
+      "version": "0.1.0-alpha.4",
       "strict": true
     }
   ]
