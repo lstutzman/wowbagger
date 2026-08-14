@@ -1,0 +1,396 @@
+import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
+import path from 'node:path';
+import { projectReadiness } from './ready.js';
+import { randomUUID } from 'node:crypto';
+
+const REPORT_FILE_SYSTEM = { mkdir, open, rename, rm };
+const LOGO_MIME_TYPES = new Map([
+  ['.svg', 'image/svg+xml'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.webp', 'image/webp'],
+]);
+
+const CONFIG_KEYS = new Set(['report_version', 'repository', 'title', 'output', 'fields', 'swarm']);
+const REPOSITORY_KEYS = new Set(['name', 'logo']);
+const FIELD_KEYS = new Set([
+  'area',
+  'rank',
+  'score',
+  'complexity',
+  'tier',
+  'mandate',
+  'severity',
+  'confidence',
+  'security',
+  'priority_base',
+  'priority_component',
+  'priority_impact',
+  'priority_leverage',
+  'priority_rationale',
+  'completion_reference',
+]);
+const SWARM_KEYS = new Set(['eligible_complexities']);
+
+export class ReportError extends Error {
+  constructor(code, message, details) {
+    super(message);
+    this.name = 'ReportError';
+    this.code = code;
+    if (details !== undefined) {
+      this.details = details;
+    }
+  }
+}
+
+export function resolvePointer(value, pointer) {
+  if (pointer === '') {
+    return value;
+  }
+
+  let current = value;
+  for (const encodedSegment of pointer.slice(1).split('/')) {
+    const segment = encodedSegment.replaceAll('~1', '/').replaceAll('~0', '~');
+    if (current === null
+      || (typeof current !== 'object' && typeof current !== 'function')
+      || !Object.prototype.hasOwnProperty.call(current, segment)) {
+      return undefined;
+    }
+    current = current[segment];
+  }
+  return current;
+}
+
+export function buildReportModel(items, config, asOf) {
+  const readinessById = projectReadiness(items, asOf);
+  const projected = items.map((item) => projectItem(item, config.fields, readinessById.get(item.data.id)));
+  const reportItems = projected
+    .filter((item) => item.terminalDate === null)
+    .sort(compareProjectedItems);
+  const terminalItems = projected
+    .filter((item) => item.terminalDate !== null)
+    .sort((left, right) => compareText(right.terminalDate, left.terminalDate) || compareText(left.id, right.id));
+
+  const swarmBatches = config.swarm === null
+    ? []
+    : buildSwarmBatches(reportItems, config.swarm.eligibleComplexities);
+  return {
+    reportVersion: config.reportVersion,
+    repository: config.repository,
+    title: config.title,
+    asOf,
+    items: reportItems,
+    terminalItems,
+    stats: {
+      total: projected.length,
+      open: reportItems.length,
+      terminal: terminalItems.length,
+      ready: reportItems.filter((item) => item.readiness.state === 'ready').length,
+      blocked: reportItems.filter((item) => item.readiness.state === 'blocked').length,
+      ineligible: reportItems.filter((item) => item.readiness.state === 'ineligible').length,
+      triage: projected.filter((item) => item.status === 'triage').length,
+      inProgress: projected.filter((item) => item.status === 'in-progress').length,
+      snoozed: items.filter((item) => item.data.snoozed_until > asOf).length,
+      done: terminalItems.filter((item) => item.status === 'done').length,
+      killed: terminalItems.filter((item) => item.status === 'killed').length,
+      deferred: terminalItems.filter((item) => item.status === 'deferred').length,
+      archived: terminalItems.filter((item) => item.status === 'archived').length,
+    },
+    swarm: config.swarm,
+    swarmBatches,
+  };
+}
+
+function projectItem(item, fieldMappings, readiness) {
+  const { data } = item;
+  const fields = {};
+  for (const [slot, pointer] of Object.entries(fieldMappings)) {
+    const value = resolvePointer(data, pointer);
+    if (value !== null && ['string', 'number', 'boolean'].includes(typeof value)) {
+      fields[slot] = value;
+    }
+  }
+
+
+  return {
+    id: data.id,
+    number: data.number ?? null,
+    title: data.title,
+    kind: data.kind,
+    status: data.status,
+    created: data.created,
+    updated: data.updated,
+    terminalDate: terminalDate(data),
+    priority: data.priority ?? null,
+    parent: data.parent ?? null,
+    dependsOn: data.depends_on ?? [],
+    related: data.related ?? [],
+    decisions: data.decisions ?? [],
+    body: item.body,
+    readiness,
+    fields,
+  };
+}
+export function buildSwarmBatches(items, eligibleComplexities) {
+  const pool = items.filter((item) => item.readiness.state === 'ready'
+    && isNonEmptyString(item.fields.area)
+    && isNonEmptyString(item.fields.complexity)
+    && eligibleComplexities.includes(item.fields.complexity));
+  const batches = [];
+
+  while (pool.length > 0 && batches.length < 8) {
+    const batch = [];
+    const usedAreas = new Set();
+    for (let index = 0; index < pool.length && batch.length < 6;) {
+      const candidate = pool[index];
+      if (usedAreas.has(candidate.fields.area)) {
+        index += 1;
+        continue;
+      }
+      usedAreas.add(candidate.fields.area);
+      batch.push(candidate);
+      pool.splice(index, 1);
+    }
+    batches.push(batch);
+  }
+
+  return batches;
+}
+
+function terminalDate(data) {
+  const field = {
+    done: 'completed',
+    killed: 'killed',
+    archived: 'archived',
+    deferred: 'deferred',
+  }[data.status];
+  return field === undefined ? null : data[field];
+}
+
+export async function writeReportFile(outputPath, html, overrides = {}) {
+  const fileSystem = { ...REPORT_FILE_SYSTEM, ...overrides };
+  const directory = path.dirname(outputPath);
+  const temporaryPath = path.join(
+    directory,
+    `.${path.basename(outputPath)}.${process.pid}.${randomUUID()}.tmp`,
+  );
+  let handle = null;
+
+  try {
+    await fileSystem.mkdir(directory, { recursive: true });
+    handle = await fileSystem.open(temporaryPath, 'wx', 0o644);
+    await handle.writeFile(html, 'utf8');
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await fileSystem.rename(temporaryPath, outputPath);
+  } catch (error) {
+    if (handle !== null) {
+      await handle.close().catch(() => {});
+    }
+    let cleanupError = null;
+    try {
+      await fileSystem.rm(temporaryPath, { force: true });
+    } catch (candidate) {
+      cleanupError = candidate;
+    }
+    const details = {
+      cause: error?.code ?? error?.message ?? String(error),
+    };
+    if (cleanupError !== null) {
+      details.cleanup_cause = cleanupError?.code ?? cleanupError?.message ?? String(cleanupError);
+      details.leftover_artifact = temporaryPath;
+    }
+    throw new ReportError('report-write-failed', 'Report publication failed.', details);
+  }
+}
+
+function compareProjectedItems(left, right) {
+  const leftHasRank = typeof left.fields.rank === 'number' && Number.isFinite(left.fields.rank);
+  const rightHasRank = typeof right.fields.rank === 'number' && Number.isFinite(right.fields.rank);
+  if (leftHasRank !== rightHasRank) {
+    return leftHasRank ? -1 : 1;
+  }
+  if (leftHasRank) {
+    if (left.fields.rank !== right.fields.rank) {
+      return left.fields.rank - right.fields.rank;
+    }
+    const rankedPriority = compareOptionalPriority(left, right);
+    if (rankedPriority !== 0) {
+      return rankedPriority;
+    }
+  } else {
+    const priority = compareOptionalPriority(left, right);
+    if (priority !== 0) {
+      return priority;
+    }
+  }
+  return compareText(left.created, right.created) || compareText(left.id, right.id);
+}
+
+function compareOptionalPriority(left, right) {
+  const leftHasPriority = typeof left.priority === 'number';
+  const rightHasPriority = typeof right.priority === 'number';
+  if (leftHasPriority !== rightHasPriority) {
+    return leftHasPriority ? -1 : 1;
+  }
+  return leftHasPriority ? left.priority - right.priority : 0;
+}
+
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+export async function loadReportConfig(ledgerDirectory, outputOverride) {
+  const configPath = path.join(ledgerDirectory, '.wowbagger', 'report.json');
+  let config;
+
+  try {
+    config = JSON.parse(await readFile(configPath, 'utf8'));
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      throw new ReportError('report-config-invalid', 'Report configuration is missing.');
+    }
+    if (error instanceof SyntaxError) {
+      throw new ReportError('report-config-invalid', 'Report configuration is not valid JSON.');
+    }
+    throw new ReportError('report-read-failed', 'Report configuration could not be read.', {
+      operation: 'read-config',
+      path: configPath,
+    });
+  }
+
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    throw new ReportError('report-config-invalid', 'Report configuration must be a JSON object.');
+  }
+  const configuredOutputIsValid = isNonEmptyString(config.output);
+  if (config.report_version !== 1
+    || !isObject(config.repository)
+    || !isNonEmptyString(config.repository.name)
+    || !isNonEmptyString(config.title)
+    || (config.output !== undefined && !configuredOutputIsValid)
+    || (outputOverride === undefined && !configuredOutputIsValid)
+    || (outputOverride !== undefined && !isNonEmptyString(outputOverride))) {
+    throw new ReportError('report-config-invalid', 'Report configuration has missing or invalid required values.');
+  }
+  if (!hasOnlyKeys(config, CONFIG_KEYS)
+    || !hasOnlyKeys(config.repository, REPOSITORY_KEYS)
+    || (isObject(config.fields) && !hasOnlyKeys(config.fields, FIELD_KEYS))
+    || (isObject(config.swarm) && !hasOnlyKeys(config.swarm, SWARM_KEYS))) {
+    throw new ReportError('report-config-invalid', 'Report configuration contains an unknown key.');
+  }
+  if (config.repository.logo !== undefined
+    && (!isNonEmptyString(config.repository.logo)
+      || !LOGO_MIME_TYPES.has(path.extname(config.repository.logo).toLocaleLowerCase('en-US')))) {
+    throw new ReportError('report-config-invalid', 'Report logo must use a supported image extension.');
+  }
+  if (Object.prototype.hasOwnProperty.call(config, 'fields')
+    && (!isObject(config.fields)
+      || Object.values(config.fields).some((pointer) => !isValidPointer(pointer)))) {
+    throw new ReportError('report-config-invalid', 'Report field mappings must be valid RFC 6901 pointers.');
+  }
+  if (Object.prototype.hasOwnProperty.call(config, 'swarm')) {
+    const eligibleComplexities = config.swarm?.eligible_complexities;
+    if (!isObject(config.swarm)
+      || !Array.isArray(eligibleComplexities)
+      || eligibleComplexities.length === 0
+      || eligibleComplexities.some((value) => !isNonEmptyString(value))
+      || new Set(eligibleComplexities).size !== eligibleComplexities.length
+      || !isValidPointer(config.fields?.area)
+      || !isValidPointer(config.fields?.complexity)) {
+      throw new ReportError('report-config-invalid', 'Report swarm configuration is invalid.');
+    }
+  }
+  const outputPath = outputOverride === undefined
+    ? path.resolve(path.dirname(configPath), config.output)
+    : path.resolve(process.cwd(), outputOverride);
+  await assertReportOutputOutsideLedger(ledgerDirectory, outputPath);
+  return {
+    reportVersion: config.report_version,
+    repository: {
+      name: config.repository.name,
+      logo: config.repository.logo === undefined
+        ? null
+        : path.resolve(path.dirname(configPath), config.repository.logo),
+    },
+    title: config.title,
+    outputPath,
+    fields: config.fields ?? {},
+    swarm: config.swarm === undefined
+      ? null
+      : { eligibleComplexities: [...config.swarm.eligible_complexities] },
+  };
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+export async function readLogoDataUrl(logoPath) {
+  if (logoPath === null) {
+    return null;
+  }
+  const mimeType = LOGO_MIME_TYPES.get(path.extname(logoPath).toLocaleLowerCase('en-US'));
+  try {
+    const bytes = await readFile(logoPath);
+    return `data:${mimeType};base64,${bytes.toString('base64')}`;
+  } catch {
+    throw new ReportError('report-read-failed', 'Report logo could not be read.', {
+      operation: 'read-logo',
+      path: logoPath,
+    });
+  }
+}
+
+function hasOnlyKeys(value, allowed) {
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+
+function isValidPointer(value) {
+  return typeof value === 'string'
+    && value.startsWith('/')
+    && !/~(?:[^01]|$)/.test(value);
+}
+
+async function resolvePhysicalPath(targetPath) {
+  let existingPath = targetPath;
+  const missingSegments = [];
+
+  while (true) {
+    try {
+      return path.join(await realpath(existingPath), ...missingSegments.reverse());
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+      const parent = path.dirname(existingPath);
+      if (parent === existingPath) {
+        throw error;
+      }
+      missingSegments.push(path.basename(existingPath));
+      existingPath = parent;
+    }
+  }
+}
+
+function isInside(parentPath, candidatePath) {
+  const relative = path.relative(parentPath, candidatePath);
+  return relative === ''
+    || (relative !== '..'
+      && !relative.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relative));
+}
+
+export async function assertReportOutputOutsideLedger(ledgerDirectory, outputPath) {
+  const ledgerPath = await realpath(ledgerDirectory);
+  const resolvedOutputPath = await resolvePhysicalPath(outputPath);
+  if (isInside(ledgerPath, resolvedOutputPath)) {
+    throw new ReportError('report-config-invalid', 'Report output must be outside the ledger directory.');
+  }
+}

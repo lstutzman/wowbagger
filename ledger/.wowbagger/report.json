@@ -1,0 +1,8 @@
+{
+  "report_version": 1,
+  "repository": {
+    "name": "wowbagger"
+  },
+  "title": "wowbagger ledger report",
+  "output": "../../wowbagger-report.html"
+}
