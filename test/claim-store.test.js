@@ -227,6 +227,32 @@ test('claim journal rejects a malformed known entry during replay', async () => 
   ));
 });
 
+test('claim journal rejects a publication intent with malformed item-path evidence', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-item-path-'));
+  const journalPath = claimJournalPath(root, NS);
+  await mkdir(path.dirname(journalPath), { recursive: true });
+  const itemId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  await writeFile(journalPath, `${JSON.stringify({
+    seq: 1,
+    type: 'publish-intent',
+    operation_id: 'pub_agent-a_0001',
+    operation_digest: `sha256:${'0'.repeat(64)}`,
+    item_id: itemId,
+    item_path: 42,
+    expected_revision: `sha256:${'1'.repeat(64)}`,
+    candidate_sha256: `sha256:${'2'.repeat(64)}`,
+    fence: {
+      ledger_namespace: NS,
+      item_id: itemId,
+    },
+  })}\n`);
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
 test('claim journal rejects a publication final from another namespace', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-terminal-'));
   const journalPath = claimJournalPath(root, NS);

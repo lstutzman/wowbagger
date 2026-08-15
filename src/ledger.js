@@ -33,9 +33,10 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
     };
   }
 
+  const layout = await loadItemLayout(root, fileSystem);
   const collected = await collectMarkdownFiles(root, root, fileSystem);
   const items = [];
-  const errors = [...collected.errors];
+  const errors = [...layout.errors, ...collected.errors];
 
   for (const file of collected.files) {
     const displayPath = ledgerPath(root, file);
@@ -72,6 +73,10 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
       continue;
     }
 
+    if (layout.configured && !isInsideItemsDirectory(root, file, layout.value.items_directory)) {
+      errors.push(itemOutsideLayoutError(displayPath));
+    }
+
     items.push({
       path: displayPath,
       file,
@@ -82,7 +87,9 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
     });
   }
 
-  return { items, errors };
+  return layout.configured
+    ? { items, errors, layout: layout.value }
+    : { items, errors };
 }
 
 function bodyFromSource(source) {
@@ -180,6 +187,139 @@ async function collectMarkdownFiles(root, directory, fileSystem) {
 
 function compareText(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function isInsideItemsDirectory(root, file, itemsDirectory) {
+  const relative = path.relative(path.join(root, itemsDirectory), file);
+  return relative !== ''
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative);
+}
+
+function isValidItemsDirectory(value) {
+  if (typeof value !== 'string' || value.includes('\\')) return false;
+  const components = value.split('/');
+  return components.length > 0 && components.every((component) => (
+    component !== ''
+      && component !== '.'
+      && component !== '..'
+      && component.toLowerCase() !== '.wowbagger'
+      && /^[A-Za-z0-9._-]+$/.test(component)
+  ));
+}
+
+async function loadItemLayout(root, fileSystem) {
+  const metadataDirectory = path.join(root, '.wowbagger');
+  let metadataStat;
+  try {
+    metadataStat = await fileSystem.lstat(metadataDirectory);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return { configured: false, value: { layout_version: 1, items_directory: '' }, errors: [] };
+    }
+    return {
+      configured: true,
+      value: { layout_version: 1, items_directory: '' },
+      errors: [ledgerReadError(ledgerPath(root, metadataDirectory))],
+    };
+  }
+  if (metadataStat.isSymbolicLink()) {
+    return {
+      configured: true,
+      value: { layout_version: 1, items_directory: '' },
+      errors: [symlinkError(ledgerPath(root, metadataDirectory))],
+    };
+  }
+  if (!metadataStat.isDirectory()) {
+    return {
+      configured: true,
+      value: { layout_version: 1, items_directory: '' },
+      errors: [ledgerReadError(ledgerPath(root, metadataDirectory))],
+    };
+  }
+
+  const file = path.join(metadataDirectory, 'layout.json');
+  let layoutStat;
+  try {
+    layoutStat = await fileSystem.lstat(file);
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return { configured: false, value: { layout_version: 1, items_directory: '' }, errors: [] };
+    }
+    return {
+      configured: true,
+      value: { layout_version: 1, items_directory: '' },
+      errors: [ledgerReadError(ledgerPath(root, file))],
+    };
+  }
+  if (layoutStat.isSymbolicLink() || !layoutStat.isFile()) {
+    return {
+      configured: true,
+      value: { layout_version: 1, items_directory: '' },
+      errors: [ledgerReadError(ledgerPath(root, file))],
+    };
+  }
+
+  let handle;
+  try {
+    handle = await fileSystem.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    return {
+      configured: true,
+      value: { layout_version: 1, items_directory: '' },
+      errors: [ledgerReadError(ledgerPath(root, file))],
+    };
+  }
+
+  try {
+    const openedStat = await handle.stat();
+    if (!openedStat.isFile()) {
+      return {
+        configured: true,
+        value: { layout_version: 1, items_directory: '' },
+        errors: [ledgerReadError(ledgerPath(root, file))],
+      };
+    }
+    const source = UTF8_DECODER.decode(await handle.readFile());
+    const value = JSON.parse(source);
+    if (
+      value === null
+        || Array.isArray(value)
+        || typeof value !== 'object'
+        || Object.keys(value).sort().join(',') !== 'items_directory,layout_version'
+        || value.layout_version !== 1
+        || !isValidItemsDirectory(value.items_directory)
+    ) {
+      throw new Error('invalid layout');
+    }
+    return { configured: true, value, errors: [] };
+  } catch {
+    return {
+      configured: true,
+      value: { layout_version: 1, items_directory: '' },
+      errors: [itemLayoutError(ledgerPath(root, file))],
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+function itemLayoutError(displayPath) {
+  return {
+    path: displayPath,
+    field: 'layout',
+    code: 'item-layout-invalid',
+    message: 'Item layout must select the version 1 items directory.',
+  };
+}
+
+function itemOutsideLayoutError(displayPath) {
+  return {
+    path: displayPath,
+    field: 'path',
+    code: 'item-outside-layout',
+    message: 'Ledger items must be inside the configured items directory.',
+  };
 }
 
 function symlinkError(displayPath) {

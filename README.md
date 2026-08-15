@@ -192,6 +192,11 @@ core, these are the changes most likely to touch you:
   `core.status: "triage"`, and the refusal for a caller-supplied `status`
   names the accepting transition (triage to backlog) that makes an item
   ready.
+- **Bind a subdirectory layout in the ledger, not in each runner.** Commit
+  `<ledger>/.wowbagger/layout.json` with
+  `{"layout_version":1,"items_directory":"items"}`. `create` then derives
+  `<ledger>/items/<id>.md`; validation rejects parsed items outside `items/`.
+  Without the file, the compatible layout remains `<ledger>/<id>.md`.
 
 ## Why the name?
 

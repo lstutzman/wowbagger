@@ -110,6 +110,123 @@ test('claim-verify finalizes a committed publication observed in git HEAD', asyn
   assert.doesNotMatch(reconcileLog, /publish-finalization/);
 });
 
+test('claim-verify keeps pending publication precedence after an earlier Git finalization', async () => {
+  const fixture = await repository();
+  const acquirePath = path.join(fixture.root, 'acquire-finalized-first.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-finalized-first',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root,
+    'claim', 'acquire', '--ledger', fixture.ledger, '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+  const firstCandidate = Buffer.from(
+    fixture.before.toString('utf8')
+      .replace('title: "Before"', 'title: "First"')
+      .replace('\nBefore\n', '\nFirst\n'),
+  );
+  const firstPublishPath = path.join(fixture.root, 'publish-finalized-first.json');
+  await writeFile(firstPublishPath, JSON.stringify({
+    operation_id: 'pub_finalized_first_0001',
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    claim_fence: {
+      ledger_namespace: fixture.namespace,
+      item_id: ITEM_ID,
+      owner_id: 'agent-finalized-first',
+      epoch: acquired.envelope.result.claim.epoch,
+    },
+    expected_revision: sha256(fixture.before),
+    candidate_sha256: sha256(firstCandidate),
+    candidate_source_base64: firstCandidate.toString('base64'),
+  }));
+  const firstPublished = run(
+    fixture.root,
+    'publish-claimed', '--ledger', fixture.ledger, '--input', firstPublishPath, '--json',
+  );
+  assert.equal(firstPublished.exit, 0, JSON.stringify(firstPublished.envelope));
+  git(fixture.root, 'add', 'ledger/item.md');
+  git(fixture.root, 'commit', '-qm', 'Commit first claimed publication');
+  const firstVerified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(firstVerified.exit, 0, JSON.stringify(firstVerified.envelope));
+
+  const releasePath = path.join(fixture.root, 'release-finalized-first.json');
+  await writeFile(releasePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-finalized-first',
+    epoch: acquired.envelope.result.claim.epoch,
+    expected_expires_at: acquired.envelope.result.claim.expires_at,
+  }));
+  const released = run(
+    fixture.root,
+    'claim', 'release', '--ledger', fixture.ledger, '--input', releasePath, '--json',
+  );
+  assert.equal(released.exit, 0, JSON.stringify(released.envelope));
+  const secondAcquirePath = path.join(fixture.root, 'acquire-pending-second.json');
+  await writeFile(secondAcquirePath, JSON.stringify({
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-pending-second',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: acquired.envelope.result.claim.epoch, active: null },
+  }));
+  const secondAcquired = run(
+    fixture.root,
+    'claim', 'acquire', '--ledger', fixture.ledger, '--input', secondAcquirePath, '--json',
+  );
+  assert.equal(secondAcquired.exit, 0, JSON.stringify(secondAcquired.envelope));
+  const secondCandidate = Buffer.from(
+    firstCandidate.toString('utf8')
+      .replace('title: "First"', 'title: "Second"')
+      .replace('\nFirst\n', '\nSecond\n'),
+  );
+  const secondPublishPath = path.join(fixture.root, 'publish-pending-second.json');
+  await writeFile(secondPublishPath, JSON.stringify({
+    operation_id: 'pub_pending_second_0002',
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    claim_fence: {
+      ledger_namespace: fixture.namespace,
+      item_id: ITEM_ID,
+      owner_id: 'agent-pending-second',
+      epoch: secondAcquired.envelope.result.claim.epoch,
+    },
+    expected_revision: sha256(firstCandidate),
+    candidate_sha256: sha256(secondCandidate),
+    candidate_source_base64: secondCandidate.toString('base64'),
+  }));
+  const secondPublished = run(
+    fixture.root,
+    'publish-claimed', '--ledger', fixture.ledger, '--input', secondPublishPath, '--json',
+  );
+  assert.equal(secondPublished.exit, 0, JSON.stringify(secondPublished.envelope));
+  await writeFile(fixture.itemPath, firstCandidate);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].code, 'stale-write-detected');
+  assert.equal(
+    verified.envelope.result.findings[0].active_fence.epoch,
+    secondAcquired.envelope.result.claim.epoch,
+  );
+  assert.equal(
+    verified.envelope.result.findings[0].stale_fence.epoch,
+    acquired.envelope.result.claim.epoch,
+  );
+  assert.equal(verified.envelope.result.findings[0].reason, 'claimed-publication-pending');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Inspect publication pub_pending_second_0002 for item.md, then complete its documented recovery.',
+  );
+});
+
 test('claim-verify accepts an authorized legacy patch after claim release', async () => {
   const fixture = await repository();
   const acquirePath = path.join(fixture.root, 'acquire-release.json');
@@ -289,6 +406,211 @@ test('claim-verify rejects an unrecorded revision after a legacy-only mutation',
     verified.envelope.result.findings[0].expected_revision,
     patched.envelope.result.item.revision,
   );
+  assert.equal(verified.envelope.result.findings[0].reason, 'unauthorized-revision');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Restore the authorized revision at item.md, then run claim-verify.',
+  );
+});
+
+test('claim-verify prefers the current configured path after an authorized item move', async () => {
+  const fixture = await repository();
+  const patchPath = path.join(fixture.root, 'authorized-before-move.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: ITEM_ID,
+    expected_revision: sha256(fixture.before),
+    date: '2026-08-11',
+    set: { priority: 1 },
+  }));
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'add', 'ledger/item.md');
+  git(fixture.root, 'commit', '-qm', 'Patch item');
+  await mkdir(path.join(fixture.ledger, 'items'));
+  git(fixture.root, 'mv', 'ledger/item.md', 'ledger/items/item.md');
+  await writeFile(
+    path.join(fixture.ledger, '.wowbagger', 'layout.json'),
+    '{"layout_version":1,"items_directory":"items"}\n',
+  );
+  git(fixture.root, 'add', 'ledger/.wowbagger/layout.json');
+  git(fixture.root, 'commit', '-qm', 'Move item');
+  const movedPath = path.join(fixture.ledger, 'items', 'item.md');
+  const moved = await readFile(movedPath, 'utf8');
+  const direct = moved.replace('priority: 1', 'priority: 2');
+  await writeFile(movedPath, direct);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].reason, 'unauthorized-revision');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'items/item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Restore the authorized revision at items/item.md, then run claim-verify.',
+  );
+});
+
+test('claim-verify diagnoses a working-tree deletion as an unauthorized revision', async () => {
+  const fixture = await repository();
+  const patchPath = path.join(fixture.root, 'authorized-before-delete.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: ITEM_ID,
+    expected_revision: sha256(fixture.before),
+    date: '2026-08-11',
+    set: { priority: 1 },
+  }));
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'add', 'ledger/item.md');
+  git(fixture.root, 'commit', '-qm', 'Patch item');
+  await unlink(fixture.itemPath);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].code, 'stale-write-detected');
+  assert.equal(verified.envelope.result.findings[0].actual_revision, null);
+  assert.equal(
+    verified.envelope.result.findings[0].expected_revision,
+    patched.envelope.result.item.revision,
+  );
+  assert.equal(verified.envelope.result.findings[0].observed_surface, 'working-tree');
+  assert.equal(verified.envelope.result.findings[0].reason, 'unauthorized-revision');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Restore the authorized revision at item.md, then run claim-verify.',
+  );
+});
+
+test('claim-verify explains that a new authorized item still needs Git finalization', async () => {
+  const fixture = await repository();
+  const itemId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  const createPath = path.join(fixture.root, 'legacy-uncommitted-create.json');
+  await writeFile(createPath, JSON.stringify({
+    id: itemId,
+    item: {
+      number: 1526,
+      title: 'New item',
+      kind: 'task',
+      provenance: {
+        source: 'test',
+        recorded_at: '2026-08-15T00:00:00Z',
+      },
+      depends_on: [],
+    },
+    body: 'New item\n',
+  }));
+  const created = run(
+    fixture.root,
+    'create', '--ledger', fixture.ledger, '--input', createPath, '--json',
+  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  const transitionPath = path.join(fixture.root, 'legacy-uncommitted-transition.json');
+  await writeFile(transitionPath, JSON.stringify({
+    id: itemId,
+    expected_revision: created.envelope.result.item.revision,
+    to_status: 'backlog',
+    date: '2026-08-15',
+    decision: {
+      summary: 'Accept the new item.',
+      rationale: 'The new item is ready for work.',
+    },
+  }));
+  const transitioned = run(
+    fixture.root,
+    'transition', '--ledger', fixture.ledger, '--input', transitionPath, '--json',
+  );
+  assert.equal(transitioned.exit, 0, JSON.stringify(transitioned.envelope));
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, [{
+    code: 'stale-write-detected',
+    item_id: itemId,
+    actual_revision: null,
+    expected_revision: transitioned.envelope.result.item.revision,
+    observed_surface: 'git-head',
+    reason: 'git-finalization-required',
+    expected_path: `${itemId}.md`,
+    remediation: `Commit ${itemId}.md in Git, then run claim-verify.`,
+  }]);
+});
+
+test('claim-verify names the configured item path when another worktree needs synchronization', async () => {
+  const fixture = await repository();
+  await mkdir(path.join(fixture.ledger, 'items'));
+  git(fixture.root, 'mv', 'ledger/item.md', 'ledger/items/item.md');
+  await writeFile(
+    path.join(fixture.ledger, '.wowbagger', 'layout.json'),
+    '{"layout_version":1,"items_directory":"items"}\n',
+  );
+  git(fixture.root, 'add', 'ledger/.wowbagger/layout.json');
+  git(fixture.root, 'commit', '-qm', 'Configure item directory');
+  const workerRoot = `${fixture.root}-layout-worker`;
+  git(fixture.root, 'worktree', 'add', '-qb', 'layout-worker', workerRoot);
+  const itemId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  const createPath = path.join(fixture.root, 'layout-create.json');
+  await writeFile(createPath, JSON.stringify({
+    id: itemId,
+    item: {
+      number: 1526,
+      title: 'New item',
+      kind: 'task',
+      provenance: {
+        source: 'test',
+        recorded_at: '2026-08-15T00:00:00Z',
+      },
+      depends_on: [],
+    },
+    body: 'New item\n',
+  }));
+  const created = run(
+    fixture.root,
+    'create', '--ledger', fixture.ledger, '--input', createPath, '--json',
+  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  const transitionPath = path.join(fixture.root, 'layout-transition.json');
+  await writeFile(transitionPath, JSON.stringify({
+    id: itemId,
+    expected_revision: created.envelope.result.item.revision,
+    to_status: 'backlog',
+    date: '2026-08-15',
+    decision: {
+      summary: 'Accept the new item.',
+      rationale: 'The new item is ready for work.',
+    },
+  }));
+  const transitioned = run(
+    fixture.root,
+    'transition', '--ledger', fixture.ledger, '--input', transitionPath, '--json',
+  );
+  assert.equal(transitioned.exit, 0, JSON.stringify(transitioned.envelope));
+
+  const verified = run(
+    workerRoot,
+    'claim-verify', '--ledger', path.join(workerRoot, 'ledger'), '--json',
+  );
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, [{
+    code: 'stale-write-detected',
+    item_id: itemId,
+    actual_revision: null,
+    expected_revision: transitioned.envelope.result.item.revision,
+    observed_surface: 'working-tree',
+    reason: 'worktree-synchronization-required',
+    expected_path: `items/${itemId}.md`,
+    remediation: `Run claim-verify in the worktree that wrote items/${itemId}.md after committing it, or synchronize this worktree to that commit.`,
+  }]);
 });
 
 test('Git HEAD reconciliation includes nested ledger items', async () => {

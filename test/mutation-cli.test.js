@@ -107,6 +107,27 @@ test('create atomically publishes the canonical caller-identified triage item', 
   });
 });
 
+test('create derives the item path from a nested committed items-directory layout', async () => {
+  const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+  await withLedger({
+    '.wowbagger/layout.json': '{"layout_version":1,"items_directory":"backlog/items"}\n',
+    'backlog/items/.keep': '',
+  }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, readFileSync(fileURLToPath(new URL('request.json', fixture))));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    const item = JSON.parse(result.stdout).result.item;
+    assert.equal(item.path, 'backlog/items/wb_01Q45X474N28T5CY4GNF6YY4HM.md');
+    assert.equal(
+      await readFile(path.join(ledger, item.path), 'utf8'),
+      readFileSync(fileURLToPath(new URL('expected-item.md', fixture)), 'utf8'),
+    );
+  });
+});
+
 const PRIORITISED_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
 
 function prioritisedItemSource(id) {

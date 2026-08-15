@@ -553,36 +553,36 @@ precedence:
 1. If the requested ID exists anywhere in the ledger, return id-collision,
    exit 4, and unchanged. details contain id, the existing item's
    ledger-relative path, and actual_revision.
-2. Otherwise, lstat the default path without following symbolic links. If any
-   filesystem object occupies it, return path-collision, exit 4, and unchanged.
-   details contain id, the ledger-relative default path, and occupant_kind.
-   occupant_kind is exactly item or directory. For item it also contains
-   occupying_id; for directory occupying_id is absent. The message is exactly
-   "The default item path is occupied by a different item." This stable human
-   message is shared by both kinds; automation distinguishes them through
+2. Otherwise, lstat the configured identity-derived path without following
+   symbolic links. If any filesystem object occupies it, return
+   path-collision, exit 4, and unchanged. details contain id, that
+   ledger-relative path, and occupant_kind. occupant_kind is exactly item or
+   directory. For item it also contains occupying_id; for directory
+   occupying_id is absent. The stable message remains exactly "The default
+   item path is occupied by a different item." Automation distinguishes the
+   configured path through details.path and the occupant through
    occupant_kind.
 3. Otherwise, continue to candidate validation.
 
-Create never chooses a different ID or path for the caller. Collision checks
+Create never chooses a different ID or request-supplied path. Collision checks
 do not infer identity from a filename: an item whose frontmatter has another
 ID occupies a path without claiming the requested ID. Complete-ledger
 validation precedes these collision checks. A symbolic link, special file, or
 invalid regular .md occupant therefore produces ledger-invalid rather than
 path-collision. A real directory whose name ends in .md and whose contents
 leave the complete ledger valid is valid input under SPEC.md and produces
-path-collision when it occupies the default path.
+path-collision when it occupies the configured identity-derived path.
 
-The default final path is:
+The final path is derived from the committed item layout:
 
-    <ledger>/<id>.md
+    <ledger>/<items_directory>/<id>.md
 
-The filename is a portable default, not identity. The request cannot supply an
-arbitrary path: the no-clobber publication protocol and the collision rules
-are defined against the identity-derived default, and an arbitrary path would
-let a caller aim them at anything in the ledger. A repository that prefers a
-naming convention renames the file in Git after create — a reviewable change
-that validation does not care about, because identity resolves from
-frontmatter, never from the filename.
+When `<ledger>/.wowbagger/layout.json` is absent, `items_directory` is empty
+and the compatible path is `<ledger>/<id>.md`. The request cannot supply an
+arbitrary path. The no-clobber publication protocol and collision rules are
+bound to this derived path. A malformed layout configuration fails closed
+before mutation. Validation rejects any parsed item outside the configured
+item directory.
 
 ### Body
 

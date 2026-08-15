@@ -39,6 +39,32 @@ run-local notes.
 - A reader loads the complete configured ledger before validation or readiness.
   It MUST NOT treat a missing item as satisfied.
 
+An optional committed `<ledger>/.wowbagger/layout.json` binds item placement
+for the complete ledger. It accepts exactly:
+
+~~~json
+{
+  "layout_version": 1,
+  "items_directory": "items"
+}
+~~~
+
+`layout_version` MUST be integer `1`. `items_directory` MUST be a normalized,
+ledger-relative path made from one or more portable filename components. It
+MUST NOT be empty, absolute, contain `.` or `..`, use `\`, or contain any
+component named `.wowbagger` under a case-insensitive comparison. Unknown
+members are invalid. If the file is absent, the item
+directory is the ledger root. If the file is present, every item MUST be below
+the configured item directory. A file outside it that parses as an item makes
+the ledger invalid with `item-outside-layout`. A malformed or unreadable
+configuration makes the ledger invalid; an implementation MUST NOT fall back
+to the ledger root.
+
+The layout file is the only write-path authority. `create` derives its final
+path from `items_directory` and the caller-supplied item ID. A mutation request
+cannot supply or override a path. Readers still traverse the complete ledger
+to detect misplaced items instead of hiding them.
+
 Only regular files whose names end in `.md` are item files. A real directory
 whose name ends in `.md` remains a container and is traversed. A symbolic link
 encountered anywhere below the configured ledger, and any non-regular

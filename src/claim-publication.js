@@ -311,6 +311,7 @@ export async function reconcileClaimJournal({
         item_id: intent.item_id,
         command: intent.command,
         committed_revision: actualRevision,
+        ...(intent.item_path ? { item_path: intent.item_path } : {}),
         observed_at: observedAt,
       }));
     } else if (actualRevision === intent.expected_revision) {
@@ -481,12 +482,51 @@ export async function reconcileClaimJournal({
     const gitHeadChanged = gitHead !== null && !authorizedRevisions.has(headRevision);
     if (!workingTreeChanged && !gitHeadChanged) continue;
     const record = replayed.state.claims.find((entry) => entry.item_id === itemId);
+    const expectedPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
+      ?? headItem?.file
+      ?? latestAuthorized.item_path
+      ?? null;
+    const activeMismatch = activePublicationMismatch(
+      entries,
+      record,
+      actualRevision,
+      observedAt,
+    );
+    if (activeMismatch?.earlier) {
+      const pathLabel = expectedPath ?? `item ${itemId}`;
+      findings.push({
+        code: 'stale-write-detected',
+        item_id: itemId,
+        actual_revision: actualRevision,
+        expected_revision: activeMismatch.expectedRevision,
+        active_fence: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          owner_id: record.active.owner_id,
+          epoch: record.active.epoch,
+        },
+        observed_surface: 'working-tree',
+        reason: 'claimed-publication-pending',
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        remediation: `Inspect publication ${activeMismatch.expected.operation_id} for ${pathLabel}, then complete its documented recovery.`,
+        stale_fence: structuredClone(activeMismatch.earlier.outcome.stdout.result.claim_fence),
+      });
+      continue;
+    }
+    const diagnosis = reconciliationDiagnosis({
+      actualRevision,
+      expectedPath,
+      expectedRevision,
+      headRevision,
+      workingTreeChanged,
+    });
     findings.push({
       code: 'stale-write-detected',
       item_id: itemId,
       actual_revision: workingTreeChanged ? actualRevision : headRevision,
       expected_revision: expectedRevision,
       observed_surface: workingTreeChanged ? 'working-tree' : 'git-head',
+      ...diagnosis,
       ...(record?.active ? {
         active_fence: {
           ledger_namespace: namespace,
@@ -501,26 +541,24 @@ export async function reconcileClaimJournal({
 
   for (const record of replayed.state.claims) {
     if (coordinatedItems.has(record.item_id)) continue;
-    if (record.active === null || observedAt >= record.active.expires_at) continue;
-    const committed = entries.filter((entry) => (
-      entry.type === 'publish-final'
-        && entry.item_id === record.item_id
-        && entry.outcome?.stdout?.state === 'committed'
-        && entry.outcome.stdout.result.claim_fence.epoch === record.active.epoch
-    ));
-    const expected = committed.at(-1);
-    if (!expected) continue;
     const item = items.get(record.item_id);
     const actualRevision = item ? revisionFor(item.bytes) : null;
-    const expectedRevision = expected.outcome.stdout.result.committed_revision;
-    if (actualRevision === expectedRevision) continue;
-    const earlier = entries.find((entry) => (
-      entry.type === 'publish-final'
-        && entry.item_id === record.item_id
-        && entry.outcome?.stdout?.state === 'committed'
-        && entry.outcome.stdout.result.committed_revision === actualRevision
-        && BigInt(entry.outcome.stdout.result.claim_fence.epoch) < BigInt(record.active.epoch)
-    ));
+    const activeMismatch = activePublicationMismatch(
+      entries,
+      record,
+      actualRevision,
+      observedAt,
+    );
+    if (!activeMismatch) continue;
+    const {
+      earlier,
+      expected,
+      expectedRevision,
+    } = activeMismatch;
+    const expectedPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
+      ?? expected.item_path
+      ?? null;
+    const pathLabel = expectedPath ?? `item ${record.item_id}`;
     findings.push({
       code: earlier ? 'stale-write-detected' : 'revision-regression',
       item_id: record.item_id,
@@ -533,6 +571,10 @@ export async function reconcileClaimJournal({
         epoch: record.active.epoch,
       },
       ...(earlier ? {
+        observed_surface: 'working-tree',
+        reason: 'claimed-publication-pending',
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        remediation: `Inspect publication ${expected.operation_id} for ${pathLabel}, then complete its documented recovery.`,
         stale_fence: structuredClone(earlier.outcome.stdout.result.claim_fence),
       } : {}),
     });
@@ -555,6 +597,61 @@ export async function reconcileClaimJournal({
     state: replayed.state,
     unsafe: findings.some((finding) => finding.code !== 'pending-intent-resolved'),
   };
+}
+
+function itemPathRelativeToLedger(ledgerDirectory, file) {
+  if (!file) return null;
+  return path.relative(path.resolve(ledgerDirectory), file).split(path.sep).join('/');
+}
+
+function reconciliationDiagnosis({
+  actualRevision,
+  expectedPath,
+  expectedRevision,
+  headRevision,
+  workingTreeChanged,
+}) {
+  const pathLabel = expectedPath ?? 'the item path';
+  if (!workingTreeChanged && headRevision !== expectedRevision) {
+    return {
+      reason: 'git-finalization-required',
+      ...(expectedPath ? { expected_path: expectedPath } : {}),
+      remediation: `Commit ${pathLabel} in Git, then run claim-verify.`,
+    };
+  }
+  if (actualRevision === null && headRevision !== expectedRevision) {
+    return {
+      reason: 'worktree-synchronization-required',
+      ...(expectedPath ? { expected_path: expectedPath } : {}),
+      remediation: `Run claim-verify in the worktree that wrote ${pathLabel} after committing it, or synchronize this worktree to that commit.`,
+    };
+  }
+  return {
+    reason: 'unauthorized-revision',
+    ...(expectedPath ? { expected_path: expectedPath } : {}),
+    remediation: `Restore the authorized revision at ${pathLabel}, then run claim-verify.`,
+  };
+}
+
+function activePublicationMismatch(entries, record, actualRevision, observedAt) {
+  if (!record || record.active === null || observedAt >= record.active.expires_at) return null;
+  const expected = entries.filter((entry) => (
+    entry.type === 'publish-final'
+      && entry.item_id === record.item_id
+      && entry.outcome?.stdout?.state === 'committed'
+      && entry.outcome.stdout.result.claim_fence.epoch === record.active.epoch
+  )).at(-1);
+  if (!expected) return null;
+  const expectedRevision = expected.outcome.stdout.result.committed_revision;
+  if (actualRevision === expectedRevision) return null;
+  const earlier = entries.find((entry) => (
+    entry.type === 'publish-final'
+      && entry.item_id === record.item_id
+      && entry.outcome?.stdout?.state === 'committed'
+      && entry.outcome.stdout.result.committed_revision === actualRevision
+      && BigInt(entry.outcome.stdout.result.claim_fence.epoch) < BigInt(record.active.epoch)
+  ));
+  return { earlier, expected, expectedRevision };
 }
 
 function publicationStatuses(entries) {

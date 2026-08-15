@@ -7,6 +7,18 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- A committed `.wowbagger/layout.json` now binds the ledger's item directory.
+  `create` derives its path from that configuration. Validation rejects parsed
+  items outside it, special or symbolic layout files, and metadata-directory
+  aliases. Malformed configuration fails closed. Ledgers without the file
+  retain the root-level `<id>.md` layout.
+- `claim-verify` now classifies stale writes as unauthorized revisions, missing
+  Git finalization, worktree synchronization, or pending claimed publication.
+  Working-tree deletions of an authorized Git revision are unauthorized.
+  Findings name the expected item path and give a direct recovery action.
+
 ## 0.1.0-alpha.4 - 2026-08-14
 
 ### Added

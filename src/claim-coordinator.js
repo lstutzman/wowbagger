@@ -49,7 +49,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         : record.active !== null && observedAt < record.active.expires_at;
       if (mustRefuse) return legacyRefusal(command, namespace, itemId, observedAt, record);
 
-      const authorize = async (expectedRevision, candidateRevision) => {
+      const authorize = async (expectedRevision, candidateRevision, itemPath) => {
         const attemptId = randomUUID();
         const intentEntry = {
           type: 'legacy-mutation-intent',
@@ -59,6 +59,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
           command,
           expected_revision: expectedRevision,
           candidate_revision: candidateRevision,
+          item_path: itemPath,
           observed_at: observedAt,
         };
         const terminalEntry = {
@@ -68,6 +69,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
           item_id: itemId,
           command,
           committed_revision: candidateRevision,
+          item_path: itemPath,
           observed_at: observedAt,
         };
         const abortEntry = {
@@ -121,6 +123,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
             command,
             committed_revision: committedRevision,
             observed_at: observedAt,
+            item_path: intent.item_path,
           });
         } catch {
           return claimStoreUnavailable(command, 'legacy-mutation-record-failed', {

@@ -201,6 +201,7 @@ function validJournalEntry(entry, namespace) {
       && ['patch-v1', 'transition-v1'].includes(entry.command)
       && typeof entry.expected_revision === 'string'
       && typeof entry.candidate_revision === 'string'
+      && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
       && typeof entry.observed_at === 'string';
   }
   if (entry.type === 'legacy-mutation') {
@@ -210,6 +211,7 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.item_id === 'string'
       && ['patch-v1', 'transition-v1'].includes(entry.command)
       && typeof entry.committed_revision === 'string'
+      && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
       && typeof entry.observed_at === 'string';
   }
   if (entry.type === 'legacy-mutation-abort') {
@@ -226,6 +228,7 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.item_id === 'string'
       && typeof entry.expected_revision === 'string'
       && typeof entry.candidate_sha256 === 'string'
+      && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
       && isRecord(entry.fence)
       && (namespace === null || entry.fence.ledger_namespace === namespace)
       && entry.fence.item_id === entry.item_id;

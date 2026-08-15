@@ -271,12 +271,17 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
         }));
       }
 
-      const finalPath = path.join(root, `${id}.md`);
+      const itemDirectory = current.ledger.layout?.items_directory ?? '';
+      const relativeFinalPath = itemDirectory
+        ? `${itemDirectory}/${id}.md`
+        : `${id}.md`;
+      const finalDirectory = path.join(root, itemDirectory);
+      const finalPath = path.join(finalDirectory, `${id}.md`);
       const occupant = await pathOccupant(finalPath, current.ledger);
       if (occupant) {
         const details = {
           id,
-          path: `${id}.md`,
+          path: relativeFinalPath,
           occupant_kind: occupant.kind,
         };
         if (occupant.id) {
@@ -297,7 +302,7 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
         current.ledger,
         null,
         bytes,
-        `${path.basename(root)}/${id}.md`,
+        `${path.basename(root)}/${relativeFinalPath}`,
         finalPath,
       );
       if (!candidateValidation.valid) {
@@ -316,7 +321,7 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
         }));
       }
 
-      temporaryPath = path.join(root, `.wowbagger-tmp-${id}-${randomSuffix()}`);
+      temporaryPath = path.join(finalDirectory, `.wowbagger-tmp-${id}-${randomSuffix()}`);
       const temporaryFailure = await prepareTemporary(temporaryPath, bytes, null, scenario);
       if (temporaryFailure) {
         const artifacts = await cleanupTemporary(temporaryPath, root, scenario);
@@ -350,7 +355,7 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
             }
             return await finishUncommitted(operationFailed(id, 'publish', 'io-error', artifacts), artifacts);
           }
-          return await finishUnknown(unknownPublication('create', id, `${id}.md`, evidence.bytes, artifacts));
+          return await finishUnknown(unknownPublication('create', id, relativeFinalPath, evidence.bytes, artifacts));
         }
       }
 
@@ -370,12 +375,12 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
         if (evidence.state === 'absent') {
           return await finishUncommitted(operationFailed(id, 'verify-publication', 'verification-failed', artifacts), artifacts);
         }
-        return await finishUnknown(unknownPublication('create', id, `${id}.md`, evidence.bytes, artifacts));
+        return await finishUnknown(unknownPublication('create', id, relativeFinalPath, evidence.bytes, artifacts));
       }
 
       let directorySyncFailed = false;
       try {
-        await syncDirectoryIfSupported(root);
+        await syncDirectoryIfSupported(finalDirectory);
       } catch {
         directorySyncFailed = true;
       }
@@ -392,7 +397,7 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
         return await finishCommittedRecovery(bytes);
       }
 
-      const result = inspectedPublishedItem(id, `${id}.md`, evidence.bytes);
+      const result = inspectedPublishedItem(id, relativeFinalPath, evidence.bytes);
       const failedLocks = await releaseLocks(locks, scenario);
       locks = failedLocks;
       if (failedLocks.length > 0) {
@@ -585,7 +590,11 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
         }));
       }
       if (operation.authorize) {
-        await operation.authorize(actualRevision, revisionFor(bytes));
+        await operation.authorize(
+          actualRevision,
+          revisionFor(bytes),
+          displayItemPath(lockedTarget.path),
+        );
       }
 
       const targetDirectory = path.dirname(lockedTarget.file);

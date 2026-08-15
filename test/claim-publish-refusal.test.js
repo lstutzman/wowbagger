@@ -426,6 +426,13 @@ test('claim verify distinguishes a stale fenced write from an unknown revision r
   assert.equal(verified.envelope.result.findings[0].code, 'stale-write-detected');
   assert.equal(verified.envelope.result.findings[0].active_fence.epoch, acquired.envelope.result.claim.epoch);
   assert.equal(verified.envelope.result.findings[0].stale_fence.epoch, fixture.claim.epoch);
+  assert.equal(verified.envelope.result.findings[0].observed_surface, 'working-tree');
+  assert.equal(verified.envelope.result.findings[0].reason, 'claimed-publication-pending');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Inspect publication pub_agent-b_0002 for item.md, then complete its documented recovery.',
+  );
 });
 
 test('publish-claimed rejects and records an old fence after release', async () => {

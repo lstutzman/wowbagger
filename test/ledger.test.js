@@ -73,6 +73,142 @@ test('loader reads an indeterminate regular markdown file after lstat classifica
   });
 });
 
+test('validate rejects an item outside the committed items-directory layout', async () => {
+  await withLedger({
+    '.wowbagger/layout.json': '{"layout_version":1,"items_directory":"items"}\n',
+    'items/.keep': '',
+    'outside.md': validItemSource(),
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/outside.md',
+        field: 'path',
+        code: 'item-outside-layout',
+        message: 'Ledger items must be inside the configured items directory.',
+      }],
+    });
+  });
+});
+
+test('validate fails closed for a malformed item-layout configuration', async () => {
+  await withLedger({
+    '.wowbagger/layout.json': '{"layout_version":1,',
+    'item.md': validItemSource(),
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/.wowbagger/layout.json',
+        field: 'layout',
+        code: 'item-layout-invalid',
+        message: 'Item layout must select the version 1 items directory.',
+      }],
+    });
+  });
+});
+
+test('validate rejects a metadata-directory alias in the item layout', async () => {
+  await withLedger({
+    '.wowbagger/layout.json': '{"layout_version":1,"items_directory":".WOWBAGGER/items"}\n',
+  }, async (ledger) => {
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/.wowbagger/layout.json',
+        field: 'layout',
+        code: 'item-layout-invalid',
+        message: 'Item layout must select the version 1 items directory.',
+      }],
+    });
+  });
+});
+
+
+test('validate fails closed for a symbolic metadata directory', async () => {
+  await withLedger({
+    '.config/layout.json': '{"layout_version":1,"items_directory":"items"}\n',
+    'items/.keep': '',
+  }, async (ledger) => {
+    await symlink('.config', path.join(ledger, '.wowbagger'));
+
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/.wowbagger',
+        field: 'path',
+        code: 'symlink-not-allowed',
+        message: 'Ledger entries must not be symbolic links.',
+      }],
+    });
+  });
+});
+
+test('validate rejects a symbolic item-layout configuration', async () => {
+  await withLedger({
+    '.wowbagger/layout-target.json': '{"layout_version":1,"items_directory":"items"}\n',
+    'items/.keep': '',
+  }, async (ledger) => {
+    await symlink('layout-target.json', path.join(ledger, '.wowbagger', 'layout.json'));
+
+    const result = runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/.wowbagger/layout.json',
+        field: 'path',
+        code: 'ledger-read-error',
+        message: 'Ledger path could not be read.',
+      }],
+    });
+  });
+});
+
+test('validate rejects a special item-layout configuration without blocking', async () => {
+  await withLedger({
+    '.wowbagger/.keep': '',
+  }, async (ledger) => {
+    execFileSync('mkfifo', [path.join(ledger, '.wowbagger', 'layout.json')]);
+
+    const result = spawnSync(process.execPath, [
+      fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url)),
+      'validate', '--ledger', ledger, '--json',
+    ], { encoding: 'utf8', timeout: 750 });
+
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 1);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      valid: false,
+      errors: [{
+        path: 'ledger/.wowbagger/layout.json',
+        field: 'path',
+        code: 'ledger-read-error',
+        message: 'Ledger path could not be read.',
+      }],
+    });
+  });
+});
+
 test('loader reports an indeterminate entry when fallback lstat fails', async () => {
   await withLedger({
     'unknown-entry': 'not a ledger item',

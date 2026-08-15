@@ -477,6 +477,28 @@ A clean verification returns exit 0 and `state: "committed"`. Findings named
 findings. Repeating verification MUST NOT duplicate a publication
 finalization.
 
+Every `stale-write-detected` finding contains `actual_revision`,
+`expected_revision`, and `observed_surface`. It also contains a stable `reason`
+and `remediation`. `expected_path` is present when the journal or current
+ledger identifies the item path. The reasons are:
+
+- `unauthorized-revision`: the observed bytes do not match an authorized
+  legacy mutation or claimed publication. A missing working-tree item is also
+  unauthorized when Git `HEAD` contains the authorized revision. Restore the
+  named authorized path before repeating verification.
+- `git-finalization-required`: the current worktree contains the authorized
+  revision, but Git `HEAD` does not. Commit the named path, then repeat
+  verification.
+- `worktree-synchronization-required`: another cooperating worktree contains
+  the authorized revision. Verify in the writing worktree after commit, or
+  synchronize this worktree to that commit.
+- `claimed-publication-pending`: a claimed publication remains unresolved.
+  Inspect the publication tuple and complete its documented recovery.
+
+Legacy mutation journal entries record their derived `item_path`. Mutation
+requests never supply this value. This lets verification name the exact
+configured path without converting the journal into a second path authority.
+
 The top-level `state: "committed"` describes durable reconciliation state, not
 Git finalization of every successful publication. A caller MUST gate Git
 completion on each `result.publications` entry's `git_finalized` and
