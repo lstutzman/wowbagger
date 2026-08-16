@@ -3,6 +3,144 @@
 // derivation here is display-only, recomputed from ledger bytes at render time,
 // and never written back.
 
+// Unrecognised class values are surfaced as a report-level notice. A typo in a
+// consumer's extension field must never disappear into the standard band
+// unannounced.
+export function collectUnknownClasses(openItems) {
+  const byValue = new Map();
+  for (const item of openItems) {
+    const { raw, known } = item.sequencing.class;
+    if (raw === null || known) {
+      continue;
+    }
+    const numbers = byValue.get(raw) ?? [];
+    if (typeof item.number === 'number') {
+      numbers.push(item.number);
+    }
+    byValue.set(raw, numbers);
+  }
+  return [...byValue.entries()]
+    .sort(([left], [right]) => compareText(left, right))
+    .map(([value, numbers]) => ({ value, numbers: numbers.sort((left, right) => left - right) }));
+}
+
+// The recommended order. Every factor is a separate, visible comparison step,
+// never a single opaque score: an entry's position is always explained by the
+// first step on which it beat the entry below it. Dominance runs expedite
+// class, fixed-date proximity, unblocking leverage, epic enablement, priority,
+// age, then size, with the immutable ID as the determinism backstop.
+export function rankWorkNext(readyItems) {
+  return [...readyItems]
+    .sort(compareRanked)
+    .map((item) => ({
+      id: item.id,
+      number: item.number,
+      title: item.title,
+      reasons: describeReasons(item),
+    }));
+}
+
+function compareRanked(left, right) {
+  return expediteBand(left) - expediteBand(right)
+    || compareNumbers(dueProximity(left), dueProximity(right))
+    || right.sequencing.leverage.count - left.sequencing.leverage.count
+    || compareNumbers(epicEnablement(left), epicEnablement(right))
+    || compareNumbers(left.priority, right.priority)
+    || right.sequencing.ageDays - left.sequencing.ageDays
+    || compareNumbers(sizeWeight(left), sizeWeight(right))
+    || compareText(left.id, right.id);
+}
+
+// Nearest due date first, overdue first of all. An item with no due date has no
+// date-driven cost of delay, so it sorts behind every dated one at this step.
+function dueProximity(item) {
+  return item.sequencing.due === null ? null : item.sequencing.due.daysUntil;
+}
+
+// The closer a parent is to fully terminal, the more a child releases by
+// finishing. An item with no parent releases no parent and sorts last here.
+function epicEnablement(item) {
+  return item.sequencing.epic === null ? null : -item.sequencing.epic.ratio;
+}
+
+// The WSJF denominator, applied where the dominance order above has already
+// tied. A complexity value outside the documented scale carries no weight and
+// sorts last here rather than being guessed at.
+function sizeWeight(item) {
+  return item.sequencing.size?.weight ?? null;
+}
+
+// Ascending, with null last. Subtraction would turn two absent values into NaN.
+function compareNumbers(left, right) {
+  if (left === null || right === null) {
+    return left === right ? 0 : left === null ? 1 : -1;
+  }
+  return left - right;
+}
+
+function expediteBand(item) {
+  return item.sequencing.class.value === 'expedite' ? 0 : 1;
+}
+
+// The reasons are the report: one line per factor that placed this entry,
+// in the same order the comparison steps run.
+function describeReasons(item) {
+  const { sequencing } = item;
+  const reasons = [];
+  if (sequencing.class.raw !== null) {
+    reasons.push(sequencing.class.known
+      ? { code: 'class', label: sequencing.class.raw }
+      : { code: 'class-unknown', label: `unrecognised class "${sequencing.class.raw}"` });
+  }
+  if (sequencing.due !== null) {
+    reasons.push({ code: 'due', label: `due ${sequencing.due.date} (${duePhrase(sequencing.due.daysUntil)})` });
+  }
+  if (sequencing.leverage.count > 0) {
+    reasons.push({ code: 'leverage', label: `unblocks ${plural(sequencing.leverage.count, 'item')}${namedNumbers(sequencing.leverage.numbers)}` });
+  }
+  if (sequencing.epic !== null) {
+    reasons.push({ code: 'epic', label: `advances ${epicPhrase(sequencing.epic)}` });
+  }
+  if (item.priority !== null) {
+    reasons.push({ code: 'priority', label: `priority ${item.priority}` });
+  }
+  reasons.push({ code: 'age', label: `age ${sequencing.ageDays}d` });
+  if (sequencing.size !== null) {
+    reasons.push({ code: 'size', label: `size ${sequencing.size.value}` });
+  }
+  return reasons;
+}
+
+function epicPhrase(epic) {
+  const noun = epic.kind === 'epic' ? 'epic' : 'parent';
+  const handle = epic.number === null ? epic.id : `#${epic.number}`;
+  return `${noun} ${handle} (${Math.round(epic.ratio * 100)}% done)`;
+}
+
+function plural(count, noun) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+// Name at most four unblocked items so the reason stays one readable line.
+function namedNumbers(numbers) {
+  if (numbers.length === 0) {
+    return '';
+  }
+  const shown = numbers.slice(0, 4).map((number) => `#${number}`).join(', ');
+  return numbers.length > 4 ? ` (${shown}, +${numbers.length - 4} more)` : ` (${shown})`;
+}
+
+function duePhrase(daysUntil) {
+  if (daysUntil < 0) {
+    return `${-daysUntil}d overdue`;
+  }
+  return daysUntil === 0 ? 'today' : `in ${daysUntil}d`;
+}
+
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 // The documented class-of-service vocabulary. It rides the existing report
 // `fields` mapping, so no core field carries it and the core stays policy-free.
 export const CLASSES_OF_SERVICE = ['expedite', 'fixed-date', 'standard', 'intangible'];

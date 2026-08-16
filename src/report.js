@@ -1,7 +1,13 @@
 import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { projectReadiness } from './ready.js';
-import { classifyItem, computeEpicEnablement, computeLeverage } from './report-sequencing.js';
+import {
+  classifyItem,
+  collectUnknownClasses,
+  computeEpicEnablement,
+  computeLeverage,
+  rankWorkNext,
+} from './report-sequencing.js';
 import { randomUUID } from 'node:crypto';
 
 const REPORT_FILE_SYSTEM = { mkdir, open, rename, rm };
@@ -85,6 +91,8 @@ export function buildReportModel(items, config, asOf) {
     };
   }
 
+  const workNext = rankWorkNext(reportItems.filter((item) => item.readiness.state === 'ready'));
+
   const swarmBatches = config.swarm === null
     ? []
     : buildSwarmBatches(reportItems, config.swarm.eligibleComplexities);
@@ -95,6 +103,8 @@ export function buildReportModel(items, config, asOf) {
     asOf,
     items: reportItems,
     terminalItems,
+    workNext,
+    unknownClasses: collectUnknownClasses(reportItems),
     stats: {
       total: projected.length,
       open: reportItems.length,
