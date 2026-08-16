@@ -4,15 +4,20 @@ id: wb_01KZYS3100YCM93TCEMAS0CMBW
 number: 82
 title: "Retire the PropertyCompass legacy backlog after Wowbagger proof"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 provenance:
   source: "user-request"
   recorded_at: "2026-08-14T14:47:48.000Z"
-depends_on: [wb_01KZYS3100ZR9M1Y1YJ6W1RX4M]
-related: [wb_01KZ77NSW8363H1V6QG1HZRG11]
+depends_on: [ wb_01KZYS3100ZR9M1Y1YJ6W1RX4M ]
+related: [ wb_01KZ77NSW8363H1V6QG1HZRG11 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog at triage review."
+    rationale: "The final cutover definition, correctly gated on #80 and an explicit Lee decision; queuing it records the intended end state."
 ---
 
 # Purpose
