@@ -36,9 +36,16 @@ consumer MUST read `result.operations.work_claim.api_version` from
 response's top-level `contract_version` with the core version. That claim member
 remains the version 1 envelope marker for exact version 1 consumers.
 
-This rule is the migration path for generic consumers: dispatch by command
-namespace first, then check the version field for that domain. No envelope
-member changes, so existing exact-member consumers remain compatible.
+This rule is the migration path for generic consumers: dispatch by response
+domain first, then check the version field for that domain. Section 2 states
+the domains, the exact dispatch steps, and the two sanctioned exceptions. No
+envelope member changes, so existing exact-member consumers remain compatible.
+
+The envelope rule in section 2 is documentation of the wire that versions 1 and
+2 already emit. It adds no member, removes none, and renames none, so it is not
+a version delta and needs no version bump. What changed is that the rule is now
+stated once, the `ledger-mutation` domain is named, and
+`spec/fixtures/envelope-domains/manifest.json` pins every response class.
 
 ## 1. Scope
 
@@ -120,6 +127,99 @@ outside the configured ledger. Automation uses the JSON envelope.
 A process crash before an envelope is emitted is outside the command protocol.
 A caller must treat the outcome of a mutating command as unknown and follow the
 recovery rules in section 10.
+
+### Response domains and the dispatch rule
+
+Every --json response belongs to exactly one response domain. A domain owns its
+own version field, its own command names, and its own root members. This is the
+one envelope rule, and every surface follows it.
+
+A consumer dispatches on the root `namespace` member first, then reads the
+version field that the selected domain names. It must not dispatch on `command`
+first: two domains both answer to `capabilities`, and one core command can
+answer in two domains.
+
+| Domain | Root `namespace` | `contract_version` | Version to negotiate |
+|---|---|---|---|
+| core | absent | 2 | top-level `contract_version` of `capabilities --json` |
+| work-claim | `work-claim` | 1, the legacy envelope marker | `result.operations.work_claim.api_version` of `claim capabilities --json` |
+| ledger-publication | `ledger-publication` | 1, the legacy envelope marker | the same work-claim `api_version` |
+| ledger-mutation | `ledger-mutation` | 1, the legacy envelope marker | the same work-claim `api_version` |
+| bare result | absent, and no `ok` member either | none | none |
+
+The rule has three steps:
+
+1. A response with a root `namespace` member belongs to the domain that member
+   names.
+2. A response with no `namespace` member but a root `ok` member belongs to the
+   core domain. Its `contract_version` is this contract's version.
+3. A response with neither is a bare result. Only `validate` and `ready` emit
+   one.
+
+A claim-domain `contract_version: 1` is not this contract's version 1. It is the
+legacy claim-envelope marker, and a consumer must never compare it with the core
+`contract_version`.
+
+**Which command answers in which domain**
+
+| Command | Success | Refusals |
+|---|---|---|
+| `validate` | bare result `{valid, errors}` | bare result `{valid, errors}`, exit 1 |
+| `ready` | bare result `{as_of, valid, ready}` | bare result `{valid, errors}` on an invalid ledger, exit 1 |
+| `capabilities` | core | core |
+| `inspect` | core | core |
+| `mint-id` | core | core |
+| `report` | core | core |
+| `create` | core | core, or ledger-mutation when the claim fence refuses |
+| `transition` | core | core, or ledger-mutation when the claim fence refuses |
+| `patch` | core | core, or ledger-mutation when the claim fence refuses |
+| `provision` | work-claim | work-claim |
+| `claim capabilities/read/acquire/renew/release` | work-claim | work-claim |
+| `claim-verify` | work-claim | work-claim |
+| `claim verify` | ledger-publication, `command: "read"` | ledger-publication |
+| `publish-claimed` | ledger-publication | ledger-publication |
+
+**Exact root members**
+
+A core response has exactly `ok`, `command`, `contract_version`, and one of
+`result` or `error`; `create`, `transition`, and `patch` add `state`. A
+claim-domain response has exactly `ok`, `namespace`, `command`,
+`contract_version`, `state`, and one of `result` or `error`; a `claim
+capabilities` response omits `state`, and a claimed-publication response adds
+`operation_id` once schema validation has accepted it. No expected envelope has
+undocumented root members.
+
+**The two sanctioned exceptions, and why they stay**
+
+`validate` and `ready` emit a bare result rather than an envelope. That shape is
+load-bearing: scripts read `.valid` and `.errors` directly, `ready --json` feeds
+`.ready` to shell pipelines, and both shapes are pinned by
+`spec/fixtures/validation-errors` and `spec/fixtures/ready-selection`. Wrapping
+them would break every existing reader for no gain a consumer can use, because
+neither command mutates and neither participates in version negotiation. They
+stay bare, and step 3 of the rule is how a consumer recognizes them.
+
+A claim-fenced refusal to `create`, `transition`, or `patch` answers in the
+ledger-mutation domain with `command: "<command>-v1"` and
+`contract_version: 1`. This is not envelope drift: it is the work-claim
+contract answering, because a merge-coordinated backend refused the write
+before the core mutation ran. The shape is a pinned consumer surface of
+work-claim contract version 1, fixed by
+[work-claim contract](work-claim-contract.md) section 8, by
+`spec/fixtures/work-claims/legacy-write-refusals`, and by
+`spec/fixtures/mutation-refusals/uncommitted-prior-mutation`, and reproduced
+independently by the reference model in `test/work-claim-reference.js`.
+Re-wrapping it in a core envelope would silently change three pinned surfaces
+and split one refusal across two version domains. The split is real, so the
+contract states it here instead of hiding it.
+
+The practical consequence for a consumer: a mutating command can return either
+domain, so read `namespace` before anything else. A consumer that dispatches on
+`command === "create"` alone misses every fenced refusal.
+
+`spec/fixtures/envelope-domains/manifest.json` is the normative pin for this
+rule. It records the domain, command member, version field, exit, state, error
+code, and exact root members of every response class the CLI emits.
 
 ### Response envelopes
 
@@ -1077,6 +1177,11 @@ serialization, and preconditions.
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.
 
+[spec/fixtures/envelope-domains](../spec/fixtures/envelope-domains/README.md)
+is the companion vector for the section 2 envelope rule. It pins the response
+domain of every command's success and every refusal class, including the
+claim-fenced mutation refusals and the bare `validate` and `ready` results.
+
 ## 12. Commit-per-mutation on a provisioned ledger
 
 A ledger becomes provisioned when `provision` binds a namespace to the
@@ -1110,7 +1215,10 @@ refusals below name it by design.
 
 ### The refusal
 
-An uncommitted prior mutation makes the next mutating command return exit 6:
+An uncommitted prior mutation makes the next mutating command return exit 6.
+The refusal answers in the ledger-mutation domain, not the core domain, because
+the claim coordinator refused before the core mutation ran. Section 2 states
+that rule; `namespace` is what a consumer reads to recognize it.
 
 ~~~json
 {
