@@ -4,9 +4,10 @@ id: wb_01M05787D42WQ2KDPWGFP9ZHZ0
 number: 87
 title: "Ship a Three.js 3D ledger graph as a marketing showpiece"
 kind: task
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -17,6 +18,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept the Three.js 3D ledger-graph showpiece into the backlog."
     rationale: "Maintainer ask: a Three.js visualization would serve marketing. Kept as a separate opt-in self-contained artifact (vendored ~300KB gzip bundle) so the daily report stays lean; depends on #86 for the chart data pipeline."
+  - action: complete
+    date: 2026-08-16
+    summary: "The 3D dependency graph rides the daily report."
+    rationale: "Lee's mid-run revision (recorded in this item's body via the new body patch): embedded in the regular report, no flag, ~1.31MB vendored 3d-force-graph 1.80.0 bundle inlined, digest-verified at generation time, CSP tightened to connect-src none. Nodes carry number, status color, leverage size; hover reasons match work-next verbatim; the always-present roster makes the no-3D-only-content rule structural. Real-browser acceptance on the live 108-item ledger: zero console errors, WebGL-less degradation verified. Orchestrator re-verified the merged report in a browser."
 ---
 
 A visually striking, interactive 3D view of a wowbagger ledger - the artifact you show people. A force-directed 3D graph of the dependency DAG: nodes are items (colored by status/readiness, sized by unblocking leverage from #85, labeled #N), edges are `depends_on` and `parent`; orbit/zoom/hover interaction. Built on `3d-force-graph` (vasturiano) over Three.js. Research: `docs/research/2026-08-15-useful-backlog-reports.md` Part 3.
