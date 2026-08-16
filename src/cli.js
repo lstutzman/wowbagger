@@ -69,7 +69,7 @@ const COMMAND_SUMMARIES = {
   inspect: 'Inspect one ledger item as a lossless raw-byte snapshot.',
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
-  patch: "Patch an item's number and priority fields, guarded the same way.",
+  patch: "Patch an item's priority and relation lists, guarded the same way.",
   'mint-id': 'Mint a canonical item ID.',
   provision: 'Provision the work-claim namespace.',
   claim: 'Work-claim lifecycle operations on the provisioned store.',

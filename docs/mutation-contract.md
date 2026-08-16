@@ -900,8 +900,11 @@ operation without universal crash durability or hostile-writer protection.
 
 ## 9. Patch
 
-Patch changes the caller-supplied fields common to schema versions 1 and 2 of
-one existing item — nothing else. It runs under the same per-ID lock, locked re-read,
+Patch changes the mutable non-lifecycle fields of one existing item — its
+priority and its relation lists — and nothing else. It exists so a consumer can
+re-scope an item in band, without hand-editing frontmatter: the dependent of an
+item you want to kill is re-scoped with patch, then the kill proceeds.
+It runs under the same per-ID lock, locked re-read,
 exact-byte revision compare-and-swap, candidate complete-ledger validation,
 and atomic same-path publication protocol as transition (section 6), and it
 shares transition's envelopes, exits, and recovery rules except where this
@@ -916,7 +919,7 @@ Patch accepts exactly:
   "id": "wb_...",
   "expected_revision": "sha256:...",
   "date": "2030-01-11",
-  "set": { "priority": 3, "number": null }
+  "set": { "priority": 3, "depends_on": [], "related": ["wb_..."] }
 }
 ~~~
 
@@ -927,11 +930,35 @@ Patch accepts exactly:
 | date | Yes | ISO calendar date not earlier than existing created or updated. |
 | set | Yes | Mapping naming at least one patchable field. |
 
-The patchable field set is exactly `number` and `priority`. A set member
-outside it is an invalid-request issue at its /set pointer — the boundary is
-stated here, not discovered from the implementation. An integer value sets
-the field: number must be a positive integer, priority a non-negative
-integer. null removes the field.
+The patchable field set is exactly `priority`, `depends_on`, and `related`. A
+set member outside it is an invalid-request issue at its /set pointer — the
+boundary is stated here, not discovered from the implementation. `number` is
+the immutable item identity, assigned once at create, so it is not patchable
+and a request naming it is refused.
+
+`priority` takes a non-negative integer. `depends_on` and `related` each take
+a whole relation list, which replaces the current list; the value must be an
+array whose entries are all canonical item IDs. A non-array value is an
+invalid-type issue at `/set/<field>`; a malformed entry is an invalid-value
+issue at `/set/<field>/<index>`.
+
+null removes the field, for every patchable field alike. `related` is
+optional, so removing it succeeds and the item reads back with an empty
+related list. `depends_on` is a required item field, so removing it makes the
+candidate item invalid: the patch returns candidate-invalid, exit 2, and
+unchanged. Clear a dependency list with `[]`, not null.
+
+Request-shape validation stops at the rules above. Referential integrity,
+dependency cycles, the schema-2 done-dependency rule, self-reference, repeated
+references, and depends_on/related overlap are candidate complete-ledger
+validation's job, exactly as they are for create and transition: a relations
+edit that breaks any of them returns candidate-invalid, exit 2, and unchanged,
+and the ledger keeps its bytes. Relations edits ride the same per-ID lock,
+locked re-read, exact-byte revision compare-and-swap, candidate
+complete-ledger validation, and atomic same-path publication protocol as every
+other patch, and the same claim protocol: on a claim-protected ledger a
+relations patch of an item with an active claim is refused
+`active-claim-write-refused`, exit 4, unchanged — no exception for relations.
 
 Patch sets updated to request.date. A date earlier than the existing created
 or updated date returns patch-precondition-failed, exit 2, and unchanged,
@@ -939,19 +966,25 @@ with date-before-created and date-before-updated issue codes matching
 transition's.
 
 Patch appends no decision: the ledger's Git history is the audit trail for a
-consumer-field change. Identity, lifecycle, title, relations, provenance,
-snooze, decisions, body, and extension members cannot change through patch.
+consumer-field change. Identity, lifecycle, title, provenance, snooze,
+decisions, body, and extension members cannot change through patch.
 
 Patch never mutates another item. A candidate ledger that flags any other
 item — for example a duplicate-number collision with an existing handle —
 returns candidate-invalid, exit 2, and unchanged, and both items keep their
-bytes.
+bytes. Re-scoping one item's dependency onto `related` and dispositioning the
+item it depended on is therefore two patch and transition calls, not one
+atomic multi-item mutation.
 
 ### Serialization
 
-An updated field is rewritten in place. A newly added number serializes
-directly after id; a newly added priority directly after kind. Body bytes and
-extension nodes are preserved exactly as in transition.
+An updated field is rewritten in place. A newly added priority serializes
+directly after kind; a newly added depends_on directly after provenance, and a
+newly added related directly after depends_on. A relation list this patch adds
+is written as a YAML flow sequence, the style create writes; a relation list
+already on the item keeps its sequence node, so its style — and any anchor on
+it — survives the replacement. Body bytes and extension nodes are preserved
+exactly as in transition.
 
 ### Adapter advertisement
 
