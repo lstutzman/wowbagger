@@ -9,6 +9,18 @@ consolidation. The first tagged release inherits this file.
 
 ### Changed
 
+- **The `item-outside-layout` validation error now names the expected path and
+  the relocation that repairs it.** It keeps its stable code and its actual
+  `path`, and gains `expected_path` plus a `remediation`; its message names
+  both paths. A committed item outside the configured items directory refuses
+  every read and every guarded mutation on that ledger, including ones that
+  never touch the misplaced item, so the refusal has to say where the item
+  belongs. The claim fence is not involved: `claim-verify` reports no finding
+  on such a ledger, refuting the PropertyCompass2 PR #2184 claim that a
+  root-misplaced item makes the fence report `stale-write-detected` with
+  `actual_revision: null`. Fixtures pin both configuration orders — layout
+  bound first, and layout bound after the item was already committed at the
+  root.
 - **The core contract version is now `3`.** Every core command envelope
   (`capabilities`, `inspect`, `create`, `transition`, `patch`, `mint-id`,
   `report`) carries `contract_version: 3`, the shipped adapters require core
@@ -30,6 +42,12 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- The README and the installed skill warn that `git mv` refuses a freshly
+  created item, because `create` writes an untracked file and the `git add -A`
+  behind it in an unchecked batch commits the item at the ledger root instead.
+  Both state the safe sequence: plain `mv`, then `git add`, checking every exit
+  code before the commit. The warning sits in the `0.1.0-alpha.4` boundary text
+  that already tells consumers that core ignores the layout file.
 - One envelope rule now covers every `--json` response. The mutation contract
   states the response domains (core, work-claim, ledger-publication,
   ledger-mutation, and bare result), the dispatch steps a generic consumer

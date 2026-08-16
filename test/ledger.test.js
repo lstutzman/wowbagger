@@ -89,7 +89,9 @@ test('validate rejects an item outside the committed items-directory layout', as
         path: 'ledger/outside.md',
         field: 'path',
         code: 'item-outside-layout',
-        message: 'Ledger items must be inside the configured items directory.',
+        message: 'Ledger item ledger/outside.md is outside the configured items directory; the committed layout expects it at ledger/items/outside.md.',
+        expected_path: 'ledger/items/outside.md',
+        remediation: 'Move ledger/outside.md to ledger/items/outside.md, stage the move with git add, commit it, then run claim-verify.',
       }],
     });
   });
