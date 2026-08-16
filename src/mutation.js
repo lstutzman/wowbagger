@@ -228,6 +228,10 @@ async function createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnap
     if (!initial.valid) {
       return ledgerInvalid(initial.validation);
     }
+    const unavailableDirectory = await itemsDirectoryRefusal(root, initial.ledger, id);
+    if (unavailableDirectory) {
+      return unavailableDirectory;
+    }
     const nextIds = lockIdsForCreate(request, initial.ledger);
     if (scenario === 'expand-lock-closure-through-bounded-retry-limit') {
       return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
@@ -1783,6 +1787,43 @@ async function syncDirectoryIfSupported(directory) {
   } finally {
     await handle?.close();
   }
+}
+
+// The committed item layout names the directory create publishes into, and
+// create never creates it. Resolve it before any lock so a ledger whose
+// configured directory was never committed refuses by name instead of failing
+// as a generic temporary-file io-error.
+async function itemsDirectoryRefusal(root, ledger, id) {
+  const itemsDirectory = ledger.layout?.items_directory ?? '';
+  if (!itemsDirectory) {
+    return null;
+  }
+  let stat;
+  try {
+    stat = await lstat(path.join(root, itemsDirectory));
+  } catch (error) {
+    if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') {
+      throw error;
+    }
+    return itemsDirectoryUnavailable(id, itemsDirectory, 'absent');
+  }
+  if (stat.isDirectory()) {
+    return null;
+  }
+  return itemsDirectoryUnavailable(id, itemsDirectory, 'not-a-directory');
+}
+
+function itemsDirectoryUnavailable(id, itemsDirectory, reason) {
+  const remediation = reason === 'absent'
+    ? `Create the ledger directory ${itemsDirectory} and commit it, then retry create.`
+    : `Replace ${itemsDirectory} with a directory and commit it, then retry create.`;
+  return mutationError(
+    'items-directory-unavailable',
+    'The configured items directory is unavailable.',
+    'unchanged',
+    2,
+    { id, path: itemsDirectory, reason, remediation },
+  );
 }
 
 async function pathOccupant(finalPath, ledger) {

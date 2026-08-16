@@ -98,6 +98,7 @@ named source and hash to the declared revision.
 | Create transport | equivalent file and stdin requests |
 | Create validation | invalid JSON, duplicate JSON key, unknown request member, unknown flag, missing member |
 | Create identity/body | ID collision, unrelated-item and directory default-path collisions, empty body, LF-leading body |
+| Create item layout | configured items directory absent, configured items directory occupied by a file |
 | Candidate validation | create child under terminal epic, restore child under terminal epic |
 | Create publication/recovery | unavailable atomic no-clobber, verified committed cleanup failure, unknown verification outcome |
 | Transition concurrency | success, stale revision, held lock, exhausted lock-closure retries, date rollback |

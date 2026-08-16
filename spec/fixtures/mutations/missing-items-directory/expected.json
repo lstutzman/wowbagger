@@ -1,0 +1,16 @@
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 3,
+  "state": "unchanged",
+  "error": {
+    "code": "items-directory-unavailable",
+    "message": "The configured items directory is unavailable.",
+    "details": {
+      "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+      "path": "items",
+      "reason": "absent",
+      "remediation": "Create the ledger directory items and commit it, then retry create."
+    }
+  }
+}

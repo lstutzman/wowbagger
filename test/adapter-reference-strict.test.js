@@ -904,3 +904,88 @@ test('combined instruction and handoff bytes share context_bytes', () => {
     },
   }).error.code, 'context-limit-exceeded');
 });
+
+test('an items-directory-unavailable create refusal forwards only with its exact documented details', () => {
+  const itemId = 'wb_01KDWPVNG00000000000000000';
+  const refusal = (details) => ({
+    ok: false,
+    command: 'create',
+    contract_version: 3,
+    state: 'unchanged',
+    error: {
+      code: 'items-directory-unavailable',
+      message: 'The configured items directory is unavailable.',
+      details,
+    },
+  });
+  const outcome = (response, exitCode = 2) => mapProcessOutcome({
+    adapter_contract_version: 2,
+    request_id: 'reference-items-directory-0001',
+    command: 'create',
+    core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
+    mutation_request: {
+      id: itemId,
+      item: {
+        title: 'Map a fictional moon route',
+        kind: 'task',
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+        related: [],
+      },
+      body: '\nA fictional Markdown body.\n',
+    },
+    item_id: itemId,
+    expected_revision: null,
+    process: completeProcess({
+      exit_code: exitCode,
+      stdout_base64: Buffer.from(`${JSON.stringify(response)}\n`).toString('base64'),
+    }),
+  });
+
+  for (const details of [
+    {
+      id: itemId,
+      path: 'items',
+      reason: 'absent',
+      remediation: 'Create the ledger directory items and commit it, then retry create.',
+    },
+    {
+      id: itemId,
+      path: 'backlog/items',
+      reason: 'not-a-directory',
+      remediation: 'Replace backlog/items with a directory and commit it, then retry create.',
+    },
+  ]) {
+    assert.equal(outcome(refusal(details)), null, JSON.stringify(details));
+  }
+
+  const valid = {
+    id: itemId,
+    path: 'items',
+    reason: 'absent',
+    remediation: 'Create the ledger directory items and commit it, then retry create.',
+  };
+  for (const details of [
+    { ...valid, reason: 'io-error' },
+    {
+      ...valid,
+      path: 'items/wb_01KDWPVNG00000000000000000.md',
+      remediation: 'Create the ledger directory items/wb_01KDWPVNG00000000000000000.md and commit it, then retry create.',
+    },
+    { ...valid, path: '/items' },
+    { ...valid, path: '../items' },
+    { ...valid, id: 'not-an-item-id' },
+    { ...valid, id: 'wb_01KDWPVNG0000000000000000A' },
+    { ...valid, remediation: 'Create the ledger directory elsewhere and commit it, then retry create.' },
+    { ...valid, remediation: 42 },
+    { ...valid, occupant_kind: 'file' },
+    Object.fromEntries(Object.entries(valid).filter(([key]) => key !== 'remediation')),
+  ]) {
+    assert.notEqual(outcome(refusal(details)), null, JSON.stringify(details));
+  }
+
+  assert.notEqual(outcome(refusal(valid), 6), null, 'exit 6 must not carry this refusal');
+  const wrongMessage = refusal(valid);
+  wrongMessage.error.message = 'The configured items directory does not exist.';
+  assert.notEqual(outcome(wrongMessage), null, 'the stable message is exact');
+});

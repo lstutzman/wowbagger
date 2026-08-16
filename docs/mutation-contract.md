@@ -56,7 +56,9 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
 - **the configured item directory.** `create` derives the published path from
   the committed `<ledger>/.wowbagger/layout.json`, and validation rejects a
   parsed item outside it (section 5). A ledger without that file keeps the
-  version 2 `<ledger>/<id>.md` path.
+  version 2 `<ledger>/<id>.md` path. `create` refuses the new
+  `items-directory-unavailable`, exit 2, `unchanged`, when the configured
+  directory is not an existing directory (section 7).
 
 Two version-2-era changes are deliberately **not** version 3 deltas. The
 section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
@@ -337,7 +339,7 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or candidate/lifecycle-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid |
+| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, items-directory-unavailable |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
@@ -770,6 +772,62 @@ protocol and collision rules are bound to this derived path. A malformed layout
 configuration fails closed before mutation. Validation rejects any parsed item
 outside the configured item directory.
 
+### The configured items directory must exist
+
+Because create never creates the configured directory, create resolves it and
+refuses by name when it is not an existing directory:
+
+~~~json
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 3,
+  "state": "unchanged",
+  "error": {
+    "code": "items-directory-unavailable",
+    "message": "The configured items directory is unavailable.",
+    "details": {
+      "id": "wb_...",
+      "path": "items",
+      "reason": "absent",
+      "remediation": "Create the ledger directory items and commit it, then retry create."
+    }
+  }
+}
+~~~
+
+The exit is 2 and the state is `unchanged`. details have exactly id, path,
+reason, and remediation:
+
+- path is the resolved ledger-relative directory, exactly the configured
+  `items_directory`;
+- reason is `absent` when nothing occupies that path, and `not-a-directory`
+  when a regular or special file does;
+- remediation names that same path and the operator action that makes create
+  possible. For `absent` it is `Create the ledger directory <path> and commit
+  it, then retry create.`; for `not-a-directory` it is `Replace <path> with a
+  directory and commit it, then retry create.`; and
+- the message is stable across both reasons. Automation reads `reason`.
+
+This is a ledger-setup precondition, not a request defect: the request is
+well-formed, so it is not an invalid-request issue under section 3, and no JSON
+Pointer into the request could name the fault.
+
+Precedence. Create resolves the directory after complete-ledger validation and
+**before it acquires any lock**, so the refusal precedes id-collision,
+path-collision, and candidate validation, and no lock file, temporary file, or
+lock directory is created. Complete-ledger validation still precedes it: a
+symbolic link occupying the configured directory name is a
+`symlink-not-allowed` validation error, so that case returns `ledger-invalid`
+with exit 3 and never reaches this refusal.
+
+Only create can hit this refusal. transition, patch, and publish-claimed
+rewrite an item that already exists, so the directory holding it exists too;
+they return item-not-found when it does not.
+
+`spec/fixtures/mutations/missing-items-directory/` is the normative vector for
+both reasons.
+
 ### Body
 
 The generated source uses UTF-8 and LF for generated frontmatter lines. The
@@ -1050,8 +1108,9 @@ lock conflicts; aggregate all multi-item blockers and ordinary precondition
 issues; atomic-scope-required when blockers exist; otherwise
 transition-precondition-failed when ordinary issues exist; otherwise
 candidate-invalid when the candidate validator reports errors. For create,
-id-collision precedes path-collision as specified in section 7, and both
-precede candidate-invalid. No validator issue already represented by the
+items-directory-unavailable precedes id-collision, id-collision precedes
+path-collision as specified in section 7, and all three precede
+candidate-invalid. No validator issue already represented by the
 selected more-specific response is duplicated in a second envelope. A proposed
 ledger that remains invalid for any reason is never published.
 
@@ -1178,6 +1237,7 @@ patch.
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
 | path-collision | id, path, occupant_kind; occupying_id iff occupant_kind is item |
+| items-directory-unavailable | id, path, reason, remediation |
 | atomic-scope-required | id, blockers, precondition_issues |
 | capability-unavailable | capability, reason, recovery_artifacts, recovery_artifacts_truncated |
 | operation-failed | id, operation, reason, recovery_artifacts, recovery_artifacts_truncated |

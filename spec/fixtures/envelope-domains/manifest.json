@@ -292,6 +292,21 @@
       ]
     },
     {
+      "class": "create.items-directory-unavailable",
+      "domain": "core",
+      "command": "create",
+      "exit": 2,
+      "state": "unchanged",
+      "error_code": "items-directory-unavailable",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
       "class": "create.invalid-request",
       "domain": "core",
       "command": "create",

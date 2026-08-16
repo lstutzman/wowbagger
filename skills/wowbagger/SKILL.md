@@ -136,7 +136,9 @@ wowbagger patch      --ledger <dir> --input request.json --json
   `{"layout_version":1,"items_directory":"items"}` makes `create` publish
   atomically to `<items_directory>/<id>.md`; without the file it publishes to
   `<ledger>/<id>.md`. Configure it, and commit the directory it names, before
-  the first `create` — no file is renamed afterwards. Cores at
+  the first `create` — no file is renamed afterwards. If that directory is
+  missing, `create` refuses `items-directory-unavailable`, exit 2, and its
+  `error.details.remediation` names the directory to create. Cores at
   `0.1.0-alpha.4` and earlier ignore the file and publish at the ledger root.
 - **Never relocate an item with `git mv` straight after a create.** `create`
   writes an untracked file, so `git mv` refuses it; the `git add -A` behind it

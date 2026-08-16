@@ -1,0 +1,37 @@
+{
+  "case": "create-configured-items-directory-occupied-by-a-file",
+  "argv": ["create", "--ledger", "ledger", "--input", "request.json", "--json"],
+  "input": {"transport": "file", "path": "request.json"},
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {"json_file": "expected-occupied.json", "trailing_lf": true},
+    "stderr": {"exact": ""},
+    "files": {
+      "before": [
+        {
+          "path": "ledger/.wowbagger/layout.json",
+          "source_file": "ledger/.wowbagger/layout.json",
+          "sha256": "sha256:558713071e0a1b1889e0a60460d306e0bcb7b3043bba2e496967146ce49201bf"
+        },
+        {
+          "path": "ledger/items",
+          "source_file": "ledger/items",
+          "sha256": "sha256:2fa094a71c4db3487671e0e47c06e35146c20603ae81fd2a7b37b60066d4585d"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/.wowbagger/layout.json",
+          "source_file": "ledger/.wowbagger/layout.json",
+          "sha256": "sha256:558713071e0a1b1889e0a60460d306e0bcb7b3043bba2e496967146ce49201bf"
+        },
+        {
+          "path": "ledger/items",
+          "source_file": "ledger/items",
+          "sha256": "sha256:2fa094a71c4db3487671e0e47c06e35146c20603ae81fd2a7b37b60066d4585d"
+        }
+      ]
+    }
+  }
+}
