@@ -36,12 +36,12 @@ const writing = section(skill, '## Writing', 'the installed skill');
 test('the installed skill names the exact patchable field set', () => {
   assert.match(
     writing,
-    phrase('patchable field set is exactly priority depends_on and related'),
+    phrase('patchable field set is exactly priority depends_on related and body'),
     'the skill must state the boundary rather than leave it to be discovered',
   );
   assert.match(
     contract,
-    phrase('patchable field set is exactly priority depends_on and related'),
+    phrase('patchable field set is exactly priority depends_on related and body'),
     'the contract must state the same boundary',
   );
 });

@@ -173,7 +173,8 @@ wowbagger patch      --ledger <dir> --input request.json --json
 ### Patch edits fields, never lifecycle
 
 `patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.
-The patchable field set is exactly `priority`, `depends_on`, and `related`. A
+The patchable field set is exactly `priority`, `depends_on`, `related`, and
+`body`. A
 `set` naming anything else is an `invalid-request` issue at its `/set` pointer,
 and `number` is refused because it is immutable identity.
 
@@ -183,7 +184,7 @@ and `number` is refused because it is immutable identity.
   so a null one returns `candidate-invalid`, exit 2, `unchanged`. Use `[]`.
 - `priority` takes a non-negative integer.
 - Patch appends no decision; the Git diff is the audit trail. It never mutates
-  a second item, and it cannot touch status, title, body, or provenance.
+  a second item, and it cannot touch status, title, or provenance.
 
 ### A refused disposition is one relations patch away
 
