@@ -4,7 +4,7 @@ id: wb_01M05ESS6K4SM3P8G42G3J2PVW
 number: 99
 title: "Decide whether create should record a claim-journal entry"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T14:14:52Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Lee accepted on 2026-08-16. Design decision on create journal asymmetry needs recording either way."
 ---
 
 Design question surfaced during item #89: `createItem` does not pass `authorize` to `withLegacyMutationFence`, so a create records no journal entry on a provisioned ledger. Consequences, now documented in work-claim-contract section 3.1: create never causes a cross-worktree block (only transition and patch do), and — the open risk — the journal cannot detect an unauthorized overwrite of a freshly created item until its first transition records it.
