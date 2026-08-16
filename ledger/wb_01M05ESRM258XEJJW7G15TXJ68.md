@@ -4,6 +4,7 @@ id: wb_01M05ESRM258XEJJW7G15TXJ68
 number: 98
 title: "Drop the misleading clause from the foreign-writer remediation"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
