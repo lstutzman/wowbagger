@@ -170,6 +170,23 @@ async function walkEveryResponseClass() {
   }
 
   {
+    // A committed item layout naming a directory nobody created: create
+    // refuses in the core domain before it locks or writes anything.
+    const root = await temporaryRoot('wb-envelopes-layout-');
+    const ledger = path.join(root, 'ledger');
+    await mkdir(path.join(ledger, '.wowbagger'), { recursive: true });
+    await writeFile(
+      path.join(ledger, '.wowbagger', 'layout.json'),
+      '{"layout_version":1,"items_directory":"items"}\n',
+    );
+    see('create.items-directory-unavailable', run(root, 'create', '--ledger', ledger, '--input', await requestFile(root, 'create-no-directory.json', {
+      id: ITEM_ID,
+      item: itemRequest('Needs a directory'),
+      body: 'needs a directory\n',
+    }), '--json'));
+  }
+
+  {
     const { ledger, root } = await initialisedRepository('wb-envelopes-advisory-');
     see('claim-capabilities.success', run(root, 'claim', 'capabilities', '--ledger', ledger, '--json'));
     see('publish-claimed.capability-unavailable', run(root, 'publish-claimed', '--ledger', ledger, '--input', '/dev/null', '--json'));
