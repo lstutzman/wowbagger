@@ -5,7 +5,7 @@ number: 92
 title: "Unify mutation envelope shape across refusal paths"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
