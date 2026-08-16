@@ -116,6 +116,13 @@ wowbagger transition --ledger <dir> --input request.json --json
 
 - `create` publishes only a caller-supplied canonical ID, atomically and
   no-clobber. It will not invent an ID for you.
+- **Where `create` publishes is the ledger's decision, not the caller's.** A
+  committed `<ledger>/.wowbagger/layout.json` holding exactly
+  `{"layout_version":1,"items_directory":"items"}` makes `create` publish
+  atomically to `<items_directory>/<id>.md`; without the file it publishes to
+  `<ledger>/<id>.md`. Configure it, and commit the directory it names, before
+  the first `create` — no file is renamed afterwards. Cores at
+  `0.1.0-alpha.4` and earlier ignore the file and publish at the ledger root.
 - `create` starts an empty ledger on schema version 2 and returns the selected
   version at `result.item.core.schema_version`. A non-empty schema-version-1
   ledger stays on version 1 until its complete ledger is migrated.

@@ -573,16 +573,32 @@ path-collision. A real directory whose name ends in .md and whose contents
 leave the complete ledger valid is valid input under SPEC.md and produces
 path-collision when it occupies the configured identity-derived path.
 
-The final path is derived from the committed item layout:
+The final path is derived from the committed item layout, never from the
+request and never from a later rename:
 
     <ledger>/<items_directory>/<id>.md
 
-When `<ledger>/.wowbagger/layout.json` is absent, `items_directory` is empty
-and the compatible path is `<ledger>/<id>.md`. The request cannot supply an
-arbitrary path. The no-clobber publication protocol and collision rules are
-bound to this derived path. A malformed layout configuration fails closed
-before mutation. Validation rejects any parsed item outside the configured
-item directory.
+`items_directory` comes from `<ledger>/.wowbagger/layout.json`, whose only
+accepted shape is:
+
+~~~json
+{
+  "layout_version": 1,
+  "items_directory": "items"
+}
+~~~
+
+When that file is absent, `items_directory` is empty and the compatible path is
+`<ledger>/<id>.md`. Configuring the file is therefore ledger setup that
+precedes the first create: an already-published item keeps the path its create
+derived, and moving it is a consumer Git operation this contract neither
+performs nor prescribes. The configured directory must already exist; create
+publishes into it and never creates it.
+
+The request cannot supply an arbitrary path. The no-clobber publication
+protocol and collision rules are bound to this derived path. A malformed layout
+configuration fails closed before mutation. Validation rejects any parsed item
+outside the configured item directory.
 
 ### Body
 

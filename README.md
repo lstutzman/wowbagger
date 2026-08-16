@@ -54,6 +54,22 @@ core contract version 2. It refuses an absent or incompatible core. It will not
 fall back to editing ledger files by hand, because that would bypass validation
 and atomic publication.
 
+Decide where items live **before your first `create`**. A ledger publishes items
+to `<ledger>/<id>.md` unless a committed `<ledger>/.wowbagger/layout.json` binds
+a subdirectory:
+
+```sh
+mkdir -p path/to/ledger/.wowbagger path/to/ledger/items
+echo '{"layout_version":1,"items_directory":"items"}' > path/to/ledger/.wowbagger/layout.json
+```
+
+`layout_version` must be `1` and `items_directory` names the committed item
+directory. `create` then publishes atomically to `<items_directory>/<id>.md`,
+and validation rejects parsed items outside it. Commit the directory the file
+names — `create` publishes into an existing directory and does not make one.
+Nothing is renamed after a create. Cores at `0.1.0-alpha.4` and earlier ignore
+the file and publish every item at the ledger root.
+
 For an isolated consumer pilot, create or select the disposable worktree before
 the agent starts. Then launch a new session with that worktree as its project
 root. Follow the [isolated dogfood pilot runbook](docs/isolated-dogfood-pilot.md);

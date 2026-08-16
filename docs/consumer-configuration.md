@@ -16,9 +16,10 @@ Everything else the word "configuration" usually covers lives on the
 consumer's side of the seam:
 
 - **Paths and naming**: the ledger directory is whatever the consumer
-  chooses; item filenames follow the identity-derived default, and a
-  repository naming convention is applied by Git rename afterwards
-  (mutation contract section 7).
+  chooses, and item filenames follow the identity-derived default. Where
+  inside the ledger those files land is bound by the committed
+  `<ledger>/.wowbagger/layout.json` (mutation contract section 7), not by a
+  rename after create.
 - **Branch names and Git policy**: out of core scope permanently. The core
   performs no Git operations; ADR-0001 keeps branch policy with the
   consumer.
@@ -39,9 +40,13 @@ per-invocation binding keeps a cloned, hostile, or misconfigured repository
 from redirecting the core silently, and keeps every invocation reproducible
 from its command line alone.
 
-One repository-local artifact is deliberately not consumer configuration:
-`.wowbagger/namespace`, written by `provision` and read by the claim
-commands, is core-owned state with its own contract.
+Two repository-local artifacts are deliberately not consumer configuration.
+`.wowbagger/namespace`, written by `provision` and read by the claim commands,
+is core-owned state with its own contract. `.wowbagger/layout.json` is
+core-owned ledger structure: it binds item placement inside the ledger under
+SPEC.md and the mutation contract, is read from the ledger the caller named
+rather than discovered by a walk, and can express nothing but a validated item
+directory.
 
 ## Absence
 
