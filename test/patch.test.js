@@ -6,7 +6,7 @@ import { runCli, withLedger } from './support.js';
 
 const ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
 
-function itemSource(id, { priority = 5, number = 7 } = {}) {
+function itemSource(id, { priority = 5, number = 7, updated = '2030-01-10' } = {}) {
   return [
     '---',
     'schema_version: 1',
@@ -17,7 +17,7 @@ function itemSource(id, { priority = 5, number = 7 } = {}) {
     ...(priority === null ? [] : [`priority: ${priority}`]),
     'status: backlog',
     'created: 2030-01-10',
-    'updated: 2030-01-10',
+    `updated: ${updated}`,
     'provenance:',
     '  source: "fixture/mutations"',
     '  recorded_at: "2030-01-10T12:34:56.789Z"',
@@ -161,6 +161,40 @@ test('patch refuses a date earlier than the current updated date', async () => {
     assert.equal(envelope.state, 'unchanged');
     const codes = envelope.error.details.issues.map((entry) => entry.code);
     assert.deepEqual(codes, ['date-before-created', 'date-before-updated']);
+  });
+});
+
+test('a patch date refusal names the item current created and updated dates', async () => {
+  await withLedger({ [`${ID}.md`]: itemSource(ID, { updated: '2030-01-12' }) }, async (ledger) => {
+    const revision = inspectRevision(ledger, ID);
+
+    const result = await runPatch(ledger, {
+      id: ID,
+      expected_revision: revision,
+      date: '2030-01-09',
+      set: { priority: 2 },
+    });
+
+    assert.equal(result.status, 2, result.stdout);
+    const envelope = JSON.parse(result.stdout);
+    assert.deepEqual(envelope.error.details.issues, [
+      {
+        code: 'date-before-created',
+        field: 'date',
+        message: 'Patch date must not be earlier than the current created date.',
+        related_ids: [],
+        item_created: '2030-01-10',
+        item_updated: '2030-01-12',
+      },
+      {
+        code: 'date-before-updated',
+        field: 'date',
+        message: 'Patch date must not be earlier than the current updated date.',
+        related_ids: [],
+        item_created: '2030-01-10',
+        item_updated: '2030-01-12',
+      },
+    ]);
   });
 });
 

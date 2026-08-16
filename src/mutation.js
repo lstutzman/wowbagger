@@ -813,10 +813,10 @@ export async function patchItem(ledgerDirectory, request, scenario) {
 function buildPatch(lockedTarget, ledger, request, scenario) {
   const issues = [];
   if (request.date < lockedTarget.data.created) {
-    issues.push(transitionIssue('date-before-created', 'date', 'Patch date must not be earlier than the current created date.', []));
+    issues.push(dateIssue('date-before-created', 'Patch date must not be earlier than the current created date.', lockedTarget.data));
   }
   if (request.date < lockedTarget.data.updated) {
-    issues.push(transitionIssue('date-before-updated', 'date', 'Patch date must not be earlier than the current updated date.', []));
+    issues.push(dateIssue('date-before-updated', 'Patch date must not be earlier than the current updated date.', lockedTarget.data));
   }
   if (issues.length > 0) {
     return { outcome: mutationError('patch-precondition-failed', 'The requested patch failed its preconditions.', 'unchanged', 2, {
@@ -1026,10 +1026,10 @@ function transitionEdge(kind, from, to) {
 function transitionPreconditions(target, ledger, request, edge) {
   const issues = [];
   if (request.date < target.data.created) {
-    issues.push(transitionIssue('date-before-created', 'date', 'Transition date must not be earlier than the current created date.', []));
+    issues.push(dateIssue('date-before-created', 'Transition date must not be earlier than the current created date.', target.data));
   }
   if (request.date < target.data.updated) {
-    issues.push(transitionIssue('date-before-updated', 'date', 'Transition date must not be earlier than the current updated date.', []));
+    issues.push(dateIssue('date-before-updated', 'Transition date must not be earlier than the current updated date.', target.data));
   }
   if (!edge.allowed) {
     issues.push(transitionIssue('invalid-edge', 'to_status', 'The requested lifecycle edge is not allowed for this item.', []));
@@ -1085,6 +1085,17 @@ function transitionBlockers(target, ledger, toStatus) {
 
 function transitionIssue(code, field, message, relatedIds) {
   return { code, field, message, related_ids: relatedIds };
+}
+
+// A date refusal names the item's own dates so the caller can correct the
+// request without an inspect round-trip. Both dates ride both codes: the
+// operator needs the whole window, not the one bound that happened to fire.
+function dateIssue(code, message, data) {
+  return {
+    ...transitionIssue(code, 'date', message, []),
+    item_created: data.created,
+    item_updated: data.updated,
+  };
 }
 
 function compareTransitionIssues(left, right) {

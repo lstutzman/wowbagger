@@ -82,6 +82,7 @@ const PATCH_ISSUE_MESSAGES = Object.freeze({
   'date-before-created': 'Patch date must not be earlier than the current created date.',
   'date-before-updated': 'Patch date must not be earlier than the current updated date.',
 });
+const DATE_ISSUE_CODES = new Set(['date-before-created', 'date-before-updated']);
 const TRANSITION_BLOCKER_FIELDS = Object.freeze({
   'dependent-cleanup': 'depends_on',
   'dependent-disposition': 'depends_on',
@@ -825,22 +826,39 @@ function compareInvalidRequestIssues(left, right) {
     || compareText(left.message, right.message);
 }
 
+// A date refusal carries the item's own dates; every other code keeps the
+// four-member shape. The member set is exact in both directions, so a missing
+// date member and a stray one are equally refused.
+function issueMembers(code) {
+  return DATE_ISSUE_CODES.has(code)
+    ? ['code', 'field', 'message', 'related_ids', 'item_created', 'item_updated']
+    : ['code', 'field', 'message', 'related_ids'];
+}
+
+function validIssueDates(issue) {
+  return !DATE_ISSUE_CODES.has(issue.code)
+    || (isCalendarDate(issue.item_created) && isCalendarDate(issue.item_updated)
+      && issue.item_created <= issue.item_updated);
+}
+
 function validTransitionIssues(value) {
   if (!Array.isArray(value)) return false;
-  return value.every((issue) => hasExactMembers(issue, ['code', 'field', 'message', 'related_ids'])
+  return value.every((issue) => hasExactMembers(issue, issueMembers(issue?.code))
     && Object.hasOwn(TRANSITION_ISSUE_MESSAGES, issue.code)
     && issue.field === TRANSITION_ISSUE_FIELDS[issue.code]
     && issue.message === TRANSITION_ISSUE_MESSAGES[issue.code]
+    && validIssueDates(issue)
     && validSortedUniqueIds(issue.related_ids))
     && isOrdered(value, compareTransitionIssues);
 }
 
 function validPatchIssues(value) {
   if (!Array.isArray(value)) return false;
-  return value.every((issue) => hasExactMembers(issue, ['code', 'field', 'message', 'related_ids'])
+  return value.every((issue) => hasExactMembers(issue, issueMembers(issue?.code))
     && Object.hasOwn(PATCH_ISSUE_MESSAGES, issue.code)
     && issue.field === 'date'
     && issue.message === PATCH_ISSUE_MESSAGES[issue.code]
+    && validIssueDates(issue)
     && sameJson(issue.related_ids, []))
     && isOrdered(value, compareTransitionIssues);
 }
