@@ -5,7 +5,7 @@ number: 101
 title: "Teach the skill the in-band dependent-disposition flow"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
