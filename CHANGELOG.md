@@ -26,6 +26,17 @@ consolidation. The first tagged release inherits this file.
   implied. The core `capabilities` envelope is unchanged, and the core
   contract version does not move.
 
+- A `date-before-created` or `date-before-updated` issue now carries
+  `item_created` and `item_updated` after `related_ids` — the target item's own
+  dates at refusal time, both dates on both codes, on `transition` and `patch`
+  alike. One refusal now states the whole acceptable date window, so correcting
+  the request no longer costs an `inspect` round-trip. No other issue code
+  changes shape, and the core contract version does not move; a consumer that
+  validates issue members exactly must accept six members for these two codes.
+  The mutation contract and the installed skill now also state that `create`
+  derives `created` from the ULID timestamp, which is UTC, with the
+  across-midnight example that produces this refusal.
+
 ### Fixed
 
 - Every reconciliation finding that blocks a mutation now carries a
