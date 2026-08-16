@@ -5,9 +5,10 @@ number: 107
 title: "Collapse publish-claimed's redundant complete-ledger loads"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T16:03:35Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "Same collapse as #100 with the same safety argument; measure first."
+  - action: complete
+    date: 2026-08-16
+    summary: "publish-claimed reads the complete ledger twice, measured."
+    rationale: "Bench-measured before (3, or 4 behind a pending intent) matched the call-site reading; one snapshot now threads reconciliation, candidate validation, and the pre-lock read inside the single claim-lock hold. Locked read and serialized candidate validation untouched; retry loads fresh; the two 100-style invariants were unguarded on this path and are now pinned red-first. Wall-time attribution declared unusable under multi-agent load - the load counter is the honest number."
 ---
 
 Follow-up from item #100 (which collapsed the legacy mutation path from 3 complete-ledger loads to 2): `publish-claimed` still reads the complete ledger three times — once in validateCandidateLedger, then the mutation engine's two — and four when a pending intent forces reconciliation first. NOTE: this count was read from call sites by #100's worker, not measured; measure first with the ledgerLoadCount() observability export #100 added.
