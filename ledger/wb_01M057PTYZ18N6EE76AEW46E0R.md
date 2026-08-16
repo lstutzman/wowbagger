@@ -5,7 +5,7 @@ number: 88
 title: "Document and message the commit-per-mutation invariant"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
