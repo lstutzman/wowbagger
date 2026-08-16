@@ -5,7 +5,7 @@ number: 104
 title: "Stop a root-misplaced item from poisoning the claim fence"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
