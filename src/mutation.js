@@ -489,7 +489,9 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
   ));
 }
 
-export async function publishClaimedCandidate(ledgerDirectory, request, scenario) {
+// `ledgerSnapshot`, when supplied, stands in for the first pre-lock read: the
+// caller holds the claim lock and has already read the same directory.
+export async function publishClaimedCandidate(ledgerDirectory, request, scenario, ledgerSnapshot) {
   return mutateExistingItem(ledgerDirectory, {
     ...request,
     id: request.item_id,
@@ -503,7 +505,7 @@ export async function publishClaimedCandidate(ledgerDirectory, request, scenario
       const parsed = parseLedgerItemSource(bytes.toString('utf8'));
       return { successor: parsed.data, bytes };
     },
-  });
+  }, ledgerSnapshot);
 }
 
 // Shared locked-mutation engine for operations that rewrite one existing

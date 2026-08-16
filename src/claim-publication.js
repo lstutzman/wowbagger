@@ -168,6 +168,12 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
       const terminalKeys = new Set(replayed.entries
         .filter((entry) => entry.type === 'publish-final')
         .map((entry) => `${entry.operation_id}\0${entry.item_id}`));
+      // Every unlocked read this publication performs happens inside one claim
+      // lock hold on one directory, and nothing between them writes an item
+      // file, so the first of them is the snapshot the rest share. The read
+      // under lock, which the mutation engine still performs on its own, is
+      // what makes the revision compare-and-swap meaningful.
+      let ledgerSnapshot = null;
       if (replayed.entries.some((entry) => (
         entry.type === 'publish-intent'
           && !terminalKeys.has(`${entry.operation_id}\0${entry.item_id}`)
@@ -181,6 +187,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         });
         if (reconciled.unsafe) return publicationUnknown(request);
         replayed = { entries: reconciled.entries, state: reconciled.state };
+        ledgerSnapshot = reconciled.ledger;
         const reconciledPrior = replayed.entries.find((entry) => (
           entry.type === 'publish-final'
             && entry.operation_id === request.operation_id
@@ -191,8 +198,9 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
             : idempotencyConflict(request.operation_id, reconciledPrior.operation_digest, digest);
         }
       }
-      const candidateError = await validateCandidateLedger(ledgerDirectory, request);
-      if (candidateError) return candidateError;
+      const candidate = await validateCandidateLedger(ledgerDirectory, request, ledgerSnapshot);
+      if (candidate.error) return candidate.error;
+      ledgerSnapshot = candidate.ledger;
       const physicalNow = new Date().toISOString();
       const observedAt = advanceClockFloor(replayed.state, physicalNow);
       let clockEntry;
@@ -239,7 +247,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         state: 'pending',
       });
       entries.push(intent);
-      const mutation = await publishClaimedCandidate(ledgerDirectory, request, scenario);
+      const mutation = await publishClaimedCandidate(ledgerDirectory, request, scenario, ledgerSnapshot);
       if (!mutation.ok) {
         const outcome = mutationFailure(request, mutation);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
@@ -790,17 +798,24 @@ async function persistTerminal(entries, journalPath, ledgerDirectory, namespace,
   return outcome;
 }
 
-async function validateCandidateLedger(ledgerDirectory, request) {
-  const ledger = await loadLedger(path.resolve(ledgerDirectory));
+// The unlocked pre-read of a claimed publication. It fails fast on a candidate
+// that would make the ledger invalid; every decision it makes is re-made under
+// lock in the mutation engine, so it may run against a snapshot the caller
+// already read under the same claim lock. It returns the ledger it judged so
+// the mutation engine's own pre-lock read can share it.
+async function validateCandidateLedger(ledgerDirectory, request, ledgerSnapshot) {
+  const ledger = ledgerSnapshot ?? await loadLedger(path.resolve(ledgerDirectory));
   const candidateBytes = Buffer.from(request.candidate_source_base64, 'base64');
   const source = candidateBytes.toString('utf8');
   const parsed = parseLedgerItemSource(source);
   const target = ledger.items.find((item) => item.data.id === request.item_id);
   if (parsed.error || parsed.data?.id !== request.item_id || !target) {
-    return publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', {
-      item_id: request.item_id,
-      reason: parsed.error?.code ?? (target ? 'item-id-mismatch' : 'item-not-found'),
-    }, 3);
+    return {
+      error: publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', {
+        item_id: request.item_id,
+        reason: parsed.error?.code ?? (target ? 'item-id-mismatch' : 'item-not-found'),
+      }, 3),
+    };
   }
   const candidate = {
     path: target.path,
@@ -815,9 +830,9 @@ async function validateCandidateLedger(ledgerDirectory, request) {
     items: ledger.items.map((item) => item.data.id === request.item_id ? candidate : item),
   });
   if (!validation.valid) {
-    return publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', validation.errors, 3);
+    return { error: publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', validation.errors, 3) };
   }
-  return null;
+  return { error: null, ledger };
 }
 
 function fenceRejectionReason(request, active, observedAt) {
