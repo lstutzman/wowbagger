@@ -639,8 +639,9 @@ ledger identifies the item path. The reasons are:
   revision, but Git `HEAD` does not. Commit the named path, then repeat
   verification.
 - `worktree-synchronization-required`: another cooperating worktree contains
-  the authorized revision. Verify in the writing worktree after commit, or
-  synchronize this worktree to that commit.
+  the authorized revision. Synchronize this worktree to the commit that wrote
+  the named path, then repeat verification. Verifying in the writing worktree
+  does not clear this finding.
 - `claimed-publication-pending`: a claimed publication remains unresolved.
   Inspect the publication tuple and complete its documented recovery.
 

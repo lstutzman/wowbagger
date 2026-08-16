@@ -639,7 +639,7 @@ test('claim-verify names the configured item path when another worktree needs sy
     observed_surface: 'working-tree',
     reason: 'worktree-synchronization-required',
     expected_path: `items/${itemId}.md`,
-    remediation: `Run claim-verify in the worktree that wrote items/${itemId}.md after committing it, or synchronize this worktree to that commit.`,
+    remediation: `Synchronize this worktree to the commit that wrote items/${itemId}.md (pull or merge), then run claim-verify.`,
   }]);
 });
 
