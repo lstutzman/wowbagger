@@ -469,6 +469,16 @@ revision, it appends one idempotent `publish-finalization` entry that records
 the Git commit. It writes a per-namespace reconciliation log outside the shared
 journal; that log is a derived audit artifact, not authority.
 
+The log projects only journal entries that record a decision. `clock` and
+`publish-finalization` entries are never projected. A command therefore writes
+the log only when it records a decision, and it writes it before returning, so
+the post-mutation commit set is the changed item file plus that log. A refused
+legacy mutation and a clean `claim-verify` record no decision and leave the log
+byte-identical; a caller MUST NOT need a commit after either. The one exception
+is a `publish-claimed` refusal that reaches a durable `publish-final` terminal:
+that terminal binds the operation identity permanently, so the log changes
+although no item did.
+
 A clean verification returns exit 0 and `state: "committed"`. Findings named
 `pending-intent-resolved` are clean recovery. Any
 `legacy-mutation-outcome-unknown`, `publication-outcome-unknown`,

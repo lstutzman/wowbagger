@@ -243,9 +243,10 @@ test('claim decisions materialize a per-namespace tracked reconciliation log', a
   assert.equal(acquired.exit, 0);
   const log = await readFile(path.join(ledger, '.wowbagger', `reconcile-${namespace}.md`), 'utf8');
   assert.match(log, new RegExp(`^# Wowbagger reconciliation log \`${namespace}\`\\n`, 'u'));
-  assert.match(log, /"seq":1/u);
+  assert.match(log, /"seq":2/u);
   assert.match(log, /"type":"claim"/u);
   assert.match(log, /"command":"acquire"/u);
+  assert.doesNotMatch(log, /"type":"clock"/u);
 });
 
 test('claim commands refuse outside a git repository', async () => {
