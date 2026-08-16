@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+// The report always carries the dependency graph, so every render needs the
+// vendored bundle. A stub keeps these tests about the report, not the renderer.
+const graphBundle = {
+  manifest: { package: '3d-force-graph', version: '0.0.0-test' },
+  source: 'window.ForceGraph3D=function(){};',
+};
+
+function options(extra = {}) {
+  return { graphBundle: graphBundle, ...extra };
+}
+
 function sequencing(overrides = {}) {
   return {
     class: { value: 'standard', raw: null, known: true },
@@ -156,8 +167,8 @@ function decisionSurface(html) {
 
 test('renders deterministic self-contained HTML without executable ledger content', async () => {
   const report = await import('../src/report-html.js').catch(() => ({}));
-  const first = report.renderReportHtml?.(model());
-  const second = report.renderReportHtml?.(model());
+  const first = report.renderReportHtml?.(model(), options());
+  const second = report.renderReportHtml?.(model(), options());
 
   assert.equal(first, second);
   assert.match(first, /^<!doctype html>/);
@@ -176,7 +187,7 @@ test('renders deterministic self-contained HTML without executable ledger conten
 
 test('renders a checked control for hiding terminal history', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const html = renderReportHtml(model());
+  const html = renderReportHtml(model(), options());
 
   assert.match(
     html,
@@ -187,7 +198,7 @@ test('renders a checked control for hiding terminal history', async () => {
 
 test('opens with the ranked work-next list and its reasons', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const html = renderReportHtml(model());
+  const html = renderReportHtml(model(), options());
   const surface = decisionSurface(html);
 
   assert.ok(surface.indexOf('id="work-next"') < surface.indexOf('id="attention"'));
@@ -200,7 +211,7 @@ test('opens with the ranked work-next list and its reasons', async () => {
 
 test('renders the attention layer with blocker numbers and ages', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /#12/);
   assert.match(surface, /blocked by #5/);
@@ -211,7 +222,7 @@ test('renders the attention layer with blocker numbers and ages', async () => {
 
 test('renders the evidence layer with throughput, buckets, and forecast bands', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /0\.33/);
   assert.match(surface, /over 90d/);
@@ -223,7 +234,7 @@ test('renders the evidence layer with throughput, buckets, and forecast bands', 
 
 test('draws the weekly flow as an inline SVG chart carrying its own numbers', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<svg[^>]*data-testid="chart-weekly-flow"/);
   assert.match(surface, /<title>Week of 2026-08-10: 0 arrivals, 3 completions<\/title>/);
@@ -231,7 +242,7 @@ test('draws the weekly flow as an inline SVG chart carrying its own numbers', as
 
 test('draws all six evidence charts, each under its own stable test id', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   for (const id of [
     'chart-aging-heatmap',
@@ -247,7 +258,7 @@ test('draws all six evidence charts, each under its own stable test id', async (
 
 test('draws the aging heatmap as age crossed with status', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<title>backlog, 7-30d: 1 open item<\/title>/);
   assert.match(surface, /<title>in-progress, 30-90d: 0 open items<\/title>/);
@@ -256,7 +267,7 @@ test('draws the aging heatmap as age crossed with status', async () => {
 
 test('draws the cycle-time scatter and the cumulative flow from the same model', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<title>#9 completed 2026-08-12 after 20 days<\/title>/);
   assert.match(surface, /<title>Terminal: 1 item on 2026-08-14<\/title>/);
@@ -265,7 +276,7 @@ test('draws the cycle-time scatter and the cumulative flow from the same model',
 
 test('draws the forecast fan and states all three percentile dates', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<title>50% of trials finish 4 items by 2026-10-09, 8 weeks from 2026-08-14<\/title>/);
   assert.match(surface, /<title>95% of trials finish 4 items by 2026-11-13, 13 weeks from 2026-08-14<\/title>/);
@@ -286,7 +297,7 @@ test('draws no chart for a series with no history and keeps the numeric statemen
     },
     forecast: null,
   };
-  const surface = decisionSurface(renderReportHtml(empty));
+  const surface = decisionSurface(renderReportHtml(empty, options()));
 
   assert.doesNotMatch(surface, /data-testid="chart-/);
   assert.match(surface, /No completions in the window, so no forecast\./);
@@ -307,7 +318,7 @@ test('draws the forecast band without dividing by zero when nothing remains', as
     distribution: [{ weeks: 0, share: 1 }],
     trials: 5000,
   };
-  const surface = decisionSurface(renderReportHtml(settled));
+  const surface = decisionSurface(renderReportHtml(settled, options()));
 
   assert.doesNotMatch(surface, /data-testid="chart-forecast"/);
   assert.match(surface, /<strong>0<\/strong> open items remaining\./);
@@ -315,10 +326,10 @@ test('draws the forecast band without dividing by zero when nothing remains', as
 
 test('fetches nothing at view time: every reference is inline or a data URL', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const html = renderReportHtml(model(), { logoDataUrl: 'data:image/png;base64,AAAA' });
+  const html = renderReportHtml(model(), options({ logoDataUrl: 'data:image/png;base64,AAAA' }));
 
   assert.match(html, /<img class="logo" src="data:image\/png;base64,AAAA"/);
-  assert.match(html, /content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"/);
+  assert.match(html, /content="default-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"/);
   assert.doesNotMatch(html, /<link\b|@import|xlink:href|<use\b|<image\b|<iframe\b|<object\b|<embed\b/);
   assert.doesNotMatch(html, /\ssrc="(?!data:)/);
   assert.doesNotMatch(html, /url\(\s*['"]?(?:https?:)?\/\//);
@@ -326,21 +337,21 @@ test('fetches nothing at view time: every reference is inline or a data URL', as
 
 test('reports unrecognised class values instead of dropping them', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /urgent &amp; loud/);
 });
 
 test('refers to items by number above the drill-down', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.doesNotMatch(surface, /wb_hostile|wb_blocked|wb_dependency|wb_old|wb_stuck/);
 });
 
 test('names related items by number inside the drill-down detail', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const html = renderReportHtml(model());
+  const html = renderReportHtml(model(), options());
   const detail = html.slice(html.indexOf('id="drilldown"'));
 
   assert.match(detail, /<dt>Parent<\/dt><dd>#8<\/dd>/);
@@ -351,7 +362,7 @@ test('names related items by number inside the drill-down detail', async () => {
 
 test('says how much of a truncated attention list is not shown', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model()));
+  const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /Showing 1 of 3\./);
 });
