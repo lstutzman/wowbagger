@@ -329,6 +329,9 @@ test('reference oracle independently validates definitive patch preconditions', 
 
   for (const set of [
     { priority: 0 }, { priority: null },
+    { depends_on: [] }, { related: [] }, { related: null },
+    { depends_on: ['wb_01KDWPVNG0000000000000000A'] },
+    { depends_on: [], related: ['wb_01KDWPVNG0000000000000000A'], priority: 2 },
   ]) {
     const valid = Buffer.from(`${JSON.stringify({ ...request, set })}\n`);
     assert.equal(outcome(valid), null, JSON.stringify(set));
@@ -346,6 +349,11 @@ test('reference oracle independently validates definitive patch preconditions', 
     { ...request, set: { priority: -1 } },
     { ...request, set: { priority: 1.5 } },
     { ...request, set: { number: Number.MAX_SAFE_INTEGER + 1 } },
+    { ...request, set: { depends_on: 'wb_01KDWPVNG0000000000000000A' } },
+    { ...request, set: { depends_on: ['not-an-item-id'] } },
+    { ...request, set: { related: [null] } },
+    { ...request, set: { related: [['wb_01KDWPVNG0000000000000000A']] } },
+    { ...request, set: { parent: 'wb_01KDWPVNG0000000000000000A' } },
   ]) {
     const malformed = Buffer.from(`${JSON.stringify(malformedRequest)}\n`);
     assert.equal(outcome(malformed).error.code, 'mutation-outcome-unknown');

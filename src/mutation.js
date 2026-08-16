@@ -732,13 +732,16 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
   return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
 }
 
-// The exact patchable field set (mutation contract section 8). `number` is the
-// immutable item identity, assigned once at create, so it is not patchable;
-// everything else stays a reviewable hand-edit or a transition concern.
-const PATCHABLE_FIELDS = ['priority'];
-// Where a newly added field lands in the frontmatter; the anchor is a required
-// member, so it always exists.
-const PATCH_FIELD_ANCHORS = { priority: 'kind' };
+// The exact patchable field set (mutation contract section 9), in the order a
+// patch applies them. `number` is the immutable item identity, assigned once at
+// create, so it is not patchable; everything else stays a reviewable hand-edit
+// or a transition concern.
+const PATCHABLE_FIELDS = ['priority', 'depends_on', 'related'];
+// Patchable fields whose value is a whole relation list rather than a scalar.
+const PATCH_RELATION_FIELDS = new Set(['depends_on', 'related']);
+// Where a newly added field lands in the frontmatter; the anchor is a member
+// every valid item carries, so it always exists.
+const PATCH_FIELD_ANCHORS = { priority: 'kind', depends_on: 'provenance', related: 'depends_on' };
 
 export function validatePatchRequest(request, parseIssues = []) {
   const issues = [...parseIssues];
@@ -774,6 +777,16 @@ export function validatePatchRequest(request, parseIssues = []) {
     }
     if (hasOwn(request.set, 'priority') && request.set.priority !== null && !isPatchableInteger(request.set.priority, 0)) {
       issues.push(issue('/set/priority', 'invalid-value', 'Set member priority must be a non-negative integer or null.'));
+    }
+    for (const field of PATCH_RELATION_FIELDS) {
+      if (!hasOwn(request.set, field) || request.set[field] === null) {
+        continue;
+      }
+      if (!Array.isArray(request.set[field])) {
+        issues.push(issue(`/set/${field}`, 'invalid-type', `Set member ${field} must be an array or null.`));
+        continue;
+      }
+      validateRelationEntries(request.set[field], field, issues, ['set'], 'Set member');
     }
   }
   return sortIssues(issues);
@@ -857,9 +870,11 @@ function serializedMutationBytes(lockedTarget, source) {
 function serializePatch(source, successor, request) {
   return rewriteFrontmatter(source, (document) => {
     setRootScalar(document, 'updated', successor.updated);
-    for (const field of Object.keys(request.set)) {
+    for (const field of PATCHABLE_FIELDS.filter((name) => hasOwn(request.set, name))) {
       if (!Object.hasOwn(successor, field)) {
         deleteRootFieldPreservingAliases(document, field);
+      } else if (PATCH_RELATION_FIELDS.has(field)) {
+        setRootList(document, field, successor[field]);
       } else if (document.has(field)) {
         setRootScalar(document, field, successor[field]);
       } else {
@@ -867,6 +882,27 @@ function serializePatch(source, successor, request) {
       }
     }
   });
+}
+
+// A relation list is replaced wholesale. An existing sequence node is edited in
+// place, so an anchor on it — and every alias bound to that anchor — survives
+// the patch, and the item keeps the sequence style it was written in. A list
+// this patch adds is written in the flow style create uses.
+function setRootList(document, key, values) {
+  const node = document.get(key, true);
+  if (isSeq(node)) {
+    node.items = values.map((value) => document.createNode(value));
+    return;
+  }
+  if (document.has(key)) {
+    document.set(key, document.createNode(values));
+  } else {
+    insertRootAfter(document, PATCH_FIELD_ANCHORS[key], key, values);
+  }
+  const written = document.get(key, true);
+  if (isSeq(written)) {
+    written.flow = true;
+  }
 }
 
 function rewriteFrontmatter(source, edit) {
@@ -1506,14 +1542,14 @@ function issue(pathValue, code, message) {
   return { path: pathValue, code, message };
 }
 
-function validateRelationEntries(references, field, issues) {
+function validateRelationEntries(references, field, issues, location = ['item'], noun = 'Item member') {
   for (let index = 0; index < references.length; index += 1) {
     const reference = references[index];
     if (typeof reference !== 'string' || !ULID_PATTERN.test(reference)) {
       issues.push(issue(
-        `/item/${field}/${index}`,
+        pointer([...location, field, String(index)]),
         'invalid-value',
-        `Item member ${field} entries must be canonical Wowbagger item IDs.`,
+        `${noun} ${field} entries must be canonical Wowbagger item IDs.`,
       ));
     }
   }

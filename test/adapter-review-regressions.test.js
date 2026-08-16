@@ -1519,6 +1519,16 @@ test('reference oracle correlates a patch success with the requested fields', ()
   assert.equal(outcome({ ...request, date: '2030-01-16' }).error.code, 'mutation-outcome-unknown');
   assert.equal(outcome({ ...request, id: 'wb_01Q45X474N28T5CY4GNF6YY4HN' }).error.code,
     'mutation-outcome-unknown');
+  assert.equal(outcome({ ...request, set: { priority: 1, depends_on: [] } }), null);
+  assert.equal(outcome({ ...request, set: { priority: 1, related: null } }), null);
+  assert.equal(
+    outcome({ ...request, set: { priority: 1, related: [CREATE_ID] } }).error.code,
+    'mutation-outcome-unknown',
+  );
+  assert.equal(
+    outcome({ ...request, set: { priority: 1, depends_on: [CREATE_ID] } }).error.code,
+    'mutation-outcome-unknown',
+  );
 });
 
 // The consumer-supplied schema-1 fields (number, priority) belong to the core

@@ -2050,11 +2050,16 @@ function validPatchRequest(request) {
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactKeys(request.set, [], ['priority'])
+    || !hasExactKeys(request.set, [], ['priority', 'depends_on', 'related'])
     || Object.keys(request.set).length === 0) return false;
-  for (const value of Object.values(request.set)) {
+  for (const [field, value] of Object.entries(request.set)) {
     if (value === null) continue;
-    if (parsedIntegerValue(value, 0) === undefined) return false;
+    if (field === 'priority') {
+      if (parsedIntegerValue(value, 0) === undefined) return false;
+      continue;
+    }
+    if (!Array.isArray(value)
+      || !value.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry))) return false;
   }
   return true;
 }
@@ -2076,11 +2081,18 @@ function validPatchResultCorrelation(item, request) {
     || item.revision === request.expected_revision
     || item.core.updated !== request.date) return false;
   for (const [field, requested] of Object.entries(request.set)) {
-    if (requested === null) {
-      if (Object.hasOwn(item.core, field)) return false;
-    } else if (item.core[field] !== parsedIntegerValue(requested, 0)) {
-      return false;
+    if (field === 'priority') {
+      if (requested === null) {
+        if (Object.hasOwn(item.core, field)) return false;
+      } else if (item.core[field] !== parsedIntegerValue(requested, 0)) {
+        return false;
+      }
+      continue;
     }
+    // A relation list is replaced wholesale. Removing the field leaves the
+    // lossless core view reporting an empty list, so null and [] correlate
+    // with the same observed value.
+    if (!sameJson(item.core[field] ?? [], requested ?? [])) return false;
   }
   return true;
 }

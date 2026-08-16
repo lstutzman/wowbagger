@@ -103,6 +103,7 @@ named source and hash to the declared revision.
 | Transition concurrency | success, stale revision, held lock, exhausted lock-closure retries, date rollback |
 | Transition lifecycle | task terminalization, archive restore, epic completion |
 | Multi-item refusal | dependent cleanup, dependent disposition, child disposition, terminal referrer, combined blockers |
+| Patch relations | re-scoped dependent, dangling depends_on reference |
 | Mutation states | unchanged, committed, and unknown |
 
 Claims, adapters, PropertyCompass data, Git transport, and multi-item

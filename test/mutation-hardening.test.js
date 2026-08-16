@@ -461,6 +461,67 @@ test('patch preserves extension values when removing an anchored priority', asyn
   });
 });
 
+test('patch keeps an anchored relation list resolvable when it replaces the list', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09C';
+  const other = 'wb_01Q4G4Q3G004HMASW9NF6YY094';
+  const source = [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    'title: "Preserve an anchored relation list"',
+    'kind: task',
+    'status: backlog',
+    'created: 2030-01-14',
+    'updated: 2030-01-14',
+    'provenance:',
+    '  source: "test/mutation-hardening"',
+    '  recorded_at: "2030-01-14T12:00:00Z"',
+    'depends_on: []',
+    'related: &item_related []',
+    'related_mirror: *item_related',
+    '---',
+    '',
+  ].join('\n');
+  const neighbour = [
+    '---',
+    'schema_version: 1',
+    `id: ${other}`,
+    'title: "Relation target"',
+    'kind: task',
+    'status: backlog',
+    'created: 2030-01-14',
+    'updated: 2030-01-14',
+    'provenance:',
+    '  source: "test/mutation-hardening"',
+    '  recorded_at: "2030-01-14T12:00:00Z"',
+    'depends_on: []',
+    'related: []',
+    '---',
+    '',
+  ].join('\n');
+
+  await withLedger({ [`${id}.md`]: source, [`${other}.md`]: neighbour }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+    const requestPath = path.join(path.dirname(ledger), 'patch-anchored-relations.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: JSON.parse(inspected.stdout).result.item.revision,
+      date: '2030-01-16',
+      set: { related: [other] },
+    }));
+
+    const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
+    const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
+    const data = document.toJS();
+    assert.deepEqual(data.related, [other]);
+    assert.deepEqual(data.related_mirror, [other]);
+    assert.match(rewritten, /related: &item_related/);
+  });
+});
+
 test('patch preserves aliases bound to a reused anchor name', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09B';
   const source = [

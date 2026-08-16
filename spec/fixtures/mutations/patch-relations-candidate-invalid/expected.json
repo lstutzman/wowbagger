@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 2,
+  "state": "unchanged",
+  "error": {
+    "code": "candidate-invalid",
+    "message": "The proposed item would make the ledger invalid.",
+    "details": {
+      "id": "wb_01Q525G4G020B6CSK6CSK6CSK5",
+      "validation_errors": [
+        {
+          "path": "ledger/wb_01Q525G4G020B6CSK6CSK6CSK5.md",
+          "field": "depends_on",
+          "code": "unresolved-dependency",
+          "message": "Dependency wb_01Q52TVKC020C7DTG7DTG7DTG6 does not resolve to an item in the configured ledger."
+        }
+      ]
+    }
+  }
+}
