@@ -22,6 +22,15 @@ Generic consumers migrate without a wire change: they first identify the
 work-claim envelope by `namespace: "work-claim"`, then require the advertised
 `api_version`. Existing version 1 consumers can keep exact-member validation.
 
+This contract owns three `namespace` values, and all three carry
+`contract_version: 1`: `work-claim` for claim lifecycle operations,
+`ledger-publication` for claimed publication and publication reads, and
+`ledger-mutation` for the legacy write refusals in section 7. A response in any
+of the three is a work-claim response, whichever command the caller invoked.
+The [mutation contract](mutation-contract.md) section 2 states the single
+dispatch rule across both contracts, and
+`spec/fixtures/envelope-domains/manifest.json` pins it.
+
 ## 1. Safety boundary
 
 A claim is a durable lease for one work item in one ledger. It is not a Git
@@ -656,6 +665,12 @@ outcome before retrying; an identical request then returns the stored envelope
 without a second ledger write.
 
 ## 7. Legacy and alternate writes
+
+Every refusal in this section answers in the `ledger-mutation` namespace with
+`contract_version: 1` and `command: "<core command>-v1"`, even though the caller
+invoked the core `create`, `transition`, or `patch` command. This is a pinned
+version 1 consumer surface; it is not the core mutation envelope and MUST NOT be
+re-wrapped in one.
 
 For a fenced or merge-coordinated capability, legacy transition MUST check the
 active claim under the same namespace lock and return exit 4

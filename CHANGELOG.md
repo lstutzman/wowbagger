@@ -9,6 +9,21 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- One envelope rule now covers every `--json` response. The mutation contract
+  states the response domains (core, work-claim, ledger-publication,
+  ledger-mutation, and bare result), the dispatch steps a generic consumer
+  follows, which domain each command's success and each refusal class answers
+  in, and the exact root members of each shape. Both sanctioned exceptions are
+  stated with their reasons: `validate` and `ready` stay bare results because
+  scripts and fixtures depend on those bytes, and a claim-fenced refusal to
+  `create`, `transition`, or `patch` answers in the `ledger-mutation` domain
+  with `command: "<command>-v1"` and `contract_version: 1` because it is the
+  work-claim contract refusing, not the core contract. The work-claim contract
+  now names all three of its `namespace` values.
+  `spec/fixtures/envelope-domains/manifest.json` pins all 37 response classes,
+  and `test/envelope-dispatch.test.js` walks every one of them through the
+  documented dispatch rule and rejects drift in either direction. No emitted
+  byte changed and no contract version moved.
 - The commit-per-mutation invariant is documented. On a provisioned ledger,
   every mutation must be committed to Git before the next mutating command,
   and `claim-verify` is the reconciliation procedure for the exit 6
