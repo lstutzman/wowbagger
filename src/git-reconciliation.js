@@ -1,10 +1,15 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024;
+// Each `git cat-file --batch` record adds an object id, a type, a decimal
+// size, and two newlines ahead of the contents. 64 bytes covers that framing
+// with room to spare, so the reader can bound its own output against the
+// sizes the tree listing already reported.
+const BATCH_RECORD_OVERHEAD_BYTES = 64;
 const GIT_ENVIRONMENT = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
 );
@@ -23,20 +28,26 @@ export async function readGitHeadLedger(ledgerDirectory) {
     throw error;
   }
   const gitLedger = toGitPath(relativeLedger);
-  const treeArguments = ['ls-tree', '-r', '-z', '--name-only', 'HEAD'];
+  const treeArguments = ['ls-tree', '-r', '-l', '-z', 'HEAD'];
   if (gitLedger !== '') treeArguments.push('--', gitLedger);
   const listing = await gitBuffer(root, treeArguments);
   const prefix = gitLedger === '' ? '' : `${gitLedger}/`;
-  const files = listing.toString('utf8').split('\0')
-    .filter((name) => (
-      name.startsWith(prefix)
-        && !name.slice(prefix.length).startsWith('.wowbagger/')
-        && name.endsWith('.md')
-    ));
+  const blobs = parseTreeListing(listing).filter((entry) => (
+    entry.type === 'blob'
+      && entry.name.startsWith(prefix)
+      && !entry.name.slice(prefix.length).startsWith('.wowbagger/')
+      && entry.name.endsWith('.md')
+  ));
+  // One `git cat-file --batch` process reads a whole chunk of item blobs.
+  // Reading each item with its own `git show` cost one process spawn per
+  // ledger item, and on a ledger of a thousand items those serial spawns,
+  // not parsing or validation, were the whole mutation wall time.
   const items = new Map();
-  for (const file of files) {
-    const bytes = await gitBuffer(root, ['show', `HEAD:${file}`]);
-    items.set(file.slice(prefix.length), bytes);
+  for (const chunk of chunkBySize(blobs, MAX_GIT_OUTPUT_BYTES)) {
+    const contents = await readBlobBatch(root, chunk);
+    for (let index = 0; index < chunk.length; index += 1) {
+      items.set(chunk[index].name.slice(prefix.length), contents[index]);
+    }
   }
   return { commit, items, root };
 }
@@ -59,6 +70,120 @@ async function gitBuffer(cwd, argumentsList) {
     env: GIT_ENVIRONMENT,
   });
   return stdout;
+}
+
+// `git ls-tree -r -l -z` emits `<mode> <type> <object> <size>TAB<name>` records
+// separated by NUL. `-z` disables path quoting, so the name is whatever follows
+// the first tab, even when it contains a tab of its own.
+function parseTreeListing(listing) {
+  const entries = [];
+  for (const record of listing.toString('utf8').split('\0')) {
+    const separator = record.indexOf('\t');
+    if (separator === -1) continue;
+    const fields = record.slice(0, separator).split(' ').filter((field) => field !== '');
+    if (fields.length < 4) continue;
+    entries.push({
+      type: fields[1],
+      oid: fields[2],
+      size: Number(fields[3]),
+      name: record.slice(separator + 1),
+    });
+  }
+  return entries;
+}
+
+// Chunks stay under the per-process output bound the single-file reads used.
+// A blob larger than the bound on its own still forms one chunk, so no item
+// becomes unreadable because of its size.
+function chunkBySize(blobs, limit) {
+  const chunks = [];
+  let current = [];
+  let total = 0;
+  for (const blob of blobs) {
+    if (current.length > 0 && total + blob.size > limit) {
+      chunks.push(current);
+      current = [];
+      total = 0;
+    }
+    current.push(blob);
+    total += blob.size;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
+function readBlobBatch(cwd, blobs) {
+  const limit = blobs.reduce(
+    (total, blob) => total + blob.size + BATCH_RECORD_OVERHEAD_BYTES,
+    0,
+  );
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['cat-file', '--batch'], { cwd, env: GIT_ENVIRONMENT });
+    const chunks = [];
+    let received = 0;
+    let stderr = '';
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(error);
+    };
+    child.stdout.on('data', (chunk) => {
+      received += chunk.length;
+      if (received > limit) {
+        fail(new Error('git cat-file returned more output than the tree listing described.'));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+    });
+    child.on('error', fail);
+    child.on('close', (code) => {
+      if (settled) return;
+      if (code !== 0) {
+        fail(new Error(`git cat-file exited with ${code}: ${stderr.trim()}`));
+        return;
+      }
+      settled = true;
+      try {
+        resolve(decodeBlobBatch(Buffer.concat(chunks), blobs));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    child.stdin.on('error', fail);
+    child.stdin.end(`${blobs.map((blob) => blob.oid).join('\n')}\n`);
+  });
+}
+
+// Each record is `<object> <type> <size>\n`, then exactly `<size>` content
+// bytes, then one newline. The records answer the requested object ids in
+// order, so a mismatch means the reader and git disagree and must not guess.
+function decodeBlobBatch(output, blobs) {
+  const contents = [];
+  let offset = 0;
+  for (const blob of blobs) {
+    const newline = output.indexOf(0x0a, offset);
+    if (newline === -1) {
+      throw new Error(`git cat-file ended before object ${blob.oid} was read.`);
+    }
+    const header = output.toString('utf8', offset, newline).split(' ');
+    if (header[0] !== blob.oid || header[1] !== 'blob') {
+      throw new Error(`git cat-file did not return blob ${blob.oid}.`);
+    }
+    const size = Number(header[2]);
+    const start = newline + 1;
+    const end = start + size;
+    if (!Number.isSafeInteger(size) || size < 0 || end > output.length) {
+      throw new Error(`git cat-file returned a truncated record for ${blob.oid}.`);
+    }
+    contents.push(output.subarray(start, end));
+    offset = end + 1;
+  }
+  return contents;
 }
 
 function toGitPath(value) {

@@ -833,3 +833,53 @@ test('a repository-root ledger provisions and verifies inside its own metadata d
   );
   assert.match(await readFile(reconcilePath, 'utf8'), /# Wowbagger reconciliation log/);
 });
+test('Git HEAD reconciliation excludes ledger metadata and non-Markdown files', async () => {
+  const fixture = await repository();
+  await writeFile(path.join(fixture.ledger, '.wowbagger', 'layout.json'), '{"layout_version":1,"items_directory":"items"}\n');
+  await writeFile(path.join(fixture.ledger, 'notes.txt'), 'not a ledger item\n');
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-qm', 'Add metadata and a non-item file');
+
+  const head = await readGitHeadLedger(fixture.ledger);
+
+  assert.deepEqual([...head.items.keys()], ['item.md']);
+});
+
+test('Git HEAD reconciliation reports no commit before the first commit', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-git-unborn-'));
+  git(root, 'init', '-q');
+  const ledger = path.join(root, 'ledger');
+  await mkdir(ledger);
+
+  const head = await readGitHeadLedger(ledger);
+
+  assert.equal(head.commit, null);
+  assert.equal(head.items.size, 0);
+});
+
+test('Git HEAD reconciliation returns exact committed bytes for every item', async () => {
+  const fixture = await repository();
+  const sources = new Map();
+  for (let index = 0; index < 12; index += 1) {
+    const identifier = `wb_01KZBMBEZKPE7D15HKW9Q3G${String(index).padStart(2, '0')}`;
+    // The last item ends without a newline, so an off-by-one in the reader's
+    // record framing shows up as changed bytes rather than passing unnoticed.
+    const trailer = index === 11 ? 'No trailing newline' : `Body ${index}\n`;
+    const source = Buffer.from(fixture.before.toString('utf8')
+      .replace(ITEM_ID, identifier)
+      .replace('number: 1', `number: ${index + 2}`)
+      .replace('\nBefore\n', `\n${trailer}`));
+    const file = `batch-${String(index).padStart(2, '0')}.md`;
+    await writeFile(path.join(fixture.ledger, file), source);
+    sources.set(file, source);
+  }
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-qm', 'Add many items');
+
+  const head = await readGitHeadLedger(fixture.ledger);
+
+  assert.deepEqual([...head.items.keys()].sort(), [...sources.keys(), 'item.md'].sort());
+  for (const [file, source] of sources) {
+    assert.equal(sha256(head.items.get(file)), sha256(source), file);
+  }
+});
