@@ -141,7 +141,14 @@ async function spawnAdapterEntrypoint(entrypoint, operation, request, env, runti
       transportFailure = new Error(`${entrypoint}: adapter bootstrap timed out`);
       terminate();
     }, ADAPTER_TIMEOUT_MS);
-    child.once('spawn', () => { child.stdin.end(Buffer.from(JSON.stringify(request))); });
+    child.once('spawn', () => {
+      // The entrypoint can be gone before this write lands (it refuses an
+      // unknown operation without reading stdin). An unhandled EPIPE here
+      // would kill this runner instead of the child's real exit being
+      // reported by the close handler below.
+      child.stdin.on('error', () => {});
+      child.stdin.end(Buffer.from(JSON.stringify(request)));
+    });
     child.once('error', reject);
     child.stdout.on('data', (chunk) => {
       stdoutBytes += chunk.length;
@@ -163,7 +170,14 @@ async function spawnAdapterEntrypoint(entrypoint, operation, request, env, runti
       clearTimeout(timer);
       if (transportFailure) reject(transportFailure);
       else if (code !== 0 || signal !== null) {
-        reject(new Error(`${entrypoint}: adapter transport failed (${code ?? signal})`));
+        // §3.3 makes every entrypoint exit zero, so this is a crash rather
+        // than a refusal. The stderr already collected above is the only
+        // place it explains itself — reporting the bare code hides it
+        // (item 106).
+        reject(new Error(
+          `${entrypoint}: adapter transport failed (${code ?? signal})\nstderr:\n${
+            Buffer.concat(stderr).toString('utf8')}`,
+        ));
       } else resolve(parseBootstrapResponse(Buffer.concat(stdout), entrypoint));
     });
   });
