@@ -143,6 +143,11 @@ wowbagger transition --ledger <dir> --input request.json --json
 - `transition` changes **one** item. If the change would require touching a
   dependent or a child, it refuses. That refusal is correct — make it a
   reviewable multi-file Git change instead of forcing it.
+- **The body is patchable.** `patch` takes `set.body` — a whole-body string
+  replacement that keeps every frontmatter byte. A mirror whose items track an
+  external card updates bodies through `patch`, never by hand-editing the
+  Markdown: the hand-edit skips the lock, the revision check, and validation.
+  Removing a body is `""`; `null` is refused.
 - See `docs/mutation-contract.md` in the wowbagger repository for the request
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.

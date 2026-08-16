@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 3,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The patch request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "/set/body",
+          "code": "invalid-value",
+          "message": "Set member body must be a string; use the empty string to remove the body."
+        }
+      ]
+    }
+  }
+}

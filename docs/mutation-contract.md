@@ -53,6 +53,14 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
   that supplies one is refused, `number` is no longer patchable, and `inspect`
   accepts `--number <n>` as an alternative selector to `--id`. Schema version 1
   ledgers are unaffected; and
+- **the patchable body.** `body` joins the patchable set as a JSON string that
+  replaces the whole body under create's body rules; `null` is refused at
+  `/set/body` rather than removing anything, and the frontmatter bytes survive
+  a body swap untouched (section 9). The version stays 3: this widens the patch
+  request schema exactly as the relations delta above did, and no response
+  envelope member is added, removed, or renamed. A version 3 consumer that
+  never sends `body` cannot observe the difference, so the version 2 to 3
+  compatibility argument is unaffected and the version does not move again;
 - **the configured item directory.** `create` derives the published path from
   the committed `<ledger>/.wowbagger/layout.json`, and validation rejects a
   parsed item outside it (section 5). A ledger without that file keeps the
@@ -1062,10 +1070,14 @@ operation without universal crash durability or hostile-writer protection.
 
 ## 9. Patch
 
-Patch changes the mutable non-lifecycle fields of one existing item — its
-priority and its relation lists — and nothing else. It exists so a consumer can
-re-scope an item in band, without hand-editing frontmatter: the dependent of an
-item you want to kill is re-scoped with patch, then the kill proceeds.
+Patch changes the mutable non-lifecycle content of one existing item — its
+priority, its relation lists, and its body — and nothing else. It exists so a
+consumer can re-scope an item in band, without hand-editing frontmatter: the
+dependent of an item you want to kill is re-scoped with patch, then the kill
+proceeds. It is also the sanctioned way to rewrite a body: a consumer whose
+items mirror an external card edits the body through patch, and gets the lock,
+the compare-and-swap, candidate validation, and atomic publication that a
+hand-edit skips.
 It runs under the same per-ID lock, locked re-read,
 exact-byte revision compare-and-swap, candidate complete-ledger validation,
 and atomic same-path publication protocol as transition (section 6), and it
@@ -1081,7 +1093,12 @@ Patch accepts exactly:
   "id": "wb_...",
   "expected_revision": "sha256:...",
   "date": "2030-01-11",
-  "set": { "priority": 3, "depends_on": [], "related": ["wb_..."] }
+  "set": {
+    "priority": 3,
+    "depends_on": [],
+    "related": ["wb_..."],
+    "body": "\nReplacement body.\n"
+  }
 }
 ~~~
 
@@ -1092,11 +1109,12 @@ Patch accepts exactly:
 | date | Yes | ISO calendar date not earlier than existing created or updated. |
 | set | Yes | Mapping naming at least one patchable field. |
 
-The patchable field set is exactly `priority`, `depends_on`, and `related`. A
-set member outside it is an invalid-request issue at its /set pointer — the
-boundary is stated here, not discovered from the implementation. `number` is
-the immutable item identity, assigned once at create, so it is not patchable
-and a request naming it is refused.
+The patchable field set is exactly `priority`, `depends_on`, `related`, and
+`body`. A set member outside it is an invalid-request issue at its /set
+pointer — the boundary is stated here, not discovered from the implementation.
+`number` is the immutable item identity, assigned once at create, so it is not
+patchable and a request naming it is refused. Extension members are not
+patchable either: they stay a reviewable hand-edit.
 
 `priority` takes a non-negative integer. `depends_on` and `related` each take
 a whole relation list, which replaces the current list; the value must be an
@@ -1104,11 +1122,23 @@ array whose entries are all canonical item IDs. A non-array value is an
 invalid-type issue at `/set/<field>`; a malformed entry is an invalid-value
 issue at `/set/<field>/<index>`.
 
-null removes the field, for every patchable field alike. `related` is
-optional, so removing it succeeds and the item reads back with an empty
-related list. `depends_on` is a required item field, so removing it makes the
-candidate item invalid: the patch returns candidate-invalid, exit 2, and
+`body` takes a JSON string that replaces the whole body, under create's body
+rules: the empty string and an LF-leading string are distinct and both valid,
+and the bytes are written exactly as the UTF-8 encoding of the string. A
+non-string body is an invalid-type issue at `/set/body`.
+
+null removes the field, for every patchable **frontmatter** field alike.
+`related` is optional, so removing it succeeds and the item reads back with an
+empty related list. `depends_on` is a required item field, so removing it makes
+the candidate item invalid: the patch returns candidate-invalid, exit 2, and
 unchanged. Clear a dependency list with `[]`, not null.
+
+`body` is the deliberate exception to that convention, and the asymmetry is
+stated here so no consumer has to infer it. The body is a region of the file,
+not a frontmatter member: every item has one, and there is nothing to remove.
+"Remove the body" means the empty string. `{"body": null}` is therefore refused
+as an invalid-value issue at `/set/body`, exit 2, unchanged — it is not read as
+a removal and it is not read as the empty string.
 
 Request-shape validation stops at the rules above. Referential integrity,
 dependency cycles, the schema-2 done-dependency rule, self-reference, repeated
@@ -1120,7 +1150,8 @@ locked re-read, exact-byte revision compare-and-swap, candidate
 complete-ledger validation, and atomic same-path publication protocol as every
 other patch, and the same claim protocol: on a claim-protected ledger a
 relations patch of an item with an active claim is refused
-`active-claim-write-refused`, exit 4, unchanged — no exception for relations.
+`active-claim-write-refused`, exit 4, unchanged — no exception for relations,
+and none for a body.
 
 Patch sets updated to request.date. A date earlier than the existing created
 or updated date returns patch-precondition-failed, exit 2, and unchanged,
@@ -1131,7 +1162,7 @@ the operator's local calendar date here too.
 
 Patch appends no decision: the ledger's Git history is the audit trail for a
 consumer-field change. Identity, lifecycle, title, provenance, snooze,
-decisions, body, and extension members cannot change through patch.
+decisions, and extension members cannot change through patch.
 
 Patch never mutates another item. A candidate ledger that flags any other
 item — for example a duplicate-number collision with an existing handle —
@@ -1147,8 +1178,22 @@ directly after kind; a newly added depends_on directly after provenance, and a
 newly added related directly after depends_on. A relation list this patch adds
 is written as a YAML flow sequence, the style create writes; a relation list
 already on the item keeps its sequence node, so its style — and any anchor on
-it — survives the replacement. Body bytes and extension nodes are preserved
-exactly as in transition.
+it — survives the replacement. Extension nodes are preserved exactly as in
+transition, and a patch that names no body preserves the body bytes the same
+way.
+
+A body patch rewrites no frontmatter byte. The published frontmatter — from the
+opening delimiter through the closing delimiter and its newline — is identical
+to the item's own frontmatter bytes except the `updated` value, which every
+patch sets to request.date. Anchors, aliases, comments, quoting and flow or
+block styles, member order, and extension members all survive, because the body
+swap is a byte splice after the closing delimiter and never reaches them. This
+is a hard invariant, pinned byte for byte by the vectors, not a best effort.
+
+The body bytes are written exactly as the UTF-8 encoding of `set.body`, the
+same rule create serializes under: no newline is invented, trimmed, or removed,
+and no line ending is translated. An empty body leaves no byte after the
+closing delimiter's newline.
 
 ### Adapter advertisement
 
@@ -1269,7 +1314,8 @@ edges, the schema version 1 dependent-cleanup blocker and the other two
 multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
 unchanged/committed/unknown states; and patch field boundaries, CAS,
-serialization, and preconditions.
+serialization, preconditions, and the body swap with its untouched
+frontmatter.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.
