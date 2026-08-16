@@ -5,7 +5,7 @@ number: 96
 title: "Stop failed mutations leaving reconcile-log residue that blocks the next write"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
