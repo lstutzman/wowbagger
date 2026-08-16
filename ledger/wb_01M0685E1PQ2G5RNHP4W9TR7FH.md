@@ -4,6 +4,7 @@ id: wb_01M0685E1PQ2G5RNHP4W9TR7FH
 number: 109
 title: "Name an undelivered core input instead of timing out"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
