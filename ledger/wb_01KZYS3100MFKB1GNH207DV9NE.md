@@ -4,15 +4,20 @@ id: wb_01KZYS3100MFKB1GNH207DV9NE
 number: 78
 title: "Project malformed PropertyCompass source identities without collision"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 provenance:
   source: "propertycompass-migration-refreshed-inventory"
   recorded_at: "2026-08-14T13:24:17.000Z"
 depends_on: []
-related: [wb_01KZYS3100YCRMVR2M83T648TH, wb_01KZ77NSW8363H1V6QG1HZRG11]
+related: [ wb_01KZYS3100YCRMVR2M83T648TH, wb_01KZ77NSW8363H1V6QG1HZRG11 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog at triage review."
+    rationale: "Reviewed collision-checked filename-identity projection for the three malformed cards; loses nothing, invents nothing."
 ---
 
 # Problem
