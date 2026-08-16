@@ -5,9 +5,10 @@ number: 102
 title: "Refuse a missing configured items directory by name"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T14:14:54Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "Lee accepted on 2026-08-16. Paper-cut refusal naming the missing configured directory."
+  - action: complete
+    date: 2026-08-16
+    summary: "Create refuses a missing configured items directory by name."
+    rationale: "New core refusal items-directory-unavailable, exit 2, reasons absent/not-a-directory, remediation naming the resolved path; placed after complete-ledger validation and before any lock, so the ledger stays byte-identical. Symlink occupant stays ledger-invalid by design. Mirrored in the oracle AND the shipped adapter engine (which would otherwise have mapped it to mutation-outcome-unknown). 18 mutations red."
 ---
 
 Paper-cut found during item #94's verification: with `.wowbagger/layout.json` configuring `items_directory` and the configured directory absent, `create` fails as `operation-failed` / `operation: "prepare-temporary"` / `reason: "io-error"`, exit 6 — a generic envelope that names neither the missing directory nor the fix. The repo's own fixtures dodge it by seeding `items/.keep`. The docs from #94 state "the configured directory must already exist", but the refusal itself should say so.
