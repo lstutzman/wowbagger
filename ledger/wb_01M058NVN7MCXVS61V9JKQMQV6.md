@@ -5,9 +5,10 @@ number: 94
 title: "Document layout.json as the create items-directory mechanism"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "consumer-field-feedback"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept the corrected/new PropertyCompass2 field finding."
     rationale: "Field issue 7 corrected: creates land at ledger root because layout.json is undocumented, not unsupported. Replaces killed #93."
+  - action: complete
+    date: 2026-08-16
+    summary: "Documented layout.json as the create items-directory mechanism."
+    rationale: "Contract, README, consumer-configuration doc, and skill now teach the committed layout binding; rename-after-create ritual deleted; packaging tests pin the docs. Verified: published alpha.4 contains no layout code and ignores the file - the docs state that version boundary; the release itself is the consumer unblocker."
 ---
 Field issue 7 as CORRECTED on 2026-08-16 (report: .PropertyCompass2/worktrees/260815-212735/docs/wowbagger-feedback.md): all 22 of the consumer session creates published to the ledger ROOT per the contract default; the misplacement is silent (identity is frontmatter, validate passes either way) and surfaced only when a path lookup failed. They then relocated 22 files by hand with git mv, and asked for a per-ledger items_dir config or a create --dir flag.
 
