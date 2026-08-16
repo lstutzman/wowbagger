@@ -96,6 +96,25 @@ consolidation. The first tagged release inherits this file.
 
 ### Fixed
 
+- A claim-fence refusal no longer reaches the agent as
+  `mutation-outcome-unknown`. Both adapter engines classified every response
+  with the core envelope validator, so a fenced refusal — `namespace:
+  "ledger-mutation"`, `command: "<command>-v1"`, `contract_version: 1`, `state:
+  "unchanged"` — failed core validation and became "the mutation may have been
+  applied; inspect current state before retrying", on every fenced refusal on a
+  provisioned ledger, about a write that provably never ran. The adapter now
+  dispatches on the response domain first, exactly as the mutation contract's
+  section 2 rule requires, and validates a fenced refusal on the work-claim
+  contract's terms: `claimed-item-write-refused` on `create`,
+  `active-claim-write-refused` on `transition` and `patch`, and
+  `claim-store-unavailable` on any mutation, each with its pinned message, exit,
+  and permitted states, its read-back bound to the item the caller asked to
+  write, and its reason plus findings and remediation forwarded verbatim. A
+  `claim-store-unavailable` refusal that declares `state: "unknown"` stays an
+  unknown outcome, and so does any namespaced envelope the adapter cannot
+  classify. Adapter contract section 6.1 states the rule and the honest-outcome
+  guarantee; five conformance vectors pin it, the differential test replays each
+  through both engines, and no version moved in either domain.
 - A mutation on a large provisioned ledger no longer spends its wall time in
   process spawns. Git HEAD reconciliation read every committed item with its
   own `git show`, one subprocess per item, serially; it now reads them with

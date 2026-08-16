@@ -21,5 +21,6 @@ One line per term. This is a glossary, not documentation.
 - **schema migration** — the one-time maintenance tool that changes a complete ledger from schema version 1 to schema version 2.
 - **quiesced window** — a maintenance period in which all processes and people that can write the target ledger are stopped.
 - **Herdr** — the terminal workspace manager that keeps this repository's panes, agents, and sessions persistent and observable.
+- **claim-fence refusal** — a `ledger-mutation` response refusing a `create`/`transition`/`patch` before the core mutation ran; state-unchanged classes are deterministic and forwarded verbatim, never mutation-outcome-unknown.
 - **response domain** — which contract a CLI response answers in (core, work-claim, ledger-publication, ledger-mutation, or bare result); dispatch namespace-first, then the domain's own version field (mutation contract section 2).
 - **commit-per-mutation invariant** — on a provisioned ledger every mutation must be Git-committed before the next mutating command; `claim-verify` is the reconciliation verb.
