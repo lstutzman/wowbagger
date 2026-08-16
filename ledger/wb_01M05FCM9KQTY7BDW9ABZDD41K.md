@@ -4,6 +4,7 @@ id: wb_01M05FCM9KQTY7BDW9ABZDD41K
 number: 103
 title: "Bump the core contract version for the widened refusal envelope"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
