@@ -30,6 +30,18 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- **`patch` can replace an item body.** `set.body` takes a JSON string that
+  replaces the whole body under `create`'s body rules, so a consumer whose
+  items mirror an external card updates them through the managed path instead
+  of hand-editing the Markdown. A body patch rewrites no frontmatter byte —
+  anchors, aliases, comments, quoting, styles, member order, and extension
+  members all survive, and only `updated` changes, as it does for every patch.
+  A body may be set in the same `set` as `priority`, `depends_on`, or
+  `related`, in one compare-and-swap write. `null` is refused at `/set/body`:
+  the body is a region of the file, so removing it means `""`, not null. A
+  claimed item, a stale revision, and a non-string body refuse as before. This
+  widens the patch request schema inside core contract version 3 and does not
+  move the version.
 - One envelope rule now covers every `--json` response. The mutation contract
   states the response domains (core, work-claim, ledger-publication,
   ledger-mutation, and bare result), the dispatch steps a generic consumer
