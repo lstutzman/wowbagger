@@ -4,6 +4,7 @@ id: wb_01M05N0V016SAVW2RCS1652YXN
 number: 107
 title: "Collapse publish-claimed's redundant complete-ledger loads"
 kind: task
+priority: 20
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
