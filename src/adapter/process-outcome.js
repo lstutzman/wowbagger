@@ -14,6 +14,8 @@ import { hasExactMembers, isNonNegativeSafeInteger, sameJson } from './schema-he
 
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
+const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
+const CANONICAL_UINT64 = /^(0|[1-9][0-9]*)$/;
 const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
 const MESSAGES = Object.freeze({
   'mutation-outcome-unknown': 'The mutation may have been applied; inspect current state before retrying.',
@@ -60,6 +62,30 @@ const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
     'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
   ]),
 });
+// The claim fence answers in the ledger-mutation domain with the legacy
+// work-claim envelope marker, never the core contract version.
+const LEDGER_MUTATION_NAMESPACE = 'ledger-mutation';
+const LEDGER_MUTATION_CONTRACT_VERSION = 1;
+const FENCE_REFUSALS = new Map([
+  ['claimed-item-write-refused', {
+    message: 'Legacy create cannot write an item identity with claim history.',
+    exit_code: 4,
+    commands: new Set(['create']),
+    states: new Set(['unchanged']),
+  }],
+  ['active-claim-write-refused', {
+    message: 'Legacy transition cannot write an item with an active claim.',
+    exit_code: 4,
+    commands: new Set(['transition', 'patch']),
+    states: new Set(['unchanged']),
+  }],
+  ['claim-store-unavailable', {
+    message: 'The durable claim store is unavailable.',
+    exit_code: 6,
+    commands: new Set(['create', 'transition', 'patch']),
+    states: new Set(['unchanged', 'unknown']),
+  }],
+]);
 const INVALID_REQUEST_CODES = new Set([
   'invalid-json', 'duplicate-key', 'missing-member', 'unknown-member', 'invalid-type',
   'invalid-value', 'missing-argument', 'repeated-argument', 'unknown-argument',
@@ -722,6 +748,73 @@ function validPatchResultCorrelation(item, request) {
     });
 }
 
+// A claim-fence refusal is the work-claim contract answering for a mutating
+// command. It proves the write never ran, so it is a deterministic outcome the
+// adapter forwards verbatim rather than an unobservable one.
+function validLedgerMutationRefusalEnvelope(value, command, exitCode, responseContext) {
+  if (!isMutationCommand(command)
+    || !hasExactMembers(value, ['ok', 'namespace', 'command', 'contract_version', 'state', 'error'])
+    || value.ok !== false
+    || value.namespace !== LEDGER_MUTATION_NAMESPACE
+    || value.command !== `${command}-v1`
+    || value.contract_version !== LEDGER_MUTATION_CONTRACT_VERSION
+    || !hasExactMembers(value.error, ['code', 'message', 'details'])) return false;
+  const refusal = FENCE_REFUSALS.get(value.error.code);
+  if (refusal === undefined
+    || !refusal.commands.has(command)
+    || refusal.exit_code !== exitCode
+    || !refusal.states.has(value.state)
+    || value.error.message !== refusal.message
+    // The fence runs after the core has accepted the request, so a refusal can
+    // never answer a request the caller never made canonically.
+    || !hasCanonicalMutationRequest(responseContext, command)) return false;
+  return value.error.code === 'claim-store-unavailable'
+    ? validClaimStoreUnavailableDetails(value.error.details)
+    : validFenceReadBackDetails(value.error.code, value.error.details, command, responseContext);
+}
+
+function validFenceReadBackDetails(code, details, command, responseContext) {
+  const expectedItemId = responseItemId(responseContext, command);
+  if (!hasExactMembers(details, [
+    'ledger_namespace', 'item_id', 'observed_at', 'last_epoch', 'active',
+  ])
+    || !NAMESPACE_ID.test(details.ledger_namespace)
+    || !WOWBAGGER_ID.test(details.item_id)
+    || (expectedItemId !== undefined && details.item_id !== expectedItemId)
+    || !isCoreRfc3339Utc(details.observed_at)
+    || typeof details.last_epoch !== 'string'
+    || !CANONICAL_UINT64.test(details.last_epoch)
+    || !validFenceActiveClaim(details.active)) return false;
+  // Each refusal names the condition that produced it; an envelope whose
+  // read-back contradicts its own code is not a deterministic refusal.
+  return code === 'claimed-item-write-refused'
+    ? details.last_epoch !== '0'
+    : details.active !== null;
+}
+
+function validFenceActiveClaim(value) {
+  if (value === null) return true;
+  return hasExactMembers(value, ['owner_id', 'epoch', 'issued_at', 'expires_at'])
+    && nonEmptyControlFreeString(value.owner_id)
+    && typeof value.epoch === 'string' && CANONICAL_UINT64.test(value.epoch)
+    && isCoreRfc3339Utc(value.issued_at)
+    && isCoreRfc3339Utc(value.expires_at);
+}
+
+function validClaimStoreUnavailableDetails(details) {
+  if (!plainObject(details) || !nonEmptyControlFreeString(details.reason)) return false;
+  if (!Object.hasOwn(details, 'findings')) {
+    return details.reason !== 'publication-reconciliation-required';
+  }
+  return Array.isArray(details.findings) && details.findings.length > 0
+    && details.findings.every((finding) => plainObject(finding)
+      && nonEmptyControlFreeString(finding.code)
+      && WOWBAGGER_ID.test(finding.item_id))
+    // A reconciliation refusal is only actionable if it names at least one
+    // remediation the caller can run.
+    && details.findings.some((finding) => nonEmptyControlFreeString(finding.remediation));
+}
+
 function validCoreErrorAtExit(value, command, exitCode, responseContext) {
   if (!hasExactMembers(value, ['code', 'message', 'details'])
     || !CORE_ERROR_CODES_BY_COMMAND[command]?.has(value.code)
@@ -992,6 +1085,13 @@ function envelopeState(process, command = null, responseContext = null) {
 
 function validCoreCommandEnvelope(value, command, exitCode, responseContext) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  // Response-domain dispatch (mutation contract section 2): a root namespace
+  // member selects the domain before any command or version check. Only the
+  // ledger-mutation domain answers for a core command; every other namespace
+  // stays a protocol failure.
+  if (Object.hasOwn(value, 'namespace')) {
+    return validLedgerMutationRefusalEnvelope(value, command, exitCode, responseContext);
+  }
   if (command === 'validate') return validCoreValidateEnvelope(value, exitCode);
   if (command === 'ready') return validCoreReadyEnvelope(value, exitCode, responseContext);
   if (command === 'capabilities') return validCoreCapabilitiesEnvelope(value, exitCode);
