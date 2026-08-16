@@ -388,6 +388,51 @@ refuses rather than guessing. The shipped plugin skill also requires its exact
 core distribution version. Direct checkout use—`./bin/wowbagger.js` from a
 clone—remains supported and is what this repository's own ledger uses.
 
+## Commit each mutation before the next one
+
+On a **provisioned** ledger — one where `provision` has bound a namespace and
+`claim capabilities` reports `mode: "merge-coordinated"` — there is one
+operating rule:
+
+**Commit each mutation to Git before running the next mutating command.**
+
+The durable claim store validates every recorded mutation against Git `HEAD`,
+not against working-tree bytes. That is what makes a recorded mutation durable
+rather than a local edit one `git checkout` away from vanishing. An uncommitted
+mutation is an unreconciled mutation, so the next `create`, `transition`, or
+`patch` refuses instead of writing on top of it.
+
+The loop that works:
+
+```sh
+./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
+git add path/to/ledger && git commit -m "Record the mutation"
+./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
+./bin/wowbagger.js transition --ledger path/to/ledger --input next.json --json
+```
+
+Skip the commit and the next command returns exit 6:
+
+```json
+{"ok":false,"namespace":"ledger-mutation","command":"create-v1","contract_version":1,
+ "state":"unchanged","error":{"code":"claim-store-unavailable",
+ "message":"The durable claim store is unavailable.",
+ "details":{"reason":"publication-reconciliation-required","findings":[{
+   "code":"stale-write-detected","reason":"git-finalization-required",
+   "expected_path":"wb_....md",
+   "remediation":"Commit wb_....md in Git, then run claim-verify."}]}}}
+```
+
+`state: "unchanged"` is exact — nothing was written. **`claim-verify` is the
+reconciliation procedure.** Read `details.findings`, do what each
+`remediation` string says, run `claim-verify` until it returns exit 0, then
+repeat the refused command.
+
+Full rules, the other blocking finding codes, and why validating against
+working-tree bytes was rejected are in
+[the mutation contract](docs/mutation-contract.md) section 12 and
+[the work-claim contract](docs/work-claim-contract.md).
+
 ## Verify a checkout
 
 The development workflow is intentionally self-hosted: edit code and ledger

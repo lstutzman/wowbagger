@@ -1,0 +1,52 @@
+{
+  "case": "uncommitted-prior-mutation",
+  "fixture_version": 1,
+  "status": "normative-envelope",
+  "description": "On a provisioned ledger an uncommitted prior mutation makes the next create refuse exit 6 claim-store-unavailable with reason publication-reconciliation-required. Every finding names the exact path to commit and claim-verify.",
+  "coverage": [
+    "commit-per-mutation",
+    "create-refusal",
+    "git-finalization-required",
+    "publication-reconciliation-required",
+    "remediation"
+  ],
+  "scenario": {
+    "prior_item_id": "wb_01M01BFR000TXV22D7KZ6TQYH2",
+    "next_item_id": "wb_01M01BFR001TXV22D7KZ6TQYH3",
+    "steps": [
+      "provision the ledger and commit the namespace",
+      "create the prior item and leave it uncommitted",
+      "transition the prior item to backlog and leave it uncommitted",
+      "create the next item"
+    ]
+  },
+  "expected": {
+    "exit": 6,
+    "stdout": {
+      "ok": false,
+      "namespace": "ledger-mutation",
+      "command": "create-v1",
+      "contract_version": 1,
+      "state": "unchanged",
+      "error": {
+        "code": "claim-store-unavailable",
+        "message": "The durable claim store is unavailable.",
+        "details": {
+          "reason": "publication-reconciliation-required",
+          "findings": [
+            {
+              "code": "stale-write-detected",
+              "item_id": "wb_01M01BFR000TXV22D7KZ6TQYH2",
+              "actual_revision": null,
+              "expected_revision": "{{PRIOR_REVISION}}",
+              "observed_surface": "git-head",
+              "reason": "git-finalization-required",
+              "expected_path": "wb_01M01BFR000TXV22D7KZ6TQYH2.md",
+              "remediation": "Commit wb_01M01BFR000TXV22D7KZ6TQYH2.md in Git, then run claim-verify."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

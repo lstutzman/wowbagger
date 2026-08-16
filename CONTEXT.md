@@ -15,6 +15,7 @@ One line per term. This is a glossary, not documentation.
 - **oracle** — `spec/adapter-reference.js` (and `test/work-claim-reference.js`): independent re-implementations that conformance tests compare against; never merged with `src/`.
 - **claim (advisory)** — "who is touching this right now"; visible across worktrees, enforces nothing.
 - **fenced claims** — item 17's accepted work-claim protocol; provisioned Git ledgers implement the `merge-coordinated` profile with claim-protected publication and `safe_exclusive_dispatch: false`, not the strict transactional `fenced` profile.
+- **commit-per-mutation invariant** — on a provisioned ledger, every mutation must be Git-committed before the next mutating command; the loop is write, commit, `claim-verify`, next write.
 - **dogfood** — using wowbagger on its own backlog (maintainer-dogfood) or a consumer's (consumer-dogfood/tinydancer).
 - **decision record** — the `decisions:` entries on an item; why a lifecycle edge happened, written at transition time.
 - **schema migration** — the one-time maintenance tool that changes a complete ledger from schema version 1 to schema version 2.

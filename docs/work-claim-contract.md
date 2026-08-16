@@ -49,6 +49,28 @@ write. Git history and `claim-verify` then finalize or reject the outcome. It
 does not make the claim decision and Git commit one atomic transaction, so it
 MUST report `safe_exclusive_dispatch: false`.
 
+### The commit-per-mutation invariant
+
+Because Git history is what finalizes an outcome, the merge-coordinated profile
+carries one operating rule that binds every caller:
+
+**Commit each mutation to Git before running the next mutating command.**
+
+A merge-coordinated backend validates recorded revisions against Git `HEAD`,
+never against working-tree bytes. An uncommitted mutation is an unreconciled
+mutation. The next `create`, `transition`, `patch`, or `publish-claimed`
+therefore refuses with exit 6 `claim-store-unavailable` and
+`details.reason: "publication-reconciliation-required"` rather than writing on
+top of work that is not yet durable.
+
+`claim-verify` is the reconciliation procedure for that refusal. The loop is
+write, commit, `claim-verify`, next write. Section 6 defines `claim-verify`,
+section 7 defines the refusal the legacy write paths emit, and section 8
+defines the error envelope. The [mutation
+contract](mutation-contract.md) section 12 states the same rule for
+`create`, `transition`, and `patch` callers, together with the
+considered-and-rejected alternative of validating against working-tree bytes.
+
 ## 2. Ledger namespace and identity
 
 Every claim key is the immutable tuple `(ledger_namespace, item_id)`. No state,
@@ -477,6 +499,20 @@ A clean verification returns exit 0 and `state: "committed"`. Findings named
 findings. Repeating verification MUST NOT duplicate a publication
 finalization.
 
+Every finding that blocks a mutation MUST carry a `remediation` string, and
+that string MUST name both the action to take and `claim-verify`. It MUST also
+carry `expected_path` when the journal or current ledger identifies the item
+path, and the `remediation` string names that path. A clean
+`pending-intent-resolved` finding carries neither member; it blocks nothing and
+there is nothing to remedy. The blocking codes remediate as follows:
+
+| Code | Remediation names |
+|---|---|
+| `stale-write-detected` | the action for its `reason` below, then `claim-verify` |
+| `revision-regression` | restoring the authorized revision at `expected_path`, then `claim-verify` |
+| `legacy-mutation-outcome-unknown` | restoring `expected_path` to the expected or candidate revision recorded for `attempt_id`, then `claim-verify` |
+| `publication-outcome-unknown` | inspecting the named publication for `expected_path`, completing its documented recovery, then `claim-verify` |
+
 Every `stale-write-detected` finding contains `actual_revision`,
 `expected_revision`, and `observed_surface`. It also contains a stable `reason`
 and `remediation`. `expected_path` is present when the journal or current
@@ -537,6 +573,22 @@ terminal when the expected revision remains. Any third revision produces
 authorized expected revision. A later unrecorded revision remains a stale
 write.
 
+A merge-coordinated backend MUST reconcile before it authorizes a legacy write.
+When reconciliation produces any blocking finding, the legacy command MUST
+refuse with exit 6 `claim-store-unavailable`,
+`details.reason: "publication-reconciliation-required"`, and
+`details.findings` set to those findings. `state` MUST be `unchanged`: the
+refused command wrote nothing.
+
+An uncommitted prior mutation is the ordinary cause. Its finding is
+`stale-write-detected` with `observed_surface: "git-head"`, `reason:
+"git-finalization-required"`, `actual_revision: null` when the authorized
+revision is absent from `HEAD`, and a `remediation` string naming the path to
+commit and `claim-verify`. The caller commits each named path, runs
+`claim-verify` until it returns exit 0, and only then repeats the mutating
+command. `spec/fixtures/mutation-refusals/uncommitted-prior-mutation/manifest.json`
+is the normative envelope for the create path.
+
 An implementation may instead route a legacy write through `publish-claimed`,
 but it cannot silently omit a fence. Administrative repair, bulk import,
 plugins, direct database writes, and filesystem writers count as alternate
@@ -593,6 +645,15 @@ unreachable and a backend that cannot locate its store at all both use it.
 `git-directory-not-found` where a backend keeps claim state inside a git
 directory. A caller distinguishes causes through `details.reason`, never
 through the message.
+
+`details.reason: "publication-reconciliation-required"` is the reason a
+merge-coordinated backend returns when reconciliation found blocking findings,
+and it is the reason an uncommitted prior mutation produces. **`claim-verify`
+is its reconciliation procedure.** The envelope also carries
+`details.findings`; act on each finding's `remediation` string, then run
+`wowbagger claim-verify --ledger <dir> --json` and require exit 0 before
+repeating the refused command. Nothing else reconciles the journal, and no
+other verb is needed.
 
 This code was added after the version 1 vectors were written. It is additive:
 it names a condition the original text did not model, changes no existing code,

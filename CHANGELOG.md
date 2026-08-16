@@ -7,7 +7,24 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- The commit-per-mutation invariant is documented. On a provisioned ledger,
+  every mutation must be committed to Git before the next mutating command,
+  and `claim-verify` is the reconciliation procedure for the exit 6
+  `publication-reconciliation-required` refusal. The mutation contract, the
+  work-claim contract, the README, and the installed skill's claimed and
+  unclaimed loops all state the rule and the loop it implies. The mutation
+  contract also records why validating against working-tree bytes was
+  rejected.
+
 ### Fixed
+
+- Every reconciliation finding that blocks a mutation now carries a
+  `remediation` string naming the path to act on and `claim-verify`.
+  `revision-regression`, `legacy-mutation-outcome-unknown`, and
+  `publication-outcome-unknown` previously blocked with no recovery action;
+  they now also carry `expected_path` when it is identifiable.
 
 - A committed `.wowbagger/layout.json` now binds the ledger's item directory.
   `create` derives its path from that configuration. Validation rejects parsed

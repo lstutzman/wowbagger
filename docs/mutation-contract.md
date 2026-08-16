@@ -64,6 +64,12 @@ identity with claim history. Until then, the local runtime's unsupported
 capability is authoritative; callers cannot combine this API with an external
 claim hint and infer fencing.
 
+A **provisioned** ledger is that coordinated backend. It adds one operating
+rule that governs every command in this document: **commit each mutation to Git
+before running the next mutating command.** Section 12 states the rule, the
+refusal it produces, and its reconciliation procedure. Read it before writing a
+batch of mutations against a provisioned ledger.
+
 The first backend coordinates only cooperative Wowbagger writers using the same
 ledger directory in one working copy. It does not coordinate clones, worktrees,
 machines, hostile or non-cooperating writers, or Git operations. Its write
@@ -1034,3 +1040,109 @@ serialization, and preconditions.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.
+
+## 12. Commit-per-mutation on a provisioned ledger
+
+A ledger becomes provisioned when `provision` binds a namespace to the
+repository and `claim capabilities` reports `mode: "merge-coordinated"`. On
+such a ledger, `create`, `transition`, and `patch` run inside the claim
+coordinator described by the [work-claim
+contract](work-claim-contract.md).
+
+### The rule
+
+**Commit each mutation to Git before running the next mutating command.**
+
+The coordinator records every authorized mutation in the durable journal and
+validates the recorded revisions against Git `HEAD`, not against working-tree
+bytes. An uncommitted mutation is therefore an unreconciled mutation, and the
+next `create`, `transition`, or `patch` refuses rather than writing on top of
+work that is not yet durable.
+
+The loop that works:
+
+~~~sh
+wowbagger create --ledger <dir> --input request.json --json
+git add <dir> && git commit -m "Record the mutation"
+wowbagger claim-verify --ledger <dir> --json
+wowbagger transition --ledger <dir> --input next.json --json
+~~~
+
+`claim-verify` is the reconciliation procedure. It is not optional bookkeeping:
+it is the command that moves the journal forward to the new commit, and the
+refusals below name it by design.
+
+### The refusal
+
+An uncommitted prior mutation makes the next mutating command return exit 6:
+
+~~~json
+{
+  "ok": false,
+  "namespace": "ledger-mutation",
+  "command": "create-v1",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "claim-store-unavailable",
+    "message": "The durable claim store is unavailable.",
+    "details": {
+      "reason": "publication-reconciliation-required",
+      "findings": [
+        {
+          "code": "stale-write-detected",
+          "item_id": "wb_...",
+          "actual_revision": null,
+          "expected_revision": "sha256:...",
+          "observed_surface": "git-head",
+          "reason": "git-finalization-required",
+          "expected_path": "wb_....md",
+          "remediation": "Commit wb_....md in Git, then run claim-verify."
+        }
+      ]
+    }
+  }
+}
+~~~
+
+`state: "unchanged"` is exact: the refused command wrote nothing. Read
+`details.findings`. Every finding that blocks a mutation carries a
+`remediation` string, and every such string names both the path to act on and
+`claim-verify`. `actual_revision: null` with `observed_surface: "git-head"`
+means the authorized revision is not in `HEAD` at all, which is what an
+uncommitted mutation looks like.
+
+`spec/fixtures/mutation-refusals/uncommitted-prior-mutation/manifest.json` is
+the normative envelope for this refusal.
+
+### Reconciliation
+
+For every blocking finding:
+
+1. Do what `remediation` says, for each finding, using its `expected_path`.
+   `git-finalization-required` means commit that path.
+2. Run `wowbagger claim-verify --ledger <dir> --json`.
+3. Exit 0 with `state: "committed"` means the ledger is reconciled and the next
+   mutating command may run. Exit 6 means findings remain; repeat from step 1.
+
+The reasons a `stale-write-detected` finding can carry, and the other blocking
+finding codes, are enumerated in the [work-claim
+contract](work-claim-contract.md).
+
+### Rejected alternative: validate against working-tree bytes
+
+The obvious way to remove this friction is to validate recorded revisions
+against the working tree instead of Git `HEAD`. It was considered and
+rejected.
+
+The journal exists to make a mutation durable and reviewable. Working-tree
+bytes are neither: they are unpublished, unshared, and one `git checkout` away
+from vanishing. Validating against them would let the coordinator declare a
+mutation reconciled while nothing outside one uncommitted directory records it,
+which is precisely the guarantee the journal is for. It would also make a
+cooperating worktree unable to tell an authorized publication from a local
+edit, because both look identical in a working tree.
+
+The invariant stays. What changed is its visibility: it is stated here, in the
+work-claim contract, in the README workflow, and in the installed skill's
+loops, and every blocking finding now names its own remedy.

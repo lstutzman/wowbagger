@@ -351,6 +351,38 @@ test('claim-verify resolves a committed legacy mutation intent after response lo
   )));
 });
 
+test('an unknown legacy mutation outcome names the path to restore and claim-verify', async () => {
+  const fixture = await repository();
+  const candidate = Buffer.from(fixture.before.toString('utf8')
+    .replace('title: "Before"', 'title: "Candidate"'));
+  const third = Buffer.from(fixture.before.toString('utf8')
+    .replace('title: "Before"', 'title: "Third"'));
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const journalPath = claimJournalPath(gitCommonDir, fixture.namespace);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'legacy_unknown_outcome_0001',
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    command: 'patch-v1',
+    expected_revision: sha256(fixture.before),
+    candidate_revision: sha256(candidate),
+    item_path: 'item.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await writeFile(fixture.itemPath, third);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].code, 'legacy-mutation-outcome-unknown');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Restore item.md to the expected or candidate revision recorded for attempt legacy_unknown_outcome_0001, then run claim-verify.',
+  );
+});
+
 test('claim-verify rejects an unrecorded revision after a legacy-only mutation', async () => {
   const fixture = await repository();
   const acquirePath = path.join(fixture.root, 'acquire-legacy-only.json');
