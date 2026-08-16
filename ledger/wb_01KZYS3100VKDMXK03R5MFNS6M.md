@@ -5,10 +5,9 @@ number: 83
 title: "Publish Darwin-supported Claude Code adapter"
 kind: task
 priority: 1
-status: deferred
+status: backlog
 created: 2026-08-14
 updated: 2026-08-16
-deferred: 2026-08-16
 provenance:
   source: "consumer-dogfood/propertycompass"
   recorded_at: "2026-08-14T21:00:00.000Z"
@@ -23,6 +22,10 @@ decisions:
     date: 2026-08-16
     summary: "Defer the adapter release."
     rationale: "Lee deferred the release step on 2026-08-16; the queue focuses on field-feedback and report work first. Release remains Lee-gated."
+  - action: undefer
+    date: 2026-08-16
+    summary: "Undefer the release."
+    rationale: "Lee opened the release gate on 2026-08-16: contract v3, the adapter EPIPE fix, layout.json, the body verb, and the latency work all sit unpublished behind it."
 ---
 
 Property Compass adapter onboarding reproduced `adapter-platform-mismatch` on Darwin. The Claude Code manifest still declared Darwin `unverified` even though the native common-vector runner passes all 183 assertions across all 15 cases.
