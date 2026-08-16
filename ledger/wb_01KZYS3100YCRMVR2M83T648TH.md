@@ -4,15 +4,20 @@ id: wb_01KZYS3100YCRMVR2M83T648TH
 number: 77
 title: "Refresh the PropertyCompass migration snapshot after pre-freeze commits"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 provenance:
   source: "propertycompass-migration-quiescence"
   recorded_at: "2026-08-14T13:24:17.000Z"
 depends_on: []
-related: [wb_01KZYS3100NYPQ6AXGTBM9BFGT, wb_01KZ77NSW8363H1V6QG1HZRG11]
+related: [ wb_01KZYS3100NYPQ6AXGTBM9BFGT, wb_01KZ77NSW8363H1V6QG1HZRG11 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog at triage review."
+    rationale: "Snapshot-refresh requirement stands; the enumerated pre-freeze commits are a floor and the live dual-run session keeps adding to the source, so the refresh-to-pinned-tip rule is more necessary now, not less."
 ---
 
 # Problem
