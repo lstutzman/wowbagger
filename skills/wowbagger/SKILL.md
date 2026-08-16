@@ -107,6 +107,14 @@ On success, require exit `0`, `ok: true`, `command: "report"`,
 On failure, require `ok: false` and inspect `error.code`; do not treat an
 existing output as fresh because failed publication preserves the prior report.
 
+The report ends its decision surface with a 3D dependency graph of the whole
+ledger. Its renderer is a pinned, checksummed `3d-force-graph` build vendored
+at `vendor/3d-force-graph/` and inlined at generation time, so the report is
+still one self-contained file that fetches nothing — it is roughly 1.3 MB
+larger for it. A browser without WebGL shows the graph section's plain
+explanation and its per-node roster instead; nothing the graph shows is
+missing from the rest of the report.
+
 The generated HTML does not authorize transitions, claims, or parallel work.
 It has no live ledger revision. Its readiness state is the canonical projection
 at generation time, but the file is only a static view. Area-diverse batches are

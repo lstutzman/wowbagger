@@ -1,4 +1,11 @@
 import { markdownBrowserSource } from './report-markdown.js';
+import { READINESS_REASON_LABELS } from './report.js';
+import {
+  buildGraphModel,
+  graphClientSource,
+  graphSection,
+  graphStyleSource,
+} from './report-graph.js';
 import {
   agingHeatmapChart,
   cumulativeFlowChart,
@@ -12,14 +19,6 @@ const READINESS_LABELS = {
   ready: 'Ready',
   blocked: 'Blocked',
   ineligible: 'Ineligible',
-};
-
-const REASON_LABELS = {
-  'kind-not-task': 'Not a task',
-  'status-not-backlog': 'Not in backlog',
-  snoozed: 'Snoozed',
-  'dependency-unsatisfied': 'Dependency is not done',
-  'ancestor-not-backlog': 'Ancestor is not in backlog',
 };
 
 function escapeHtml(value) {
@@ -60,7 +59,7 @@ function renderReasons(item, numbersById) {
     return '<span class="muted">No blockers.</span>';
   }
   return `<ul class="reasons">${item.readiness.reasons.map((reason) => {
-    const label = REASON_LABELS[reason.code] ?? reason.code;
+    const label = READINESS_REASON_LABELS[reason.code] ?? reason.code;
     const related = reason.item_id === undefined ? '' : `: ${escapeHtml(handleFor(reason.item_id, numbersById))}`;
     return `<li>${escapeHtml(label)}${related}</li>`;
   }).join('')}</ul>`;
@@ -264,7 +263,8 @@ document.getElementById('collapse-all').addEventListener('click',()=>{for(const 
 applyHistory();apply();`;
 }
 
-export function renderReportHtml(model, { logoDataUrl = null } = {}) {
+export function renderReportHtml(model, { logoDataUrl = null, graphBundle } = {}) {
+  const graph = buildGraphModel(model);
   const numbersById = new Map([...model.items, ...model.terminalItems].map((item) => [item.id, item.number]));
   const fieldNames = [...new Set(model.items.flatMap((item) => Object.keys(item.fields)))].sort();
   const groupOptions = [
@@ -298,12 +298,14 @@ export function renderReportHtml(model, { logoDataUrl = null } = {}) {
   ];
   const markdownRuntime = markdownBrowserSource().replaceAll('</script', '<\\/script');
   const interactionRuntime = clientSource().replaceAll('</script', '<\\/script');
+  const graphRuntime = graphClientSource(graph).replaceAll('</script', '<\\/script');
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><title>${escapeHtml(model.title)}</title><style>${styleSource()}.history-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}.controls .history-toggle input{min-width:0;flex:none;margin:0;padding:0}</style></head><body data-richness="standard"><main class="shell">
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><title>${escapeHtml(model.title)}</title><style>${styleSource()}${graphStyleSource()}.history-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}.controls .history-toggle input{min-width:0;flex:none;margin:0;padding:0}</style></head><body data-richness="standard"><main class="shell">
 <header class="masthead"><div class="identity">${logo}<div><p class="eyebrow">${escapeHtml(model.repository.name)}</p><h1>${escapeHtml(model.title)}</h1></div></div><div class="as-of">Ledger state<br><strong>${escapeHtml(model.asOf)}</strong></div></header>
 ${renderWorkNext(model.workNext, model.unknownClasses)}
 ${renderAttention(model.attention)}
 ${renderEvidence(model.evidence, model.asOf)}
+${graphSection(graph, graphBundle.manifest)}
 <section id="drilldown"><div class="section-heading"><div><p class="eyebrow">Drill-down</p><h2>Every item</h2></div><p class="muted">State counts and item detail below the decision surface.</p></div>
 <section class="stats" aria-label="Ledger summary">${stats.map(([label, value]) => `<div class="stat"><strong>${escapeHtml(value)}</strong><span>${label}</span></div>`).join('')}</section>
 <section class="controls panel" aria-label="Report controls"><label class="sr-only" for="search">Search items</label><input id="search" type="search" placeholder="Search ID, number, title, or mapped fields"><select id="group-by" aria-label="Group items">${groupOptions.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('')}</select><select id="sort-by" aria-label="Sort items">${sortOptions.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('')}</select>${slotFilters}<select id="richness" aria-label="Detail level"><option value="basic">Basic</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select><label class="history-toggle"><input id="show-history" type="checkbox" checked>Show history</label><button class="filter active" data-filter="all" type="button">All</button><button class="filter" data-filter="ready" type="button">Ready</button><button class="filter" data-filter="blocked" type="button">Blocked</button><button class="filter" data-filter="ineligible" type="button">Ineligible</button><button type="button" id="expand-all">Expand all</button><button type="button" id="collapse-all">Collapse all</button></section>
@@ -311,5 +313,5 @@ ${renderEvidence(model.evidence, model.asOf)}
 ${renderSwarm(model.swarmBatches)}
 </section>
 <section id="history" class="panel"><div class="section-heading"><div><p class="eyebrow">History</p><h2>Terminal items</h2></div><p class="muted">Completed, killed, deferred, and archived.</p></div>${renderTerminalTable(model.terminalItems)}</section>
-</main><script>${markdownRuntime}</script><script>${interactionRuntime}</script></body></html>`;
+</main><script>${markdownRuntime}</script><script>${interactionRuntime}</script><script>${graphBundle.source}</script><script>${graphRuntime}</script></body></html>`;
 }

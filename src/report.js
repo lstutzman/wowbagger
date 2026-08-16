@@ -44,6 +44,17 @@ const FIELD_KEYS = new Set([
 ]);
 const SWARM_KEYS = new Set(['eligible_complexities']);
 
+// The readiness vocabulary both report surfaces print. It lives beside the
+// model so the HTML report and the graph can never label the same refusal
+// differently.
+export const READINESS_REASON_LABELS = {
+  'kind-not-task': 'Not a task',
+  'status-not-backlog': 'Not in backlog',
+  snoozed: 'Snoozed',
+  'dependency-unsatisfied': 'Dependency is not done',
+  'ancestor-not-backlog': 'Ancestor is not in backlog',
+};
+
 export class ReportError extends Error {
   constructor(code, message, details) {
     super(message);

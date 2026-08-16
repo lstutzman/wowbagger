@@ -7,7 +7,27 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- **The report draws the whole ledger as a 3D dependency graph.** It sits below
+  the evidence layer, under the decision surface. Every item is a node labelled
+  `#N`, coloured by readiness or terminal status and sized by the same
+  transitive unblocking leverage the recommended order uses; `depends_on` edges
+  are straight and arrowed, `parent` edges are curved and unarrowed, and both
+  run from the prerequisite to the item it releases. Hovering or clicking a node
+  shows its number, title, status, age, leverage, and the same reasons line the
+  ranked list prints for it. The renderer is `3d-force-graph` 1.80.0 over
+  Three.js r183, vendored at `vendor/3d-force-graph/` with its upstream SHA-256
+  recorded beside it and pinned by a test, and inlined at generation time: the
+  report stays one self-contained file and fetches nothing at generation or view
+  time. It costs roughly 1.3 MB of report size. A browser without WebGL gets the
+  section's plain explanation and a per-node roster instead; no
+  decision-relevant content exists only in the 3D view.
+
 ### Changed
+
+- **The report's content security policy now also forbids `connect-src`.** The
+  report has never opened a connection; the policy now says so.
 
 - **The `item-outside-layout` validation error now names the expected path and
   the relocation that repairs it.** It keeps its stable code and its actual

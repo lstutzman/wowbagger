@@ -37,6 +37,7 @@ import {
   writeReportFile,
 } from './report.js';
 import { renderReportHtml } from './report-html.js';
+import { loadGraphBundle } from './report-graph.js';
 import {
   createItem,
   inspectItem,
@@ -497,7 +498,8 @@ async function runReportCommand(options) {
     const config = await loadReportConfig(options.ledger, options.out);
     const model = buildReportModel(ledger.items, config, options.asOf);
     const logoDataUrl = await readLogoDataUrl(config.repository.logo);
-    const html = renderReportHtml(model, { logoDataUrl });
+    const graphBundle = await loadGraphBundle();
+    const html = renderReportHtml(model, { logoDataUrl, graphBundle });
     await assertReportOutputOutsideLedger(options.ledger, config.outputPath);
     await writeReportFile(config.outputPath, html);
     process.stdout.write(`${JSON.stringify({
