@@ -4,7 +4,7 @@ id: wb_01M05FJKJFKMHHTS3YMBAG3WXC
 number: 105
 title: "Give the item body a sanctioned mutation verb"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T14:28:25Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Field friction 11: mirror-based consumers need body writes more than priority writes; hand-edits bypass the managed path today."
 ---
 
 Field friction 11 from PropertyCompass2 (docs/wowbagger-feedback.md, commits 0f1243821/badcd6bf2): an item's body has no sanctioned mutation verb. `transition` refuses a body by contract; `patch` (post-#90) changes priority, depends_on, and related only. Mirror-based consumers (every ledger item mirrors a legacy backlog card that keeps being edited) hand-edit the Markdown and bump `updated` — works, validates, bypasses the managed path entirely. Concrete damage: consumer item #1475 was `done` in the ledger while its card read `backlog` for a day; the parent epic's checklist disagreed with both. Body rot is invisible to `validate` because body content is not an invariant.
