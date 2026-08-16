@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { projectReadiness } from './ready.js';
+import { buildAttention } from './report-attention.js';
 import { buildEvidence } from './report-evidence.js';
 import {
   classifyItem,
@@ -94,6 +95,8 @@ export function buildReportModel(items, config, asOf) {
 
   const workNext = rankWorkNext(reportItems.filter((item) => item.readiness.state === 'ready'));
 
+  const evidence = buildEvidence(reportItems, terminalItems, asOf);
+
   const swarmBatches = config.swarm === null
     ? []
     : buildSwarmBatches(reportItems, config.swarm.eligibleComplexities);
@@ -106,7 +109,8 @@ export function buildReportModel(items, config, asOf) {
     terminalItems,
     workNext,
     unknownClasses: collectUnknownClasses(reportItems),
-    evidence: buildEvidence(reportItems, terminalItems, asOf),
+    evidence,
+    attention: buildAttention(reportItems, evidence.cycleTime, asOf),
     stats: {
       total: projected.length,
       open: reportItems.length,
