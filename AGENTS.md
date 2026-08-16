@@ -18,6 +18,9 @@ Before substantive work:
    `.claude/skills/*/SKILL.md`, and `skills/*/SKILL.md`. When the user names a skill
    or the task matches its `description:`, read that skill completely before acting.
    A project skill overrides a global skill with the same `name:`.
+7. Use the `caveman` skill in every session: read it before substantive work and
+   apply it for the whole session. If no skill named `caveman` is discoverable,
+   say so plainly at session start instead of guessing at its content.
 
 ## Claude-to-Codex adaptation
 
