@@ -4,7 +4,7 @@ id: wb_01M05787D42WQ2KDPWGFP9ZHZ0
 number: 87
 title: "Ship a Three.js 3D ledger graph as a marketing showpiece"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
