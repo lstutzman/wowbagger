@@ -4,6 +4,7 @@ id: wb_01M058P3KQDSD269YXN5B4KSAK
 number: 96
 title: "Stop failed mutations leaving reconcile-log residue that blocks the next write"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
