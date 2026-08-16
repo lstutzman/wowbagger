@@ -149,6 +149,27 @@ test('the durable clock floor advances even when an operation is rejected', asyn
     `expected clock_floor to strictly advance after a REJECTED operation (was ${floorAfterAcquire}, now ${floorAfterRejection})`);
 });
 
+// The normative fixture declares what a Git common-directory journal serializes.
+// The shipped provisioned backend must advertise exactly that, or the
+// advertisement and the observed behaviour have drifted apart again.
+test('the provisioned backend advertises the fixture write serialization', async () => {
+  const source = manifest('capabilities-worktree-serialized');
+  const declared = source.expected.transcript[0].stdout.result.backend.write_serialization;
+  assert.equal(source.initial.backend.coordination_scope, 'shared-git-common-dir-serialized-journal');
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  await capture(['provision', '--ledger', ledger, '--json']);
+
+  const capabilities = await capture(['claim', 'capabilities', '--ledger', ledger, '--json']);
+
+  assert.equal(capabilities.exit, 0, JSON.stringify(capabilities.envelope));
+  assert.equal(
+    capabilities.envelope.result.backend.coordination_scope,
+    source.initial.backend.coordination_scope,
+  );
+  assert.deepEqual(capabilities.envelope.result.backend.write_serialization, declared);
+});
+
 test('claim reads bypass a contended lock while claim decisions fail closed', async () => {
   const root = await repository();
   const ledger = path.join(root, 'ledger');

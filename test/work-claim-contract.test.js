@@ -19,6 +19,7 @@ const expectedCases = [
   'backward-clock-rejection-restart',
   'capabilities-fenced',
   'capabilities-missing-write-path',
+  'capabilities-worktree-serialized',
   'claim-response-loss-read',
   'clock-floor-persistence-failure',
   'epoch-exhaustion',
@@ -81,6 +82,7 @@ const requiredCoverage = [
   'storage-failure',
   'takeover',
   'transition-refusal',
+  'write-serialization',
 ];
 
 test('normative work-claim manifests execute to their exact envelopes and durable final states', () => {
@@ -132,7 +134,7 @@ test('normative work-claim manifests execute to their exact envelopes and durabl
   }
 
   assert.deepEqual([...coverage].sort(), requiredCoverage);
-  assert.equal(actionCount, 48);
+  assert.equal(actionCount, 49);
 });
 
 test('work-claim ledger byte alternatives are individually valid', async () => {

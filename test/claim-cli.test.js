@@ -292,6 +292,7 @@ test('claim capabilities reports the contract-shaped envelope, distinct from top
       backend: {
         name: 'local-filesystem',
         coordination_scope: 'shared-git-directory-cooperative-writers',
+        write_serialization: { scope: 'none', blocks_until: 'not-applicable' },
       },
       operations: {
         work_claim: {
@@ -320,6 +321,10 @@ test('a provisioned namespace advertises merge-coordinated claim capabilities', 
     name: 'local-filesystem-git-journal',
     coordination_scope: 'shared-git-common-dir-serialized-journal',
     ledger_binding: { mode: 'explicit-allowlist', namespaces: [namespace] },
+    write_serialization: {
+      scope: 'all-worktrees-of-one-repository',
+      blocks_until: 'peer-commit-visible-in-this-checkout',
+    },
   });
   assert.deepEqual(capabilities.envelope.result.operations.work_claim, {
     supported: true,

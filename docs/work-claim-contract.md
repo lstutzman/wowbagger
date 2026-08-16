@@ -117,6 +117,10 @@ most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
       "ledger_binding": {
         "mode": "explicit-allowlist",
         "namespaces": ["wbns_11111111111111111111111111111111"]
+      },
+      "write_serialization": {
+        "scope": "shared-coordinator-writers",
+        "blocks_until": "coordinator-transaction-complete"
       }
     },
     "operations": {
@@ -145,6 +149,28 @@ identify this capability context. It is distinct from the unbound default claim
 profile in the core `capabilities --json` response. A caller MUST use
 `claim capabilities --ledger <dir> --json` and MUST gate `publish-claimed` on
 that ledger-specific response.
+
+`backend.write_serialization` is required. It names the writers that one
+recorded write blocks, and what ends the block. `coordination_scope` says where
+the coordination state lives; `write_serialization` says who pays for it.
+
+| `scope` | A recorded write blocks |
+|---|---|
+| `none` | nobody; writers do not serialize |
+| `shared-coordinator-writers` | every writer bound to the coordinator |
+| `all-worktrees-of-one-repository` | every worktree that shares one Git common directory |
+
+| `blocks_until` | The block ends when |
+|---|---|
+| `not-applicable` | there is no block |
+| `coordinator-transaction-complete` | the coordinator transaction finishes |
+| `peer-commit-visible-in-this-checkout` | the writing commit is visible in the blocked checkout |
+
+A caller MUST NOT infer write serialization from `coordination_scope` alone,
+and MUST NOT read the core envelope's
+`limits.cross_worktree_coordination: false` as a promise that worktrees write
+independently. That member reports that the core never synchronizes checkouts.
+It does not report who blocks whom. `write_serialization` does.
 
 `safe_exclusive_dispatch` may be `true` only when all of the following hold:
 
@@ -179,6 +205,10 @@ A provisioned Git-journal backend MAY instead report:
     "ledger_binding": {
       "mode": "explicit-allowlist",
       "namespaces": ["wbns_11111111111111111111111111111111"]
+    },
+    "write_serialization": {
+      "scope": "all-worktrees-of-one-repository",
+      "blocks_until": "peer-commit-visible-in-this-checkout"
     }
   },
   "operations": {
@@ -214,6 +244,70 @@ Git-backed ledger without a provisioned namespace remains advisory:
 `fencing_enforced_at: "none"`, and `safe_exclusive_dispatch: false`.
 An advisory endpoint MUST reject `publish-claimed`; a caller must never upgrade
 an advisory capability locally.
+
+### 3.1 One journal serializes every worktree of one repository
+
+The journal lives in the Git common directory. Every worktree of one
+repository shares that directory, so every worktree shares one journal, and
+one journal serializes them all. Clones do not share it, so clones stay
+independent.
+
+A worktree keeps its own checkout. The journal therefore knows item revisions
+that a sibling checkout cannot see. Reconciliation runs before every mutation
+on a provisioned ledger and compares the journal's expected revisions against
+the local working tree and the local Git HEAD. A revision written in another
+worktree is absent in both, so reconciliation reports
+`stale-write-detected` and the mutation refuses with exit 6
+`claim-store-unavailable`, reason `publication-reconciliation-required`.
+
+The plain statement: **on a provisioned ledger, a recorded write in one
+worktree blocks every mutation in the other worktrees of that repository until
+the writing commit is visible where the next mutation runs.** `create` records
+nothing, so `create` never causes a block; `transition` and `patch` do, and
+`create` is the operation most often refused by one.
+
+Each refusal carries a `reason` that separates the two cases:
+
+| `reason` | Cause | Remedy |
+|---|---|---|
+| `git-finalization-required` | this worktree wrote the item and has not committed it | commit here, then `claim-verify` |
+| `worktree-synchronization-required` | another worktree wrote the item | synchronize this checkout to that commit |
+| `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision, then `claim-verify` |
+
+### 3.2 Recovering from a foreign-writer block
+
+1. Stop writing in the blocked worktree. Every retry refuses again and costs a
+   reconcile log write.
+2. Read the finding. `worktree-synchronization-required` names the item path
+   and the revision the journal expects.
+3. Wait for the writing worktree to commit and push, or merge its branch.
+4. Synchronize the blocked checkout to that commit: pull, merge, or rebase.
+5. Run `claim-verify --ledger <dir> --json` in the blocked worktree and require
+   exit 0.
+6. Resume.
+
+Only step 4 clears a foreign-writer block. Running `claim-verify` in the
+writing worktree finalizes that worktree's own state; it does not make the
+blocked checkout able to see the item, so the blocked worktree stays blocked.
+
+A refused mutation still writes the per-namespace reconcile log into the
+blocked ledger. Git refuses to merge over that untracked file, so remove or
+commit it before step 4.
+
+**Do not chase `expected_revision`.** The blocked worktree cannot win that
+race. While the sibling keeps working, each new write moves the expected
+revision, so any value read from a refusal is already stale by the time the
+next command runs.
+
+**Warning — copying the item in does not work.** A field report tried it:
+copy the sibling's item file into the blocked checkout, byte-identical, and
+retry. The mutation still refuses. Reconciliation reads the local Git HEAD as
+well as the working tree, so the copy only changes which refusal you get. The
+finding turns from `worktree-synchronization-required` into
+`git-finalization-required`, which now asks the blocked worktree to commit
+another worktree's item into its own branch. That duplicates the sibling's
+work, conflicts on merge, and the sibling's next recorded write blocks the
+checkout again at a new revision. Synchronize the checkout instead.
 
 ## 4. Durable claim and authoritative time
 

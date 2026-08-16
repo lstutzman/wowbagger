@@ -40,12 +40,20 @@ export function resolveClaimBackend({ gitCommonDir, namespace = null }) {
     return {
       name: 'local-filesystem',
       coordination_scope: coordinationScope({ gitCommonDir }),
+      write_serialization: { scope: 'none', blocks_until: 'not-applicable' },
     };
   }
   return {
     name: 'local-filesystem-git-journal',
     coordination_scope: 'shared-git-common-dir-serialized-journal',
     ledger_binding: { mode: 'explicit-allowlist', namespaces: [namespace] },
+    // One journal in the shared Git common directory serializes every worktree
+    // of this repository. A recorded write blocks the other worktrees until
+    // its commit is visible in the checkout that wants to write next.
+    write_serialization: {
+      scope: 'all-worktrees-of-one-repository',
+      blocks_until: 'peer-commit-visible-in-this-checkout',
+    },
   };
 }
 

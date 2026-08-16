@@ -178,6 +178,35 @@ It is not exclusive coordination. Direct filesystem writes, hostile processes,
 other clones, and alternate tools can bypass the protocol. Never present a
 claim as a lock or build a dispatch loop that requires exclusive ownership.
 
+## One worktree's write blocks the others
+
+The claim journal lives in the shared Git common directory, so **one journal
+serializes every worktree of one repository**. Read the scope from
+`result.backend.write_serialization` in `claim capabilities`; the provisioned
+profile reports `scope: "all-worktrees-of-one-repository"`. Do not read the
+core envelope's `limits.cross_worktree_coordination: false` as permission to
+write in parallel — it only says the core never synchronizes checkouts.
+
+A recorded `transition` or `patch` in one worktree refuses every mutation in
+the others with exit 6 `claim-store-unavailable`, reason
+`publication-reconciliation-required`, until the writing commit is visible in
+the blocked checkout. `create` records nothing, so `create` never causes a
+block — but it is usually the command that gets refused by one.
+
+Read `error.details.findings[0].reason` and say which case it is:
+
+- `git-finalization-required` — you wrote it here and have not committed.
+  Commit, then `claim-verify`.
+- `worktree-synchronization-required` — another worktree wrote it. Stop
+  writing. Wait for that worktree to commit and push, remove the untracked
+  reconcile log, pull or merge, run `claim-verify`, then resume.
+
+Two traps. Do not retry with the `expected_revision` from the refusal: a
+sibling that is still working moves it, and you cannot win that race. Do not
+copy the sibling's item file into your checkout: the refusal only changes to
+`git-finalization-required`, which asks you to commit their work into your
+branch, and the next sibling write blocks you again.
+
 An item stays in `backlog` while claimed work runs. The active claim is the work-in-flight signal.
 Do not use legacy `transition` to set `in-progress` after acquiring a claim; it
 correctly refuses with `active-claim-write-refused`.

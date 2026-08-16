@@ -167,6 +167,7 @@ function capabilities(backend) {
           name: backend.name,
           coordination_scope: backend.coordination_scope,
           ledger_binding: structuredClone(backend.ledger_binding),
+          write_serialization: structuredClone(backend.write_serialization),
         },
         operations: {
           work_claim: {
