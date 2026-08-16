@@ -133,6 +133,27 @@ wowbagger transition --ledger <dir> --input request.json --json
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
 
+### Item dates are UTC, so do not assume today
+
+An item's `created` date is not your calendar date. `create` writes `created`
+and `updated` from the item ID: the date derives from the ULID timestamp,
+which is UTC. An item created just after midnight UTC carries **tomorrow's**
+date for anyone west of UTC.
+
+`transition` and `patch` refuse a `date` earlier than the item's `created` or
+`updated`, so today's local date can be refused by an item minted minutes ago:
+
+```
+error.details.issues[]
+  code: "date-before-created"        item_created: "2026-08-17"
+  code: "date-before-updated"        item_updated: "2026-08-17"
+```
+
+Both codes carry `item_created` and `item_updated` — the item's own dates.
+Read them from the refusal and resend with a date that is not earlier than
+`item_updated`. Do not run `inspect` to find them, and do not invent a date to
+get past the guard: the invariant is correct, your date was wrong.
+
 ### Commit every mutation before the next one
 
 On a **provisioned** ledger (`claim capabilities` reports

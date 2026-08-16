@@ -714,6 +714,15 @@ The request cannot supply action, decision date, rollup, body, frontmatter
 patches, or terminal dates. Wowbagger derives them. A decision is rejected for
 an edge that does not append one.
 
+An item's created date is not the operator's calendar date. Create writes
+created and updated from the UTC date encoded by the item ID: the date
+derives from the ULID timestamp, which is UTC. An item created just after
+midnight UTC therefore carries tomorrow's date for every operator west of
+UTC. A transition dated with the operator's local calendar date is then
+earlier than created, and the request refuses with date-before-created and
+date-before-updated. Read the item's created and updated dates before
+choosing a transition date; the refusal carries both (next section).
+
 ### Allowed edges
 
 | Kind | From | To | Generated evidence |
@@ -795,7 +804,9 @@ exists. details are:
       "code": "date-before-updated",
       "field": "date",
       "message": "Transition date must not be earlier than the current updated date.",
-      "related_ids": []
+      "related_ids": [],
+      "item_created": "2030-01-13",
+      "item_updated": "2030-01-15"
     }
   ]
 }
@@ -806,6 +817,13 @@ live-dependencies, or nonterminal-children. related_ids are unique immutable IDs
 sorted ascending. Issues sort by code, then field, then their related ID
 sequence. Date checks are all reported: a date earlier than both created and
 updated produces both date issues.
+
+date-before-created and date-before-updated carry item_created and
+item_updated after related_ids: the target's own dates at refusal time, both
+on both codes, so one refusal states the whole acceptable window without an
+inspect round-trip. No other issue code carries them. Every other code keeps
+the four-member shape exactly, and a consumer that validates issue members
+exactly must accept six members for these two codes.
 
 For a schema version 1 done transition, any non-empty depends_on list produces
 live-dependencies and related_ids contains the complete list. For a schema
@@ -936,7 +954,9 @@ integer. null removes the field.
 Patch sets updated to request.date. A date earlier than the existing created
 or updated date returns patch-precondition-failed, exit 2, and unchanged,
 with date-before-created and date-before-updated issue codes matching
-transition's.
+transition's, including the item_created and item_updated members. The same
+UTC ULID derivation applies: an item created just after midnight UTC refuses
+the operator's local calendar date here too.
 
 Patch appends no decision: the ledger's Git history is the audit trail for a
 consumer-field change. Identity, lifecycle, title, relations, provenance,

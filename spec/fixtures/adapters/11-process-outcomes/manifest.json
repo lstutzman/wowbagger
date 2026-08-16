@@ -123,12 +123,32 @@
       "id": "inspect-schema-two-forwards-as-success",
       "type": "process-outcome",
       "scenario": "inspect-schema-two-valid"
+    },
+    {
+      "id": "mutation-date-precondition-carries-item-dates",
+      "type": "process-outcome",
+      "scenario": "mutation-date-precondition-dated"
+    },
+    {
+      "id": "mutation-date-precondition-without-item-dates-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-date-precondition-undated"
+    },
+    {
+      "id": "mutation-date-precondition-impossible-date-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-date-precondition-impossible-date"
+    },
+    {
+      "id": "mutation-date-precondition-reversed-dates-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-date-precondition-reversed-dates"
     }
   ],
   "artifacts": [
     {
       "path": "scenarios.json",
-      "sha256": "sha256:745c17475a318845c643d87f98a5349a58088ac6adbbfec09a0108af2f5b76fd"
+      "sha256": "sha256:57f142c7cc15573e02254824753db08f9c7749cf45fe65a74589f636524d8ff4"
     }
   ]
 }
