@@ -4,9 +4,10 @@ id: wb_01M05787BCDWD5WDV6JXVCB8RG
 number: 86
 title: "Render the report evidence layer as inline SVG charts"
 kind: task
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -17,6 +18,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept the SVG evidence-chart layer into the backlog."
     rationale: "Maintainer ask: heatmaps, Monte Carlo, and graphs are needed for humans to visualize the evidence. Depends on #85 for the derived metrics; charts stay inline SVG so the report remains one self-contained file."
+  - action: complete
+    date: 2026-08-16
+    summary: "Evidence layer renders all six inline SVG charts."
+    rationale: "Aging heatmap (age by status), throughput with 4-week rolling mean, arrivals-vs-completions, cumulative flow, cycle-time scatter, and the Monte Carlo fan with 50/85/95 marks - all derived from ledger bytes plus as-of, seeded and byte-deterministic, one self-contained file, numbers preserved as text. 28 derivation/chart mutation guards red. Area axis on the heatmap unmeetable on this ledger (no field mapping) - noted for a mapped consumer."
 ---
 Humans need to *see* the evidence layer, not read tables of it. Render the metrics that item #85 computes as hand-rolled **inline SVG** charts inside the report - no chart library, no external request, preserving the report's verified single-self-contained-file property (styles, script, and even the logo are already inlined; see `renderReportHtml` / `readLogoDataUrl`). Research: `docs/research/2026-08-15-useful-backlog-reports.md` Part 3 (architecture), Parts 1-2 (which charts and why).
 
