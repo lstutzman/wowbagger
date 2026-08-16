@@ -4,15 +4,20 @@ id: wb_01KZYS3100VWKSWTF8NTXQD8P7
 number: 76
 title: "Project historic PropertyCompass dates without invalid ordering"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 provenance:
   source: "propertycompass-migration-preflight"
   recorded_at: "2026-08-14T13:24:17.000Z"
 depends_on: []
-related: [wb_01KZYS31008RT7QHS6CGKDVNTS, wb_01KZ77NSW8363H1V6QG1HZRG11]
+related: [ wb_01KZYS31008RT7QHS6CGKDVNTS, wb_01KZ77NSW8363H1V6QG1HZRG11 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog at triage review."
+    rationale: "Reviewed earliest-evidenced-date rule resolving 168 date inversions; without it the target ledger cannot validate."
 ---
 
 # Problem
