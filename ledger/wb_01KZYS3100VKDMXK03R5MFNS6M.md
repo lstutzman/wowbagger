@@ -5,7 +5,7 @@ number: 83
 title: "Publish Darwin-supported Claude Code adapter"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-14
 updated: 2026-08-16
 provenance:
