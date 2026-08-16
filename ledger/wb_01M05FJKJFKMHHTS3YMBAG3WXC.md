@@ -4,6 +4,7 @@ id: wb_01M05FJKJFKMHHTS3YMBAG3WXC
 number: 105
 title: "Give the item body a sanctioned mutation verb"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
