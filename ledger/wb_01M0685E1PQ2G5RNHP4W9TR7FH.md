@@ -4,7 +4,7 @@ id: wb_01M0685E1PQ2G5RNHP4W9TR7FH
 number: 109
 title: "Name an undelivered core input instead of timing out"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T21:38:08Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "From the #106 EPIPE fix: a diagnosable condition currently reports as timed_out."
 ---
 
 Follow-up from item #106's EPIPE fix: `launchCoreProcess` now swallows a failed write to the core child's stdin. When the core exits fast that is correct (its real exit code is the story). But when the core is ALIVE and the write genuinely fails, the run reports `timed_out` after 30 seconds instead of "the input never reached the core" - a diagnosable condition reported as an unobservable one.
