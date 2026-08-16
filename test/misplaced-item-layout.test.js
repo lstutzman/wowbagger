@@ -117,10 +117,37 @@ test('a committed root-misplaced item blocks every guarded mutation when layout.
 
   // The claim fence is not poisoned: the journal is consistent and reports no
   // finding, so the consumer's stale-write-detected/actual_revision null
-  // mechanism does not exist.
+  // mechanism does not exist. The reconciliation verb still names the blocker
+  // that stops every mutation instead of answering a bare green findings [].
   const verified = run(root, 'claim-verify', '--ledger', ledger, '--json');
   assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
   assert.deepEqual(verified.envelope.result.findings, []);
+  assert.deepEqual(verified.envelope.result.ledger_validation, {
+    valid: false,
+    errors: [expectedError],
+    remediation: 'The ledger is invalid and every mutation is blocked; claim state is consistent. Repair each validation error, commit the repair, then run claim-verify.',
+  });
+
+  // The refusal stays a refusal, but it no longer hides the item the operator
+  // must read: a target that parses and carries no validation error of its own
+  // arrives with its complete byte snapshot.
+  const inspected = run(root, 'inspect', '--ledger', ledger, '--id', placed.id, '--json');
+  assert.equal(inspected.exit, 3);
+  assert.equal(inspected.envelope.error.code, 'ledger-invalid');
+  assert.deepEqual(inspected.envelope.error.details.validation_errors, [expectedError]);
+  assert.deepEqual(inspected.envelope.error.details.item, placed);
+
+  // The faulted item itself is withheld: its own placement is what validation
+  // rejects, and the refusal already names the path to repair.
+  const inspectedMisplaced = run(root, 'inspect', '--ledger', ledger, '--id', misplaced.id, '--json');
+  assert.equal(inspectedMisplaced.exit, 3);
+  assert.deepEqual(inspectedMisplaced.envelope.error.details, { validation_errors: [expectedError] });
+
+  // The number selector reaches the same snapshot, so an operator who speaks
+  // #N never has to learn a ULID to diagnose an invalid ledger.
+  const byNumber = run(root, 'inspect', '--ledger', ledger, '--number', String(placed.core.number), '--json');
+  assert.equal(byNumber.exit, 3);
+  assert.deepEqual(byNumber.envelope.error.details.item, placed);
 
   // Every guarded mutation refuses, including one that touches only the
   // correctly placed item.
@@ -210,6 +237,8 @@ test('the remediation the refusal names repairs the ledger', async () => {
   assert.deepEqual(revalidated.envelope, { valid: true, errors: [] });
   const verified = run(root, 'claim-verify', '--ledger', ledger, '--json');
   assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  // A repaired ledger reports the same member with nothing to remedy.
+  assert.deepEqual(verified.envelope.result.ledger_validation, { valid: true, errors: [] });
   const created = run(root, 'create', '--ledger', ledger, '--input', await requestFile(root, 'create-after.json', createRequest(mintId(root), 'Item after the repair')), '--json');
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
 });

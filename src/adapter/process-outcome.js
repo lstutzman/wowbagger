@@ -252,10 +252,14 @@ function hasRequiredFinalLf(bytes) {
   return !inString && !escaped;
 }
 
+// A validation error names its own repair when the validator can derive one:
+// a misplaced item carries the path the layout expects and the move to make.
 function validValidationErrors(value) {
   return Array.isArray(value) && value.every((error) => hasExactMembers(error, [
     'path', 'field', 'code', 'message',
-  ])
+  ], ['expected_path', 'remediation'])
+    && (!Object.hasOwn(error, 'expected_path') || nonEmptyControlFreeString(error.expected_path))
+    && (!Object.hasOwn(error, 'remediation') || nonEmptyControlFreeString(error.remediation))
     && nonEmptyControlFreeString(error.path)
     && nonEmptyControlFreeString(error.field)
     && nonEmptyControlFreeString(error.code)
@@ -853,7 +857,11 @@ function validCoreErrorDetails(code, details, command, responseContext) {
   const expectedRevision = responseExpectedRevision(responseContext, command);
   const expectedCreateRevision = expectedCreateCandidateRevision(responseContext, command);
   const matchesItemId = (id) => expectedItemId === undefined || id === expectedItemId;
-  if (code !== 'invalid-request' && !hasCanonicalMutationRequest(responseContext, command)) {
+  // Only a mutation refusal has a mutation request to be canonical about. A
+  // read command has none, so demanding one there refused every inspect
+  // refusal the core can emit and hid the diagnosis from the caller.
+  if (code !== 'invalid-request' && isMutationCommand(command)
+    && !hasCanonicalMutationRequest(responseContext, command)) {
     return false;
   }
   switch (code) {
@@ -861,8 +869,13 @@ function validCoreErrorDetails(code, details, command, responseContext) {
       && validInvalidRequestDetails(details);
     case 'item-not-found': return hasExactMembers(details, ['id'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id);
-    case 'ledger-invalid': return hasExactMembers(details, ['validation_errors'])
-      && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
+    // inspect keeps refusing an invalid ledger, but it may attach the snapshot
+    // of the item the caller asked for. A mutation refusal never carries one.
+    case 'ledger-invalid': return hasExactMembers(details, ['validation_errors'],
+      command === 'inspect' ? ['item'] : [])
+      && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0
+      && (!Object.hasOwn(details, 'item')
+        || (validCoreItemShape(details.item) && matchesItemId(details.item.id)));
     case 'transition-precondition-failed': return hasExactMembers(details, ['id', 'issues'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validTransitionIssues(details.issues) && details.issues.length > 0;

@@ -56,34 +56,31 @@ const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 
 export async function inspectItem(ledgerDirectory, id) {
   const ledger = await loadLedger(ledgerDirectory);
-  const validation = validateLedger(ledger);
-  if (!validation.valid) {
-    return { validation };
-  }
-
-  const item = ledger.items.find((candidate) => candidate.data.id === id);
-  if (!item) {
-    return { item: null };
-  }
-
-  return { item: inspectedItem(id, displayItemPath(item.path), item.bytes, item.data, item.body) };
+  return inspectResolved(ledger, ledger.items.find((candidate) => candidate.data.id === id));
 }
 
 // Resolve an item by its number identity. A valid ledger has unique numbers, so
 // at most one item matches; an invalid ledger returns its validation instead.
 export async function inspectItemByNumber(ledgerDirectory, number) {
   const ledger = await loadLedger(ledgerDirectory);
+  return inspectResolved(ledger, ledger.items.find((candidate) => candidate.data.number === number));
+}
+
+// An invalid ledger stays a refusal: a revision handed out here must never look
+// like a mutation precondition. It does carry the resolved item's snapshot when
+// no validation error names that item's path, so the operator can read the very
+// bytes the refusal tells them to repair around. An item the ledger already
+// faults is withheld: its own frontmatter is what is in question.
+function inspectResolved(ledger, item) {
   const validation = validateLedger(ledger);
+  const snapshot = item
+    ? inspectedItem(item.data.id, displayItemPath(item.path), item.bytes, item.data, item.body)
+    : null;
   if (!validation.valid) {
-    return { validation };
+    const faulted = validation.errors.some((error) => error.path === item?.path);
+    return { validation, ...(snapshot && !faulted ? { item: snapshot } : {}) };
   }
-
-  const item = ledger.items.find((candidate) => candidate.data.number === number);
-  if (!item) {
-    return { item: null };
-  }
-
-  return { item: inspectedItem(item.data.id, displayItemPath(item.path), item.bytes, item.data, item.body) };
+  return { item: snapshot };
 }
 
 export function revisionFor(bytes) {
