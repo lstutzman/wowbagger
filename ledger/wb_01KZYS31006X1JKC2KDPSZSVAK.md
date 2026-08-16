@@ -4,15 +4,20 @@ id: wb_01KZYS31006X1JKC2KDPSZSVAK
 number: 73
 title: "Preserve dangling PropertyCompass relationship identifiers"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 provenance:
   source: "propertycompass-migration-inventory"
   recorded_at: "2026-08-14T13:24:17.000Z"
 depends_on: []
-related: [wb_01KZ77NSW8363H1V6QG1HZRG11]
+related: [ wb_01KZ77NSW8363H1V6QG1HZRG11 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog at triage review."
+    rationale: "Reviewed lossless-projection rule for nine dangling relationship references; the inventory evidence and decision are agreed, ready to execute when the window opens."
 ---
 
 # Problem
