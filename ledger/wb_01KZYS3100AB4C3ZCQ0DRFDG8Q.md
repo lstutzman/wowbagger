@@ -4,15 +4,20 @@ id: wb_01KZYS3100AB4C3ZCQ0DRFDG8Q
 number: 71
 title: "Turn the README into an accurate adoption and collaboration guide"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 provenance:
   source: "user-request"
   recorded_at: "2026-08-14T12:49:26.000Z"
 depends_on: []
 related: []
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog at triage review."
+    rationale: "Standalone user-requested documentation and adoption work, independent of the migration; README accuracy is a live liability with alpha.4 published."
 ---
 
 # Problem
