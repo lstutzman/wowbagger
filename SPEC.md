@@ -414,7 +414,10 @@ second derived missing-matching-terminal-decision error.
 
 Machine-readable validation errors MUST contain a stable code, file path, field
 when applicable, and a human-readable message. Output sorts by path, then
-field, then code. Each item participating in a duplicate ID MUST receive its
+field, then code. An error whose repair the validator can derive MAY also
+carry `expected_path`, the ledger-relative path the item belongs at, and
+`remediation`, a human-readable string naming the repair. `item-outside-layout`
+carries both. No other member is permitted on a validation error. Each item participating in a duplicate ID MUST receive its
 own duplicate-id error. Each item participating in a dependency cycle MUST
 receive its own dependency-cycle error. A self-parent MUST receive its own
 self-parent error, and each item participating in a multi-item containment
