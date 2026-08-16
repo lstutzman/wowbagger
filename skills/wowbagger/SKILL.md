@@ -126,6 +126,37 @@ wowbagger transition --ledger <dir> --input request.json --json
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
 
+### Commit every mutation before the next one
+
+On a **provisioned** ledger (`claim capabilities` reports
+`mode: "merge-coordinated"`) this is not optional:
+
+**Commit each mutation to Git before running the next mutating command.**
+
+```sh
+wowbagger create --ledger <dir> --input request.json --json
+git add <dir> && git commit -m "Record the mutation"
+wowbagger claim-verify --ledger <dir> --json
+wowbagger transition --ledger <dir> --input next.json --json
+```
+
+The claim store validates every recorded mutation against Git `HEAD`, never
+against working-tree bytes — that is what makes a mutation durable rather than
+a local edit. So an uncommitted mutation blocks the next one. Skip the commit
+and the next `create`, `transition`, or `patch` returns exit 6
+`claim-store-unavailable` with
+`details.reason: "publication-reconciliation-required"`. `state` is
+`unchanged`, so nothing was written.
+
+**`claim-verify` is the reconciliation procedure for that refusal.** Do not go
+looking for another verb; there is none. Read `details.findings`, do exactly
+what each finding's `remediation` string says (it names the path), run
+`claim-verify` until it exits 0, then repeat the refused command. Never hand-
+edit a ledger file to get past it.
+
+Batch work is where this bites: filing ten items means ten commits, not one
+commit at the end. Tell the user that before starting a batch.
+
 ## Work claims are merge-coordinated
 
 ```sh
@@ -170,12 +201,17 @@ Use the claimed write path as one complete loop:
    revision, the candidate bytes and digest, and the active claim fence. Never
    retry with only the operation ID; retry the complete request.
 8. Commit the item change, or merge the worker commit into the coordinating
-   branch.
+   branch. Do this now, not at the end of a batch — the next mutating command
+   refuses while this one is uncommitted.
 9. Run `claim-verify` after the commit or merge. It finalizes the Git outcome,
-   repairs response-loss cases, and reports later revision drift. Run it again
-   before the next fenced operation if the prior outcome was not final.
+   repairs response-loss cases, and reports later revision drift. Require exit
+   0 before the next mutating command; exit 6 means findings remain, so act on
+   each `remediation` string and run it again.
 10. Release the claim with its current observed state.
 11. Run `validate` and show the resulting diff.
+
+Steps 7 to 9 are the whole rule in order: write, commit, `claim-verify`, next
+write.
 
 Legacy `create` refuses an ID with claim history. Legacy `transition` refuses an
 item with an active claim. Do not bypass those refusals. Read
@@ -191,6 +227,13 @@ response envelopes, refusal precedence, and recovery rules.
 4. Do the work.
 5. `inspect` again for the current revision, then `transition` to close it.
 6. `validate`, then show the diff.
+7. On a provisioned ledger, commit the ledger change now:
+   `git add <dir> && git commit`.
+8. On a provisioned ledger, run `claim-verify --ledger <dir> --json` and
+   require exit 0 before the next `create`, `transition`, or `patch`.
+
+Write, commit, `claim-verify`, next write. The unclaimed loop obeys the same
+rule as the claimed one, because both run through the same coordinator.
 
 ## Friction is a finding
 
