@@ -7,6 +7,17 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- `claim capabilities --ledger <dir> --json` now advertises
+  `result.backend.write_serialization`. A provisioned Git-journal backend
+  reports `scope: "all-worktrees-of-one-repository"` and
+  `blocks_until: "peer-commit-visible-in-this-checkout"`; an unprovisioned
+  backend reports `scope: "none"`. This makes the serialization the shared
+  Git-common-directory journal already performed discoverable instead of
+  implied. The core `capabilities` envelope is unchanged, and the core
+  contract version does not move.
+
 ### Fixed
 
 - A committed `.wowbagger/layout.json` now binds the ledger's item directory.
@@ -18,6 +29,13 @@ consolidation. The first tagged release inherits this file.
   Git finalization, worktree synchronization, or pending claimed publication.
   Working-tree deletions of an authorized Git revision are unauthorized.
   Findings name the expected item path and give a direct recovery action.
+- The contracts and the skill now state that a provisioned ledger's claim
+  journal serializes every worktree of one repository, and that a recorded
+  write blocks mutations in the other worktrees until its commit is visible
+  there. `limits.cross_worktree_coordination: false` is documented as "the
+  core never synchronizes checkouts", not as independent worktree writes.
+  Both stale-write remedies, the moving-`expected_revision` trap, and the
+  failed copy-the-item-in workaround are documented and pinned by tests.
 
 ## 0.1.0-alpha.4 - 2026-08-14
 

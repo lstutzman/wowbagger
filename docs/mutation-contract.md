@@ -341,8 +341,28 @@ MUST gate `publish-claimed` on that ledger-specific response. Neither result
 elevates the fixed mutation scope. Version 2 keeps
 `transition.write_scope: "single-item"`,
 `transition.cas_scope: "exact-byte-sha256"`, and
-`limits.multi_item_atomicity: false`. Work-claim visibility across worktrees is
-never cross-worktree mutation coordination.
+`limits.multi_item_atomicity: false`.
+
+`limits.cross_worktree_coordination: false` states one thing only: the core
+never synchronizes checkouts. It does not merge, pull, or copy item files
+between worktrees, and it never makes a write in one worktree appear in
+another. It is **not** a statement that worktrees write independently.
+
+On a provisioned Git-backed ledger they do not. One claim journal lives in the
+shared Git common directory, so it serializes every worktree of that
+repository: a recorded `transition` or `patch` in one worktree refuses every
+mutation in the others with exit 6 `claim-store-unavailable`, reason
+`publication-reconciliation-required`, until the writing commit is visible in
+the blocked checkout. Clones do not share the common directory, so
+`limits.cross_clone_coordination: false` carries no such consequence.
+
+That serialization is discoverable, per ledger, at
+`result.backend.write_serialization` in
+`claim capabilities --ledger <dir> --json`. See
+[the work-claim contract](work-claim-contract.md), section 3.1, for the
+behaviour and section 3.2 for the recovery. Work-claim serialization across
+worktrees is still not cross-worktree mutation coordination: it refuses
+writers, it does not reconcile them.
 
 Because capabilities takes no ledger content and does not write, it still
 cannot prove that a particular filesystem supports the required atomic

@@ -1256,6 +1256,14 @@ through the Git common directory. That visibility may set
 safe exclusive dispatch. Provisioned ledger-specific claim capabilities may
 separately advertise merge-coordinated claim-protected publication.
 
+`limits.cross_worktree_coordination: false` means the core never synchronizes
+checkouts. It does not mean worktrees write independently. A provisioned
+ledger's claim journal serializes every worktree of one repository and refuses
+mutations in the others until the writing commit is visible; an adapter reads
+that from the ledger-specific `backend.write_serialization` member, never from
+this core limit. An adapter MUST NOT report the core limit as evidence that a
+sibling worktree cannot block a mutation.
+
 Version 2 accepts a `patch` core request with exactly `command`, `ledger`, and
 `input_base64`. It launches the argument vector
 `["patch","--ledger","<resolved>","--input","-","--json"]`, sends the exact
