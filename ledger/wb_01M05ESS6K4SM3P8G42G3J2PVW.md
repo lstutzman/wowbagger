@@ -5,7 +5,7 @@ number: 99
 title: "Decide whether create should record a claim-journal entry"
 kind: task
 priority: 20
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
