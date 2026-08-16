@@ -82,8 +82,21 @@ export async function migrateSchema2(ledgerDirectory, { apply = false, onItem = 
       `Item locks are held under the ledger: ${heldLocks.join(', ')}. The migration requires a quiesced window. Stop all writers and resolve the locks through audited manual recovery before rerunning the dry run. No files were changed.`,
     );
   }
+  let nextNumber = 1 + ledger.items.reduce(
+    (highest, item) => (Number.isSafeInteger(item.data.number) && item.data.number > highest
+      ? item.data.number
+      : highest),
+    0,
+  );
   const changes = ledger.items.map((item) => {
-    const source = schema2Source(item.source);
+    // Schema 2 requires a number identity. Items that predate the rule get one
+    // assigned here, continuing past the highest existing number; items that
+    // already carry a number keep it.
+    const assignedNumber = Number.isSafeInteger(item.data.number) ? null : nextNumber;
+    if (assignedNumber !== null) {
+      nextNumber += 1;
+    }
+    const source = schema2Source(item.source, assignedNumber);
     return {
       id: item.data.id,
       path: item.path,
@@ -222,7 +235,7 @@ function candidateItem(item, change) {
   };
 }
 
-function schema2Source(source) {
+function schema2Source(source, assignedNumber = null) {
   const bounds = frontmatterBounds(source);
   const document = parseDocument(source.slice(bounds.start, bounds.end), {
     prettyErrors: false,
@@ -235,7 +248,18 @@ function schema2Source(source) {
   }
   const start = bounds.start + schemaVersion.range[0];
   const end = bounds.start + schemaVersion.range[1];
-  return `${source.slice(0, start)}2${source.slice(end)}`;
+  // 1 -> 2 is length-preserving, so byte offsets stay valid for a second edit.
+  const stamped = `${source.slice(0, start)}2${source.slice(end)}`;
+  if (assignedNumber === null) {
+    return stamped;
+  }
+  const idNode = document.get('id', true);
+  if (!idNode?.range) {
+    throw new Error('The id scalar could not be located.');
+  }
+  const idEnd = bounds.start + idNode.range[1];
+  const eol = stamped.slice(idEnd, idEnd + 2) === '\r\n' ? '\r\n' : '\n';
+  return `${stamped.slice(0, idEnd)}${eol}number: ${assignedNumber}${stamped.slice(idEnd)}`;
 }
 
 function migratedBytes(before, source) {

@@ -72,12 +72,14 @@ test('pre-publication lock and temporary failures clean every owned artifact', a
 
 test('failed cleanup reports bounded lock and temporary artifacts truthfully', async () => {
   const cases = [
-    ['lock-metadata-write-and-unlink-fail', 'unchanged', 'operation-failed', 'lock-file'],
-    ['temporary-close-and-unlink-fail', 'unchanged', 'operation-failed', 'temporary-file'],
-    ['temporary-unlink-fails-after-publication', 'committed', 'post-commit-recovery-required', 'temporary-file'],
-    ['lock-unlink-fails-after-publication', 'committed', 'post-commit-recovery-required', 'lock-file'],
+    ['lock-metadata-write-and-unlink-fail', 'unchanged', 'operation-failed', ['lock-file']],
+    ['temporary-close-and-unlink-fail', 'unchanged', 'operation-failed', ['temporary-file']],
+    ['temporary-unlink-fails-after-publication', 'committed', 'post-commit-recovery-required', ['temporary-file']],
+    // A schema-2 create holds two locks (the item and the number index), so a
+    // post-publication lock-unlink failure leaves both stale for recovery.
+    ['lock-unlink-fails-after-publication', 'committed', 'post-commit-recovery-required', ['lock-file', 'lock-file']],
   ];
-  for (const [scenario, state, code, kind] of cases) {
+  for (const [scenario, state, code, kinds] of cases) {
     await withLedger({}, async (ledger) => {
       const requestPath = await writeCreateRequest(ledger);
       const result = runScenario(scenario,
@@ -87,9 +89,15 @@ test('failed cleanup reports bounded lock and temporary artifacts truthfully', a
       assert.equal(result.status, 6, `${scenario}: ${result.stderr}`);
       assert.equal(output.state, state, scenario);
       assert.equal(output.error.code, code, scenario);
-      assert.equal(output.error.details.recovery_artifacts.length, 1, scenario);
-      assert.equal(output.error.details.recovery_artifacts[0].kind, kind, scenario);
-      assert.match(output.error.details.recovery_artifacts[0].sha256, /^sha256:[0-9a-f]{64}$/);
+      assert.equal(output.error.details.recovery_artifacts.length, kinds.length, scenario);
+      assert.deepEqual(
+        output.error.details.recovery_artifacts.map((artifact) => artifact.kind).sort(),
+        [...kinds].sort(),
+        scenario,
+      );
+      for (const artifact of output.error.details.recovery_artifacts) {
+        assert.match(artifact.sha256, /^sha256:[0-9a-f]{64}$/);
+      }
       assert.equal(output.error.details.recovery_artifacts_truncated, false);
     });
   }

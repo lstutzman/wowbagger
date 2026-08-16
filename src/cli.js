@@ -40,6 +40,7 @@ import { renderReportHtml } from './report-html.js';
 import {
   createItem,
   inspectItem,
+  inspectItemByNumber,
   patchItem,
   transitionItem,
   validateCreateRequest,
@@ -156,7 +157,20 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
     const options = parsedOptions.options;
-    const result = await inspectItem(options.ledger, options.id);
+    let result;
+    let selectorDetails;
+    if (options.number !== undefined) {
+      const parsedNumber = Number(options.number);
+      if (!Number.isSafeInteger(parsedNumber) || parsedNumber < 1) {
+        writeInvalidRequest(command, [issue('/arguments', 'invalid-value', 'Argument --number must be a positive integer.')]);
+        return;
+      }
+      result = await inspectItemByNumber(options.ledger, parsedNumber);
+      selectorDetails = { number: parsedNumber };
+    } else {
+      result = await inspectItem(options.ledger, options.id);
+      selectorDetails = { id: options.id };
+    }
     if (result.validation) {
       process.stdout.write(`${JSON.stringify({
         ok: false,
@@ -179,7 +193,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
         error: {
           code: 'item-not-found',
           message: 'The requested item was not found.',
-          details: { id: options.id },
+          details: selectorDetails,
         },
       })}\n`);
       process.exitCode = 2;
@@ -644,7 +658,7 @@ function parseContractOptions(command, argumentsList) {
   const issues = [];
   const seen = new Set();
   const valueFlags = command === 'inspect'
-    ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
+    ? new Map([['--ledger', 'ledger'], ['--id', 'id'], ['--number', 'number']])
     : command === 'report'
       ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out']])
       : command === 'create' || command === 'transition' || command === 'patch'
@@ -661,7 +675,9 @@ function parseContractOptions(command, argumentsList) {
     ? new Set(['--date'])
     : command === 'report'
       ? new Set(['--out'])
-      : new Set();
+      : command === 'inspect'
+        ? new Set(['--id', '--number'])
+        : new Set();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--json') {
@@ -698,6 +714,13 @@ function parseContractOptions(command, argumentsList) {
     if (!seen.has(flag) && !optionalFlags.has(flag)) {
       issues.push(argumentIssue(-1, 'missing-argument', `Argument ${flag} is required.`));
     }
+  }
+  if (command === 'inspect' && seen.has('--id') === seen.has('--number')) {
+    issues.push(argumentIssue(
+      -1,
+      seen.has('--id') ? 'conflicting-argument' : 'missing-argument',
+      'Exactly one of --id or --number is required.',
+    ));
   }
   if (!seen.has('--json')) {
     issues.push(argumentIssue(-1, 'missing-argument', 'Argument --json is required.'));
@@ -1104,7 +1127,7 @@ function usage(command) {
   }
 
   if (command === 'inspect') {
-    return 'Usage: wowbagger inspect --ledger <dir> --id <id> --json';
+    return 'Usage: wowbagger inspect --ledger <dir> (--id <id> | --number <n>) --json';
   }
 
   if (command === 'create') {

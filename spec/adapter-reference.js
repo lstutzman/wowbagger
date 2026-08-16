@@ -2050,12 +2050,11 @@ function validPatchRequest(request) {
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactKeys(request.set, [], ['number', 'priority'])
+    || !hasExactKeys(request.set, [], ['priority'])
     || Object.keys(request.set).length === 0) return false;
-  for (const [field, value] of Object.entries(request.set)) {
+  for (const value of Object.values(request.set)) {
     if (value === null) continue;
-    const minimum = field === 'number' ? 1 : 0;
-    if (parsedIntegerValue(value, minimum) === undefined) return false;
+    if (parsedIntegerValue(value, 0) === undefined) return false;
   }
   return true;
 }
@@ -2079,7 +2078,7 @@ function validPatchResultCorrelation(item, request) {
   for (const [field, requested] of Object.entries(request.set)) {
     if (requested === null) {
       if (Object.hasOwn(item.core, field)) return false;
-    } else if (item.core[field] !== parsedIntegerValue(requested, field === 'number' ? 1 : 0)) {
+    } else if (item.core[field] !== parsedIntegerValue(requested, 0)) {
       return false;
     }
   }

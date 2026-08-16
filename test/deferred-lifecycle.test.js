@@ -21,6 +21,7 @@ test('transition from backlog to deferred writes the deferred date field', async
   const source = `---
 schema_version: 2
 id: wb_01KZQ1WW00A234567890123456
+number: 1
 title: "Deferred task test"
 kind: task
 status: backlog
@@ -80,6 +81,7 @@ test('transition from deferred to backlog removes the deferred date field', asyn
   const source = `---
 schema_version: 2
 id: wb_01KZMFG500A234567890123456
+number: 2
 title: "Undefer task test"
 kind: task
 status: deferred
@@ -145,6 +147,7 @@ test('ready excludes deferred items', async () => {
   const backlogItem = `---
 schema_version: 2
 id: wb_01KZQ1WW00A234567890123456
+number: 3
 title: "Ready task"
 kind: task
 status: backlog
@@ -163,6 +166,7 @@ Should be in ready.
   const deferredItem = `---
 schema_version: 2
 id: wb_01KZQ1WW00B234567890123456
+number: 4
 title: "Deferred task"
 kind: task
 status: deferred
@@ -205,6 +209,7 @@ test('validate rejects deferred status without deferred date field', async () =>
   const invalidItem = `---
 schema_version: 2
 id: wb_01KWDFKD00C234567890123456
+number: 5
 title: "Invalid deferred"
 kind: task
 status: deferred
@@ -239,6 +244,7 @@ test('validate rejects non-deferred status with deferred date field', async () =
   const invalidItem = `---
 schema_version: 2
 id: wb_01KWDFKD00D234567890123456
+number: 6
 title: "Invalid with deferred field"
 kind: task
 status: backlog
@@ -275,6 +281,7 @@ test('transition from deferred to in-progress is rejected', async () => {
   const source = `---
 schema_version: 2
 id: wb_01KZMFG500B234567890123456
+number: 7
 title: "Deferred item"
 kind: task
 status: deferred
@@ -335,6 +342,7 @@ test('transition from deferred to backlog without decision is rejected', async (
   const source = `---
 schema_version: 2
 id: wb_01KZMFG500C234567890123456
+number: 8
 title: "Deferred item no decision"
 kind: task
 status: deferred
@@ -392,6 +400,7 @@ test('validate rejects deferred item when deferred date does not match updated',
   const invalidItem = `---
 schema_version: 2
 id: wb_01KZMFG500D234567890123456
+number: 9
 title: "Mismatch deferred date"
 kind: task
 status: deferred
@@ -432,6 +441,7 @@ test('validate rejects deferred item without matching defer decision', async () 
   const invalidItem = `---
 schema_version: 2
 id: wb_01KZMFG500E234567890123456
+number: 10
 title: "Missing defer decision"
 kind: task
 status: deferred

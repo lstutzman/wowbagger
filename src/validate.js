@@ -108,7 +108,7 @@ function inspectItem(item, context) {
   fact.parent = inspectParent(fact, context);
   inspectOptionalDate(fact, 'snoozed_until', context);
   inspectOptionalPriority(fact, context);
-  fact.number = inspectOptionalNumber(fact, context);
+  fact.number = inspectNumber(fact, context);
 
   for (const field of TERMINAL_DATE_FIELDS) {
     inspectOptionalDate(fact, field, context);
@@ -243,11 +243,21 @@ function inspectRequiredDate(fact, field, context) {
   return inspectDate(fact, field, context);
 }
 
-// number is a short human handle. The immutable ULID remains the identity used
-// for publication, references, and the filename; number exists so a person can
-// say "item 12" instead of reading out twenty-six characters.
-function inspectOptionalNumber(fact, context) {
+// number is the human-facing identity: on schema 2 it is required, unique, and
+// immutable, assigned by the core at create. The ULID stays the internal
+// surrogate key (filename, publication fence, references). Schema 1 predates
+// this rule, so number stays optional there.
+function inspectNumber(fact, context) {
   if (!hasOwn(fact.data, 'number')) {
+    if (fact.schemaVersion === 2) {
+      addError(
+        fact,
+        'number',
+        'missing-number',
+        'Field number is required and is assigned by Wowbagger at create.',
+        context,
+      );
+    }
     return null;
   }
 

@@ -68,7 +68,7 @@ test('per-command help prints that command usage line', () => {
   const cases = [
     ['validate', 'wowbagger validate --ledger <dir> --json'],
     ['ready', 'wowbagger ready --ledger <dir> --as-of YYYY-MM-DD'],
-    ['inspect', 'wowbagger inspect --ledger <dir> --id <id> --json'],
+    ['inspect', 'wowbagger inspect --ledger <dir> (--id <id> | --number <n>) --json'],
     ['create', 'wowbagger create --ledger <dir> --input <json-file|-> --json'],
     ['transition', 'wowbagger transition --ledger <dir> --input <json-file|-> --json'],
     ['patch', 'wowbagger patch --ledger <dir> --input <json-file|-> --json'],

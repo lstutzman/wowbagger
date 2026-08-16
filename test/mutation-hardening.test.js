@@ -415,15 +415,16 @@ test('transition preserves aliases to changing controlled anchors without changi
   }
 });
 
-test('patch preserves extension values when removing an anchored number', async () => {
+test('patch preserves extension values when removing an anchored priority', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY094';
   const source = [
     '---',
     'schema_version: 1',
     `id: ${id}`,
-    'number: &item_number 7',
+    'number: 7',
     'title: "Remove an anchored controlled field"',
     'kind: task',
+    'priority: &item_priority 3',
     'status: backlog',
     'created: 2030-01-14',
     'updated: 2030-01-14',
@@ -432,7 +433,7 @@ test('patch preserves extension values when removing an anchored number', async 
     '  recorded_at: "2030-01-14T12:00:00Z"',
     'depends_on: []',
     'related: []',
-    'number_mirror: *item_number',
+    'priority_mirror: *item_priority',
     '---',
     '',
   ].join('\n');
@@ -445,7 +446,7 @@ test('patch preserves extension values when removing an anchored number', async 
       id,
       expected_revision: revision,
       date: '2030-01-16',
-      set: { number: null },
+      set: { priority: null },
     }));
 
     const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
@@ -454,9 +455,9 @@ test('patch preserves extension values when removing an anchored number', async 
     const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
     const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
     const data = document.toJS();
-    assert.equal(Object.hasOwn(data, 'number'), false);
-    assert.equal(data.number_mirror, 7);
-    assert.doesNotMatch(rewritten, /\*item_number/);
+    assert.equal(Object.hasOwn(data, 'priority'), false);
+    assert.equal(data.priority_mirror, 3);
+    assert.doesNotMatch(rewritten, /\*item_priority/);
   });
 });
 
@@ -466,7 +467,7 @@ test('patch preserves aliases bound to a reused anchor name', async () => {
     '---',
     'schema_version: 1',
     `id: ${id}`,
-    'number: &shared 7',
+    'priority: &shared 3',
     'title: "Preserve reused anchors"',
     'kind: task',
     'status: backlog',
@@ -477,7 +478,7 @@ test('patch preserves aliases bound to a reused anchor name', async () => {
     '  recorded_at: "2030-01-14T12:00:00Z"',
     'depends_on: []',
     'related: []',
-    'number_mirror: *shared',
+    'priority_mirror: *shared',
     'extension_anchor: &shared "extension value"',
     'extension_mirror: *shared',
     '---',
@@ -491,7 +492,7 @@ test('patch preserves aliases bound to a reused anchor name', async () => {
       id,
       expected_revision: JSON.parse(inspected.stdout).result.item.revision,
       date: '2030-01-16',
-      set: { number: null },
+      set: { priority: null },
     }));
 
     const result = runCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
@@ -500,7 +501,7 @@ test('patch preserves aliases bound to a reused anchor name', async () => {
     const rewritten = await readFile(path.join(ledger, `${id}.md`), 'utf8');
     const document = parseDocument(rewritten.split('\n---\n', 1)[0].replace(/^---\n/, ''), { schema: 'core' });
     const data = document.toJS();
-    assert.equal(data.number_mirror, 7);
+    assert.equal(data.priority_mirror, 3);
     assert.equal(data.extension_anchor, 'extension value');
     assert.equal(data.extension_mirror, 'extension value');
   });

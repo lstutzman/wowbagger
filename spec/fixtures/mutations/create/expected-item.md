@@ -1,6 +1,7 @@
 ---
 schema_version: 2
 id: wb_01Q45X474N28T5CY4GNF6YY4HM
+number: 1
 title: "Map a fictional moon route"
 kind: task
 status: triage

@@ -47,6 +47,7 @@ These never modify anything. Prefer them.
 wowbagger validate --ledger <dir> --json
 wowbagger ready     --ledger <dir> --as-of <YYYY-MM-DD> --json
 wowbagger inspect   --ledger <dir> --id wb_... --json
+wowbagger inspect   --ledger <dir> --number <n> --json
 wowbagger capabilities --json
 ```
 
@@ -60,6 +61,22 @@ wowbagger capabilities --json
 - `inspect` returns a lossless byte snapshot plus a SHA-256 revision. That
   revision is what `transition` compares against, so inspect immediately before
   transitioning.
+
+## Talk to people in numbers, not ULIDs
+
+Every item has two identifiers. The `wb_...` ULID is the **internal** identity —
+the filename, the publication fence, what `transition`/`inspect` take as `--id`.
+The integer **number** is the **human-facing** identity: on a schema-2 ledger it
+is required, unique, and immutable, and the core assigns it at `create`.
+
+- When you refer to an item to a person, say **#N** (its number), e.g. "item #30",
+  never the `wb_...` ULID. Show the ULID only if they ask for it.
+- You can address an item by number: `inspect --number <n>` resolves it (and
+  refuses `item-not-found` when no item carries that number). `--id wb_...` still
+  works; use exactly one.
+- The number is not caller-settable. `create` refuses a supplied `number` and
+  assigns the next one itself; `patch` refuses `number` because it is immutable.
+  To read an item's number, `inspect` it and read `result.item.core.number`.
 
 ## Generating an HTML report
 

@@ -128,6 +128,30 @@ test('create derives the item path from a nested committed items-directory layou
   });
 });
 
+test('create assigns the next number as the item identity on a schema-2 ledger', async () => {
+  await withLedger({}, async (ledger) => {
+    const dir = path.dirname(ledger);
+    const provenance = { source: 'test', recorded_at: '2030-01-10T00:00:00.000Z' };
+    const reqA = path.join(dir, 'a.json');
+    await writeFile(reqA, JSON.stringify({
+      id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+      item: { title: 'A', kind: 'task', provenance, depends_on: [], related: [] },
+      body: 'a',
+    }));
+    const a = JSON.parse(runCli('create', '--ledger', ledger, '--input', reqA, '--json').stdout);
+    assert.equal(a.result.item.core.number, 1);
+
+    const reqB = path.join(dir, 'b.json');
+    await writeFile(reqB, JSON.stringify({
+      id: 'wb_01Q4837BM01W70T30B184GG1R6',
+      item: { title: 'B', kind: 'task', provenance, depends_on: [], related: [] },
+      body: 'b',
+    }));
+    const b = JSON.parse(runCli('create', '--ledger', ledger, '--input', reqB, '--json').stdout);
+    assert.equal(b.result.item.core.number, 2);
+  });
+});
+
 const PRIORITISED_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
 
 function prioritisedItemSource(id) {
@@ -162,6 +186,37 @@ test('inspect reports number and priority inside core', async () => {
     const item = JSON.parse(result.stdout).result.item;
     assert.equal(item.core.number, 7);
     assert.equal(item.core.priority, 5);
+  });
+});
+
+test('inspect resolves an item by its number identity', async () => {
+  await withLedger({ [`${PRIORITISED_ID}.md`]: prioritisedItemSource(PRIORITISED_ID) }, async (ledger) => {
+    const result = runCli('inspect', '--ledger', ledger, '--number', '7', '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    const item = JSON.parse(result.stdout).result.item;
+    assert.equal(item.id, PRIORITISED_ID);
+    assert.equal(item.core.number, 7);
+  });
+});
+
+test('inspect reports item-not-found for an absent number', async () => {
+  await withLedger({ [`${PRIORITISED_ID}.md`]: prioritisedItemSource(PRIORITISED_ID) }, async (ledger) => {
+    const result = runCli('inspect', '--ledger', ledger, '--number', '999', '--json');
+
+    assert.equal(result.status, 2, result.stdout);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'item-not-found');
+    assert.deepEqual(envelope.error.details, { number: 999 });
+  });
+});
+
+test('inspect refuses when neither id nor number is supplied', async () => {
+  await withLedger({ [`${PRIORITISED_ID}.md`]: prioritisedItemSource(PRIORITISED_ID) }, async (ledger) => {
+    const result = runCli('inspect', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 2, result.stdout);
+    assert.equal(JSON.parse(result.stdout).error.code, 'invalid-request');
   });
 });
 
@@ -241,7 +296,7 @@ test('create refuses a malformed priority at the request level', async () => {
   });
 });
 
-test('create refuses a malformed number at the request level', async () => {
+test('create refuses any caller-supplied number because the core assigns the identity', async () => {
   await withLedger({}, async (ledger) => {
     const requestPath = path.join(path.dirname(ledger), 'request.json');
     await writeFile(requestPath, JSON.stringify({
@@ -264,12 +319,12 @@ test('create refuses a malformed number at the request level', async () => {
     assert.deepEqual(envelope.error.details.issues, [{
       path: '/item/number',
       code: 'invalid-value',
-      message: 'Item member number must be a positive integer.',
+      message: 'Item member number is controlled by Wowbagger; it is the item identity, assigned at create.',
     }]);
   });
 });
 
-test('create serializes number and priority at their canonical frontmatter positions', async () => {
+test('create serializes the assigned number and caller priority at their canonical frontmatter positions', async () => {
   await withLedger({}, async (ledger) => {
     const requestPath = path.join(path.dirname(ledger), 'request.json');
     await writeFile(requestPath, JSON.stringify({
@@ -277,7 +332,6 @@ test('create serializes number and priority at their canonical frontmatter posit
       item: {
         title: 'Demo',
         kind: 'task',
-        number: 7,
         priority: 5,
         provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
         depends_on: [],
@@ -291,7 +345,7 @@ test('create serializes number and priority at their canonical frontmatter posit
     const item = JSON.parse(result.stdout).result.item;
     const lines = Buffer.from(item.source_base64, 'base64').toString('utf8').split('\n');
     const idIndex = lines.findIndex((line) => line.startsWith('id:'));
-    assert.equal(lines[idIndex + 1], 'number: 7');
+    assert.equal(lines[idIndex + 1], 'number: 1');
     const kindIndex = lines.indexOf('kind: task');
     assert.equal(lines[kindIndex + 1], 'priority: 5');
   });
@@ -326,7 +380,7 @@ test('contract JSON commands return deterministic invalid-request envelopes for 
     ['capabilities', ['--mystery', '--json'], [{ path: '/arguments/1', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
     ['capabilities', ['--json', '--json'], [{ path: '/arguments/2', code: 'repeated-argument', message: 'Argument --json must not be repeated.' }]],
     ['capabilities', ['--json', 'stray'], [{ path: '/arguments/2', code: 'unknown-argument', message: 'Argument stray is not recognized.' }]],
-    ['inspect', ['--ledger', 'ledger', '--json'], [{ path: '/arguments', code: 'missing-argument', message: 'Argument --id is required.' }]],
+    ['inspect', ['--ledger', 'ledger', '--json'], [{ path: '/arguments', code: 'missing-argument', message: 'Exactly one of --id or --number is required.' }]],
     ['inspect', ['--ledger', 'ledger', '--id', id, '--json', '--mystery'], [{ path: '/arguments/6', code: 'unknown-argument', message: 'Argument --mystery is not recognized.' }]],
     ['inspect', ['--ledger', 'ledger', '--id', id, '--id', id, '--json'], [{ path: '/arguments/5', code: 'repeated-argument', message: 'Argument --id must not be repeated.' }]],
     ['inspect', ['--ledger', 'ledger', '--id', '--json'], [{ path: '/arguments/3', code: 'missing-argument', message: 'Argument --id requires a value.' }]],

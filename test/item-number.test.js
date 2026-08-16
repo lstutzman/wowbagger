@@ -34,6 +34,20 @@ test('accepts a ledger whose items carry no number', () => {
   assert.deepEqual(errorsFor([item('wb_01KZAAAAAAAAAAAAAAAAAAAAAA')]), []);
 });
 
+function schema2Item(id, extra = {}) {
+  return item(id, { schema_version: 2, decisions: [], ...extra });
+}
+
+test('requires a number on a schema-2 item', () => {
+  const errors = errorsFor([schema2Item('wb_01KZAAAAAAAAAAAAAAAAAAAAAA')]);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].code, 'missing-number');
+});
+
+test('accepts a schema-2 item that carries a number', () => {
+  assert.deepEqual(errorsFor([schema2Item('wb_01KZAAAAAAAAAAAAAAAAAAAAAA', { number: 1 })]), []);
+});
+
 test('accepts distinct positive integer numbers', () => {
   assert.deepEqual(errorsFor([
     item('wb_01KZAAAAAAAAAAAAAAAAAAAAAA', { number: 1 }),

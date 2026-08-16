@@ -1,6 +1,7 @@
 ---
 schema_version: 2
 id: wb_01Q45V47G0205ANANANANANANA
+number: 1
 title: "Record an empty fictional observation"
 kind: task
 status: triage

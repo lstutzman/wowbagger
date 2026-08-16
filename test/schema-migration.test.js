@@ -63,7 +63,9 @@ test('applies only the schema scalar when explicitly requested', async () => {
     'Body bytes stay exact.',
     '',
   ].join('\r\n');
-  const expected = source.replace('schema_version: 1', 'schema_version: 2');
+  const expected = source
+    .replace('schema_version: 1', 'schema_version: 2')
+    .replace(`id: ${BACKLOG_ID}`, `id: ${BACKLOG_ID}\r\nnumber: 1`);
 
   await withLedger({ 'item.md': source }, async (ledger) => {
     const result = runMigration('--ledger', ledger, '--apply');
@@ -81,7 +83,9 @@ test('preserves a UTF-8 byte order mark when applying the schema stamp', async (
   const source = Buffer.concat([byteOrderMark, Buffer.from(standaloneBacklogSource)]);
   const expected = Buffer.concat([
     byteOrderMark,
-    Buffer.from(standaloneBacklogSource.replace('schema_version: 1', 'schema_version: 2')),
+    Buffer.from(standaloneBacklogSource
+      .replace('schema_version: 1', 'schema_version: 2')
+      .replace(`id: ${BACKLOG_ID}\n`, `id: ${BACKLOG_ID}\nnumber: 1\n`)),
   ]);
 
   await withLedger({ 'item.md': source }, async (ledger) => {
@@ -151,8 +155,12 @@ test('refuses a mixed schema ledger as a partial migration state', async () => {
 });
 
 test('refuses an already schema version 2 ledger without rewriting it', async () => {
-  const migratedDoneSource = doneSource.replace('schema_version: 1', 'schema_version: 2');
-  const migratedBacklogSource = backlogSource.replace('schema_version: 1', 'schema_version: 2');
+  const migratedDoneSource = doneSource
+    .replace('schema_version: 1', 'schema_version: 2')
+    .replace(`id: ${DONE_ID}\n`, `id: ${DONE_ID}\nnumber: 1\n`);
+  const migratedBacklogSource = backlogSource
+    .replace('schema_version: 1', 'schema_version: 2')
+    .replace(`id: ${BACKLOG_ID}\n`, `id: ${BACKLOG_ID}\nnumber: 2\n`);
 
   await withLedger({
     '01-foundation.md': migratedDoneSource,

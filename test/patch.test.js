@@ -103,14 +103,9 @@ test('patch refuses a negative priority', async () => {
   });
 });
 
-test('patch refuses a number already held by another item without touching it', async () => {
-  const otherId = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
-  await withLedger({
-    [`${ID}.md`]: itemSource(ID),
-    [`${otherId}.md`]: itemSource(otherId, { number: 9 }),
-  }, async (ledger) => {
+test('patch refuses to change the immutable number', async () => {
+  await withLedger({ [`${ID}.md`]: itemSource(ID) }, async (ledger) => {
     const revision = inspectRevision(ledger, ID);
-    const otherRevision = inspectRevision(ledger, otherId);
 
     const result = await runPatch(ledger, {
       id: ID,
@@ -121,11 +116,11 @@ test('patch refuses a number already held by another item without touching it', 
 
     assert.equal(result.status, 2, result.stdout);
     const envelope = JSON.parse(result.stdout);
-    assert.equal(envelope.error.code, 'candidate-invalid');
+    assert.equal(envelope.error.code, 'invalid-request');
     assert.equal(envelope.state, 'unchanged');
-    assert.ok(envelope.error.details.validation_errors.every((entry) => entry.code === 'duplicate-number'), result.stdout);
+    const paths = envelope.error.details.issues.map((entry) => entry.path);
+    assert.ok(paths.includes('/set/number'), result.stdout);
     assert.equal(inspectRevision(ledger, ID), revision);
-    assert.equal(inspectRevision(ledger, otherId), otherRevision);
   });
 });
 
@@ -169,23 +164,21 @@ test('patch refuses a date earlier than the current updated date', async () => {
   });
 });
 
-test('patch inserts absent number and priority at their canonical positions', async () => {
-  await withLedger({ [`${ID}.md`]: itemSource(ID, { number: null, priority: null }) }, async (ledger) => {
+test('patch inserts an absent priority at its canonical position', async () => {
+  await withLedger({ [`${ID}.md`]: itemSource(ID, { priority: null }) }, async (ledger) => {
     const revision = inspectRevision(ledger, ID);
 
     const result = await runPatch(ledger, {
       id: ID,
       expected_revision: revision,
       date: '2030-01-11',
-      set: { number: 12, priority: 4 },
+      set: { priority: 4 },
     });
 
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     const item = JSON.parse(result.stdout).result.item;
-    assert.equal(item.core.number, 12);
     assert.equal(item.core.priority, 4);
     const lines = Buffer.from(item.source_base64, 'base64').toString('utf8').split('\n');
-    assert.equal(lines[lines.indexOf(`id: ${ID}`) + 1], 'number: 12');
     assert.equal(lines[lines.indexOf('kind: task') + 1], 'priority: 4');
   });
 });

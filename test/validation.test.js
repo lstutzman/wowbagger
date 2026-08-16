@@ -18,6 +18,7 @@ test('validate accepts a uniform schema version 2 ledger', async () => {
     'item.md': `---
 schema_version: 2
 id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+number: 1
 title: "Versioned item"
 kind: task
 status: backlog
@@ -42,6 +43,7 @@ test('validate labels schema version 2 vocabulary errors with schema version 2',
     'bad-decision.md': `---
 schema_version: 2
 id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+number: 2
 title: "Invalid decision action"
 kind: task
 status: backlog
@@ -61,6 +63,7 @@ decisions:
     'bad-kind.md': `---
 schema_version: 2
 id: wb_01KDZ98CG0YH769STZ754EKXSZ
+number: 3
 title: "Invalid kind"
 kind: story
 status: backlog
@@ -75,6 +78,7 @@ depends_on: []
     'bad-status.md': `---
 schema_version: 2
 id: wb_01KE1VN3G0HV9ZDBB8BEASXBBG
+number: 4
 title: "Invalid status"
 kind: task
 status: paused
@@ -135,6 +139,7 @@ depends_on: []
     'version-2.md': `---
 schema_version: 2
 id: wb_01KDZ98CG0YH769STZ754EKXSZ
+number: 5
 title: "Version 2 item"
 kind: task
 status: backlog
@@ -175,6 +180,7 @@ test('validate accepts a schema version 2 dependency on a done prerequisite', as
     'prerequisite.md': `---
 schema_version: 2
 id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+number: 6
 title: "Completed prerequisite"
 kind: task
 status: done
@@ -195,6 +201,7 @@ decisions:
     'dependent.md': `---
 schema_version: 2
 id: wb_01KDZ98CG0YH769STZ754EKXSZ
+number: 7
 title: "Dependent work"
 kind: task
 status: backlog
@@ -219,6 +226,7 @@ test('validate accepts a schema version 2 done item whose prerequisite is done',
     'prerequisite.md': `---
 schema_version: 2
 id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+number: 8
 title: "Completed prerequisite"
 kind: task
 status: done
@@ -239,6 +247,7 @@ decisions:
     'dependent.md': `---
 schema_version: 2
 id: wb_01KDZ98CG0YH769STZ754EKXSZ
+number: 9
 title: "Completed dependent"
 kind: task
 status: done
@@ -269,6 +278,7 @@ test('validate rejects a schema version 2 done item whose prerequisite is live',
     'prerequisite.md': `---
 schema_version: 2
 id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+number: 10
 title: "Live prerequisite"
 kind: task
 status: backlog
@@ -283,6 +293,7 @@ depends_on: []
     'dependent.md': `---
 schema_version: 2
 id: wb_01KDZ98CG0YH769STZ754EKXSZ
+number: 11
 title: "Invalid completion"
 kind: task
 status: done

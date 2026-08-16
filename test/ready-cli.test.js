@@ -56,6 +56,7 @@ test('ready selects schema version 2 tasks only when every prerequisite is done'
     'done.md': `---
 schema_version: 2
 id: wb_01KDWPVNG05FCBFC6R7R7CJANX
+number: 1
 title: "Done prerequisite"
 kind: task
 status: done
@@ -76,6 +77,7 @@ decisions:
     'ready.md': `---
 schema_version: 2
 id: wb_01KDZ98CG0YH769STZ754EKXSZ
+number: 2
 title: "Ready dependent"
 kind: task
 status: backlog
@@ -90,6 +92,7 @@ depends_on: [wb_01KDWPVNG05FCBFC6R7R7CJANX]
     'live.md': `---
 schema_version: 2
 id: wb_01KE1VN3G0HV9ZDBB8BEASXBBG
+number: 3
 title: "Live prerequisite"
 kind: task
 status: in-progress
@@ -104,6 +107,7 @@ depends_on: []
     'blocked.md': `---
 schema_version: 2
 id: wb_01KE4E1TG0ZEEX37TTS82ME1JK
+number: 4
 title: "Blocked dependent"
 kind: task
 status: backlog

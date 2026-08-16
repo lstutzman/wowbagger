@@ -69,6 +69,23 @@ export async function inspectItem(ledgerDirectory, id) {
   return { item: inspectedItem(id, displayItemPath(item.path), item.bytes, item.data, item.body) };
 }
 
+// Resolve an item by its number identity. A valid ledger has unique numbers, so
+// at most one item matches; an invalid ledger returns its validation instead.
+export async function inspectItemByNumber(ledgerDirectory, number) {
+  const ledger = await loadLedger(ledgerDirectory);
+  const validation = validateLedger(ledger);
+  if (!validation.valid) {
+    return { validation };
+  }
+
+  const item = ledger.items.find((candidate) => candidate.data.number === number);
+  if (!item) {
+    return { item: null };
+  }
+
+  return { item: inspectedItem(item.data.id, displayItemPath(item.path), item.bytes, item.data, item.body) };
+}
+
 export function revisionFor(bytes) {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }
@@ -135,13 +152,15 @@ export function validateCreateRequest(request, parseIssues = []) {
   }
   const controlled = new Set([
     'schema_version', 'id', 'status', 'created', 'updated', 'completed',
-    'killed', 'archived', 'deferred', 'decisions', 'body',
+    'killed', 'archived', 'deferred', 'decisions', 'body', 'number',
   ]);
   for (const field of Object.keys(item)) {
     if (controlled.has(field)) {
       const message = field === 'status'
         ? 'Item member status is controlled by Wowbagger. Create assigns triage; a transition from triage to backlog accepts the item into ready.'
-        : `Item member ${field} is controlled by Wowbagger.`;
+        : field === 'number'
+          ? 'Item member number is controlled by Wowbagger; it is the item identity, assigned at create.'
+          : `Item member ${field} is controlled by Wowbagger.`;
       issues.push(issue(pointer(['item', field]), 'invalid-value', message));
     }
   }
@@ -153,9 +172,6 @@ export function validateCreateRequest(request, parseIssues = []) {
   }
   if (hasOwn(item, 'priority') && !isPatchableInteger(item.priority, 0)) {
     issues.push(issue('/item/priority', 'invalid-value', 'Item member priority must be a non-negative integer.'));
-  }
-  if (hasOwn(item, 'number') && !isPatchableInteger(item.number, 1)) {
-    issues.push(issue('/item/number', 'invalid-value', 'Item member number must be a positive integer.'));
   }
   if (hasOwn(item, 'depends_on') && !Array.isArray(item.depends_on)) {
     issues.push(issue('/item/depends_on', 'invalid-type', 'Item member depends_on must be an array.'));
@@ -291,10 +307,11 @@ async function createItemUnfenced(ledgerDirectory, request, scenario) {
       }
 
       const schemaVersion = current.ledger.items[0]?.data.schema_version ?? 2;
+      const assignedNumber = schemaVersion === 2 ? nextItemNumber(current.ledger.items) : null;
       let bytes;
       try {
         failCandidateSerializationForTest(scenario);
-        bytes = createCandidateSource(request, schemaVersion);
+        bytes = createCandidateSource(request, schemaVersion, assignedNumber);
       } catch {
         return await finishUncommitted(operationFailed(id, 'serialize-candidate', 'serialization-failed'));
       }
@@ -715,12 +732,13 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
   return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
 }
 
-// The exact patchable field set (mutation contract section 8). Everything
-// else stays a reviewable hand-edit or a transition concern.
-const PATCHABLE_FIELDS = ['number', 'priority'];
-// Where a newly added field lands in the frontmatter; both anchors are
-// required members, so they always exist.
-const PATCH_FIELD_ANCHORS = { number: 'id', priority: 'kind' };
+// The exact patchable field set (mutation contract section 8). `number` is the
+// immutable item identity, assigned once at create, so it is not patchable;
+// everything else stays a reviewable hand-edit or a transition concern.
+const PATCHABLE_FIELDS = ['priority'];
+// Where a newly added field lands in the frontmatter; the anchor is a required
+// member, so it always exists.
+const PATCH_FIELD_ANCHORS = { priority: 'kind' };
 
 export function validatePatchRequest(request, parseIssues = []) {
   const issues = [...parseIssues];
@@ -772,10 +790,7 @@ export async function patchItem(ledgerDirectory, request, scenario) {
   return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize) => (
     mutateExistingItem(ledgerDirectory, request, scenario, {
       name: 'patch',
-      lockIds: (target, _ledger, patchRequest) => [
-        target.data.id,
-        ...(hasOwn(patchRequest.set, 'number') ? [NUMBER_INDEX_LOCK_ID] : []),
-      ],
+      lockIds: (target) => [target.data.id],
       build: buildPatch,
       authorize,
     })
@@ -1306,7 +1321,8 @@ function lockIdsForCreate(request, ledger) {
   const existingIds = new Set(ledger.items.map((item) => item.data.id));
   const references = [request.item.parent, ...(request.item.depends_on ?? [])]
     .filter((id) => existingIds.has(id));
-  const numberLock = hasOwn(request.item, 'number') ? [NUMBER_INDEX_LOCK_ID] : [];
+  const schemaVersion = ledger.items[0]?.data.schema_version ?? 2;
+  const numberLock = schemaVersion === 2 ? [NUMBER_INDEX_LOCK_ID] : [];
   return [request.id, ...references, ...numberLock].sort(compareText);
 }
 
@@ -1821,14 +1837,33 @@ async function waitForTestMarker(file) {
   throw new Error(`Timed out waiting for test marker ${path.basename(file)}.`);
 }
 
-export function createCandidateSource(request, schemaVersion = 1) {
-  return Buffer.from(serializeCreate(createData(request, dateFromId(request.id), schemaVersion), request.body), 'utf8');
+export function createCandidateSource(request, schemaVersion = 1, number = null) {
+  return Buffer.from(
+    serializeCreate(createData(request, dateFromId(request.id), schemaVersion, number), request.body),
+    'utf8',
+  );
 }
 
-function createData(request, date, schemaVersion) {
+// number is the item identity: on schema 2 the core assigns 1 + the highest
+// existing number, computed under NUMBER_INDEX_LOCK_ID so concurrent creates in
+// one working copy never collide. Schema 1 predates the rule and stays
+// number-less unless a migration assigns one.
+export function nextItemNumber(items) {
+  let highest = 0;
+  for (const item of items) {
+    const value = item.data.number;
+    if (Number.isSafeInteger(value) && value > highest) {
+      highest = value;
+    }
+  }
+  return highest + 1;
+}
+
+function createData(request, date, schemaVersion, number = null) {
   return {
     schema_version: schemaVersion,
     id: request.id,
+    ...(number !== null ? { number } : {}),
     title: request.item.title,
     kind: request.item.kind,
     status: 'triage',

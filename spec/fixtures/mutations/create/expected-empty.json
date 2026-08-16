@@ -7,10 +7,10 @@
     "item": {
       "id": "wb_01Q45V47G0205ANANANANANANA",
       "path": "wb_01Q45V47G0205ANANANANANANA.md",
-      "revision": "sha256:506e4092b5d46541be29ca538baaf28369d5a48a8af23fda8c04ce3dce5ab81b",
+      "revision": "sha256:32199a3a0b7c50fad51d51b415d227a9cda69b73083acd65b9d8ef125f1303d0",
       "source_encoding": "base64",
       "source_media_type": "text/markdown; charset=utf-8",
-      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAyCmlkOiB3Yl8wMVE0NVY0N0cwMjA1QU5BTkFOQU5BTkFOQQp0aXRsZTogIlJlY29yZCBhbiBlbXB0eSBmaWN0aW9uYWwgb2JzZXJ2YXRpb24iCmtpbmQ6IHRhc2sKc3RhdHVzOiB0cmlhZ2UKY3JlYXRlZDogMjAzMC0wMS0xMAp1cGRhdGVkOiAyMDMwLTAxLTEwCnByb3ZlbmFuY2U6CiAgc291cmNlOiAiZml4dHVyZS9tdXRhdGlvbnMiCiAgcmVjb3JkZWRfYXQ6ICIyMDMwLTAxLTEwVDEyOjAwOjAwWiIKZGVwZW5kc19vbjogW10KcmVsYXRlZDogW10KLS0tCg==",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAyCmlkOiB3Yl8wMVE0NVY0N0cwMjA1QU5BTkFOQU5BTkFOQQpudW1iZXI6IDEKdGl0bGU6ICJSZWNvcmQgYW4gZW1wdHkgZmljdGlvbmFsIG9ic2VydmF0aW9uIgpraW5kOiB0YXNrCnN0YXR1czogdHJpYWdlCmNyZWF0ZWQ6IDIwMzAtMDEtMTAKdXBkYXRlZDogMjAzMC0wMS0xMApwcm92ZW5hbmNlOgogIHNvdXJjZTogImZpeHR1cmUvbXV0YXRpb25zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMFQxMjowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCi0tLQo=",
       "core": {
         "schema_version": 2,
         "id": "wb_01Q45V47G0205ANANANANANANA",
@@ -19,6 +19,7 @@
         "status": "triage",
         "created": "2030-01-10",
         "updated": "2030-01-10",
+        "number": 1,
         "provenance": {
           "source": "fixture/mutations",
           "recorded_at": "2030-01-10T12:00:00Z"

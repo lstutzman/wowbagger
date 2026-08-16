@@ -44,7 +44,7 @@ async function repository() {
   await mkdir(path.join(ledger, '.wowbagger'));
   await writeFile(path.join(ledger, '.wowbagger', 'namespace'), `${namespace}\n`);
   const itemPath = path.join(ledger, 'item.md');
-  const before = Buffer.from('---\nschema_version: 2\nid: wb_01KZBMBEZKPE7D15HKW9Q3GSZV\ntitle: "Before"\nkind: task\nstatus: backlog\ncreated: 2026-08-06\nupdated: 2026-08-11\nprovenance:\n  source: "repository-backlog"\n  recorded_at: "2026-08-11T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\nBefore\n');
+  const before = Buffer.from('---\nschema_version: 2\nid: wb_01KZBMBEZKPE7D15HKW9Q3GSZV\nnumber: 1\ntitle: "Before"\nkind: task\nstatus: backlog\ncreated: 2026-08-06\nupdated: 2026-08-11\nprovenance:\n  source: "repository-backlog"\n  recorded_at: "2026-08-11T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\nBefore\n');
   await writeFile(itemPath, before);
   git(root, 'add', '.');
   git(root, 'commit', '-qm', 'Initial item');
@@ -497,7 +497,6 @@ test('claim-verify explains that a new authorized item still needs Git finalizat
   await writeFile(createPath, JSON.stringify({
     id: itemId,
     item: {
-      number: 1526,
       title: 'New item',
       kind: 'task',
       provenance: {
@@ -562,7 +561,6 @@ test('claim-verify names the configured item path when another worktree needs sy
   await writeFile(createPath, JSON.stringify({
     id: itemId,
     item: {
-      number: 1526,
       title: 'New item',
       kind: 'task',
       provenance: {

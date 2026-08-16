@@ -88,19 +88,18 @@ test('two create processes leave one complete item and no temporary or lock file
   });
 });
 
-test('concurrent creates cannot commit the same number', async () => {
+test('the number-index lock keeps concurrent creates from sharing a number', async () => {
+  // The number-index lock is fail-fast, like the item lock: one create wins and
+  // assigns the number, the other refuses with lock-held for the caller to
+  // retry. What must never happen is two committed items sharing a number.
   const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
   const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HP';
   await withLedger({}, async (ledger) => {
     const firstRequest = path.join(path.dirname(ledger), 'number-first.json');
     const secondRequest = path.join(path.dirname(ledger), 'number-second.json');
     const body = `\n${'x'.repeat(1024 * 1024)}\n`;
-    const first = createRequest(firstId, body);
-    const second = createRequest(secondId, body);
-    first.item.number = 42;
-    second.item.number = 42;
-    await writeFile(firstRequest, JSON.stringify(first));
-    await writeFile(secondRequest, JSON.stringify(second));
+    await writeFile(firstRequest, JSON.stringify(createRequest(firstId, body)));
+    await writeFile(secondRequest, JSON.stringify(createRequest(secondId, body)));
 
     const results = await Promise.all([
       runCli('create', '--ledger', ledger, '--input', firstRequest, '--json'),
@@ -109,47 +108,12 @@ test('concurrent creates cannot commit the same number', async () => {
     const outputs = results.map(parseOutput);
     const validation = await runCli('validate', '--ledger', ledger, '--json');
 
-    assert.equal(outputs.filter((entry) => entry.ok).length, 1);
-    assert.equal(outputs.filter((entry) => !entry.ok).length, 1);
-    assert.equal(validation.status, 0, validation.stdout);
-    assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
-    await assertNoOwnArtifacts(ledger);
-  });
-});
-
-test('concurrent patches cannot commit the same number', async () => {
-  const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HQ';
-  const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HR';
-  const firstSource = numberedBacklogSource(firstId, 1);
-  const secondSource = numberedBacklogSource(secondId, 2);
-  await withLedger({
-    [`${firstId}.md`]: firstSource,
-    [`${secondId}.md`]: secondSource,
-  }, async (ledger) => {
-    const firstRequest = path.join(path.dirname(ledger), 'patch-number-first.json');
-    const secondRequest = path.join(path.dirname(ledger), 'patch-number-second.json');
-    await writeFile(firstRequest, JSON.stringify({
-      id: firstId,
-      expected_revision: `sha256:${fingerprint(Buffer.from(firstSource)).sha256}`,
-      date: '2030-01-11',
-      set: { number: 42 },
-    }));
-    await writeFile(secondRequest, JSON.stringify({
-      id: secondId,
-      expected_revision: `sha256:${fingerprint(Buffer.from(secondSource)).sha256}`,
-      date: '2030-01-11',
-      set: { number: 42 },
-    }));
-
-    const results = await Promise.all([
-      runCli('patch', '--ledger', ledger, '--input', firstRequest, '--json'),
-      runCli('patch', '--ledger', ledger, '--input', secondRequest, '--json'),
-    ]);
-    const outputs = results.map(parseOutput);
-    const validation = await runCli('validate', '--ledger', ledger, '--json');
-
-    assert.equal(outputs.filter((entry) => entry.ok).length, 1);
-    assert.equal(outputs.filter((entry) => !entry.ok).length, 1);
+    const committed = outputs.filter((entry) => entry.ok);
+    const refused = outputs.filter((entry) => !entry.ok);
+    assert.equal(committed.length, 1, JSON.stringify(outputs));
+    assert.equal(refused.length, 1, JSON.stringify(outputs));
+    assert.equal(refused[0].error.code, 'lock-held');
+    assert.equal(committed[0].result.item.core.number, 1);
     assert.equal(validation.status, 0, validation.stdout);
     assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
     await assertNoOwnArtifacts(ledger);
@@ -305,6 +269,7 @@ test('a schema version 2 done transition changes only the target when a dependen
   const target = `---
 schema_version: 2
 id: ${targetId}
+number: 1
 title: "Complete the prerequisite"
 kind: task
 status: in-progress
@@ -320,6 +285,7 @@ related: []
   const dependent = `---
 schema_version: 2
 id: ${dependentId}
+number: 2
 title: "Keep declared prerequisite history"
 kind: task
 status: backlog
@@ -364,6 +330,7 @@ test('a schema version 2 done transition retains its satisfied prerequisites', a
   const prerequisite = `---
 schema_version: 2
 id: ${prerequisiteId}
+number: 3
 title: "Completed prerequisite"
 kind: task
 status: done
@@ -385,6 +352,7 @@ decisions:
   const target = `---
 schema_version: 2
 id: ${targetId}
+number: 4
 title: "Complete dependent work"
 kind: task
 status: in-progress
@@ -433,6 +401,7 @@ test('a schema version 2 done transition refuses a live prerequisite', async () 
   const prerequisite = `---
 schema_version: 2
 id: ${prerequisiteId}
+number: 5
 title: "Live prerequisite"
 kind: task
 status: backlog
@@ -448,6 +417,7 @@ related: []
   const target = `---
 schema_version: 2
 id: ${targetId}
+number: 6
 title: "Blocked completion"
 kind: task
 status: in-progress
@@ -499,6 +469,7 @@ test('an epic cannot enter in-progress before candidate validation', async () =>
   const source = `---
 schema_version: 2
 id: ${id}
+number: 7
 title: "Unsupported epic edge"
 kind: epic
 status: backlog
@@ -596,27 +567,6 @@ function createRequest(id, body) {
   };
 }
 
-function numberedBacklogSource(id, number) {
-  return `---
-schema_version: 1
-id: ${id}
-number: ${number}
-title: "Coordinate ledger-wide number uniqueness"
-kind: task
-status: backlog
-created: 2030-01-10
-updated: 2030-01-10
-provenance:
-  source: "test/mutation-process"
-  recorded_at: "2030-01-10T12:34:56.789Z"
-depends_on: []
-related: []
----
-
-${'x'.repeat(1024 * 1024)}
-`;
-}
-
 function triageSource(id) {
   return `---
 schema_version: 1
@@ -636,7 +586,8 @@ related: []
 }
 
 function schemaSeed(id, schemaVersion) {
-  return triageSource(id).replace('schema_version: 1', `schema_version: ${schemaVersion}`);
+  const seed = triageSource(id).replace('schema_version: 1', `schema_version: ${schemaVersion}`);
+  return schemaVersion === 2 ? seed.replace(`id: ${id}\n`, `id: ${id}\nnumber: 1\n`) : seed;
 }
 
 function runCli(...argumentsList) {

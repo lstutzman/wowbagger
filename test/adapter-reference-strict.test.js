@@ -328,7 +328,7 @@ test('reference oracle independently validates definitive patch preconditions', 
   });
 
   for (const set of [
-    { number: 1 }, { number: null }, { priority: 0 }, { priority: null }, { number: 2, priority: 3 },
+    { priority: 0 }, { priority: null },
   ]) {
     const valid = Buffer.from(`${JSON.stringify({ ...request, set })}\n`);
     assert.equal(outcome(valid), null, JSON.stringify(set));
@@ -339,6 +339,9 @@ test('reference oracle independently validates definitive patch preconditions', 
     { ...request, date: '2030-02-30' },
     { ...request, set: {} },
     { ...request, set: { title: 'not patchable' } },
+    { ...request, set: { number: 1 } },
+    { ...request, set: { number: null } },
+    { ...request, set: { number: 2, priority: 3 } },
     { ...request, set: { number: 0 } },
     { ...request, set: { priority: -1 } },
     { ...request, set: { priority: 1.5 } },
