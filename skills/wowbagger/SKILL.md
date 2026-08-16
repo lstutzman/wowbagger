@@ -126,6 +126,7 @@ before running it.
 ```sh
 wowbagger create     --ledger <dir> --input request.json --json
 wowbagger transition --ledger <dir> --input request.json --json
+wowbagger patch      --ledger <dir> --input request.json --json
 ```
 
 - `create` publishes only a caller-supplied canonical ID, atomically and
@@ -161,6 +162,36 @@ wowbagger transition --ledger <dir> --input request.json --json
 - See `docs/mutation-contract.md` in the wowbagger repository for the request
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
+
+### Patch edits fields, never lifecycle
+
+`patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.
+The patchable field set is exactly `priority`, `depends_on`, and `related`. A
+`set` naming anything else is an `invalid-request` issue at its `/set` pointer,
+and `number` is refused because it is immutable identity.
+
+- A relation list is replaced whole. There is no add or remove member — send
+  the complete list you want the item to carry.
+- `[]` clears a list. `null` removes the field, but `depends_on` is required,
+  so a null one returns `candidate-invalid`, exit 2, `unchanged`. Use `[]`.
+- `priority` takes a non-negative integer.
+- Patch appends no decision; the Git diff is the audit trail. It never mutates
+  a second item, and it cannot touch status, title, body, or provenance.
+
+### A refused disposition is one relations patch away
+
+Killing or archiving an item that another item still declares in `depends_on`
+returns exit 5 `atomic-scope-required`:
+
+```
+error.details.blockers[]
+  code: "dependent-disposition"   item_id: "wb_..."   field: "depends_on"
+```
+
+That refusal is a routing instruction, not a dead end. Read `item_id`,
+`inspect` that dependent, `patch` it to move the target out of `depends_on` and
+into `related`, commit, then retry the disposition with a fresh revision. Two
+mutations and two reviewable diffs, never one atomic multi-item write.
 
 ### Item dates are UTC, so do not assume today
 
