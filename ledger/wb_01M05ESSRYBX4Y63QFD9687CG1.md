@@ -5,9 +5,10 @@ number: 100
 title: "Collapse the redundant complete-ledger loads per mutation"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T14:14:52Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "Lee accepted on 2026-08-16. Remaining ~2x latency headroom after the #91 batch fix."
+  - action: complete
+    date: 2026-08-16
+    summary: "One fewer complete-ledger load per claim-protected mutation."
+    rationale: "Reconciliation's snapshot is shared with the pre-lock read (same bytes by construction - the fence holds the lock and reconciliation writes outside the item surface); the locked re-read stays and is now guarded (it was not before - a mutation replacing it with the pre-lock read left all 909 tests green). Retry loads fresh. 3 loads to 2, ~260ms saved, 1.28x on the provisioned path. publish-claimed's own three loads flagged for a follow-up."
 ---
 
 Follow-up from item #91's profile: after the git cat-file batch fix (12.8x), the remaining ~1.2s per provisioned-ledger mutation at 1,500 items is three complete ledger loads at ~0.3s each — two in `mutateExistingItem` (before and after lock closure) and one in `reconcileClaimJournal`. Ceiling is roughly another 2x.
