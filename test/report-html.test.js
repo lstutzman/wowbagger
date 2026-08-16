@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+function sequencing(overrides = {}) {
+  return {
+    class: { value: 'standard', raw: null, known: true },
+    due: null,
+    ageDays: 13,
+    size: { value: 'small', weight: 1 },
+    leverage: { count: 0, numbers: [] },
+    epic: null,
+    ...overrides,
+  };
+}
+
 function model() {
   return {
     reportVersion: 1,
@@ -20,13 +32,14 @@ function model() {
       updated: '2026-08-02',
       terminalDate: null,
       priority: 1,
-      parent: null,
-      dependsOn: [],
-      related: [],
+      parent: 'wb_done',
+      dependsOn: ['wb_done'],
+      related: ['wb_missing'],
       decisions: [],
       body: '# Body\n\n</script><script>alert(1)</script>',
-      readiness: { state: 'ready', reasons: [] },
+      readiness: { state: 'blocked', reasons: [{ code: 'dependency-unsatisfied', item_id: 'wb_done' }] },
       fields: { area: 'Core & CLI', complexity: 'small' },
+      sequencing: sequencing(),
     }],
     terminalItems: [{
       id: 'wb_done',
@@ -46,7 +59,66 @@ function model() {
       readiness: { state: 'ineligible', reasons: [{ code: 'status-not-backlog' }] },
       fields: {},
     }],
+    workNext: [{
+      id: 'wb_hostile',
+      number: 7,
+      title: 'Unsafe </script><img src=x onerror=alert(1)>',
+      reasons: [
+        { code: 'priority', label: 'priority 1' },
+        { code: 'age', label: 'age 13d' },
+      ],
+    }],
+    unknownClasses: [{ value: 'urgent & loud', numbers: [7] }],
+    attention: {
+      blocked: [{
+        id: 'wb_blocked',
+        number: 12,
+        title: 'Blocked item',
+        ageDays: 10,
+        blockers: [
+          { code: 'dependency-unsatisfied', id: 'wb_dependency', number: 5, title: 'Dependency', status: 'in-progress' },
+        ],
+      }],
+      aging: [
+        { id: 'wb_old', number: 3, title: 'Old item', status: 'backlog', state: 'ready', ageDays: 225 },
+      ],
+      stuck: [{
+        id: 'wb_stuck',
+        number: 10,
+        title: 'Stuck item',
+        status: 'in-progress',
+        startedOn: '2026-07-01',
+        elapsedDays: 44,
+        thresholdDays: 20,
+      }],
+    },
+    evidence: {
+      agingBuckets: [
+        { label: 'under 7d', count: 1 },
+        { label: '7-30d', count: 2 },
+        { label: '30-90d', count: 0 },
+        { label: 'over 90d', count: 1 },
+      ],
+      weeks: [
+        { weekStart: '2026-08-03', arrivals: 2, completions: 1 },
+        { weekStart: '2026-08-10', arrivals: 0, completions: 3 },
+      ],
+      throughput: { total: 4, windowWeeks: 12, perWeek: 0.33 },
+      cycleTime: { sampleCount: 3, medianDays: 10, p85Days: 20 },
+      forecast: {
+        remaining: 4,
+        weeks50: 8,
+        weeks85: 11,
+        date50: '2026-10-09',
+        date85: '2026-10-30',
+        trials: 5000,
+      },
+    },
   };
+}
+
+function decisionSurface(html) {
+  return html.slice(0, html.indexOf('id="drilldown"'));
 }
 
 test('renders deterministic self-contained HTML without executable ledger content', async () => {
@@ -78,4 +150,65 @@ test('renders a checked control for hiding terminal history', async () => {
     /<label class="history-toggle"><input id="show-history" type="checkbox" checked>Show history<\/label>/,
   );
   assert.match(html, /<section id="history" class="panel">/);
+});
+
+test('opens with the ranked work-next list and its reasons', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model());
+  const surface = decisionSurface(html);
+
+  assert.ok(surface.indexOf('id="work-next"') < surface.indexOf('id="attention"'));
+  assert.ok(surface.indexOf('id="attention"') < surface.indexOf('id="evidence"'));
+  assert.match(surface, /id="work-next"/);
+  assert.match(surface, /<span class="handle">#7<\/span>/);
+  assert.match(surface, /priority 1/);
+  assert.match(surface, /age 13d/);
+});
+
+test('renders the attention layer with blocker numbers and ages', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model()));
+
+  assert.match(surface, /#12/);
+  assert.match(surface, /blocked by #5/);
+  assert.match(surface, /225d/);
+  assert.match(surface, /44d/);
+  assert.match(surface, /p85 20d/);
+});
+
+test('renders the evidence layer with throughput, buckets, and forecast bands', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model()));
+
+  assert.match(surface, /0\.33/);
+  assert.match(surface, /over 90d/);
+  assert.match(surface, /2026-10-09/);
+  assert.match(surface, /2026-10-30/);
+  assert.match(surface, /50%/);
+  assert.match(surface, /85%/);
+});
+
+test('reports unrecognised class values instead of dropping them', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model()));
+
+  assert.match(surface, /urgent &amp; loud/);
+});
+
+test('refers to items by number above the drill-down', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model()));
+
+  assert.doesNotMatch(surface, /wb_hostile|wb_blocked|wb_dependency|wb_old|wb_stuck/);
+});
+
+test('names related items by number inside the drill-down detail', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model());
+  const detail = html.slice(html.indexOf('id="drilldown"'));
+
+  assert.match(detail, /<dt>Parent<\/dt><dd>#8<\/dd>/);
+  assert.match(detail, /<dt>Depends on<\/dt><dd>#8<\/dd>/);
+  assert.match(detail, /<dt>Related<\/dt><dd>wb_missing<\/dd>/);
+  assert.match(detail, /<li>Dependency is not done: #8<\/li>/);
 });
