@@ -4,7 +4,7 @@ id: wb_01M05FJJZXJZ5TGWKAKHQPPBK8
 number: 104
 title: "Stop a root-misplaced item from poisoning the claim fence"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T14:28:25Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Field trap 7a with a fence-poisoning damage claim (PropertyCompass2 PR 2184); needs repro and an honest refusal."
 ---
 
 Field trap 7a from PropertyCompass2 (docs/wowbagger-feedback.md, commits 0f1243821/badcd6bf2; extends corrected entry 7; cost the consumer a second PR on 2026-08-16). The relocation ritual itself is already dead in source — layout.json is documented (#94) and the missing-directory refusal is filed (#102) — but 7a adds two claims that need their own work:
