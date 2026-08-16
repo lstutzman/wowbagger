@@ -324,6 +324,10 @@ export async function reconcileClaimJournal({
         observed_at: observedAt,
       }));
     } else {
+      const expectedPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
+        ?? intent.item_path
+        ?? null;
+      const pathLabel = expectedPath ?? `item ${intent.item_id}`;
       findings.push({
         code: 'legacy-mutation-outcome-unknown',
         item_id: intent.item_id,
@@ -331,6 +335,8 @@ export async function reconcileClaimJournal({
         actual_revision: actualRevision,
         expected_revision: intent.expected_revision,
         candidate_revision: intent.candidate_revision,
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        remediation: `Restore ${pathLabel} to the expected or candidate revision recorded for attempt ${intent.attempt_id}, then run claim-verify.`,
       });
     }
   }
@@ -397,6 +403,9 @@ export async function reconcileClaimJournal({
       item_id: intent.item_id,
       outcome,
     }));
+    const unknownPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
+      ?? intent.item_path
+      ?? null;
     findings.push({
       code: outcome.stdout.state === 'unknown'
         ? 'publication-outcome-unknown'
@@ -404,6 +413,10 @@ export async function reconcileClaimJournal({
       item_id: intent.item_id,
       operation_id: intent.operation_id,
       outcome: outcome.stdout.state,
+      ...(outcome.stdout.state === 'unknown' ? {
+        ...(unknownPath ? { expected_path: unknownPath } : {}),
+        remediation: `Inspect publication ${intent.operation_id} for ${unknownPath ?? `item ${intent.item_id}`}, complete its documented recovery, then run claim-verify.`,
+      } : {}),
     });
   }
 
@@ -576,7 +589,10 @@ export async function reconcileClaimJournal({
         ...(expectedPath ? { expected_path: expectedPath } : {}),
         remediation: `Inspect publication ${expected.operation_id} for ${pathLabel}, then complete its documented recovery.`,
         stale_fence: structuredClone(earlier.outcome.stdout.result.claim_fence),
-      } : {}),
+      } : {
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        remediation: `Restore the authorized revision at ${pathLabel}, then run claim-verify.`,
+      }),
     });
   }
 
