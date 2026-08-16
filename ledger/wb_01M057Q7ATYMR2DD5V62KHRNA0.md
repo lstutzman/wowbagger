@@ -4,6 +4,7 @@ id: wb_01M057Q7ATYMR2DD5V62KHRNA0
 number: 92
 title: "Unify mutation envelope shape across refusal paths"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
