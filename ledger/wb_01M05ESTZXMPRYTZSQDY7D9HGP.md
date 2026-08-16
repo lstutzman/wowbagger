@@ -4,6 +4,7 @@ id: wb_01M05ESTZXMPRYTZSQDY7D9HGP
 number: 102
 title: "Refuse a missing configured items directory by name"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
