@@ -4,7 +4,7 @@ id: wb_01M05ESTZXMPRYTZSQDY7D9HGP
 number: 102
 title: "Refuse a missing configured items directory by name"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T14:14:54Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Lee accepted on 2026-08-16. Paper-cut refusal naming the missing configured directory."
 ---
 
 Paper-cut found during item #94's verification: with `.wowbagger/layout.json` configuring `items_directory` and the configured directory absent, `create` fails as `operation-failed` / `operation: "prepare-temporary"` / `reason: "io-error"`, exit 6 — a generic envelope that names neither the missing directory nor the fix. The repo's own fixtures dodge it by seeding `items/.keep`. The docs from #94 state "the configured directory must already exist", but the refusal itself should say so.
