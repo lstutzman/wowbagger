@@ -4,7 +4,7 @@ id: wb_01M058NZK1NK5EDXX2C09K707V
 number: 95
 title: "Name actual dates and UTC derivation in transition date refusals"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T00:00:00.000Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept the corrected/new PropertyCompass2 field finding."
+    rationale: "Field paper-cut 9: correct invariant, insufficient diagnostics; UTC/ULID date derivation is undocumented."
 ---
 Field paper-cut 9 (report: .PropertyCompass2/worktrees/260815-212735/docs/wowbagger-feedback.md): a create just after midnight UTC mints created=next-day (the created date derives from the ULID timestamp, which is UTC), so a transition dated with the operator’s local calendar date refuses `transition-precondition-failed` with `date-before-created`/`date-before-updated`. The invariant is correct; the diagnostics are not: the refusal names neither the item’s actual created/updated values nor that they are UTC/ULID-derived (verified: transitionPreconditions in src/mutation.js emits code/field/message with empty related_ids and no dates). Every occurrence costs an inspect round-trip.
 
