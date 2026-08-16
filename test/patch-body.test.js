@@ -78,6 +78,118 @@ test('a body patch replaces the body bytes and rewrites no other frontmatter byt
   });
 });
 
+test('a body patch refuses null, because removing a body means the empty string', async () => {
+  const before = itemSource('\nMirror body.\n');
+  await withLedger({ [`${ITEM}.md`]: before }, async (ledger) => {
+    const revision = inspectRevision(ledger, ITEM);
+
+    const result = await runPatch(ledger, {
+      id: ITEM,
+      expected_revision: revision,
+      date: '2030-01-22',
+      set: { body: null },
+    });
+
+    assert.equal(result.status, 2, result.stdout);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'invalid-request');
+    assert.equal(envelope.state, 'unchanged');
+    assert.deepEqual(envelope.error.details.issues, [{
+      path: '/set/body',
+      code: 'invalid-value',
+      message: 'Set member body must be a string; use the empty string to remove the body.',
+    }]);
+    assert.equal(await readFile(path.join(ledger, `${ITEM}.md`), 'utf8'), before);
+  });
+});
+
+test('a body patch refuses a body that is not a string', async () => {
+  const before = itemSource('\nMirror body.\n');
+  await withLedger({ [`${ITEM}.md`]: before }, async (ledger) => {
+    const result = await runPatch(ledger, {
+      id: ITEM,
+      expected_revision: inspectRevision(ledger, ITEM),
+      date: '2030-01-22',
+      set: { body: 3 },
+    });
+
+    assert.equal(result.status, 2, result.stdout);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'invalid-request');
+    assert.deepEqual(envelope.error.details.issues, [{
+      path: '/set/body',
+      code: 'invalid-type',
+      message: 'Set member body must be a string.',
+    }]);
+    assert.equal(await readFile(path.join(ledger, `${ITEM}.md`), 'utf8'), before);
+  });
+});
+
+test('the empty body leaves no byte after the closing delimiter', async () => {
+  const before = itemSource('\nMirror body.\n');
+  await withLedger({ [`${ITEM}.md`]: before }, async (ledger) => {
+    const result = await runPatch(ledger, {
+      id: ITEM,
+      expected_revision: inspectRevision(ledger, ITEM),
+      date: '2030-01-22',
+      set: { body: '' },
+    });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.equal(JSON.parse(result.stdout).result.item.body, '');
+    const published = await readFile(path.join(ledger, `${ITEM}.md`), 'utf8');
+    assert.equal(bodyRegion(published), '');
+    assert.ok(published.endsWith('---\n'), JSON.stringify(published));
+  });
+});
+
+test('a body patch refuses a stale expected_revision and leaves the item alone', async () => {
+  const before = itemSource('\nMirror body.\n');
+  await withLedger({ [`${ITEM}.md`]: before }, async (ledger) => {
+    const stale = `sha256:${'0'.repeat(64)}`;
+
+    const result = await runPatch(ledger, {
+      id: ITEM,
+      expected_revision: stale,
+      date: '2030-01-22',
+      set: { body: 'never written\n' },
+    });
+
+    assert.equal(result.status, 4, result.stdout);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'revision-conflict');
+    assert.equal(envelope.state, 'unchanged');
+    assert.equal(await readFile(path.join(ledger, `${ITEM}.md`), 'utf8'), before);
+  });
+});
+
+test('one patch writes a body and a frontmatter field together', async () => {
+  const before = itemSource('\nMirror body.\n');
+  await withLedger({ [`${ITEM}.md`]: before }, async (ledger) => {
+    const result = await runPatch(ledger, {
+      id: ITEM,
+      expected_revision: inspectRevision(ledger, ITEM),
+      date: '2030-01-22',
+      set: { priority: 4, related: [], body: 'Card and priority moved together.\n' },
+    });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const item = JSON.parse(result.stdout).result.item;
+    assert.equal(item.core.priority, 4);
+    assert.deepEqual(item.core.related, []);
+    assert.equal(item.body, 'Card and priority moved together.\n');
+
+    const published = await readFile(path.join(ledger, `${ITEM}.md`), 'utf8');
+    assert.equal(bodyRegion(published), 'Card and priority moved together.\n');
+    assert.equal(
+      frontmatterRegion(published),
+      frontmatterRegion(before)
+        .replace(`updated: ${CREATED}`, 'updated: 2030-01-22')
+        .replace('kind: task\n', 'kind: task\npriority: 4\n'),
+    );
+  });
+});
+
 test('a body patch preserves anchors, aliases, comments, and extension members byte for byte', async () => {
   const before = itemSource('\nMirror body.\n', {
     extra: [
