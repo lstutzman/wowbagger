@@ -10,7 +10,7 @@
     "adapter_version": "1.0.0",
     "adapter_contract_versions": [2],
     "bootstrap_wire_version": 1,
-    "required_core_contract_version": 2,
+    "required_core_contract_version": 3,
     "entrypoints": {
       "describe": { "kind": "command", "executable": "bin/adapter", "fixed_args": ["describe"] },
       "invoke": { "kind": "command", "executable": "bin/adapter", "fixed_args": ["invoke"] }
@@ -28,7 +28,7 @@
     "adapter_id": "example.reference",
     "adapter_version": "1.0.0",
     "core": {
-      "required_core_contract_version": 2,
+      "required_core_contract_version": 3,
       "commands": ["capabilities", "create", "inspect", "patch", "ready", "transition", "validate"]
     },
     "host": {
@@ -532,7 +532,7 @@
     {
       "id": "required-core-version",
       "required_core_contract_version": 1,
-      "probed_core_contract_version": 2,
+      "probed_core_contract_version": 3,
       "expected": "core-contract-version-mismatch"
     }
   ]

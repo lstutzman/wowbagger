@@ -1238,13 +1238,14 @@ error registry. It changes only this versioned surface:
 | Path or behavior | Version 2 requirement |
 |---|---|
 | Manifest `adapter_contract_versions` | Exactly `[2]` |
-| Manifest and describe required core contract | Exactly `2` |
+| Manifest and describe required core contract | Exactly `3` |
 | Describe `selected_adapter_contract_version` | Exactly `2` |
 | Describe `core.commands` order | `capabilities`, `create`, `inspect`, `patch`, `ready`, `transition`, `validate` |
 | Invoke and result `adapter_contract_version` | Exactly `2` |
-| Independently probed core `contract_version` | Exactly `2` |
+| Independently probed core `contract_version` | Exactly `3` |
 
-The version 2 core capability probe adds exactly
+The core capability probe adapter contract version 2 requires is core
+contract version 3. It adds exactly
 `operations.patch: {"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}`.
 Its mutation backend scope is always
 `same-working-copy-cooperative-writers`,
@@ -1282,7 +1283,7 @@ shipped v2 adapter exits successfully at the bootstrap process level but
 receives exactly the compact refusal
 `{"ok":false,"error":{"code":"unsupported-adapter-contract-version"}}` plus
 one LF. It receives no v2 describe result and no requested core child is
-launched. Conversely, a v1 adapter probing a v2 core observes
-`contract_version: 2` and refuses the pairing as
-`core-contract-version-mismatch`; neither direction silently receives the
-other version's behavior.
+launched. Conversely, an adapter that requires core contract version 1 or 2 while
+probing a version 3 core observes `contract_version: 3` and refuses the
+pairing as `core-contract-version-mismatch`; neither direction silently
+receives the other version's behavior.

@@ -7,6 +7,27 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Changed
+
+- **The core contract version is now `3`.** Every core command envelope
+  (`capabilities`, `inspect`, `create`, `transition`, `patch`, `mint-id`,
+  `report`) carries `contract_version: 3`, the shipped adapters require core
+  contract version 3, and the installed skill's version check gates on 3. A
+  version 1 or version 2 consumer fails closed against this core, which is the
+  point of the bump. Version 3 is version 2 plus four deltas against published
+  `0.1.0-alpha.4`: the widened `date-before-created` / `date-before-updated`
+  issue shape carrying `item_created` and `item_updated` (the delta that forced
+  the bump — a version 2 consumer validating issue members exactly refuses the
+  six-member shape); the patch field set widening from `number`/`priority` to
+  `priority`/`depends_on`/`related`; number as the core-assigned immutable item
+  identity on schema version 2, with `create` refusing a supplied number and
+  `inspect` accepting `--number`; and `create` deriving its published path from
+  a committed `.wowbagger/layout.json`. The mutation contract's "Contract
+  versions" section carries the full enumeration. The legacy work-claim,
+  ledger-publication, and ledger-mutation envelopes and
+  `result.operations.work_claim.api_version` are separate version domains and
+  stay at 1; the adapter contract stays at 2.
+
 ### Added
 
 - One envelope rule now covers every `--json` response. The mutation contract
@@ -58,16 +79,17 @@ consolidation. The first tagged release inherits this file.
   `blocks_until: "peer-commit-visible-in-this-checkout"`; an unprovisioned
   backend reports `scope: "none"`. This makes the serialization the shared
   Git-common-directory journal already performed discoverable instead of
-  implied. The core `capabilities` envelope is unchanged, and the core
-  contract version does not move.
+  implied. The core `capabilities` envelope is unchanged; this change is not
+  one of the version 3 deltas.
 
 - A `date-before-created` or `date-before-updated` issue now carries
   `item_created` and `item_updated` after `related_ids` — the target item's own
   dates at refusal time, both dates on both codes, on `transition` and `patch`
   alike. One refusal now states the whole acceptable date window, so correcting
   the request no longer costs an `inspect` round-trip. No other issue code
-  changes shape, and the core contract version does not move; a consumer that
-  validates issue members exactly must accept six members for these two codes.
+  changes shape; a consumer that validates issue members exactly must accept
+  six members for these two codes. This widening is the reason the core
+  contract version moves to 3 (see Changed, above).
   The mutation contract and the installed skill now also state that `create`
   derives `created` from the ULID timestamp, which is UTC, with the
   across-midnight example that produces this refusal.

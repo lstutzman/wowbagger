@@ -54,6 +54,6 @@ test('mint-id prints one canonical contract-valid ID', () => {
   const envelope = JSON.parse(result.stdout);
   assert.equal(envelope.ok, true);
   assert.equal(envelope.command, 'mint-id');
-  assert.equal(envelope.contract_version, 2);
+  assert.equal(envelope.contract_version, 3);
   assert.match(envelope.result.id, CANONICAL);
 });

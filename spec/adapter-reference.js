@@ -19,7 +19,7 @@ const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
 const PLATFORM_KEYS = ['darwin', 'linux', 'win32'];
 const PLATFORM_STATUS = new Set(['supported', 'unsupported', 'unverified']);
 const ADAPTER_CONTRACT_VERSION = 2;
-const CORE_CONTRACT_VERSION = 2;
+const CORE_CONTRACT_VERSION = 3;
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],

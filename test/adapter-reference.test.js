@@ -13,7 +13,7 @@ function strictBinding() {
     adapter: { id: 'example.reference', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      contract_version: 2,
+      contract_version: 3,
       argv: ['transition', '--ledger', '/approved/workspace/ledger', '--input', '-', '--json'],
       input_base64: 'e30K',
     },
@@ -429,7 +429,7 @@ test('core capability probe must match the exact core schema and advertised prof
     ok: false,
     error: {
       code: 'core-contract-version-mismatch',
-      details: { required: 1, probed: 2 },
+      details: { required: 1, probed: 3 },
     },
   });
 });
