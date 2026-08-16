@@ -1663,8 +1663,13 @@ test('forwards an items-directory-unavailable create refusal instead of calling 
 
   for (const details of [
     { ...valid, reason: 'io-error' },
-    { ...valid, path: 'items/wb_01Q45X474N28T5CY4GNF6YY4HM.md' },
+    {
+      ...valid,
+      path: 'items/wb_01Q45X474N28T5CY4GNF6YY4HM.md',
+      remediation: 'Create the ledger directory items/wb_01Q45X474N28T5CY4GNF6YY4HM.md and commit it, then retry create.',
+    },
     { ...valid, remediation: 'Ask somebody.' },
+    { ...valid, occupant_kind: 'file' },
     Object.fromEntries(Object.entries(valid).filter(([key]) => key !== 'path')),
   ]) {
     assert.equal(

@@ -967,7 +967,11 @@ test('an items-directory-unavailable create refusal forwards only with its exact
   };
   for (const details of [
     { ...valid, reason: 'io-error' },
-    { ...valid, path: 'items/wb_01KDWPVNG00000000000000000.md' },
+    {
+      ...valid,
+      path: 'items/wb_01KDWPVNG00000000000000000.md',
+      remediation: 'Create the ledger directory items/wb_01KDWPVNG00000000000000000.md and commit it, then retry create.',
+    },
     { ...valid, path: '/items' },
     { ...valid, path: '../items' },
     { ...valid, id: 'not-an-item-id' },
