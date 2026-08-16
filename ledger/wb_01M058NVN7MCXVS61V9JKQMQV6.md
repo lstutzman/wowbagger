@@ -5,7 +5,7 @@ number: 94
 title: "Document layout.json as the create items-directory mechanism"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
