@@ -4,7 +4,7 @@ id: wb_01M05ESRM258XEJJW7G15TXJ68
 number: 98
 title: "Drop the misleading clause from the foreign-writer remediation"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T14:14:51Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Lee accepted on 2026-08-16. Cheap honesty fix proven misleading by the #89 fixture."
 ---
 
 Found during item #89's two-worktree fixture work: the `worktree-synchronization-required` remediation string is half wrong. It reads "Run claim-verify in the worktree that wrote `<path>` after committing it, or synchronize this worktree to that commit." The #89 fixture's vector 2 proves the first clause does not help the blocked reader: claim-verify in the writing worktree finalizes that worktree only and leaves the sibling blocked. Only the second clause (synchronize) works.
