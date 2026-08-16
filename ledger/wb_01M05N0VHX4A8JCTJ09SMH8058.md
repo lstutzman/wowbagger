@@ -4,7 +4,7 @@ id: wb_01M05N0VHX4A8JCTJ09SMH8058
 number: 108
 title: "Let an operator diagnose and inspect an invalid ledger"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T16:03:35Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "The tool refuses to show you the thing it tells you to fix; recovery diagnosability."
 ---
 
 Diagnosability follow-up from item #104's repro: on a ledger with one invalid item (e.g. item-outside-layout), EVERY read and mutation refuses exit 3 ledger-invalid — including `inspect` of a perfectly valid item, which the operator needs to get the revision for the fix, and `claim-verify`, the documented reconciliation verb, exits 0 with findings [] and explains nothing about why every mutation is blocked. The enriched #104 refusal (expected_path + remediation) makes recovery survivable, but the read-path behavior is a trap: the tool refuses to show you the thing it is telling you to fix.
