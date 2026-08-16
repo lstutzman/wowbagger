@@ -102,18 +102,48 @@ function model() {
         { label: '30-90d', count: 0 },
         { label: 'over 90d', count: 1 },
       ],
+      agingMatrix: {
+        statuses: ['backlog', 'in-progress'],
+        rows: [
+          { label: 'under 7d', counts: [1, 0] },
+          { label: '7-30d', counts: [1, 1] },
+          { label: '30-90d', counts: [0, 0] },
+          { label: 'over 90d', counts: [1, 0] },
+        ],
+      },
       weeks: [
-        { weekStart: '2026-08-03', arrivals: 2, completions: 1 },
-        { weekStart: '2026-08-10', arrivals: 0, completions: 3 },
+        { weekStart: '2026-08-03', arrivals: 2, completions: 1, rolling: 0.25 },
+        { weekStart: '2026-08-10', arrivals: 0, completions: 3, rolling: 1 },
+      ],
+      cumulativeFlow: [
+        { date: '2026-08-13', triage: 1, accepted: 1, terminal: 0 },
+        { date: '2026-08-14', triage: 1, accepted: 0, terminal: 1 },
       ],
       throughput: { total: 4, windowWeeks: 12, perWeek: 0.33 },
-      cycleTime: { sampleCount: 3, medianDays: 10, p85Days: 20 },
+      cycleTime: {
+        sampleCount: 3,
+        medianDays: 10,
+        p85Days: 20,
+        samples: [
+          { number: 8, completedOn: '2026-08-10', days: 10 },
+          { number: 9, completedOn: '2026-08-12', days: 20 },
+          { number: 10, completedOn: '2026-08-14', days: 4 },
+        ],
+      },
       forecast: {
         remaining: 4,
         weeks50: 8,
         weeks85: 11,
+        weeks95: 13,
         date50: '2026-10-09',
         date85: '2026-10-30',
+        date95: '2026-11-13',
+        distribution: [
+          { weeks: 0, share: 0 },
+          { weeks: 8, share: 0.63 },
+          { weeks: 11, share: 0.88 },
+          { weeks: 13, share: 0.95 },
+        ],
         trials: 5000,
       },
     },
@@ -199,22 +229,47 @@ test('draws the weekly flow as an inline SVG chart carrying its own numbers', as
   assert.match(surface, /<title>Week of 2026-08-10: 0 arrivals, 3 completions<\/title>/);
 });
 
-test('draws the aging buckets as an inline SVG chart carrying its own numbers', async () => {
+test('draws all six evidence charts, each under its own stable test id', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const surface = decisionSurface(renderReportHtml(model()));
 
-  assert.match(surface, /<svg[^>]*data-testid="chart-aging"/);
-  assert.match(surface, /<title>7-30d: 2 open items<\/title>/);
-  assert.match(surface, /<title>30-90d: 0 open items<\/title>/);
+  for (const id of [
+    'chart-aging-heatmap',
+    'chart-throughput',
+    'chart-weekly-flow',
+    'chart-cumulative-flow',
+    'chart-cycle-time',
+    'chart-forecast',
+  ]) {
+    assert.match(surface, new RegExp(`<svg[^>]*data-testid="${id}"`), id);
+  }
 });
 
-test('draws the forecast as an inline SVG band carrying its own dates', async () => {
+test('draws the aging heatmap as age crossed with status', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const surface = decisionSurface(renderReportHtml(model()));
 
-  assert.match(surface, /<svg[^>]*data-testid="chart-forecast"/);
+  assert.match(surface, /<title>backlog, 7-30d: 1 open item<\/title>/);
+  assert.match(surface, /<title>in-progress, 30-90d: 0 open items<\/title>/);
+  assert.match(surface, /<text class="chart-total" [^>]*>2<\/text>/);
+});
+
+test('draws the cycle-time scatter and the cumulative flow from the same model', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model()));
+
+  assert.match(surface, /<title>#9 completed 2026-08-12 after 20 days<\/title>/);
+  assert.match(surface, /<title>Terminal: 1 item on 2026-08-14<\/title>/);
+  assert.match(surface, /<title>Week of 2026-08-10: 3 completions, 1 a week over the last 4<\/title>/);
+});
+
+test('draws the forecast fan and states all three percentile dates', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model()));
+
   assert.match(surface, /<title>50% of trials finish 4 items by 2026-10-09, 8 weeks from 2026-08-14<\/title>/);
-  assert.match(surface, /<title>85% of trials finish 4 items by 2026-10-30, 11 weeks from 2026-08-14<\/title>/);
+  assert.match(surface, /<title>95% of trials finish 4 items by 2026-11-13, 13 weeks from 2026-08-14<\/title>/);
+  assert.match(surface, /95% by <strong>2026-11-13<\/strong> \(13 weeks\)/);
 });
 
 test('draws no chart for a series with no history and keeps the numeric statement', async () => {
@@ -222,9 +277,13 @@ test('draws no chart for a series with no history and keeps the numeric statemen
   const empty = model();
   empty.evidence = {
     agingBuckets: [{ label: 'under 7d', count: 0 }, { label: 'over 90d', count: 0 }],
-    weeks: [{ weekStart: '2026-08-10', arrivals: 0, completions: 0 }],
+    agingMatrix: { statuses: [], rows: [] },
+    weeks: [{ weekStart: '2026-08-10', arrivals: 0, completions: 0, rolling: null }],
+    cumulativeFlow: [{ date: '2026-08-14', triage: 0, accepted: 0, terminal: 0 }],
     throughput: { total: 0, windowWeeks: 12, perWeek: 0 },
-    cycleTime: { sampleCount: 0, medianDays: null, p85Days: null },
+    cycleTime: {
+      sampleCount: 0, medianDays: null, p85Days: null, samples: [],
+    },
     forecast: null,
   };
   const surface = decisionSurface(renderReportHtml(empty));
@@ -238,7 +297,15 @@ test('draws the forecast band without dividing by zero when nothing remains', as
   const { renderReportHtml } = await import('../src/report-html.js');
   const settled = model();
   settled.evidence.forecast = {
-    remaining: 0, weeks50: 0, weeks85: 0, date50: '2026-08-14', date85: '2026-08-14', trials: 5000,
+    remaining: 0,
+    weeks50: 0,
+    weeks85: 0,
+    weeks95: 0,
+    date50: '2026-08-14',
+    date85: '2026-08-14',
+    date95: '2026-08-14',
+    distribution: [{ weeks: 0, share: 1 }],
+    trials: 5000,
   };
   const surface = decisionSurface(renderReportHtml(settled));
 

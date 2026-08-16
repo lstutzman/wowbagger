@@ -106,9 +106,16 @@ test('report renders byte-identical evidence charts for the same ledger and as-o
     const second = await readFile(output, 'utf8');
 
     assert.equal(first, second);
-    assert.match(first, /data-testid="chart-weekly-flow"/);
-    assert.match(first, /data-testid="chart-aging"/);
-    assert.match(first, /data-testid="chart-forecast"/);
+    for (const id of [
+      'chart-aging-heatmap',
+      'chart-throughput',
+      'chart-weekly-flow',
+      'chart-cumulative-flow',
+      'chart-cycle-time',
+      'chart-forecast',
+    ]) {
+      assert.match(first, new RegExp(`data-testid="${id}"`), id);
+    }
   });
 });
 
