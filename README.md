@@ -382,16 +382,41 @@ relative `--out` overrides resolve from the caller's working directory.
 
 `repository.logo`, `fields`, and `swarm` are optional. Field values resolve
 from parsed frontmatter with RFC 6901 JSON Pointers. A swarm requires mapped
-`area` and `complexity` fields. It contains no external runtime dependency.
+`area` and `complexity` fields. The report fetches nothing at view time.
 
 The report opens with **Work next**: the ready set in a recommended order,
 each entry carrying the factors that placed it. Below it sit **Attention**
 (blocked work naming its blockers, the oldest open work, and started work past
-this ledger's own 85th-percentile cycle time) and the **evidence layer**
+this ledger's own 85th-percentile cycle time), the **evidence layer**
 (aging buckets, weekly arrivals against completions, accept-to-complete cycle
-time, and a Monte Carlo forecast as 50 and 85 percent bands). State counts,
-item cards, filters, grouping, detail levels, terminal history, and
-area-diverse ready batches all remain, demoted below that decision surface.
+time, and a Monte Carlo forecast as 50 and 85 percent bands), and the **ledger
+graph**. State counts, item cards, filters, grouping, detail levels, terminal
+history, and area-diverse ready batches all remain, demoted below that
+decision surface.
+
+### The ledger graph
+
+Below the evidence layer the report draws the whole ledger as a force-directed
+3D graph. Every item is a node, labelled `#N`, coloured by readiness for open
+items and by terminal status for closed ones, and sized by the same transitive
+unblocking leverage the recommended order uses. Edges run from a prerequisite
+or a parent to the item it releases: a `depends_on` edge is straight and
+arrowed, a `parent` edge is curved and unarrowed. Hovering or clicking a node
+opens a card with its number, title, status, age, leverage, and the same
+reasons line the ranked list prints for it.
+
+The renderer is [`3d-force-graph`](https://github.com/vasturiano/3d-force-graph)
+over Three.js, vendored into `vendor/3d-force-graph/` at a pinned version
+`1.80.0` with its upstream SHA-256 recorded in `VERSIONS.json` and pinned by a
+test. It is inlined into the report at generation time. Nothing is fetched from
+a CDN, at generation time or at view time, and the report's content security
+policy forbids every remote load. The bundle costs roughly 1.3 MB of the
+report's size; the report stays one self-contained file you can attach, open
+offline, and share.
+
+Without WebGL the graph section says so and expands its own roster instead: one
+row per node, carrying that node's number, title, status, age, leverage, and
+reasons. No decision-relevant content exists only in the 3D view.
 
 The recommended order is a report-layer derivation. It is recomputed from
 ledger bytes at render time, never persisted, never a mutation, and it does not
