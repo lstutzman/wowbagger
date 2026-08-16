@@ -852,10 +852,10 @@ function patchData(data, request) {
     related: [...(data.related ?? [])],
     updated: request.date,
   };
-  for (const [field, value] of Object.entries(request.set)) {
-    if (field === 'body') {
-      continue;
-    }
+  // The successor is the frontmatter view the candidate is checked against, so
+  // it takes only the frontmatter fields; the body rides the serializer.
+  for (const field of PATCH_FRONTMATTER_FIELDS.filter((name) => hasOwn(request.set, name))) {
+    const value = request.set[field];
     if (value === null) {
       delete successor[field];
     } else {
