@@ -36,6 +36,7 @@
     "src",
     "skills",
     "adapters",
+    "vendor",
     "docs/adapter-contract.md",
     "docs/mutation-contract.md",
     "docs/work-claim-contract.md",
