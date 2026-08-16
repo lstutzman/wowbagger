@@ -7,7 +7,18 @@ import { parseDocument } from 'yaml';
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 const DEFAULT_FILE_SYSTEM = { lstat, open, readdir };
 
+// A complete ledger load reads and parses every item file, so it is the unit
+// of cost a large-ledger command is measured in. The monotonic counter lets
+// tests and the benchmark assert how many complete loads one command performs
+// without timing anything.
+let completeLoadCount = 0;
+
+export function ledgerLoadCount() {
+  return completeLoadCount;
+}
+
 export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYSTEM) {
+  completeLoadCount += 1;
   const root = path.resolve(ledgerDirectory);
   let rootStat;
   try {
@@ -74,7 +85,10 @@ export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYST
     }
 
     if (layout.configured && !isInsideItemsDirectory(root, file, layout.value.items_directory)) {
-      errors.push(itemOutsideLayoutError(displayPath));
+      errors.push(itemOutsideLayoutError(
+        displayPath,
+        ledgerPath(root, path.join(root, layout.value.items_directory, path.basename(file))),
+      ));
     }
 
     items.push({
@@ -313,12 +327,18 @@ function itemLayoutError(displayPath) {
   };
 }
 
-function itemOutsideLayoutError(displayPath) {
+// The refusal names both paths because a misplaced item blocks every read and
+// every guarded mutation on the ledger, including ones that never touch it. An
+// agent that reads only the code has to guess where the file belongs; naming
+// the expected path and the relocation makes the repair mechanical.
+function itemOutsideLayoutError(displayPath, expectedPath) {
   return {
     path: displayPath,
     field: 'path',
     code: 'item-outside-layout',
-    message: 'Ledger items must be inside the configured items directory.',
+    message: `Ledger item ${displayPath} is outside the configured items directory; the committed layout expects it at ${expectedPath}.`,
+    expected_path: expectedPath,
+    remediation: `Move ${displayPath} to ${expectedPath}, stage the move with git add, commit it, then run claim-verify.`,
   };
 }
 

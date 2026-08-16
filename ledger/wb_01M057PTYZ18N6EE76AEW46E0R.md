@@ -5,9 +5,10 @@ number: 88
 title: "Document and message the commit-per-mutation invariant"
 kind: task
 priority: 1
-status: backlog
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "consumer-field-feedback"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept the PropertyCompass2 field finding into the backlog."
     rationale: "First real production session (21 creates, 27 transitions, alpha.4) recorded this in docs/wowbagger-feedback.md (PR #2196). Verified against this repo source before filing."
+  - action: complete
+    date: 2026-08-16
+    summary: "Documented and messaged the commit-per-mutation invariant."
+    rationale: "Contract section 12, work-claim contract, README, and both skill loops state the write-commit-claim-verify rule; every blocking reconciliation finding now carries a remediation naming the path and claim-verify, pinned by a fixture-driven refusal test. Merged green at 816 tests."
 ---
 Field blocker 1 from PropertyCompass2 dual-run (21 creates/27 transitions, alpha.4; report: .PropertyCompass2/worktrees/260815-212735/docs/wowbagger-feedback.md, PR #2196; independently reproduced in this repo on 2026-08-16 filing items #86/#87). On a provisioned ledger the durable claim store validates each prior mutation at git HEAD, so an uncommitted prior item makes every next create fail exit 6 `claim-store-unavailable` / `publication-reconciliation-required` / `stale-write-detected` with `actual_revision: null`. The invariant - every mutation must be Git-committed before the next mutating command - is documented NOWHERE (not SPEC.md, not mutation-contract.md, not the skill). The consumer burned four failed cycles and an aborted 20-item batch discovering it.
 

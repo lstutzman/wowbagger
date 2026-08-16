@@ -19,13 +19,14 @@ const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
 const PLATFORM_KEYS = ['darwin', 'linux', 'win32'];
 const PLATFORM_STATUS = new Set(['supported', 'unsupported', 'unverified']);
 const ADAPTER_CONTRACT_VERSION = 2;
-const CORE_CONTRACT_VERSION = 2;
+const CORE_CONTRACT_VERSION = 3;
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],
   ['transition-precondition-failed', 2],
   ['patch-precondition-failed', 2],
   ['candidate-invalid', 2],
+  ['items-directory-unavailable', 2],
   ['ledger-invalid', 3],
   ['revision-conflict', 4],
   ['lock-held', 4],
@@ -41,12 +42,40 @@ const MUTATION_ERROR_STATES = new Map([
   ['post-commit-recovery-required', 'committed'],
   ['write-outcome-unknown', 'unknown'],
 ]);
+// A mutating command may also be answered by the claim fence, which speaks the
+// ledger-mutation domain and carries the legacy work-claim envelope marker
+// rather than the core contract version.
+const CLAIM_DOMAIN_ENVELOPE_VERSION = 1;
+const CLAIM_NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
+const UNSIGNED_DECIMAL = /^(0|[1-9][0-9]*)$/;
+const FENCE_REFUSAL_MESSAGES = new Map([
+  ['claimed-item-write-refused', 'Legacy create cannot write an item identity with claim history.'],
+  ['active-claim-write-refused', 'Legacy transition cannot write an item with an active claim.'],
+  ['claim-store-unavailable', 'The durable claim store is unavailable.'],
+]);
+const FENCE_REFUSAL_EXITS = new Map([
+  ['claimed-item-write-refused', 4],
+  ['active-claim-write-refused', 4],
+  ['claim-store-unavailable', 6],
+]);
+const FENCE_REFUSAL_COMMANDS = new Map([
+  ['claimed-item-write-refused', ['create']],
+  ['active-claim-write-refused', ['transition', 'patch']],
+  ['claim-store-unavailable', ['create', 'transition', 'patch']],
+]);
+// Only the durable-store refusal can leave the outcome genuinely unobservable;
+// the two legacy refusals always prove the write never started.
+const FENCE_REFUSAL_STATES = new Map([
+  ['claimed-item-write-refused', ['unchanged']],
+  ['active-claim-write-refused', ['unchanged']],
+  ['claim-store-unavailable', ['unchanged', 'unknown']],
+]);
 const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
   inspect: new Set(['invalid-request', 'item-not-found', 'ledger-invalid']),
   create: new Set([
     'invalid-request', 'ledger-invalid', 'lock-held', 'id-collision', 'path-collision',
-    'candidate-invalid', 'capability-unavailable', 'operation-failed',
-    'post-commit-recovery-required', 'write-outcome-unknown',
+    'candidate-invalid', 'items-directory-unavailable', 'capability-unavailable',
+    'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
   ]),
   transition: new Set([
     'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
@@ -82,6 +111,7 @@ const PATCH_ISSUE_MESSAGES = Object.freeze({
   'date-before-created': 'Patch date must not be earlier than the current created date.',
   'date-before-updated': 'Patch date must not be earlier than the current updated date.',
 });
+const DATE_ISSUE_CODES = new Set(['date-before-created', 'date-before-updated']);
 const TRANSITION_BLOCKER_FIELDS = Object.freeze({
   'dependent-cleanup': 'depends_on',
   'dependent-disposition': 'depends_on',
@@ -1492,6 +1522,11 @@ function hasRequiredFinalLf(bytes) {
 
 function validCoreCommandEnvelope(value, command, exitCode, responseContext) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  // Dispatch on the response domain before the command: a root namespace
+  // member names the domain, and only ledger-mutation answers a core command.
+  if (Object.hasOwn(value, 'namespace')) {
+    return validClaimFenceRefusalEnvelope(value, command, exitCode, responseContext);
+  }
   if (command === 'validate') {
     return validCoreValidateEnvelope(value, exitCode);
   }
@@ -1785,10 +1820,15 @@ function validCoreValidateEnvelope(value, exitCode) {
     && (value.valid ? value.errors.length === 0 : value.errors.length > 0);
 }
 
+// SPEC.md requires a code, path, field, and message. A validator that can also
+// derive the repair states it: expected_path and remediation ride along on the
+// errors that have one, and nowhere else.
 function validValidationErrors(value) {
   return Array.isArray(value) && value.every((error) => hasExactKeys(error, [
     'path', 'field', 'code', 'message',
-  ])
+  ], ['expected_path', 'remediation'])
+    && (!Object.hasOwn(error, 'expected_path') || nonEmptyControlFreeString(error.expected_path))
+    && (!Object.hasOwn(error, 'remediation') || nonEmptyControlFreeString(error.remediation))
     && nonEmptyControlFreeString(error.path)
     && nonEmptyControlFreeString(error.field)
     && nonEmptyControlFreeString(error.code)
@@ -1801,6 +1841,66 @@ function compareValidationErrors(left, right) {
     || compareText(left.field, right.field)
     || compareText(left.code, right.code)
     || compareText(left.message, right.message);
+}
+
+function validClaimFenceRefusalEnvelope(value, command, exitCode, responseContext) {
+  if (!hasExactKeys(value, ['ok', 'namespace', 'command', 'contract_version', 'state', 'error'])) {
+    return false;
+  }
+  if (value.ok !== false || value.namespace !== 'ledger-mutation') return false;
+  if (value.command !== `${command}-v1`) return false;
+  if (value.contract_version !== CLAIM_DOMAIN_ENVELOPE_VERSION) return false;
+  if (!hasExactKeys(value.error, ['code', 'message', 'details'])) return false;
+  const code = value.error.code;
+  if (!FENCE_REFUSAL_MESSAGES.has(code)) return false;
+  if (value.error.message !== FENCE_REFUSAL_MESSAGES.get(code)) return false;
+  if (exitCode !== FENCE_REFUSAL_EXITS.get(code)) return false;
+  if (!FENCE_REFUSAL_COMMANDS.get(code).includes(command)) return false;
+  if (!FENCE_REFUSAL_STATES.get(code).includes(value.state)) return false;
+  // The core validates the request before the fence sees it, so a fence
+  // refusal cannot answer a request that was never canonical.
+  if (!hasCanonicalMutationRequest(responseContext, command)) return false;
+  if (code === 'claim-store-unavailable') return validUnavailableStoreDetails(value.error.details);
+  return validClaimReadBackDetails(code, value.error.details, responseItemId(responseContext, command));
+}
+
+function validClaimReadBackDetails(code, details, expectedItemId) {
+  const members = ['ledger_namespace', 'item_id', 'observed_at', 'last_epoch', 'active'];
+  if (!hasExactKeys(details, members)) return false;
+  if (!CLAIM_NAMESPACE_ID.test(details.ledger_namespace)) return false;
+  if (!WOWBAGGER_ID.test(details.item_id)) return false;
+  if (expectedItemId !== undefined && details.item_id !== expectedItemId) return false;
+  if (!isCoreRfc3339Utc(details.observed_at)) return false;
+  if (typeof details.last_epoch !== 'string' || !UNSIGNED_DECIMAL.test(details.last_epoch)) {
+    return false;
+  }
+  if (details.active !== null) {
+    const active = details.active;
+    if (!hasExactKeys(active, ['owner_id', 'epoch', 'issued_at', 'expires_at'])) return false;
+    if (!nonEmptyControlFreeString(active.owner_id)) return false;
+    if (typeof active.epoch !== 'string' || !UNSIGNED_DECIMAL.test(active.epoch)) return false;
+    if (!isCoreRfc3339Utc(active.issued_at) || !isCoreRfc3339Utc(active.expires_at)) return false;
+  }
+  // The read-back must exhibit the condition its own code names.
+  if (code === 'claimed-item-write-refused') return details.last_epoch !== '0';
+  return details.active !== null;
+}
+
+function validUnavailableStoreDetails(details) {
+  if (!plainObject(details)) return false;
+  if (!nonEmptyControlFreeString(details.reason)) return false;
+  if (!Object.hasOwn(details, 'findings')) {
+    return details.reason !== 'publication-reconciliation-required';
+  }
+  const findings = details.findings;
+  if (!Array.isArray(findings) || findings.length === 0) return false;
+  for (const finding of findings) {
+    if (!plainObject(finding)) return false;
+    if (!nonEmptyControlFreeString(finding.code)) return false;
+    if (!WOWBAGGER_ID.test(finding.item_id)) return false;
+  }
+  // Reconciliation is only actionable when some finding names a remediation.
+  return findings.some((finding) => nonEmptyControlFreeString(finding.remediation));
 }
 
 function validCoreMutationEnvelope(value, command, exitCode, responseContext) {
@@ -1838,6 +1938,7 @@ function coreErrorMessageMatches(code, command, message) {
     'transition-precondition-failed': 'The requested lifecycle transition failed its preconditions.',
     'patch-precondition-failed': 'The requested patch failed its preconditions.',
     'candidate-invalid': 'The proposed item would make the ledger invalid.',
+    'items-directory-unavailable': 'The configured items directory is unavailable.',
     'revision-conflict': 'The item changed after it was inspected.',
     'lock-held': 'The item is locked by another cooperative Wowbagger writer.',
     'id-collision': 'The requested item ID already exists.',
@@ -1856,7 +1957,11 @@ function validCoreErrorDetails(code, details, command, responseContext) {
   const expectedRevision = responseExpectedRevision(responseContext, command);
   const expectedCreateRevision = expectedCreateCandidateRevision(responseContext, command);
   const matchesItemId = (id) => expectedItemId === undefined || id === expectedItemId;
-  if (code !== 'invalid-request' && !hasCanonicalMutationRequest(responseContext, command)) {
+  // Canonicality is a property of a mutation request. inspect and the other
+  // read commands never carry one, so this precondition only applies where a
+  // request exists to judge; otherwise no read refusal could ever forward.
+  if (code !== 'invalid-request' && isMutationCommand(command)
+    && !hasCanonicalMutationRequest(responseContext, command)) {
     return false;
   }
   switch (code) {
@@ -1864,8 +1969,14 @@ function validCoreErrorDetails(code, details, command, responseContext) {
       && validInvalidRequestDetails(details);
     case 'item-not-found': return hasExactKeys(details, ['id'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id);
-    case 'ledger-invalid': return hasExactKeys(details, ['validation_errors'])
-      && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
+    // The refusal stands, and inspect may still hand back the snapshot of the
+    // item this request named. Only inspect may; a mutation refusal that
+    // carries an item is not the refusal this contract describes.
+    case 'ledger-invalid': return hasExactKeys(details, ['validation_errors'],
+      command === 'inspect' ? ['item'] : [])
+      && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0
+      && (!Object.hasOwn(details, 'item')
+        || (validCoreItemShape(details.item) && matchesItemId(details.item.id)));
     case 'transition-precondition-failed': return hasExactKeys(details, ['id', 'issues'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validTransitionIssues(details.issues) && details.issues.length > 0;
@@ -1894,6 +2005,8 @@ function validCoreErrorDetails(code, details, command, responseContext) {
     ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validTransitionBlockers(details.blockers)
       && validTransitionIssues(details.precondition_issues);
+    case 'items-directory-unavailable': return validItemsDirectoryDetails(details)
+      && matchesItemId(details.id);
     case 'capability-unavailable': return validCapabilityUnavailableDetails(details);
     case 'operation-failed': return validOperationFailedDetails(details) && matchesItemId(details.id);
     case 'post-commit-recovery-required': return hasExactKeys(details, [
@@ -2050,11 +2163,23 @@ function validPatchRequest(request) {
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactKeys(request.set, [], ['priority'])
+    || !hasExactKeys(request.set, [], ['priority', 'depends_on', 'related', 'body'])
     || Object.keys(request.set).length === 0) return false;
-  for (const value of Object.values(request.set)) {
+  for (const [field, value] of Object.entries(request.set)) {
+    // body is the one patchable value outside the frontmatter, and the one
+    // that null does not remove: the body region always exists, so removing it
+    // is the empty string and null is refused.
+    if (field === 'body') {
+      if (typeof value !== 'string') return false;
+      continue;
+    }
     if (value === null) continue;
-    if (parsedIntegerValue(value, 0) === undefined) return false;
+    if (field === 'priority') {
+      if (parsedIntegerValue(value, 0) === undefined) return false;
+      continue;
+    }
+    if (!Array.isArray(value)
+      || !value.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry))) return false;
   }
   return true;
 }
@@ -2076,11 +2201,22 @@ function validPatchResultCorrelation(item, request) {
     || item.revision === request.expected_revision
     || item.core.updated !== request.date) return false;
   for (const [field, requested] of Object.entries(request.set)) {
-    if (requested === null) {
-      if (Object.hasOwn(item.core, field)) return false;
-    } else if (item.core[field] !== parsedIntegerValue(requested, 0)) {
-      return false;
+    if (field === 'body') {
+      if (item.body !== requested) return false;
+      continue;
     }
+    if (field === 'priority') {
+      if (requested === null) {
+        if (Object.hasOwn(item.core, field)) return false;
+      } else if (item.core[field] !== parsedIntegerValue(requested, 0)) {
+        return false;
+      }
+      continue;
+    }
+    // A relation list is replaced wholesale. Removing the field leaves the
+    // lossless core view reporting an empty list, so null and [] correlate
+    // with the same observed value.
+    if (!sameJson(item.core[field] ?? [], requested ?? [])) return false;
   }
   return true;
 }
@@ -2100,22 +2236,39 @@ function compareInvalidRequestIssues(left, right) {
     || compareText(left.message, right.message);
 }
 
+// A date refusal carries the item's own dates; every other code keeps the
+// four-key shape. The key set is exact in both directions, so a missing
+// date member and a stray one are equally refused.
+function issueKeys(code) {
+  return DATE_ISSUE_CODES.has(code)
+    ? ['code', 'field', 'message', 'related_ids', 'item_created', 'item_updated']
+    : ['code', 'field', 'message', 'related_ids'];
+}
+
+function validIssueDates(issue) {
+  return !DATE_ISSUE_CODES.has(issue.code)
+    || (isCalendarDate(issue.item_created) && isCalendarDate(issue.item_updated)
+      && issue.item_created <= issue.item_updated);
+}
+
 function validTransitionIssues(value) {
   if (!Array.isArray(value)) return false;
-  return value.every((issue) => hasExactKeys(issue, ['code', 'field', 'message', 'related_ids'])
+  return value.every((issue) => hasExactKeys(issue, issueKeys(issue?.code))
     && Object.hasOwn(TRANSITION_ISSUE_MESSAGES, issue.code)
     && issue.field === TRANSITION_ISSUE_FIELDS[issue.code]
     && issue.message === TRANSITION_ISSUE_MESSAGES[issue.code]
+    && validIssueDates(issue)
     && validSortedUniqueIds(issue.related_ids))
     && isOrdered(value, compareTransitionIssues);
 }
 
 function validPatchIssues(value) {
   if (!Array.isArray(value)) return false;
-  return value.every((issue) => hasExactKeys(issue, ['code', 'field', 'message', 'related_ids'])
+  return value.every((issue) => hasExactKeys(issue, issueKeys(issue?.code))
     && Object.hasOwn(PATCH_ISSUE_MESSAGES, issue.code)
     && issue.field === 'date'
     && issue.message === PATCH_ISSUE_MESSAGES[issue.code]
+    && validIssueDates(issue)
     && sameJson(issue.related_ids, []))
     && isOrdered(value, compareTransitionIssues);
 }
@@ -2172,6 +2325,18 @@ function validPathCollisionDetails(value) {
   return value.occupant_kind === 'item'
     ? Object.hasOwn(value, 'occupying_id') && WOWBAGGER_ID.test(value.occupying_id)
     : !Object.hasOwn(value, 'occupying_id');
+}
+
+// The configured items directory is ledger setup, not a request member: the
+// refusal names the ledger-relative directory and the operator action that
+// makes create possible.
+function validItemsDirectoryDetails(value) {
+  if (!hasExactKeys(value, ['id', 'path', 'reason', 'remediation'])
+    || !WOWBAGGER_ID.test(value.id)
+    || !isSafeLedgerDirectoryPath(value.path)
+    || !new Set(['absent', 'not-a-directory']).has(value.reason)
+    || typeof value.remediation !== 'string') return false;
+  return value.remediation.includes(value.path) && value.remediation.includes('create');
 }
 
 function validCapabilityUnavailableDetails(value) {
@@ -2342,6 +2507,10 @@ function isSafeLogicalPath(value) {
     && !/^[A-Za-z]:/.test(value)
     && !/^volume\{[^}]+\}(?:\/|$)/i.test(value)
     && value.split('/').every((segment) => segment && segment !== '.' && segment !== '..'));
+}
+
+function isSafeLedgerDirectoryPath(value) {
+  return isSafeLogicalPath(value) && value !== '.' && !value.endsWith('.md');
 }
 
 function isSafeLedgerDisplayPath(value) {

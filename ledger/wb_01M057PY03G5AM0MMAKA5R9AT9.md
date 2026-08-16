@@ -5,9 +5,10 @@ number: 89
 title: "Make cross-worktree claim coordination honest and diagnosable"
 kind: task
 priority: 1
-status: backlog
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "consumer-field-feedback"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept the PropertyCompass2 field finding into the backlog."
     rationale: "First real production session (21 creates, 27 transitions, alpha.4) recorded this in docs/wowbagger-feedback.md (PR #2196). Verified against this repo source before filing."
+  - action: complete
+    date: 2026-08-16
+    summary: "Made cross-worktree serialization honest and diagnosable."
+    rationale: "claim capabilities now advertises write_serialization (all-worktrees-of-one-repository); a two-worktree fixture distinguishes the foreign-writer and own-uncommitted refusals with the right remediation each; recovery and both traps documented. cross_worktree_coordination stays false with a precise definition."
 ---
 Field blocker 2 from PropertyCompass2 dual-run (report: .PropertyCompass2/worktrees/260815-212735/docs/wowbagger-feedback.md, PR #2196). A sibling worktree's unpushed ledger commits block ALL creates in other worktrees: the claim journal lives in the shared git common dir, so it knows items whose files the local checkout cannot see; every create fails `stale-write-detected` naming a foreign item, and `expected_revision` keeps moving while the sibling works - chasing it is a trap (the consumer proved copying byte-identical files in still loses the race).
 

@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "command": "patch",
+  "contract_version": 3,
+  "state": "committed",
+  "result": {
+    "item": {
+      "id": "wb_01Q525G4G020B6CSK6CSK6CSK5",
+      "path": "wb_01Q525G4G020B6CSK6CSK6CSK5.md",
+      "revision": "sha256:dd189bed01e42e76353e2d2f8263567f2b3ae2acd92650c0b3608ed5ce860d0d",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE1MjVHNEcwMjBCNkNTSzZDU0s2Q1NLNQp0aXRsZTogIlVzZSB0aGUgZmljdGlvbmFsIGJlYWNvbiIKa2luZDogdGFzawpzdGF0dXM6IGJhY2tsb2cKY3JlYXRlZDogMjAzMC0wMS0yMQp1cGRhdGVkOiAyMDMwLTAxLTIyCnByb3ZlbmFuY2U6CiAgc291cmNlOiAiZml4dHVyZS9tdXRhdGlvbnMiCiAgcmVjb3JkZWRfYXQ6ICIyMDMwLTAxLTIxVDEyOjAwOjAwWiIKZGVwZW5kc19vbjogW10KcmVsYXRlZDogWyB3Yl8wMVE0WkszREcwMjBBTkFOQU5BTkFOQU5BTSBdCi0tLQoKVGhpcyBkZXBlbmRlbnQgY2Fubm90IHJlbWFpbiBhdHRhY2hlZCB0byBhIGtpbGxlZCBwcmVyZXF1aXNpdGUuCg==",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q525G4G020B6CSK6CSK6CSK5",
+        "title": "Use the fictional beacon",
+        "kind": "task",
+        "status": "backlog",
+        "created": "2030-01-21",
+        "updated": "2030-01-22",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-21T12:00:00Z"
+        },
+        "depends_on": [],
+        "related": [
+          "wb_01Q4ZK3DG020ANANANANANANAM"
+        ]
+      },
+      "body": "\nThis dependent cannot remain attached to a killed prerequisite.\n"
+    }
+  }
+}

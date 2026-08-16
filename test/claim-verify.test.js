@@ -352,3 +352,36 @@ test('claim-verify reports a revision regression after a committed claimed publi
   assert.equal(transition.exit, 6, JSON.stringify(transition.envelope));
   assert.equal(transition.envelope.error.details.reason, 'publication-reconciliation-required');
 });
+
+test('an unknown publication outcome names the publication, the path, and claim-verify', async () => {
+  const fixture = await pendingPublicationFixture();
+  const third = Buffer.from(fixture.before.toString('utf8').replace('title: "Before"', 'title: "Third"'));
+  await writeFile(fixture.itemPath, third);
+
+  const verified = capture(['claim-verify', '--ledger', fixture.ledger, '--json']);
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].code, 'publication-outcome-unknown');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    `Inspect publication ${fixture.request.operation_id} for item.md, complete its documented recovery, then run claim-verify.`,
+  );
+});
+
+test('a revision regression names the path to restore and claim-verify', async () => {
+  const fixture = await pendingPublicationFixture();
+  const resolved = capture(['claim-verify', '--ledger', fixture.ledger, '--json']);
+  assert.equal(resolved.exit, 0, JSON.stringify(resolved.envelope));
+  await writeFile(fixture.itemPath, fixture.before);
+
+  const verified = capture(['claim-verify', '--ledger', fixture.ledger, '--json']);
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].code, 'revision-regression');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Restore the authorized revision at item.md, then run claim-verify.',
+  );
+});

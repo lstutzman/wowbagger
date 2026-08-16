@@ -137,6 +137,10 @@ test('reference model marks an alternate bypass path unsafe for exclusive dispat
           legacy_create_v1: 'reject-claimed-id',
           legacy_transition_v1: 'reject-active-claim',
         },
+        write_serialization: {
+          scope: 'shared-coordinator-writers',
+          blocks_until: 'coordinator-transaction-complete',
+        },
       },
       durable: {
         clock_floors: [],
@@ -163,6 +167,10 @@ test('reference model marks an alternate bypass path unsafe for exclusive dispat
           ledger_binding: {
             mode: 'explicit-allowlist',
             namespaces: [namespaceA],
+          },
+          write_serialization: {
+            scope: 'shared-coordinator-writers',
+            blocks_until: 'coordinator-transaction-complete',
           },
         },
         operations: {

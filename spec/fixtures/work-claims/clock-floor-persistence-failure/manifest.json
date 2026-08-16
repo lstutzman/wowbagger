@@ -43,6 +43,10 @@
         "claimed_publication_v1": "atomic-fence",
         "legacy_create_v1": "reject-claimed-id",
         "legacy_transition_v1": "reject-active-claim"
+      },
+      "write_serialization": {
+        "scope": "shared-coordinator-writers",
+        "blocks_until": "coordinator-transaction-complete"
       }
     },
     "faults": {
@@ -126,6 +130,10 @@
           "claimed_publication_v1": "atomic-fence",
           "legacy_create_v1": "reject-claimed-id",
           "legacy_transition_v1": "reject-active-claim"
+        },
+        "write_serialization": {
+          "scope": "shared-coordinator-writers",
+          "blocks_until": "coordinator-transaction-complete"
         }
       },
       "faults": {

@@ -19,6 +19,10 @@ const JOURNAL_ENTRY_TYPES = new Set([
   'publish-finalization',
   'publish-intent',
 ]);
+// The reconciliation log is a tracked derived artifact. Entry types that every
+// invocation appends, including refusals and read-only verification, stay out
+// of it so a mutation that changes nothing leaves the working tree unchanged.
+const UNPROJECTED_ENTRY_TYPES = new Set(['clock', 'publish-finalization']);
 
 export function claimJournalPath(commonDir, namespace) {
   return path.join(commonDir, 'wowbagger', namespace, 'journal.ndjson');
@@ -74,7 +78,7 @@ export async function replayClaimJournal(journalPath, namespace) {
 }
 
 export async function writeReconcileLog(logPath, namespace, entries) {
-  const mergeableEntries = entries.filter((entry) => entry.type !== 'publish-finalization');
+  const mergeableEntries = entries.filter((entry) => !UNPROJECTED_ENTRY_TYPES.has(entry.type));
   const content = [
     `# Wowbagger reconciliation log \`${namespace}\``,
     '',

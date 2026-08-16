@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "command": "patch",
+  "contract_version": 3,
+  "state": "committed",
+  "result": {
+    "item": {
+      "id": "wb_01Q4ZK3DG020ANANANANANANAM",
+      "path": "wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "revision": "sha256:d9fdfffe605a6e7feeb4c6e20aa60838670a420881d267217ed87a42134c5592",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0WkszREcwMjBBTkFOQU5BTkFOQU5BTQp0aXRsZTogIk1pcnJvciBvZiBhIGxlZ2FjeSBiYWNrbG9nIGNhcmQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBiYWNrbG9nCmNyZWF0ZWQ6IDIwMzAtMDEtMjAKdXBkYXRlZDogMjAzMC0wMS0yMgpwcm92ZW5hbmNlOgogIHNvdXJjZTogImZpeHR1cmUvbXV0YXRpb25zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0yMFQxMjowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCiMgdGhlIG1pcnJvciBrZWVwcyBpdHMgb3duIG5vdGVzIGhlcmUKbWlycm9yOiAmbWlycm9yCiAgY2FyZDogIlBDLTE0NzUiCmF1ZGl0OgogIC0gbGFzdDogKm1pcnJvcgotLS0KClRoZSBsZWdhY3kgY2FyZCBub3cgcmVhZHMgZG9uZS4K",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q4ZK3DG020ANANANANANANAM",
+        "title": "Mirror of a legacy backlog card",
+        "kind": "task",
+        "status": "backlog",
+        "created": "2030-01-20",
+        "updated": "2030-01-22",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-20T12:00:00Z"
+        },
+        "depends_on": [],
+        "related": []
+      },
+      "body": "\nThe legacy card now reads done.\n"
+    }
+  }
+}

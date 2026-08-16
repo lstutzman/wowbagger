@@ -684,6 +684,46 @@ test('legacy create refuses an item identity with fenced claim history', async (
   assert.equal(refused.envelope.error.code, 'claimed-item-write-refused');
 });
 
+test('legacy patch refuses a body edit on an item with an active fenced claim', async () => {
+  const fixture = await publicationFixture();
+  const patchPath = path.join(fixture.root, 'patch-body.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    date: '2026-08-11',
+    set: { body: 'The mirror moved on.\n' },
+  }));
+
+  const refused = await capture([
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 4, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'active-claim-write-refused');
+  assert.equal(refused.envelope.command, 'patch-v1');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
+test('legacy patch refuses a relations edit on an item with an active fenced claim', async () => {
+  const fixture = await publicationFixture();
+  const patchPath = path.join(fixture.root, 'patch-relations.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    date: '2026-08-11',
+    set: { depends_on: [], related: [] },
+  }));
+
+  const refused = await capture([
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 4, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'active-claim-write-refused');
+  assert.equal(refused.envelope.command, 'patch-v1');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
 test('legacy patch refuses an item with an active fenced claim', async () => {
   const fixture = await publicationFixture();
   const patchPath = path.join(fixture.root, 'patch.json');

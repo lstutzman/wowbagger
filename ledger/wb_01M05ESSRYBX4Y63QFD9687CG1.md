@@ -1,0 +1,42 @@
+---
+schema_version: 2
+id: wb_01M05ESSRYBX4Y63QFD9687CG1
+number: 100
+title: "Collapse the redundant complete-ledger loads per mutation"
+kind: task
+priority: 10
+status: done
+created: 2026-08-16
+updated: 2026-08-16
+completed: 2026-08-16
+provenance:
+  source: "maintainer-dogfood"
+  recorded_at: "2026-08-16T14:14:52Z"
+depends_on: []
+related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Lee accepted on 2026-08-16. Remaining ~2x latency headroom after the #91 batch fix."
+  - action: complete
+    date: 2026-08-16
+    summary: "One fewer complete-ledger load per claim-protected mutation."
+    rationale: "Reconciliation's snapshot is shared with the pre-lock read (same bytes by construction - the fence holds the lock and reconciliation writes outside the item surface); the locked re-read stays and is now guarded (it was not before - a mutation replacing it with the pre-lock read left all 909 tests green). Retry loads fresh. 3 loads to 2, ~260ms saved, 1.28x on the provisioned path. publish-claimed's own three loads flagged for a follow-up."
+---
+
+Follow-up from item #91's profile: after the git cat-file batch fix (12.8x), the remaining ~1.2s per provisioned-ledger mutation at 1,500 items is three complete ledger loads at ~0.3s each — two in `mutateExistingItem` (before and after lock closure) and one in `reconcileClaimJournal`. Ceiling is roughly another 2x.
+
+Constraint from #91's analysis: the second mutateExistingItem load is the read-under-lock that makes the revision compare-and-swap meaningful — it cannot simply be dropped. The reconcile load and the first mutateExistingItem load are both unlocked reads of the same directory within one command and look genuinely redundant.
+
+Scope:
+1. Collapse the redundant unlocked loads (share one snapshot between reconciliation and the pre-lock load, or thread the reconcile load's result into the mutation path). The locked re-read stays.
+2. The complete-ledger safety property survives: whatever is shared must be provably the same bytes the dropped load would have read, or re-checked under lock. No validation rule weakened.
+3. Extend bench/mutation-latency.bench.js attribution with before/after on the same 1,500-item fixture.
+
+Also flagged in #91 (contract question, decide here or split): `readGitHeadLedger` reads the whole HEAD ledger to answer per-item questions keyed by item ID because the filename-to-ID mapping is convention, not guarantee. Making that mapping authoritative would let the HEAD read narrow to the items under reconciliation and drop to near zero.
+
+Acceptance:
+- Benchmark shows the load-count reduction on the same fixture with before/after numbers.
+- The large-ledger mutation guard (test/large-ledger-mutation-guard.test.js) stays green; no validation rule weakened.
+- Gate green on both runtimes.

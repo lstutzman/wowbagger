@@ -37,6 +37,7 @@ import {
   writeReportFile,
 } from './report.js';
 import { renderReportHtml } from './report-html.js';
+import { loadGraphBundle } from './report-graph.js';
 import {
   createItem,
   inspectItem,
@@ -54,7 +55,7 @@ import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
-const MUTATION_CONTRACT_VERSION = 2;
+const MUTATION_CONTRACT_VERSION = 3;
 
 const MAX_PUBLICATION_REQUEST_BYTES = 11 * 1024 * 1024;
 const DISTRIBUTION_VERSION = JSON.parse(
@@ -69,7 +70,7 @@ const COMMAND_SUMMARIES = {
   inspect: 'Inspect one ledger item as a lossless raw-byte snapshot.',
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
-  patch: "Patch an item's number and priority fields, guarded the same way.",
+  patch: "Patch an item's priority and relation lists, guarded the same way.",
   'mint-id': 'Mint a canonical item ID.',
   provision: 'Provision the work-claim namespace.',
   claim: 'Work-claim lifecycle operations on the provisioned store.',
@@ -179,7 +180,10 @@ export async function runCli(argumentsList, { scenario } = {}) {
         error: {
           code: 'ledger-invalid',
           message: 'The configured ledger is invalid.',
-          details: { validation_errors: result.validation.errors },
+          details: {
+            validation_errors: result.validation.errors,
+            ...(result.item ? { item: result.item } : {}),
+          },
         },
       })}\n`);
       process.exitCode = 3;
@@ -497,7 +501,8 @@ async function runReportCommand(options) {
     const config = await loadReportConfig(options.ledger, options.out);
     const model = buildReportModel(ledger.items, config, options.asOf);
     const logoDataUrl = await readLogoDataUrl(config.repository.logo);
-    const html = renderReportHtml(model, { logoDataUrl });
+    const graphBundle = await loadGraphBundle();
+    const html = renderReportHtml(model, { logoDataUrl, graphBundle });
     await assertReportOutputOutsideLedger(options.ledger, config.outputPath);
     await writeReportFile(config.outputPath, html);
     process.stdout.write(`${JSON.stringify({

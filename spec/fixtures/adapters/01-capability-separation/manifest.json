@@ -27,7 +27,7 @@
   "artifacts": [
     {
       "path": "adapter-capabilities.json",
-      "sha256": "sha256:231ee05a055b855cf233aaa5fcbb162b35a9e907cc0a70acb5a916919bb06447"
+      "sha256": "sha256:6813754ecf625c5fde9f293bbc149acc83a8673f8c3b44fe9a18cb6f4201f9a7"
     },
     {
       "path": "expected-refusal.json",

@@ -21,6 +21,10 @@ const installedWorkClaimContract = readFileSync(
   path.join(projectRoot, 'docs', 'work-claim-contract.md'),
   'utf8',
 );
+const installedMutationContract = readFileSync(
+  path.join(projectRoot, 'docs', 'mutation-contract.md'),
+  'utf8',
+);
 
 test('the npm package is public and installable under the wowbagger name', () => {
   assert.equal(manifest.name, 'wowbagger');
@@ -65,6 +69,60 @@ test('the installed skill defines the lifecycle signal for claimed work', () => 
   assert.match(installedSkill, /active claim is the work-in-flight signal/i);
   assert.match(installedSkill, /item stays in `backlog` while claimed work runs/i);
 });
+
+test('the installed mutation contract derives the create path from layout and prescribes no rename', () => {
+  const create = installedMutationContract.slice(
+    installedMutationContract.indexOf('## 7. Create'),
+    installedMutationContract.indexOf('## 8. Transition'),
+  );
+
+  assert.match(create, /`?<ledger>\/\.wowbagger\/layout\.json`?/);
+  assert.match(create, /"layout_version":\s*1/);
+  assert.match(create, /"items_directory"/);
+  assert.match(create, /<ledger>\/<items_directory>\/<id>\.md/);
+  assert.match(create, /<ledger>\/<id>\.md/);
+  assert.doesNotMatch(installedMutationContract, /rename the (file|item) .*after/i);
+  assert.doesNotMatch(installedMutationContract, /naming convention is applied by Git rename/i);
+});
+
+test('the published README states the layout binding as ledger setup, before the first create', () => {
+  const setup = readme.slice(readme.indexOf('## Start here'), readme.indexOf('## Why the name?'));
+
+  assert.match(setup, /`?<ledger>\/\.wowbagger\/layout\.json`?/);
+  assert.match(setup, /"layout_version":\s*1/);
+  assert.match(setup, /"items_directory":\s*"items"/);
+  assert.match(setup, /<items_directory>\/<id>\.md/);
+  assert.match(setup, /before .*first `?create`?/i);
+  assert.match(setup, /`?0\.1\.0-alpha\.4`? and earlier ignore/i);
+});
+
+test('the installed skill states the layout binding that decides where create publishes', () => {
+  assert.match(installedSkill, /`<ledger>\/\.wowbagger\/layout\.json`/);
+  assert.match(installedSkill, /layout_version/);
+  assert.match(installedSkill, /items_directory/);
+  assert.match(installedSkill, /<items_directory>\/<id>\.md/);
+  assert.match(installedSkill, /`?0\.1\.0-alpha\.4`? and earlier ignore/i);
+});
+
+// Field trap 7a: four of five PropertyCompass2 creates landed at the ledger
+// root because `git mv` refused the untracked file create had just written and
+// the unchecked `git add -A` behind it committed the item where it lay.
+for (const [surface, text] of [
+  ['published README', () => readme],
+  ['installed skill', () => installedSkill],
+]) {
+  test(`the ${surface} warns that git mv refuses a freshly created item`, () => {
+    const source = text();
+    const trap = source.slice(source.indexOf('0.1.0-alpha.4` and earlier ignore'));
+
+    assert.match(trap, /`git mv`/);
+    assert.match(trap, /untracked/i);
+    assert.match(trap, /`git add -A`/);
+    assert.match(trap, /commits? .*at the ledger root/i);
+    assert.match(trap, /`mv`.*then.*`git add`/is);
+    assert.match(trap, /exit\s+code/i);
+  });
+}
 
 test('the npm package ships every contract document referenced by the installed skill', () => {
   for (const contract of ['docs/mutation-contract.md', 'docs/work-claim-contract.md']) {

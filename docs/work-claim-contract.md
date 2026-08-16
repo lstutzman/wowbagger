@@ -22,6 +22,15 @@ Generic consumers migrate without a wire change: they first identify the
 work-claim envelope by `namespace: "work-claim"`, then require the advertised
 `api_version`. Existing version 1 consumers can keep exact-member validation.
 
+This contract owns three `namespace` values, and all three carry
+`contract_version: 1`: `work-claim` for claim lifecycle operations,
+`ledger-publication` for claimed publication and publication reads, and
+`ledger-mutation` for the legacy write refusals in section 7. A response in any
+of the three is a work-claim response, whichever command the caller invoked.
+The [mutation contract](mutation-contract.md) section 2 states the single
+dispatch rule across both contracts, and
+`spec/fixtures/envelope-domains/manifest.json` pins it.
+
 ## 1. Safety boundary
 
 A claim is a durable lease for one work item in one ledger. It is not a Git
@@ -48,6 +57,28 @@ cooperating claim decisions and records publication intent before the item
 write. Git history and `claim-verify` then finalize or reject the outcome. It
 does not make the claim decision and Git commit one atomic transaction, so it
 MUST report `safe_exclusive_dispatch: false`.
+
+### The commit-per-mutation invariant
+
+Because Git history is what finalizes an outcome, the merge-coordinated profile
+carries one operating rule that binds every caller:
+
+**Commit each mutation to Git before running the next mutating command.**
+
+A merge-coordinated backend validates recorded revisions against Git `HEAD`,
+never against working-tree bytes. An uncommitted mutation is an unreconciled
+mutation. The next `create`, `transition`, `patch`, or `publish-claimed`
+therefore refuses with exit 6 `claim-store-unavailable` and
+`details.reason: "publication-reconciliation-required"` rather than writing on
+top of work that is not yet durable.
+
+`claim-verify` is the reconciliation procedure for that refusal. The loop is
+write, commit, `claim-verify`, next write. Section 6 defines `claim-verify`,
+section 7 defines the refusal the legacy write paths emit, and section 8
+defines the error envelope. The [mutation
+contract](mutation-contract.md) section 12 states the same rule for
+`create`, `transition`, and `patch` callers, together with the
+considered-and-rejected alternative of validating against working-tree bytes.
 
 ## 2. Ledger namespace and identity
 
@@ -95,6 +126,10 @@ most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
       "ledger_binding": {
         "mode": "explicit-allowlist",
         "namespaces": ["wbns_11111111111111111111111111111111"]
+      },
+      "write_serialization": {
+        "scope": "shared-coordinator-writers",
+        "blocks_until": "coordinator-transaction-complete"
       }
     },
     "operations": {
@@ -123,6 +158,28 @@ identify this capability context. It is distinct from the unbound default claim
 profile in the core `capabilities --json` response. A caller MUST use
 `claim capabilities --ledger <dir> --json` and MUST gate `publish-claimed` on
 that ledger-specific response.
+
+`backend.write_serialization` is required. It names the writers that one
+recorded write blocks, and what ends the block. `coordination_scope` says where
+the coordination state lives; `write_serialization` says who pays for it.
+
+| `scope` | A recorded write blocks |
+|---|---|
+| `none` | nobody; writers do not serialize |
+| `shared-coordinator-writers` | every writer bound to the coordinator |
+| `all-worktrees-of-one-repository` | every worktree that shares one Git common directory |
+
+| `blocks_until` | The block ends when |
+|---|---|
+| `not-applicable` | there is no block |
+| `coordinator-transaction-complete` | the coordinator transaction finishes |
+| `peer-commit-visible-in-this-checkout` | the writing commit is visible in the blocked checkout |
+
+A caller MUST NOT infer write serialization from `coordination_scope` alone,
+and MUST NOT read the core envelope's
+`limits.cross_worktree_coordination: false` as a promise that worktrees write
+independently. That member reports that the core never synchronizes checkouts.
+It does not report who blocks whom. `write_serialization` does.
 
 `safe_exclusive_dispatch` may be `true` only when all of the following hold:
 
@@ -157,6 +214,10 @@ A provisioned Git-journal backend MAY instead report:
     "ledger_binding": {
       "mode": "explicit-allowlist",
       "namespaces": ["wbns_11111111111111111111111111111111"]
+    },
+    "write_serialization": {
+      "scope": "all-worktrees-of-one-repository",
+      "blocks_until": "peer-commit-visible-in-this-checkout"
     }
   },
   "operations": {
@@ -192,6 +253,95 @@ Git-backed ledger without a provisioned namespace remains advisory:
 `fencing_enforced_at: "none"`, and `safe_exclusive_dispatch: false`.
 An advisory endpoint MUST reject `publish-claimed`; a caller must never upgrade
 an advisory capability locally.
+
+### 3.1 One journal serializes every worktree of one repository
+
+The journal lives in the Git common directory. Every worktree of one
+repository shares that directory, so every worktree shares one journal, and
+one journal serializes them all. Clones do not share it, so clones stay
+independent.
+
+A worktree keeps its own checkout. The journal therefore knows item revisions
+that a sibling checkout cannot see. Reconciliation runs before every mutation
+on a provisioned ledger and compares the journal's expected revisions against
+the local working tree and the local Git HEAD. A revision written in another
+worktree is absent in both, so reconciliation reports
+`stale-write-detected` and the mutation refuses with exit 6
+`claim-store-unavailable`, reason `publication-reconciliation-required`.
+
+The plain statement: **on a provisioned ledger, a recorded write in one
+worktree blocks every mutation in the other worktrees of that repository until
+the writing commit is visible where the next mutation runs.** `create` records
+nothing, so `create` never causes a block; `transition` and `patch` do, and
+`create` is the operation most often refused by one.
+
+**Decided: create stays journal-silent.** The asymmetry is intended. Three
+reasons hold it:
+
+1. Create already protects its own instant. Publication is atomic, it refuses
+   to clobber an existing path, and it verifies the published bytes exactly
+   after the write. A journal entry adds no protection to that instant.
+2. A journaled create would serialize every worktree on the highest-volume
+   mutation. The field reports name create as the most frequent mutation and as
+   the most frequent victim of a block. Making create a blocker as well as a
+   victim multiplies a cost that consumers already report.
+3. The remaining exposure window is real but narrow, and it closes at the
+   item's first journal-visible mutation.
+
+**The exposure window, stated honestly.** The journal does not know a created
+item until that item's first journal-visible mutation, which is a `transition`
+or a `patch`. Until then an out-of-protocol overwrite of the item's bytes is
+not detected. A commit alone does not close the window, because reconciliation
+compares only the revisions the journal expects, and the journal expects none
+for that item. From the first `transition` or `patch`, the ordinary surfaces
+cover the item: with the authorized revision committed, an out-of-protocol
+overwrite of the working-tree bytes reports `unauthorized-revision` and the
+next mutation refuses. Inside the window, only an actor that bypasses this tool
+can overwrite the item, and this protocol does not defend against that actor.
+It is merge-coordinated, not exclusive.
+
+Each refusal carries a `reason` that separates the two cases:
+
+| `reason` | Cause | Remedy |
+|---|---|---|
+| `git-finalization-required` | this worktree wrote the item and has not committed it | commit here, then `claim-verify` |
+| `worktree-synchronization-required` | another worktree wrote the item | synchronize this checkout to that commit |
+| `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision, then `claim-verify` |
+
+### 3.2 Recovering from a foreign-writer block
+
+1. Stop writing in the blocked worktree. Every retry refuses again and costs a
+   reconcile log write.
+2. Read the finding. `worktree-synchronization-required` names the item path
+   and the revision the journal expects.
+3. Wait for the writing worktree to commit and push, or merge its branch.
+4. Synchronize the blocked checkout to that commit: pull, merge, or rebase.
+5. Run `claim-verify --ledger <dir> --json` in the blocked worktree and require
+   exit 0.
+6. Resume.
+
+Only step 4 clears a foreign-writer block. Running `claim-verify` in the
+writing worktree finalizes that worktree's own state; it does not make the
+blocked checkout able to see the item, so the blocked worktree stays blocked.
+
+A refused mutation still writes the per-namespace reconcile log into the
+blocked ledger. Git refuses to merge over that untracked file, so remove or
+commit it before step 4.
+
+**Do not chase `expected_revision`.** The blocked worktree cannot win that
+race. While the sibling keeps working, each new write moves the expected
+revision, so any value read from a refusal is already stale by the time the
+next command runs.
+
+**Warning — copying the item in does not work.** A field report tried it:
+copy the sibling's item file into the blocked checkout, byte-identical, and
+retry. The mutation still refuses. Reconciliation reads the local Git HEAD as
+well as the working tree, so the copy only changes which refusal you get. The
+finding turns from `worktree-synchronization-required` into
+`git-finalization-required`, which now asks the blocked worktree to commit
+another worktree's item into its own branch. That duplicates the sibling's
+work, conflicts on merge, and the sibling's next recorded write blocks the
+checkout again at a new revision. Synchronize the checkout instead.
 
 ## 4. Durable claim and authoritative time
 
@@ -469,6 +619,39 @@ revision, it appends one idempotent `publish-finalization` entry that records
 the Git commit. It writes a per-namespace reconciliation log outside the shared
 journal; that log is a derived audit artifact, not authority.
 
+The log projects only journal entries that record a decision. `clock` and
+`publish-finalization` entries are never projected. A command therefore writes
+the log only when it records a decision, and it writes it before returning, so
+the post-mutation commit set is the changed item file plus that log. A refused
+legacy mutation and a clean `claim-verify` record no decision and leave the log
+byte-identical; a caller MUST NOT need a commit after either. The one exception
+is a `publish-claimed` refusal that reaches a durable `publish-final` terminal:
+that terminal binds the operation identity permanently, so the log changes
+although no item did.
+
+`claim-verify` also reports ledger validity, because it is the verb every
+remediation string names and the caller runs it to learn why the next mutation
+is blocked. `result.ledger_validation` is always present. It carries `valid`
+and `errors`, the same members and the same deterministic SPEC.md error
+sequence the bare `validate` result carries. When `valid` is `false` it also
+carries `remediation`, naming the repair and `claim-verify`; a valid ledger has
+nothing to remedy and carries neither extra member. Reporting costs no extra
+ledger read: reconciliation already loads the ledger it judges.
+
+This member widens a version 1 envelope and the version does not move. The
+legacy claim-envelope `contract_version` stays `1`, matching the
+`write_serialization` precedent: an added `result` member is additive, no root
+member changes, and a version 1 consumer that reads `findings`, `state`, and
+`publications` is unaffected. The version to negotiate remains
+`result.operations.work_claim.api_version`.
+
+`ledger_validation` never changes the claim answer. `findings`, `state`, and
+the exit status describe claim state alone: an invalid ledger with a consistent
+journal still returns exit 0, `state: "committed"`, and `findings: []`. It is
+not a claim finding, and a caller MUST NOT treat it as one. It is the honest
+statement that a clean claim answer is not a clear road, and the caller must
+repair validation before the next mutation will run.
+
 A clean verification returns exit 0 and `state: "committed"`. Findings named
 `pending-intent-resolved` are clean recovery. Any
 `legacy-mutation-outcome-unknown`, `publication-outcome-unknown`,
@@ -476,6 +659,20 @@ A clean verification returns exit 0 and `state: "committed"`. Findings named
 `state: "unknown"`. A caller MUST stop publication work and inspect those
 findings. Repeating verification MUST NOT duplicate a publication
 finalization.
+
+Every finding that blocks a mutation MUST carry a `remediation` string, and
+that string MUST name both the action to take and `claim-verify`. It MUST also
+carry `expected_path` when the journal or current ledger identifies the item
+path, and the `remediation` string names that path. A clean
+`pending-intent-resolved` finding carries neither member; it blocks nothing and
+there is nothing to remedy. The blocking codes remediate as follows:
+
+| Code | Remediation names |
+|---|---|
+| `stale-write-detected` | the action for its `reason` below, then `claim-verify` |
+| `revision-regression` | restoring the authorized revision at `expected_path`, then `claim-verify` |
+| `legacy-mutation-outcome-unknown` | restoring `expected_path` to the expected or candidate revision recorded for `attempt_id`, then `claim-verify` |
+| `publication-outcome-unknown` | inspecting the named publication for `expected_path`, completing its documented recovery, then `claim-verify` |
 
 Every `stale-write-detected` finding contains `actual_revision`,
 `expected_revision`, and `observed_surface`. It also contains a stable `reason`
@@ -490,8 +687,9 @@ ledger identifies the item path. The reasons are:
   revision, but Git `HEAD` does not. Commit the named path, then repeat
   verification.
 - `worktree-synchronization-required`: another cooperating worktree contains
-  the authorized revision. Verify in the writing worktree after commit, or
-  synchronize this worktree to that commit.
+  the authorized revision. Synchronize this worktree to the commit that wrote
+  the named path, then repeat verification. Verifying in the writing worktree
+  does not clear this finding.
 - `claimed-publication-pending`: a claimed publication remains unresolved.
   Inspect the publication tuple and complete its documented recovery.
 
@@ -517,6 +715,12 @@ without a second ledger write.
 
 ## 7. Legacy and alternate writes
 
+Every refusal in this section answers in the `ledger-mutation` namespace with
+`contract_version: 1` and `command: "<core command>-v1"`, even though the caller
+invoked the core `create`, `transition`, or `patch` command. This is a pinned
+version 1 consumer surface; it is not the core mutation envelope and MUST NOT be
+re-wrapped in one.
+
 For a fenced or merge-coordinated capability, legacy transition MUST check the
 active claim under the same namespace lock and return exit 4
 `active-claim-write-refused` before changing an active claimed item. Legacy
@@ -536,6 +740,22 @@ terminal when the expected revision remains. Any third revision produces
 `legacy-mutation-outcome-unknown`. The latest committed terminal is the
 authorized expected revision. A later unrecorded revision remains a stale
 write.
+
+A merge-coordinated backend MUST reconcile before it authorizes a legacy write.
+When reconciliation produces any blocking finding, the legacy command MUST
+refuse with exit 6 `claim-store-unavailable`,
+`details.reason: "publication-reconciliation-required"`, and
+`details.findings` set to those findings. `state` MUST be `unchanged`: the
+refused command wrote nothing.
+
+An uncommitted prior mutation is the ordinary cause. Its finding is
+`stale-write-detected` with `observed_surface: "git-head"`, `reason:
+"git-finalization-required"`, `actual_revision: null` when the authorized
+revision is absent from `HEAD`, and a `remediation` string naming the path to
+commit and `claim-verify`. The caller commits each named path, runs
+`claim-verify` until it returns exit 0, and only then repeats the mutating
+command. `spec/fixtures/mutation-refusals/uncommitted-prior-mutation/manifest.json`
+is the normative envelope for the create path.
 
 An implementation may instead route a legacy write through `publish-claimed`,
 but it cannot silently omit a fence. Administrative repair, bulk import,
@@ -593,6 +813,15 @@ unreachable and a backend that cannot locate its store at all both use it.
 `git-directory-not-found` where a backend keeps claim state inside a git
 directory. A caller distinguishes causes through `details.reason`, never
 through the message.
+
+`details.reason: "publication-reconciliation-required"` is the reason a
+merge-coordinated backend returns when reconciliation found blocking findings,
+and it is the reason an uncommitted prior mutation produces. **`claim-verify`
+is its reconciliation procedure.** The envelope also carries
+`details.findings`; act on each finding's `remediation` string, then run
+`wowbagger claim-verify --ledger <dir> --json` and require exit 0 before
+repeating the refused command. Nothing else reconciles the journal, and no
+other verb is needed.
 
 This code was added after the version 1 vectors were written. It is additive:
 it names a condition the original text did not model, changes no existing code,

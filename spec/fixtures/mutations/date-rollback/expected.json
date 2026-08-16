@@ -1,7 +1,7 @@
 {
   "ok": false,
   "command": "transition",
-  "contract_version": 2,
+  "contract_version": 3,
   "state": "unchanged",
   "error": {
     "code": "transition-precondition-failed",
@@ -13,13 +13,17 @@
           "code": "date-before-created",
           "field": "date",
           "message": "Transition date must not be earlier than the current created date.",
-          "related_ids": []
+          "related_ids": [],
+          "item_created": "2030-01-13",
+          "item_updated": "2030-01-15"
         },
         {
           "code": "date-before-updated",
           "field": "date",
           "message": "Transition date must not be earlier than the current updated date.",
-          "related_ids": []
+          "related_ids": [],
+          "item_created": "2030-01-13",
+          "item_updated": "2030-01-15"
         }
       ]
     }

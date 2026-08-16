@@ -21,20 +21,27 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.4` and core `contract_version: 2`.**
+`0.1.0-alpha.5` and core `contract_version: 3`.**
+
+Both pins name the published `0.1.0-alpha.5` release. Earlier cores —
+`0.1.0-alpha.4` and before — report `contract_version: 2` and lack behavior
+this skill requires, so the version check refuses them. Do not soften either
+pin to make a check pass.
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to
   editing ledger files by hand — hand-edits bypass validation and atomic
   publication, which is the whole point of the tool.
 - If the distribution version is missing or is different, stop and report the
-  installed and required versions. An older core can share contract version 2
+  installed and required versions. An older core can share a contract version
   while still lacking behavior this skill requires. Do not guess from the
   contract version alone.
-- `contract_version` is anything other than `2` → stop and say so plainly. A
+- `contract_version` is anything other than `3` → stop and say so plainly. A
   core reporting `1` predates schema version 2, where `depends_on` records
-  declared prerequisites rather than only live blockers; an older or newer core
-  may have changed the request or response shape. Do not guess.
+  declared prerequisites rather than only live blockers. A core reporting `2`
+  predates the widened date-refusal issue shape, the `depends_on`/`related`
+  patch field set, and core-assigned item numbers. An older or newer core may
+  have changed the request or response shape. Do not guess.
 
 Run both commands once per session before the first ledger command, not before
 every command.
@@ -93,16 +100,29 @@ ledger. Do not use an npm script as a machine protocol; invoke `wowbagger`
 directly so standard output contains exactly one compact JSON object.
 
 On success, require exit `0`, `ok: true`, `command: "report"`,
-`contract_version: 2`, `result.report_version: 1`, and the requested
+`contract_version: 3`, `result.report_version: 1`, and the requested
 `result.as_of`. Read the generated file from the absolute `result.output`.
 On failure, require `ok: false` and inspect `error.code`; do not treat an
 existing output as fresh because failed publication preserves the prior report.
+
+The report ends its decision surface with a 3D dependency graph of the whole
+ledger. Its renderer is a pinned, checksummed `3d-force-graph` build vendored
+at `vendor/3d-force-graph/` and inlined at generation time, so the report is
+still one self-contained file that fetches nothing — it is roughly 1.3 MB
+larger for it. A browser without WebGL shows the graph section's plain
+explanation and its per-node roster instead; nothing the graph shows is
+missing from the rest of the report.
 
 The generated HTML does not authorize transitions, claims, or parallel work.
 It has no live ledger revision. Its readiness state is the canonical projection
 at generation time, but the file is only a static view. Area-diverse batches are
 scheduling hints. Use `inspect` plus `transition` for lifecycle changes and the
 claim commands below for coordination.
+
+The report's "Work next" list is a recommended order derived in the report
+layer for a human reader. It is not the queue. `ready --json` remains the only
+machine queue, and its order is priority, created date, then ID. Do not dispatch
+from the report and do not present its order as core output.
 
 ## Writing
 
@@ -112,19 +132,151 @@ before running it.
 ```sh
 wowbagger create     --ledger <dir> --input request.json --json
 wowbagger transition --ledger <dir> --input request.json --json
+wowbagger patch      --ledger <dir> --input request.json --json
 ```
 
 - `create` publishes only a caller-supplied canonical ID, atomically and
   no-clobber. It will not invent an ID for you.
+- **Where `create` publishes is the ledger's decision, not the caller's.** A
+  committed `<ledger>/.wowbagger/layout.json` holding exactly
+  `{"layout_version":1,"items_directory":"items"}` makes `create` publish
+  atomically to `<items_directory>/<id>.md`; without the file it publishes to
+  `<ledger>/<id>.md`. Configure it, and commit the directory it names, before
+  the first `create` — no file is renamed afterwards. If that directory is
+  missing, `create` refuses `items-directory-unavailable`, exit 2, and its
+  `error.details.remediation` names the directory to create. Cores at
+  `0.1.0-alpha.4` and earlier ignore the file and publish at the ledger root.
+- **Never relocate an item with `git mv` straight after a create.** `create`
+  writes an untracked file, so `git mv` refuses it; the `git add -A` behind it
+  in an unchecked batch then commits the item at the ledger root. Use plain
+  `mv`, then `git add`, and check every exit code before you commit:
+
+  ```sh
+  mv <ledger>/<id>.md <ledger>/items/<id>.md || exit 1
+  git add <ledger> || exit 1
+  ```
+
+  A committed item outside the configured items directory fails validation and
+  refuses every read and every guarded mutation on that ledger, including ones
+  that never touch it. The `item-outside-layout` refusal carries
+  `expected_path` and a `remediation` naming the move; make it, commit it, then
+  run `claim-verify`.
 - `create` starts an empty ledger on schema version 2 and returns the selected
   version at `result.item.core.schema_version`. A non-empty schema-version-1
   ledger stays on version 1 until its complete ledger is migrated.
 - `transition` changes **one** item. If the change would require touching a
   dependent or a child, it refuses. That refusal is correct — make it a
   reviewable multi-file Git change instead of forcing it.
+- **The body is patchable.** `patch` takes `set.body` — a whole-body string
+  replacement that keeps every frontmatter byte. A mirror whose items track an
+  external card updates bodies through `patch`, never by hand-editing the
+  Markdown: the hand-edit skips the lock, the revision check, and validation.
+  Removing a body is `""`; `null` is refused.
 - See `docs/mutation-contract.md` in the wowbagger repository for the request
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
+
+### Diagnosing an invalid ledger
+
+An invalid ledger refuses every read and every guarded mutation, so the exit 3
+`ledger-invalid` refusals are the diagnosis. Read them; do not hand-parse the
+Markdown.
+
+- `validate --ledger <dir> --json` lists every error, each with its `path`,
+  `code`, and `message`, and with `expected_path` and `remediation` where the
+  validator can derive the repair.
+- `inspect` still refuses with exit 3, but its
+  `error.details.item` carries the complete snapshot — `revision`,
+  `source_base64`, `core`, `body` — of the item you asked for, whenever no
+  validation error names that item's path. An item the ledger faults is
+  withheld: `validate` already names its repair.
+- `claim-verify --ledger <dir> --json` reports `result.ledger_validation`. An
+  exit 0 with `findings: []` and `ledger_validation.valid: false` means the
+  claim journal is consistent and validation is what blocks every mutation.
+  Repair validation first; the claim state needs nothing.
+
+### Patch edits fields, never lifecycle
+
+`patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.
+The patchable field set is exactly `priority`, `depends_on`, `related`, and
+`body`. A
+`set` naming anything else is an `invalid-request` issue at its `/set` pointer,
+and `number` is refused because it is immutable identity.
+
+- A relation list is replaced whole. There is no add or remove member — send
+  the complete list you want the item to carry.
+- `[]` clears a list. `null` removes the field, but `depends_on` is required,
+  so a null one returns `candidate-invalid`, exit 2, `unchanged`. Use `[]`.
+- `priority` takes a non-negative integer.
+- Patch appends no decision; the Git diff is the audit trail. It never mutates
+  a second item, and it cannot touch status, title, or provenance.
+
+### A refused disposition is one relations patch away
+
+Killing or archiving an item that another item still declares in `depends_on`
+returns exit 5 `atomic-scope-required`:
+
+```
+error.details.blockers[]
+  code: "dependent-disposition"   item_id: "wb_..."   field: "depends_on"
+```
+
+That refusal is a routing instruction, not a dead end. Read `item_id`,
+`inspect` that dependent, `patch` it to move the target out of `depends_on` and
+into `related`, commit, then retry the disposition with a fresh revision. Two
+mutations and two reviewable diffs, never one atomic multi-item write.
+
+### Item dates are UTC, so do not assume today
+
+An item's `created` date is not your calendar date. `create` writes `created`
+and `updated` from the item ID: the date derives from the ULID timestamp,
+which is UTC. An item created just after midnight UTC carries **tomorrow's**
+date for anyone west of UTC.
+
+`transition` and `patch` refuse a `date` earlier than the item's `created` or
+`updated`, so today's local date can be refused by an item minted minutes ago:
+
+```
+error.details.issues[]
+  code: "date-before-created"        item_created: "2026-08-17"
+  code: "date-before-updated"        item_updated: "2026-08-17"
+```
+
+Both codes carry `item_created` and `item_updated` — the item's own dates.
+Read them from the refusal and resend with a date that is not earlier than
+`item_updated`. Do not run `inspect` to find them, and do not invent a date to
+get past the guard: the invariant is correct, your date was wrong.
+
+### Commit every mutation before the next one
+
+On a **provisioned** ledger (`claim capabilities` reports
+`mode: "merge-coordinated"`) this is not optional:
+
+**Commit each mutation to Git before running the next mutating command.**
+
+```sh
+wowbagger create --ledger <dir> --input request.json --json
+git add <dir> && git commit -m "Record the mutation"
+wowbagger claim-verify --ledger <dir> --json
+wowbagger transition --ledger <dir> --input next.json --json
+```
+
+The claim store validates every recorded mutation against Git `HEAD`, never
+against working-tree bytes — that is what makes a mutation durable rather than
+a local edit. So an uncommitted mutation blocks the next one. Skip the commit
+and the next `create`, `transition`, or `patch` returns exit 6
+`claim-store-unavailable` with
+`details.reason: "publication-reconciliation-required"`. `state` is
+`unchanged`, so nothing was written.
+
+**`claim-verify` is the reconciliation procedure for that refusal.** Do not go
+looking for another verb; there is none. Read `details.findings`, do exactly
+what each finding's `remediation` string says (it names the path), run
+`claim-verify` until it exits 0, then repeat the refused command. Never hand-
+edit a ledger file to get past it.
+
+Batch work is where this bites: filing ten items means ten commits, not one
+commit at the end. Tell the user that before starting a batch.
 
 ## Work claims are merge-coordinated
 
@@ -146,6 +298,35 @@ worktrees that use the protocol.
 It is not exclusive coordination. Direct filesystem writes, hostile processes,
 other clones, and alternate tools can bypass the protocol. Never present a
 claim as a lock or build a dispatch loop that requires exclusive ownership.
+
+### One worktree's write blocks the others
+
+The claim journal lives in the shared Git common directory, so **one journal
+serializes every worktree of one repository**. Read the scope from
+`result.backend.write_serialization` in `claim capabilities`; the provisioned
+profile reports `scope: "all-worktrees-of-one-repository"`. Do not read the
+core envelope's `limits.cross_worktree_coordination: false` as permission to
+write in parallel — it only says the core never synchronizes checkouts.
+
+A recorded `transition` or `patch` in one worktree refuses every mutation in
+the others with exit 6 `claim-store-unavailable`, reason
+`publication-reconciliation-required`, until the writing commit is visible in
+the blocked checkout. `create` records nothing, so `create` never causes a
+block — but it is usually the command that gets refused by one.
+
+Read `error.details.findings[0].reason` and say which case it is:
+
+- `git-finalization-required` — you wrote it here and have not committed.
+  Commit, then `claim-verify`.
+- `worktree-synchronization-required` — another worktree wrote it. Stop
+  writing. Wait for that worktree to commit and push, remove the untracked
+  reconcile log, pull or merge, run `claim-verify`, then resume.
+
+Two traps. Do not retry with the `expected_revision` from the refusal: a
+sibling that is still working moves it, and you cannot win that race. Do not
+copy the sibling's item file into your checkout: the refusal only changes to
+`git-finalization-required`, which asks you to commit their work into your
+branch, and the next sibling write blocks you again.
 
 An item stays in `backlog` while claimed work runs. The active claim is the work-in-flight signal.
 Do not use legacy `transition` to set `in-progress` after acquiring a claim; it
@@ -170,12 +351,17 @@ Use the claimed write path as one complete loop:
    revision, the candidate bytes and digest, and the active claim fence. Never
    retry with only the operation ID; retry the complete request.
 8. Commit the item change, or merge the worker commit into the coordinating
-   branch.
+   branch. Do this now, not at the end of a batch — the next mutating command
+   refuses while this one is uncommitted.
 9. Run `claim-verify` after the commit or merge. It finalizes the Git outcome,
-   repairs response-loss cases, and reports later revision drift. Run it again
-   before the next fenced operation if the prior outcome was not final.
+   repairs response-loss cases, and reports later revision drift. Require exit
+   0 before the next mutating command; exit 6 means findings remain, so act on
+   each `remediation` string and run it again.
 10. Release the claim with its current observed state.
 11. Run `validate` and show the resulting diff.
+
+Steps 7 to 9 are the whole rule in order: write, commit, `claim-verify`, next
+write.
 
 Legacy `create` refuses an ID with claim history. Legacy `transition` refuses an
 item with an active claim. Do not bypass those refusals. Read
@@ -191,6 +377,13 @@ response envelopes, refusal precedence, and recovery rules.
 4. Do the work.
 5. `inspect` again for the current revision, then `transition` to close it.
 6. `validate`, then show the diff.
+7. On a provisioned ledger, commit the ledger change now:
+   `git add <dir> && git commit`.
+8. On a provisioned ledger, run `claim-verify --ledger <dir> --json` and
+   require exit 0 before the next `create`, `transition`, or `patch`.
+
+Write, commit, `claim-verify`, next write. The unclaimed loop obeys the same
+rule as the claimed one, because both run through the same coordinator.
 
 ## Friction is a finding
 

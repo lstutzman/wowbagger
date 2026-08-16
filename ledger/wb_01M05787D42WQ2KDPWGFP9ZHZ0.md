@@ -4,9 +4,10 @@ id: wb_01M05787D42WQ2KDPWGFP9ZHZ0
 number: 87
 title: "Ship a Three.js 3D ledger graph as a marketing showpiece"
 kind: task
-status: backlog
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -17,22 +18,26 @@ decisions:
     date: 2026-08-16
     summary: "Accept the Three.js 3D ledger-graph showpiece into the backlog."
     rationale: "Maintainer ask: a Three.js visualization would serve marketing. Kept as a separate opt-in self-contained artifact (vendored ~300KB gzip bundle) so the daily report stays lean; depends on #86 for the chart data pipeline."
+  - action: complete
+    date: 2026-08-16
+    summary: "The 3D dependency graph rides the daily report."
+    rationale: "Lee's mid-run revision (recorded in this item's body via the new body patch): embedded in the regular report, no flag, ~1.31MB vendored 3d-force-graph 1.80.0 bundle inlined, digest-verified at generation time, CSP tightened to connect-src none. Nodes carry number, status color, leverage size; hover reasons match work-next verbatim; the always-present roster makes the no-3D-only-content rule structural. Real-browser acceptance on the live 108-item ledger: zero console errors, WebGL-less degradation verified. Orchestrator re-verified the merged report in a browser."
 ---
+
 A visually striking, interactive 3D view of a wowbagger ledger - the artifact you show people. A force-directed 3D graph of the dependency DAG: nodes are items (colored by status/readiness, sized by unblocking leverage from #85, labeled #N), edges are `depends_on` and `parent`; orbit/zoom/hover interaction. Built on `3d-force-graph` (vasturiano) over Three.js. Research: `docs/research/2026-08-15-useful-backlog-reports.md` Part 3.
 
-Architecture decisions (already researched, keep them):
+Architecture decisions:
 
-- **Separate opt-in artifact, not the daily report.** The bundled library is ~300 KB gzipped (~1 MB inline text) - right-sized for a showpiece, wrong-sized to force on every report open. Generate via an explicit flag or config (e.g. `report --flair` or a `showpiece` config key) to a second output file next to the report.
-- **Still one self-contained file.** Inline the vendored bundle so the showpiece keeps the report family's defining property: attach it, open it offline, share it. That property is the marketing value.
+- **REVISED (Lee, 2026-08-16): part of the regular report.** The graph is a section of the daily report - one `report` invocation, one self-contained HTML file, graph included, no flag and no second artifact. This supersedes the original separate-opt-in decision; the accepted cost is the inlined ~300 KB gzipped (~1 MB text) bundle riding every report open. The decision surface (Work next, Attention, Evidence) stays above the graph section.
+- **Still one self-contained file.** Inline the vendored bundle; attach it, open it offline, share it. That property is the marketing value.
 - **Supply chain:** vendor a pinned, checksummed three.js/3d-force-graph build into the repository; inline at generation time; never fetch from a CDN at view or generation time. Record the exact upstream version and checksum next to the vendored file.
-- **Degradation:** without WebGL, show a plain explanation and the item list; no decision-relevant content may exist only in the 3D view.
+- **Degradation:** without WebGL, the graph section shows a plain explanation; no decision-relevant content may exist only in the 3D view.
 
 Acceptance criteria:
 
-- Generating with the flag produces a self-contained HTML file whose only script is the inlined vendored bundle plus inline glue (test: no external URL fetches in the file).
+- The plain `report` invocation produces one self-contained HTML file including the graph section; the file makes zero external fetches (test) and two renders of the same ledger at the same as-of are byte-identical (test).
 - Nodes render number, title, status color, and leverage-scaled size from a fixture ledger; edges distinguish depends_on from parent visually.
 - Clicking or hovering a node shows #N, title, status, age, and its reasons line consistent with the #85 work-next entry.
-- The default `report` invocation is byte-identical with and without the showpiece feature present in the codebase (no growth of the daily report).
 - Vendored bundle carries a recorded upstream version + sha256; a test pins the checksum.
 - Renders a 100+ item ledger (the real one) without console errors; verified in a real browser once during acceptance.
 - Four-command gate green on both Node runtimes.

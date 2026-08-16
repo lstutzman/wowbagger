@@ -168,6 +168,12 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
       const terminalKeys = new Set(replayed.entries
         .filter((entry) => entry.type === 'publish-final')
         .map((entry) => `${entry.operation_id}\0${entry.item_id}`));
+      // Every unlocked read this publication performs happens inside one claim
+      // lock hold on one directory, and nothing between them writes an item
+      // file, so the first of them is the snapshot the rest share. The read
+      // under lock, which the mutation engine still performs on its own, is
+      // what makes the revision compare-and-swap meaningful.
+      let ledgerSnapshot = null;
       if (replayed.entries.some((entry) => (
         entry.type === 'publish-intent'
           && !terminalKeys.has(`${entry.operation_id}\0${entry.item_id}`)
@@ -181,6 +187,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         });
         if (reconciled.unsafe) return publicationUnknown(request);
         replayed = { entries: reconciled.entries, state: reconciled.state };
+        ledgerSnapshot = reconciled.ledger;
         const reconciledPrior = replayed.entries.find((entry) => (
           entry.type === 'publish-final'
             && entry.operation_id === request.operation_id
@@ -191,8 +198,9 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
             : idempotencyConflict(request.operation_id, reconciledPrior.operation_digest, digest);
         }
       }
-      const candidateError = await validateCandidateLedger(ledgerDirectory, request);
-      if (candidateError) return candidateError;
+      const candidate = await validateCandidateLedger(ledgerDirectory, request, ledgerSnapshot);
+      if (candidate.error) return candidate.error;
+      ledgerSnapshot = candidate.ledger;
       const physicalNow = new Date().toISOString();
       const observedAt = advanceClockFloor(replayed.state, physicalNow);
       let clockEntry;
@@ -239,7 +247,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         state: 'pending',
       });
       entries.push(intent);
-      const mutation = await publishClaimedCandidate(ledgerDirectory, request, scenario);
+      const mutation = await publishClaimedCandidate(ledgerDirectory, request, scenario, ledgerSnapshot);
       if (!mutation.ok) {
         const outcome = mutationFailure(request, mutation);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
@@ -324,6 +332,10 @@ export async function reconcileClaimJournal({
         observed_at: observedAt,
       }));
     } else {
+      const expectedPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
+        ?? intent.item_path
+        ?? null;
+      const pathLabel = expectedPath ?? `item ${intent.item_id}`;
       findings.push({
         code: 'legacy-mutation-outcome-unknown',
         item_id: intent.item_id,
@@ -331,6 +343,8 @@ export async function reconcileClaimJournal({
         actual_revision: actualRevision,
         expected_revision: intent.expected_revision,
         candidate_revision: intent.candidate_revision,
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        remediation: `Restore ${pathLabel} to the expected or candidate revision recorded for attempt ${intent.attempt_id}, then run claim-verify.`,
       });
     }
   }
@@ -397,6 +411,7 @@ export async function reconcileClaimJournal({
       item_id: intent.item_id,
       outcome,
     }));
+    const unknownPath = itemPathRelativeToLedger(ledgerDirectory, item?.file);
     findings.push({
       code: outcome.stdout.state === 'unknown'
         ? 'publication-outcome-unknown'
@@ -404,6 +419,10 @@ export async function reconcileClaimJournal({
       item_id: intent.item_id,
       operation_id: intent.operation_id,
       outcome: outcome.stdout.state,
+      ...(outcome.stdout.state === 'unknown' ? {
+        ...(unknownPath ? { expected_path: unknownPath } : {}),
+        remediation: `Inspect publication ${intent.operation_id} for ${unknownPath ?? `item ${intent.item_id}`}, complete its documented recovery, then run claim-verify.`,
+      } : {}),
     });
   }
 
@@ -576,7 +595,10 @@ export async function reconcileClaimJournal({
         ...(expectedPath ? { expected_path: expectedPath } : {}),
         remediation: `Inspect publication ${expected.operation_id} for ${pathLabel}, then complete its documented recovery.`,
         stale_fence: structuredClone(earlier.outcome.stdout.result.claim_fence),
-      } : {}),
+      } : {
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        remediation: `Restore the authorized revision at ${pathLabel}, then run claim-verify.`,
+      }),
     });
   }
 
@@ -593,6 +615,13 @@ export async function reconcileClaimJournal({
   return {
     entries,
     findings,
+    // The snapshot reconciliation judged. Reconciliation writes only the
+    // journal, the claim state, and the ledger's `.wowbagger` reconcile log,
+    // none of which a complete ledger load reads, so these are still the bytes
+    // on disk when reconciliation returns. A caller holding the claim lock may
+    // reuse it instead of loading the same directory again, provided every
+    // decision it draws from the snapshot is re-made under lock.
+    ledger,
     observedAt,
     state: replayed.state,
     unsafe: findings.some((finding) => finding.code !== 'pending-intent-resolved'),
@@ -623,7 +652,7 @@ function reconciliationDiagnosis({
     return {
       reason: 'worktree-synchronization-required',
       ...(expectedPath ? { expected_path: expectedPath } : {}),
-      remediation: `Run claim-verify in the worktree that wrote ${pathLabel} after committing it, or synchronize this worktree to that commit.`,
+      remediation: `Synchronize this worktree to the commit that wrote ${pathLabel} (pull or merge), then run claim-verify.`,
     };
   }
   return {
@@ -676,6 +705,19 @@ function publicationStatuses(entries) {
 }
 
 
+// claim-verify is the verb every remediation string names, so a consistent
+// journal alone is a misleading answer while ledger validation blocks every
+// mutation. The report names that blocker without pretending it is a claim
+// finding: findings and the exit status still describe claim state only.
+function ledgerValidationReport(ledger) {
+  const validation = validateLedger(ledger);
+  if (validation.valid) return validation;
+  return {
+    ...validation,
+    remediation: 'The ledger is invalid and every mutation is blocked; claim state is consistent. Repair each validation error, commit the repair, then run claim-verify.',
+  };
+}
+
 export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace }) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
@@ -700,6 +742,7 @@ export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namesp
             ledger_namespace: namespace,
             observed_at: reconciled.observedAt,
             findings: reconciled.findings,
+            ledger_validation: ledgerValidationReport(reconciled.ledger),
             publications: publicationStatuses(reconciled.entries),
           },
         },
@@ -755,17 +798,24 @@ async function persistTerminal(entries, journalPath, ledgerDirectory, namespace,
   return outcome;
 }
 
-async function validateCandidateLedger(ledgerDirectory, request) {
-  const ledger = await loadLedger(path.resolve(ledgerDirectory));
+// The unlocked pre-read of a claimed publication. It fails fast on a candidate
+// that would make the ledger invalid; every decision it makes is re-made under
+// lock in the mutation engine, so it may run against a snapshot the caller
+// already read under the same claim lock. It returns the ledger it judged so
+// the mutation engine's own pre-lock read can share it.
+async function validateCandidateLedger(ledgerDirectory, request, ledgerSnapshot) {
+  const ledger = ledgerSnapshot ?? await loadLedger(path.resolve(ledgerDirectory));
   const candidateBytes = Buffer.from(request.candidate_source_base64, 'base64');
   const source = candidateBytes.toString('utf8');
   const parsed = parseLedgerItemSource(source);
   const target = ledger.items.find((item) => item.data.id === request.item_id);
   if (parsed.error || parsed.data?.id !== request.item_id || !target) {
-    return publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', {
-      item_id: request.item_id,
-      reason: parsed.error?.code ?? (target ? 'item-id-mismatch' : 'item-not-found'),
-    }, 3);
+    return {
+      error: publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', {
+        item_id: request.item_id,
+        reason: parsed.error?.code ?? (target ? 'item-id-mismatch' : 'item-not-found'),
+      }, 3),
+    };
   }
   const candidate = {
     path: target.path,
@@ -780,9 +830,9 @@ async function validateCandidateLedger(ledgerDirectory, request) {
     items: ledger.items.map((item) => item.data.id === request.item_id ? candidate : item),
   });
   if (!validation.valid) {
-    return publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', validation.errors, 3);
+    return { error: publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', validation.errors, 3) };
   }
-  return null;
+  return { error: null, ledger };
 }
 
 function fenceRejectionReason(request, active, observedAt) {

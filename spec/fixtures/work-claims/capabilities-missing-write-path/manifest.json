@@ -41,6 +41,10 @@
         "alternate": "none",
         "claimed_publication_v1": "atomic-fence",
         "legacy_create_v1": "reject-claimed-id"
+      },
+      "write_serialization": {
+        "scope": "shared-coordinator-writers",
+        "blocks_until": "coordinator-transaction-complete"
       }
     },
     "faults": {},
@@ -79,6 +83,10 @@
                   "wbns_11111111111111111111111111111111",
                   "wbns_22222222222222222222222222222222"
                 ]
+              },
+              "write_serialization": {
+                "scope": "shared-coordinator-writers",
+                "blocks_until": "coordinator-transaction-complete"
               }
             },
             "operations": {
@@ -116,6 +124,10 @@
           "alternate": "none",
           "claimed_publication_v1": "atomic-fence",
           "legacy_create_v1": "reject-claimed-id"
+        },
+        "write_serialization": {
+          "scope": "shared-coordinator-writers",
+          "blocks_until": "coordinator-transaction-complete"
         }
       },
       "faults": {},

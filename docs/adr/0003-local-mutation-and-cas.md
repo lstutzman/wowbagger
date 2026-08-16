@@ -1,6 +1,12 @@
 # ADR 0003: Local mutation and compare-and-set
 
-Status: accepted; implemented by the pre-alpha local runtime
+Status: accepted; implemented by the pre-alpha local runtime; the worktree
+scope below is amended by the merge-coordinated Git-journal profile. The
+mutation backend still observes only its own working copy, but on a
+provisioned ledger the claim journal in the shared Git common directory
+serializes every worktree of one repository and refuses a mutation while a
+sibling worktree's recorded write is invisible here. See
+[the work-claim contract](../work-claim-contract.md), section 3.1.
 
 ## Context
 

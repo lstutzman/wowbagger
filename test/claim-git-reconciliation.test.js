@@ -351,6 +351,38 @@ test('claim-verify resolves a committed legacy mutation intent after response lo
   )));
 });
 
+test('an unknown legacy mutation outcome names the path to restore and claim-verify', async () => {
+  const fixture = await repository();
+  const candidate = Buffer.from(fixture.before.toString('utf8')
+    .replace('title: "Before"', 'title: "Candidate"'));
+  const third = Buffer.from(fixture.before.toString('utf8')
+    .replace('title: "Before"', 'title: "Third"'));
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const journalPath = claimJournalPath(gitCommonDir, fixture.namespace);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'legacy_unknown_outcome_0001',
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    command: 'patch-v1',
+    expected_revision: sha256(fixture.before),
+    candidate_revision: sha256(candidate),
+    item_path: 'item.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await writeFile(fixture.itemPath, third);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.result.findings[0].code, 'legacy-mutation-outcome-unknown');
+  assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
+  assert.equal(
+    verified.envelope.result.findings[0].remediation,
+    'Restore item.md to the expected or candidate revision recorded for attempt legacy_unknown_outcome_0001, then run claim-verify.',
+  );
+});
+
 test('claim-verify rejects an unrecorded revision after a legacy-only mutation', async () => {
   const fixture = await repository();
   const acquirePath = path.join(fixture.root, 'acquire-legacy-only.json');
@@ -607,7 +639,7 @@ test('claim-verify names the configured item path when another worktree needs sy
     observed_surface: 'working-tree',
     reason: 'worktree-synchronization-required',
     expected_path: `items/${itemId}.md`,
-    remediation: `Run claim-verify in the worktree that wrote items/${itemId}.md after committing it, or synchronize this worktree to that commit.`,
+    remediation: `Synchronize this worktree to the commit that wrote items/${itemId}.md (pull or merge), then run claim-verify.`,
   }]);
 });
 
@@ -800,4 +832,54 @@ test('a repository-root ledger provisions and verifies inside its own metadata d
     provisioned.envelope.result.ledger_namespace,
   );
   assert.match(await readFile(reconcilePath, 'utf8'), /# Wowbagger reconciliation log/);
+});
+test('Git HEAD reconciliation excludes ledger metadata and non-Markdown files', async () => {
+  const fixture = await repository();
+  await writeFile(path.join(fixture.ledger, '.wowbagger', 'layout.json'), '{"layout_version":1,"items_directory":"items"}\n');
+  await writeFile(path.join(fixture.ledger, 'notes.txt'), 'not a ledger item\n');
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-qm', 'Add metadata and a non-item file');
+
+  const head = await readGitHeadLedger(fixture.ledger);
+
+  assert.deepEqual([...head.items.keys()], ['item.md']);
+});
+
+test('Git HEAD reconciliation reports no commit before the first commit', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-git-unborn-'));
+  git(root, 'init', '-q');
+  const ledger = path.join(root, 'ledger');
+  await mkdir(ledger);
+
+  const head = await readGitHeadLedger(ledger);
+
+  assert.equal(head.commit, null);
+  assert.equal(head.items.size, 0);
+});
+
+test('Git HEAD reconciliation returns exact committed bytes for every item', async () => {
+  const fixture = await repository();
+  const sources = new Map();
+  for (let index = 0; index < 12; index += 1) {
+    const identifier = `wb_01KZBMBEZKPE7D15HKW9Q3G${String(index).padStart(2, '0')}`;
+    // The last item ends without a newline, so an off-by-one in the reader's
+    // record framing shows up as changed bytes rather than passing unnoticed.
+    const trailer = index === 11 ? 'No trailing newline' : `Body ${index}\n`;
+    const source = Buffer.from(fixture.before.toString('utf8')
+      .replace(ITEM_ID, identifier)
+      .replace('number: 1', `number: ${index + 2}`)
+      .replace('\nBefore\n', `\n${trailer}`));
+    const file = `batch-${String(index).padStart(2, '0')}.md`;
+    await writeFile(path.join(fixture.ledger, file), source);
+    sources.set(file, source);
+  }
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-qm', 'Add many items');
+
+  const head = await readGitHeadLedger(fixture.ledger);
+
+  assert.deepEqual([...head.items.keys()].sort(), [...sources.keys(), 'item.md'].sort());
+  for (const [file, source] of sources) {
+    assert.equal(sha256(head.items.get(file)), sha256(source), file);
+  }
 });

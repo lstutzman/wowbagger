@@ -24,6 +24,9 @@ const validRequest = JSON.stringify({
 // Spawns `adapters/claude-code/entrypoint.js` for real (never calling its
 // exported functions directly) so the wire assertions exercise the actual
 // process boundary: real stdin, real stdout, real exit code.
+// §3.3 makes every entrypoint exit zero, so a non-zero exit is always a
+// crash rather than a refusal; the child's stderr is the only place it
+// explains itself, so it travels with the failure (item 106).
 function spawnEntrypoint(args, stdinInput, {
   env = process.env,
   entrypointPath = entrypoint,
@@ -31,9 +34,24 @@ function spawnEntrypoint(args, stdinInput, {
   return new Promise((resolve, reject) => {
     const child = execFile(process.execPath, [entrypointPath, ...args], { encoding: 'buffer', env });
     let stdout = Buffer.alloc(0);
+    let stderr = Buffer.alloc(0);
     child.stdout.on('data', (chunk) => { stdout = Buffer.concat([stdout, chunk]); });
+    child.stderr.on('data', (chunk) => { stderr = Buffer.concat([stderr, chunk]); });
     child.on('error', reject);
-    child.on('close', (code) => resolve({ code, stdout }));
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(
+          `${entrypointPath} ${args.join(' ')}: exited ${code}\nstderr:\n${stderr.toString('utf8')}`,
+        ));
+        return;
+      }
+      resolve({ code, stdout });
+    });
+    // The entrypoint can be gone before this write lands (it refuses an
+    // unknown operation without reading stdin). An unhandled EPIPE here
+    // would kill the test process instead of the child's real exit being
+    // reported above.
+    child.stdin.on('error', () => {});
     if (stdinInput === undefined) {
       child.stdin.end();
     } else {
@@ -49,9 +67,20 @@ function spawnEntrypointOpenStdin(args, stdinInput, { env = process.env } = {}) 
   return new Promise((resolve, reject) => {
     const child = execFile(process.execPath, [entrypoint, ...args], { encoding: 'buffer', env });
     let stdout = Buffer.alloc(0);
+    let stderr = Buffer.alloc(0);
     child.stdout.on('data', (chunk) => { stdout = Buffer.concat([stdout, chunk]); });
+    child.stderr.on('data', (chunk) => { stderr = Buffer.concat([stderr, chunk]); });
     child.on('error', reject);
-    child.on('close', (code) => resolve({ code, stdout }));
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(
+          `${entrypoint} ${args.join(' ')}: exited ${code}\nstderr:\n${stderr.toString('utf8')}`,
+        ));
+        return;
+      }
+      resolve({ code, stdout });
+    });
+    child.stdin.on('error', () => {});
     child.stdin.write(stdinInput);
   });
 }
@@ -272,6 +301,35 @@ test('the core launcher enforces the advertised timeout', async (t) => {
   assert.equal(observation.timed_out, true);
   assert.equal(observation.exit_code, null);
   assert.equal(observation.signal, null);
+});
+
+// Item 106: the core can be gone before the launcher's input write lands —
+// it refused fast, or the adapter was descheduled under load between the
+// spawn event and the write. The read end is then closed and the write
+// fails EPIPE. The launcher must report the core's real exit through the
+// observation; an unhandled stdin error would instead kill the adapter
+// process itself, which the host sees only as a bare non-zero exit with no
+// §3.3 response on stdout.
+test('the core launcher survives a core that exits before its input is written', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-epipe-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const executable = path.join(temporaryDirectory, 'exit-before-read.js');
+  await writeFile(executable, 'process.exit(7);\n');
+
+  const observation = await launchCoreProcess({
+    executable,
+    argv: [],
+    cwd: temporaryDirectory,
+    // Larger than the pipe buffer, so the write is a real syscall against a
+    // read end the exited core has already closed.
+    input: Buffer.alloc(1024 * 1024, 0x61),
+    limits: { stdout_bytes: 4096, stderr_bytes: 4096, timeout_ms: 5000 },
+  });
+
+  assert.equal(observation.started, true);
+  assert.equal(observation.exit_code, 7);
+  assert.equal(observation.signal, null);
+  assert.equal(observation.timed_out, false);
 });
 
 test('bounds invoke bytes before parsing the request', async () => {
@@ -495,7 +553,7 @@ const STRUCTURALLY_INVALID_MANIFEST = JSON.stringify({
   adapter_version: '0.1.0',
   adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 2,
+  required_core_contract_version: 3,
   entrypoints: {
     describe: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['invoke'] },
@@ -550,6 +608,11 @@ async function withTemporaryManifest(manifestContent, { operation = 'describe', 
       child.stderr.on('data', (chunk) => { err = Buffer.concat([err, chunk]); });
       child.on('error', reject);
       child.on('close', (exitCode) => resolve({ code: exitCode, stdout: out, stderr: err }));
+      // These cases make the entrypoint refuse before it touches stdin, so
+      // the read end can already be closed when this write lands. An
+      // unhandled EPIPE would kill the test process instead of the refusal
+      // being asserted.
+      child.stdin.on('error', () => {});
       if (stdinInput === undefined) {
         child.stdin.end();
       } else {

@@ -1,7 +1,7 @@
 # Local mutation contract
 
-Status: versions 1 and 2 are defined; the pre-alpha standalone
-local-filesystem runtime currently emits version 2.
+Status: versions 1, 2, and 3 are defined; the pre-alpha standalone
+local-filesystem runtime currently emits version 3.
 
 This document defines the machine contract implemented by the local-filesystem
 mutation backend. It supplements [SPEC.md](../SPEC.md) and
@@ -15,19 +15,84 @@ backend can provide a particular write guarantee.
 ## Contract versions
 
 Version 1 remains the frozen contract described by the version 1 envelopes and
-capability example below. Version 2 retains every version 1 request, response,
+capability example below. Version 2 retained every version 1 request, response,
 state, exit, locking, CAS, publication, and recovery rule except for these
 explicit deltas:
 
-- every core command envelope in this contract carries `contract_version: 2`;
+- every core command envelope carried `contract_version: 2`;
 - one non-empty ledger may use schema version 1 or schema version 2, but never a
   mixture;
 - the capability envelope uses the fixed local mutation scope described in
   section 4 and advertises `patch`; and
 - adapter contract version 2 may invoke `patch` as an approved mutation.
 
+### Version 3
+
+Version 3 is the version this document defines and the runtime emits. It
+retains every version 2 request, response, state, exit, locking, CAS,
+publication, and recovery rule except for these explicit deltas, which are the
+complete difference against published version 2 (`0.1.0-alpha.4`):
+
+- every core command envelope carries `contract_version: 3`;
+- **the widened date-refusal issue shape.** `date-before-created` and
+  `date-before-updated` carry `item_created` and `item_updated` after
+  `related_ids`, on `transition` and `patch` alike (section 7). These two codes
+  are the only ones that carry them; every other issue code keeps its
+  four-member shape. This is the delta that requires the bump: a version 2
+  consumer that validates issue members exactly refuses the six-member shape,
+  so the version 2 compatibility argument below no longer holds for these two
+  codes;
+- **the widened patch field set.** The patchable set is `priority`,
+  `depends_on`, and `related`, replacing version 2's `number` and `priority`
+  (section 9). A relation value replaces the whole list; `null` removes the
+  field, and removing the required `depends_on` returns `candidate-invalid`.
+  Relations patches ride the same lock, CAS, candidate-validation, publication,
+  and claim rules as any other patch;
+- **number as item identity on schema version 2.** The core assigns `number` at
+  `create` as one more than the highest existing number; a `create` request
+  that supplies one is refused, `number` is no longer patchable, and `inspect`
+  accepts `--number <n>` as an alternative selector to `--id`. Schema version 1
+  ledgers are unaffected; and
+- **the patchable body.** `body` joins the patchable set as a JSON string that
+  replaces the whole body under create's body rules; `null` is refused at
+  `/set/body` rather than removing anything, and the frontmatter bytes survive
+  a body swap untouched (section 9). The version stays 3: this widens the patch
+  request schema exactly as the relations delta above did, and no response
+  envelope member is added, removed, or renamed. A version 3 consumer that
+  never sends `body` cannot observe the difference, so the version 2 to 3
+  compatibility argument is unaffected and the version does not move again;
+- **the configured item directory.** `create` derives the published path from
+  the committed `<ledger>/.wowbagger/layout.json`, and validation rejects a
+  parsed item outside it (section 5). A ledger without that file keeps the
+  version 2 `<ledger>/<id>.md` path. `create` refuses the new
+  `items-directory-unavailable`, exit 2, `unchanged`, when the configured
+  directory is not an existing directory (section 7); and
+- **the diagnosable inspect refusal.** An `inspect` `ledger-invalid` refusal may
+  carry `details.item`, the lossless snapshot of the item the request selected,
+  when that item resolves and no validation error names its path (section 5).
+  The version stays 3: this widens one read-only refusal's details on one
+  command, and version 3 is not yet published, so no consumer can have
+  negotiated the narrower shape. A consumer that reads only
+  `details.validation_errors` cannot observe the difference; a consumer that
+  matches `ledger-invalid` details exactly must accept the optional member on
+  `inspect`, which is why this is listed as a delta rather than left silent.
+
+Two version-2-era changes are deliberately **not** version 3 deltas. The
+section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
+it adds no member, removes none, and renames none, so it is not a version
+delta. What changed is that the rule is now stated once, the `ledger-mutation`
+domain is named, and `spec/fixtures/envelope-domains/manifest.json` pins every
+response class. The `claim capabilities` backend now advertises
+`result.backend.write_serialization`, which belongs to the work-claim version
+domain and leaves the core capability envelope unchanged.
+
+A version 1 or version 2 consumer fails closed against a version 3 core: it
+reads `contract_version: 3` from `capabilities --json`, does not recognize it,
+and stops. That is the intended outcome, not a regression.
+
 The bootstrap wire, work-claim API, adapter approval, instruction, handoff, and
-fixture-format versions are separate version domains and remain version 1.
+fixture-format versions are separate version domains and remain version 1. The
+adapter contract remains version 2; only the core contract moves to 3.
 
 Version negotiation uses distinct existing fields. A core consumer MUST read
 the top-level `contract_version` from `capabilities --json`. A work-claim
@@ -36,9 +101,12 @@ consumer MUST read `result.operations.work_claim.api_version` from
 response's top-level `contract_version` with the core version. That claim member
 remains the version 1 envelope marker for exact version 1 consumers.
 
-This rule is the migration path for generic consumers: dispatch by command
-namespace first, then check the version field for that domain. No envelope
-member changes, so existing exact-member consumers remain compatible.
+This rule is the migration path for generic consumers: dispatch by response
+domain first, then check the version field for that domain. Section 2 states
+the domains, the exact dispatch steps, and the two sanctioned exceptions. No
+root envelope member changes across versions 1, 2, and 3, so a consumer that
+matches root members exactly still matches; a consumer that matches issue
+members exactly must negotiate version 3 before reading a date refusal.
 
 ## 1. Scope
 
@@ -55,7 +123,7 @@ Git common directory, but they do not protect publication or coordinate a
 mutation. A write lock protects a short mutation attempt; it is not a claim,
 assignment, lease, or reservation. The separate [fenced work-claim
 contract](work-claim-contract.md) defines a future backend protocol; it does
-not add a fencing guarantee to either mutation-contract version.
+not add a fencing guarantee to any mutation-contract version.
 
 If a future backend advertises safely fenced claims while retaining these
 legacy entry points, it must run them through the same coordinator: transition
@@ -63,6 +131,12 @@ refuses an active claimed `(ledger_namespace, item_id)` and create refuses an
 identity with claim history. Until then, the local runtime's unsupported
 capability is authoritative; callers cannot combine this API with an external
 claim hint and infer fencing.
+
+A **provisioned** ledger is that coordinated backend. It adds one operating
+rule that governs every command in this document: **commit each mutation to Git
+before running the next mutating command.** Section 12 states the rule, the
+refusal it produces, and its reconciliation procedure. Read it before writing a
+batch of mutations against a provisioned ledger.
 
 The first backend coordinates only cooperative Wowbagger writers using the same
 ledger directory in one working copy. It does not coordinate clones, worktrees,
@@ -114,6 +188,99 @@ outside the configured ledger. Automation uses the JSON envelope.
 A process crash before an envelope is emitted is outside the command protocol.
 A caller must treat the outcome of a mutating command as unknown and follow the
 recovery rules in section 10.
+
+### Response domains and the dispatch rule
+
+Every --json response belongs to exactly one response domain. A domain owns its
+own version field, its own command names, and its own root members. This is the
+one envelope rule, and every surface follows it.
+
+A consumer dispatches on the root `namespace` member first, then reads the
+version field that the selected domain names. It must not dispatch on `command`
+first: two domains both answer to `capabilities`, and one core command can
+answer in two domains.
+
+| Domain | Root `namespace` | `contract_version` | Version to negotiate |
+|---|---|---|---|
+| core | absent | 3 | top-level `contract_version` of `capabilities --json` |
+| work-claim | `work-claim` | 1, the legacy envelope marker | `result.operations.work_claim.api_version` of `claim capabilities --json` |
+| ledger-publication | `ledger-publication` | 1, the legacy envelope marker | the same work-claim `api_version` |
+| ledger-mutation | `ledger-mutation` | 1, the legacy envelope marker | the same work-claim `api_version` |
+| bare result | absent, and no `ok` member either | none | none |
+
+The rule has three steps:
+
+1. A response with a root `namespace` member belongs to the domain that member
+   names.
+2. A response with no `namespace` member but a root `ok` member belongs to the
+   core domain. Its `contract_version` is this contract's version.
+3. A response with neither is a bare result. Only `validate` and `ready` emit
+   one.
+
+A claim-domain `contract_version: 1` is not this contract's version 1. It is the
+legacy claim-envelope marker, and a consumer must never compare it with the core
+`contract_version`.
+
+**Which command answers in which domain**
+
+| Command | Success | Refusals |
+|---|---|---|
+| `validate` | bare result `{valid, errors}` | bare result `{valid, errors}`, exit 1 |
+| `ready` | bare result `{as_of, valid, ready}` | bare result `{valid, errors}` on an invalid ledger, exit 1 |
+| `capabilities` | core | core |
+| `inspect` | core | core |
+| `mint-id` | core | core |
+| `report` | core | core |
+| `create` | core | core, or ledger-mutation when the claim fence refuses |
+| `transition` | core | core, or ledger-mutation when the claim fence refuses |
+| `patch` | core | core, or ledger-mutation when the claim fence refuses |
+| `provision` | work-claim | work-claim |
+| `claim capabilities/read/acquire/renew/release` | work-claim | work-claim |
+| `claim-verify` | work-claim | work-claim |
+| `claim verify` | ledger-publication, `command: "read"` | ledger-publication |
+| `publish-claimed` | ledger-publication | ledger-publication |
+
+**Exact root members**
+
+A core response has exactly `ok`, `command`, `contract_version`, and one of
+`result` or `error`; `create`, `transition`, and `patch` add `state`. A
+claim-domain response has exactly `ok`, `namespace`, `command`,
+`contract_version`, `state`, and one of `result` or `error`; a `claim
+capabilities` response omits `state`, and a claimed-publication response adds
+`operation_id` once schema validation has accepted it. No expected envelope has
+undocumented root members.
+
+**The two sanctioned exceptions, and why they stay**
+
+`validate` and `ready` emit a bare result rather than an envelope. That shape is
+load-bearing: scripts read `.valid` and `.errors` directly, `ready --json` feeds
+`.ready` to shell pipelines, and both shapes are pinned by
+`spec/fixtures/validation-errors` and `spec/fixtures/ready-selection`. Wrapping
+them would break every existing reader for no gain a consumer can use, because
+neither command mutates and neither participates in version negotiation. They
+stay bare, and step 3 of the rule is how a consumer recognizes them.
+
+A claim-fenced refusal to `create`, `transition`, or `patch` answers in the
+ledger-mutation domain with `command: "<command>-v1"` and
+`contract_version: 1`. This is not envelope drift: it is the work-claim
+contract answering, because a merge-coordinated backend refused the write
+before the core mutation ran. The shape is a pinned consumer surface of
+work-claim contract version 1, fixed by
+[work-claim contract](work-claim-contract.md) section 8, by
+`spec/fixtures/work-claims/legacy-write-refusals`, and by
+`spec/fixtures/mutation-refusals/uncommitted-prior-mutation`, and reproduced
+independently by the reference model in `test/work-claim-reference.js`.
+Re-wrapping it in a core envelope would silently change three pinned surfaces
+and split one refusal across two version domains. The split is real, so the
+contract states it here instead of hiding it.
+
+The practical consequence for a consumer: a mutating command can return either
+domain, so read `namespace` before anything else. A consumer that dispatches on
+`command === "create"` alone misses every fenced refusal.
+
+`spec/fixtures/envelope-domains/manifest.json` is the normative pin for this
+rule. It records the domain, command member, version field, exit, state, error
+code, and exact root members of every response class the CLI emits.
 
 ### Response envelopes
 
@@ -189,7 +356,7 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or candidate/lifecycle-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid |
+| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, items-directory-unavailable |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
@@ -317,15 +484,15 @@ members above. This is the one input to `capabilities`, so the response is
 deterministic for a given working directory but not fixed across working
 directories.
 
-### Contract version 2 capability delta
+### Contract version 3 capability delta
 
 The preceding JSON and three-member Git-dependent coupling remain the exact
-version 1 definition. Version 2 changes only the following capability paths;
-all omitted paths retain their version 1 values:
+version 1 definition. Versions 2 and 3 change only the following capability
+paths; all omitted paths retain their version 1 values:
 
-| Path | Version 2 value |
+| Path | Version 3 value |
 |---|---|
-| `contract_version` | `2` |
+| `contract_version` | `3` |
 | `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
 | `result.limits.cross_worktree_coordination` | `false` |
@@ -341,8 +508,28 @@ MUST gate `publish-claimed` on that ledger-specific response. Neither result
 elevates the fixed mutation scope. Version 2 keeps
 `transition.write_scope: "single-item"`,
 `transition.cas_scope: "exact-byte-sha256"`, and
-`limits.multi_item_atomicity: false`. Work-claim visibility across worktrees is
-never cross-worktree mutation coordination.
+`limits.multi_item_atomicity: false`.
+
+`limits.cross_worktree_coordination: false` states one thing only: the core
+never synchronizes checkouts. It does not merge, pull, or copy item files
+between worktrees, and it never makes a write in one worktree appear in
+another. It is **not** a statement that worktrees write independently.
+
+On a provisioned Git-backed ledger they do not. One claim journal lives in the
+shared Git common directory, so it serializes every worktree of that
+repository: a recorded `transition` or `patch` in one worktree refuses every
+mutation in the others with exit 6 `claim-store-unavailable`, reason
+`publication-reconciliation-required`, until the writing commit is visible in
+the blocked checkout. Clones do not share the common directory, so
+`limits.cross_clone_coordination: false` carries no such consequence.
+
+That serialization is discoverable, per ledger, at
+`result.backend.write_serialization` in
+`claim capabilities --ledger <dir> --json`. See
+[the work-claim contract](work-claim-contract.md), section 3.1, for the
+behaviour and section 3.2 for the recovery. Work-claim serialization across
+worktrees is still not cross-worktree mutation coordination: it refuses
+writers, it does not reconcile them.
 
 Because capabilities takes no ledger content and does not write, it still
 cannot prove that a particular filesystem supports the required atomic
@@ -399,8 +586,8 @@ core contains only fields defined by supported item schema versions:
 - provenance.source and provenance.recorded_at;
 - depends_on and related;
 - optional parent, snoozed_until, completed, killed, archived;
-- optional number and priority, the caller-supplied schema fields;
-  and
+- optional number, the core-assigned item identity on schema version 2, and
+  optional priority, the caller-supplied schema priority; and
 - decisions with only their defined action, date, summary, rationale, and
   optional rollup id/status members.
 
@@ -418,6 +605,29 @@ begins with LF.
 item-not-found exits 2 and has details containing only id. ledger-invalid exits
 3 and has details.validation_errors equal to the existing deterministic
 SPEC.md validation-error sequence. Neither read-only error has state.
+
+An invalid ledger stays a refusal. Inspect does not fall back to reading one
+item without validating the rest, and there is no escape flag that skips
+validation: a success envelope carrying a revision is what a caller feeds to
+expected_revision, and that revision must never come from a ledger state the
+core has not judged.
+
+The refusal still shows the operator the item they asked for. On inspect only,
+ledger-invalid details carry an optional item, and it is the same lossless
+snapshot the successful item shape above defines, for the item the request
+selected. It is present when the request resolves an item and no validation
+error names that item's path. It is absent when nothing resolves, and absent
+when the resolved item is itself faulted, because that item's own frontmatter
+or placement is what validation rejects. A create, transition, or patch
+ledger-invalid refusal never carries it.
+
+This keeps the section 5 rule intact — inspect loads and validates the complete
+ledger, and every member of the attached snapshot comes from the one raw byte
+buffer that item's own handle supplied — while removing the trap the refusal
+used to set: the tool refusing to show the item it tells the operator to fix.
+An operator repairing an invalid ledger reads the bytes and revision of the
+items around the fault with `inspect`, and reads the fault itself from
+`validation_errors`, whose `expected_path` and `remediation` name the repair.
 
 ## 6. Cooperative lock and snapshot protocol
 
@@ -518,7 +728,7 @@ Create accepts exactly:
 | item.related | No | Valid relation list; omitted means empty. |
 | item.parent | No | Valid epic ID. |
 | item.snoozed_until | No | Valid ISO calendar date. |
-| item.number | No | Positive integer; the caller-supplied schema handle. |
+| item.number | No | Refused. On schema version 2, number is the item identity and create assigns it. |
 | item.priority | No | Non-negative integer; the caller-supplied schema priority. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
@@ -538,13 +748,15 @@ prints a canonical ID for now, `--date` selects another creation date, and
 `src/mint.js` exports `mintId` so an adapter or plugin can mint one without
 shelling out.
 
-item must not supply schema_version, id, status, created, updated, completed,
-killed, archived, decisions, or body. For a non-empty valid ledger, create
-inserts the schema_version already used by every existing item. For an empty
-ledger, it inserts schema_version 2. Create returns that selection in
+item must not supply schema_version, id, number, status, created, updated,
+completed, killed, archived, decisions, or body. For a non-empty valid ledger,
+create inserts the schema_version already used by every existing item. For an
+empty ledger, it inserts schema_version 2. Create returns that selection in
 `result.item.core.schema_version`. It also inserts status triage, created
 and updated equal to the UTC date encoded by id, and related [] when omitted.
-It adds no terminal date or decision.
+On a schema version 2 ledger it inserts number as one more than the highest
+existing number, assigned under a number-index lock so concurrent creates
+cannot collide. It adds no terminal date or decision.
 
 The candidate complete ledger must validate before publication. After the
 requested-ID lock and locked revalidation, create applies this collision
@@ -573,16 +785,88 @@ path-collision. A real directory whose name ends in .md and whose contents
 leave the complete ledger valid is valid input under SPEC.md and produces
 path-collision when it occupies the configured identity-derived path.
 
-The final path is derived from the committed item layout:
+The final path is derived from the committed item layout, never from the
+request and never from a later rename:
 
     <ledger>/<items_directory>/<id>.md
 
-When `<ledger>/.wowbagger/layout.json` is absent, `items_directory` is empty
-and the compatible path is `<ledger>/<id>.md`. The request cannot supply an
-arbitrary path. The no-clobber publication protocol and collision rules are
-bound to this derived path. A malformed layout configuration fails closed
-before mutation. Validation rejects any parsed item outside the configured
-item directory.
+`items_directory` comes from `<ledger>/.wowbagger/layout.json`, whose only
+accepted shape is:
+
+~~~json
+{
+  "layout_version": 1,
+  "items_directory": "items"
+}
+~~~
+
+When that file is absent, `items_directory` is empty and the compatible path is
+`<ledger>/<id>.md`. Configuring the file is therefore ledger setup that
+precedes the first create: an already-published item keeps the path its create
+derived, and moving it is a consumer Git operation this contract neither
+performs nor prescribes. The configured directory must already exist; create
+publishes into it and never creates it.
+
+The request cannot supply an arbitrary path. The no-clobber publication
+protocol and collision rules are bound to this derived path. A malformed layout
+configuration fails closed before mutation. Validation rejects any parsed item
+outside the configured item directory.
+
+### The configured items directory must exist
+
+Because create never creates the configured directory, create resolves it and
+refuses by name when it is not an existing directory:
+
+~~~json
+{
+  "ok": false,
+  "command": "create",
+  "contract_version": 3,
+  "state": "unchanged",
+  "error": {
+    "code": "items-directory-unavailable",
+    "message": "The configured items directory is unavailable.",
+    "details": {
+      "id": "wb_...",
+      "path": "items",
+      "reason": "absent",
+      "remediation": "Create the ledger directory items and commit it, then retry create."
+    }
+  }
+}
+~~~
+
+The exit is 2 and the state is `unchanged`. details have exactly id, path,
+reason, and remediation:
+
+- path is the resolved ledger-relative directory, exactly the configured
+  `items_directory`;
+- reason is `absent` when nothing occupies that path, and `not-a-directory`
+  when a regular or special file does;
+- remediation names that same path and the operator action that makes create
+  possible. For `absent` it is `Create the ledger directory <path> and commit
+  it, then retry create.`; for `not-a-directory` it is `Replace <path> with a
+  directory and commit it, then retry create.`; and
+- the message is stable across both reasons. Automation reads `reason`.
+
+This is a ledger-setup precondition, not a request defect: the request is
+well-formed, so it is not an invalid-request issue under section 3, and no JSON
+Pointer into the request could name the fault.
+
+Precedence. Create resolves the directory after complete-ledger validation and
+**before it acquires any lock**, so the refusal precedes id-collision,
+path-collision, and candidate validation, and no lock file, temporary file, or
+lock directory is created. Complete-ledger validation still precedes it: a
+symbolic link occupying the configured directory name is a
+`symlink-not-allowed` validation error, so that case returns `ledger-invalid`
+with exit 3 and never reaches this refusal.
+
+Only create can hit this refusal. transition, patch, and publish-claimed
+rewrite an item that already exists, so the directory holding it exists too;
+they return item-not-found when it does not.
+
+`spec/fixtures/mutations/missing-items-directory/` is the normative vector for
+both reasons.
 
 ### Body
 
@@ -672,6 +956,15 @@ The request cannot supply action, decision date, rollup, body, frontmatter
 patches, or terminal dates. Wowbagger derives them. A decision is rejected for
 an edge that does not append one.
 
+An item's created date is not the operator's calendar date. Create writes
+created and updated from the UTC date encoded by the item ID: the date
+derives from the ULID timestamp, which is UTC. An item created just after
+midnight UTC therefore carries tomorrow's date for every operator west of
+UTC. A transition dated with the operator's local calendar date is then
+earlier than created, and the request refuses with date-before-created and
+date-before-updated. Read the item's created and updated dates before
+choosing a transition date; the refusal carries both (next section).
+
 ### Allowed edges
 
 | Kind | From | To | Generated evidence |
@@ -753,7 +1046,9 @@ exists. details are:
       "code": "date-before-updated",
       "field": "date",
       "message": "Transition date must not be earlier than the current updated date.",
-      "related_ids": []
+      "related_ids": [],
+      "item_created": "2030-01-13",
+      "item_updated": "2030-01-15"
     }
   ]
 }
@@ -764,6 +1059,13 @@ live-dependencies, or nonterminal-children. related_ids are unique immutable IDs
 sorted ascending. Issues sort by code, then field, then their related ID
 sequence. Date checks are all reported: a date earlier than both created and
 updated produces both date issues.
+
+date-before-created and date-before-updated carry item_created and
+item_updated after related_ids: the target's own dates at refusal time, both
+on both codes, so one refusal states the whole acceptable window without an
+inspect round-trip. No other issue code carries them. Every other code keeps
+the four-member shape exactly, and a consumer that validates issue members
+exactly must accept six members for these two codes.
 
 For a schema version 1 done transition, any non-empty depends_on list produces
 live-dependencies and related_ids contains the complete list. For a schema
@@ -846,8 +1148,9 @@ lock conflicts; aggregate all multi-item blockers and ordinary precondition
 issues; atomic-scope-required when blockers exist; otherwise
 transition-precondition-failed when ordinary issues exist; otherwise
 candidate-invalid when the candidate validator reports errors. For create,
-id-collision precedes path-collision as specified in section 7, and both
-precede candidate-invalid. No validator issue already represented by the
+items-directory-unavailable precedes id-collision, id-collision precedes
+path-collision as specified in section 7, and all three precede
+candidate-invalid. No validator issue already represented by the
 selected more-specific response is duplicated in a second envelope. A proposed
 ledger that remains invalid for any reason is never published.
 
@@ -858,8 +1161,15 @@ operation without universal crash durability or hostile-writer protection.
 
 ## 9. Patch
 
-Patch changes the caller-supplied fields common to schema versions 1 and 2 of
-one existing item — nothing else. It runs under the same per-ID lock, locked re-read,
+Patch changes the mutable non-lifecycle content of one existing item — its
+priority, its relation lists, and its body — and nothing else. It exists so a
+consumer can re-scope an item in band, without hand-editing frontmatter: the
+dependent of an item you want to kill is re-scoped with patch, then the kill
+proceeds. It is also the sanctioned way to rewrite a body: a consumer whose
+items mirror an external card edits the body through patch, and gets the lock,
+the compare-and-swap, candidate validation, and atomic publication that a
+hand-edit skips.
+It runs under the same per-ID lock, locked re-read,
 exact-byte revision compare-and-swap, candidate complete-ledger validation,
 and atomic same-path publication protocol as transition (section 6), and it
 shares transition's envelopes, exits, and recovery rules except where this
@@ -874,7 +1184,12 @@ Patch accepts exactly:
   "id": "wb_...",
   "expected_revision": "sha256:...",
   "date": "2030-01-11",
-  "set": { "priority": 3, "number": null }
+  "set": {
+    "priority": 3,
+    "depends_on": [],
+    "related": ["wb_..."],
+    "body": "\nReplacement body.\n"
+  }
 }
 ~~~
 
@@ -885,31 +1200,91 @@ Patch accepts exactly:
 | date | Yes | ISO calendar date not earlier than existing created or updated. |
 | set | Yes | Mapping naming at least one patchable field. |
 
-The patchable field set is exactly `number` and `priority`. A set member
-outside it is an invalid-request issue at its /set pointer — the boundary is
-stated here, not discovered from the implementation. An integer value sets
-the field: number must be a positive integer, priority a non-negative
-integer. null removes the field.
+The patchable field set is exactly `priority`, `depends_on`, `related`, and
+`body`. A set member outside it is an invalid-request issue at its /set
+pointer — the boundary is stated here, not discovered from the implementation.
+`number` is the immutable item identity, assigned once at create, so it is not
+patchable and a request naming it is refused. Extension members are not
+patchable either: they stay a reviewable hand-edit.
+
+`priority` takes a non-negative integer. `depends_on` and `related` each take
+a whole relation list, which replaces the current list; the value must be an
+array whose entries are all canonical item IDs. A non-array value is an
+invalid-type issue at `/set/<field>`; a malformed entry is an invalid-value
+issue at `/set/<field>/<index>`.
+
+`body` takes a JSON string that replaces the whole body, under create's body
+rules: the empty string and an LF-leading string are distinct and both valid,
+and the bytes are written exactly as the UTF-8 encoding of the string. A
+non-string body is an invalid-type issue at `/set/body`.
+
+null removes the field, for every patchable **frontmatter** field alike.
+`related` is optional, so removing it succeeds and the item reads back with an
+empty related list. `depends_on` is a required item field, so removing it makes
+the candidate item invalid: the patch returns candidate-invalid, exit 2, and
+unchanged. Clear a dependency list with `[]`, not null.
+
+`body` is the deliberate exception to that convention, and the asymmetry is
+stated here so no consumer has to infer it. The body is a region of the file,
+not a frontmatter member: every item has one, and there is nothing to remove.
+"Remove the body" means the empty string. `{"body": null}` is therefore refused
+as an invalid-value issue at `/set/body`, exit 2, unchanged — it is not read as
+a removal and it is not read as the empty string.
+
+Request-shape validation stops at the rules above. Referential integrity,
+dependency cycles, the schema-2 done-dependency rule, self-reference, repeated
+references, and depends_on/related overlap are candidate complete-ledger
+validation's job, exactly as they are for create and transition: a relations
+edit that breaks any of them returns candidate-invalid, exit 2, and unchanged,
+and the ledger keeps its bytes. Relations edits ride the same per-ID lock,
+locked re-read, exact-byte revision compare-and-swap, candidate
+complete-ledger validation, and atomic same-path publication protocol as every
+other patch, and the same claim protocol: on a claim-protected ledger a
+relations patch of an item with an active claim is refused
+`active-claim-write-refused`, exit 4, unchanged — no exception for relations,
+and none for a body.
 
 Patch sets updated to request.date. A date earlier than the existing created
 or updated date returns patch-precondition-failed, exit 2, and unchanged,
 with date-before-created and date-before-updated issue codes matching
-transition's.
+transition's, including the item_created and item_updated members. The same
+UTC ULID derivation applies: an item created just after midnight UTC refuses
+the operator's local calendar date here too.
 
 Patch appends no decision: the ledger's Git history is the audit trail for a
-consumer-field change. Identity, lifecycle, title, relations, provenance,
-snooze, decisions, body, and extension members cannot change through patch.
+consumer-field change. Identity, lifecycle, title, provenance, snooze,
+decisions, and extension members cannot change through patch.
 
 Patch never mutates another item. A candidate ledger that flags any other
 item — for example a duplicate-number collision with an existing handle —
 returns candidate-invalid, exit 2, and unchanged, and both items keep their
-bytes.
+bytes. Re-scoping one item's dependency onto `related` and dispositioning the
+item it depended on is therefore two patch and transition calls, not one
+atomic multi-item mutation.
 
 ### Serialization
 
-An updated field is rewritten in place. A newly added number serializes
-directly after id; a newly added priority directly after kind. Body bytes and
-extension nodes are preserved exactly as in transition.
+An updated field is rewritten in place. A newly added priority serializes
+directly after kind; a newly added depends_on directly after provenance, and a
+newly added related directly after depends_on. A relation list this patch adds
+is written as a YAML flow sequence, the style create writes; a relation list
+already on the item keeps its sequence node, so its style — and any anchor on
+it — survives the replacement. Extension nodes are preserved exactly as in
+transition, and a patch that names no body preserves the body bytes the same
+way.
+
+A body patch rewrites no frontmatter byte. The published frontmatter — from the
+opening delimiter through the closing delimiter and its newline — is identical
+to the item's own frontmatter bytes except the `updated` value, which every
+patch sets to request.date. Anchors, aliases, comments, quoting and flow or
+block styles, member order, and extension members all survive, because the body
+swap is a byte splice after the closing delimiter and never reaches them. This
+is a hard invariant, pinned byte for byte by the vectors, not a best effort.
+
+The body bytes are written exactly as the UTF-8 encoding of `set.body`, the
+same rule create serializes under: no newline is invented, trimmed, or removed,
+and no line ending is translated. An empty body leaves no byte after the
+closing delimiter's newline.
 
 ### Adapter advertisement
 
@@ -931,7 +1306,7 @@ patch.
 |---|---|
 | invalid-request | issues |
 | item-not-found | id |
-| ledger-invalid | validation_errors |
+| ledger-invalid | validation_errors; item iff the command is inspect and the request resolves an unfaulted item |
 | transition-precondition-failed | id, issues |
 | patch-precondition-failed | id, issues |
 | candidate-invalid | id, validation_errors |
@@ -939,6 +1314,7 @@ patch.
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
 | path-collision | id, path, occupant_kind; occupying_id iff occupant_kind is item |
+| items-directory-unavailable | id, path, reason, remediation |
 | atomic-scope-required | id, blockers, precondition_issues |
 | capability-unavailable | capability, reason, recovery_artifacts, recovery_artifacts_truncated |
 | operation-failed | id, operation, reason, recovery_artifacts, recovery_artifacts_truncated |
@@ -1030,7 +1406,122 @@ edges, the schema version 1 dependent-cleanup blocker and the other two
 multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
 unchanged/committed/unknown states; and patch field boundaries, CAS,
-serialization, and preconditions.
+serialization, preconditions, and the body swap with its untouched
+frontmatter.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.
+
+[spec/fixtures/envelope-domains](../spec/fixtures/envelope-domains/README.md)
+is the companion vector for the section 2 envelope rule. It pins the response
+domain of every command's success and every refusal class, including the
+claim-fenced mutation refusals and the bare `validate` and `ready` results.
+
+## 12. Commit-per-mutation on a provisioned ledger
+
+A ledger becomes provisioned when `provision` binds a namespace to the
+repository and `claim capabilities` reports `mode: "merge-coordinated"`. On
+such a ledger, `create`, `transition`, and `patch` run inside the claim
+coordinator described by the [work-claim
+contract](work-claim-contract.md).
+
+### The rule
+
+**Commit each mutation to Git before running the next mutating command.**
+
+The coordinator records every authorized mutation in the durable journal and
+validates the recorded revisions against Git `HEAD`, not against working-tree
+bytes. An uncommitted mutation is therefore an unreconciled mutation, and the
+next `create`, `transition`, or `patch` refuses rather than writing on top of
+work that is not yet durable.
+
+The loop that works:
+
+~~~sh
+wowbagger create --ledger <dir> --input request.json --json
+git add <dir> && git commit -m "Record the mutation"
+wowbagger claim-verify --ledger <dir> --json
+wowbagger transition --ledger <dir> --input next.json --json
+~~~
+
+`claim-verify` is the reconciliation procedure. It is not optional bookkeeping:
+it is the command that moves the journal forward to the new commit, and the
+refusals below name it by design.
+
+### The refusal
+
+An uncommitted prior mutation makes the next mutating command return exit 6.
+The refusal answers in the ledger-mutation domain, not the core domain, because
+the claim coordinator refused before the core mutation ran. Section 2 states
+that rule; `namespace` is what a consumer reads to recognize it.
+
+~~~json
+{
+  "ok": false,
+  "namespace": "ledger-mutation",
+  "command": "create-v1",
+  "contract_version": 1,
+  "state": "unchanged",
+  "error": {
+    "code": "claim-store-unavailable",
+    "message": "The durable claim store is unavailable.",
+    "details": {
+      "reason": "publication-reconciliation-required",
+      "findings": [
+        {
+          "code": "stale-write-detected",
+          "item_id": "wb_...",
+          "actual_revision": null,
+          "expected_revision": "sha256:...",
+          "observed_surface": "git-head",
+          "reason": "git-finalization-required",
+          "expected_path": "wb_....md",
+          "remediation": "Commit wb_....md in Git, then run claim-verify."
+        }
+      ]
+    }
+  }
+}
+~~~
+
+`state: "unchanged"` is exact: the refused command wrote nothing. Read
+`details.findings`. Every finding that blocks a mutation carries a
+`remediation` string, and every such string names both the path to act on and
+`claim-verify`. `actual_revision: null` with `observed_surface: "git-head"`
+means the authorized revision is not in `HEAD` at all, which is what an
+uncommitted mutation looks like.
+
+`spec/fixtures/mutation-refusals/uncommitted-prior-mutation/manifest.json` is
+the normative envelope for this refusal.
+
+### Reconciliation
+
+For every blocking finding:
+
+1. Do what `remediation` says, for each finding, using its `expected_path`.
+   `git-finalization-required` means commit that path.
+2. Run `wowbagger claim-verify --ledger <dir> --json`.
+3. Exit 0 with `state: "committed"` means the ledger is reconciled and the next
+   mutating command may run. Exit 6 means findings remain; repeat from step 1.
+
+The reasons a `stale-write-detected` finding can carry, and the other blocking
+finding codes, are enumerated in the [work-claim
+contract](work-claim-contract.md).
+
+### Rejected alternative: validate against working-tree bytes
+
+The obvious way to remove this friction is to validate recorded revisions
+against the working tree instead of Git `HEAD`. It was considered and
+rejected.
+
+The journal exists to make a mutation durable and reviewable. Working-tree
+bytes are neither: they are unpublished, unshared, and one `git checkout` away
+from vanishing. Validating against them would let the coordinator declare a
+mutation reconciled while nothing outside one uncommitted directory records it,
+which is precisely the guarantee the journal is for. It would also make a
+cooperating worktree unable to tell an authorized publication from a local
+edit, because both look identical in a working tree.
+
+The invariant stays. What changed is its visibility: it is stated here, in the
+work-claim contract, in the README workflow, and in the installed skill's
+loops, and every blocking finding now names its own remedy.

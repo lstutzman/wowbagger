@@ -5,19 +5,257 @@ A change to what a command accepts, refuses, emits, or writes is a behaviour
 change even when the commit that carried it was labelled refactor, docs, or
 consolidation. The first tagged release inherits this file.
 
-## Unreleased
+## 0.1.0-alpha.5 - 2026-08-16
+
+### Added
+
+- **The report draws the whole ledger as a 3D dependency graph.** It sits below
+  the evidence layer, under the decision surface. Every item is a node labelled
+  `#N`, coloured by readiness or terminal status and sized by the same
+  transitive unblocking leverage the recommended order uses; `depends_on` edges
+  are straight and arrowed, `parent` edges are curved and unarrowed, and both
+  run from the prerequisite to the item it releases. Hovering or clicking a node
+  shows its number, title, status, age, leverage, and the same reasons line the
+  ranked list prints for it. The renderer is `3d-force-graph` 1.80.0 over
+  Three.js r183, vendored at `vendor/3d-force-graph/` with its upstream SHA-256
+  recorded beside it and pinned by a test, and inlined at generation time: the
+  report stays one self-contained file and fetches nothing at generation or view
+  time. It costs roughly 1.3 MB of report size. A browser without WebGL gets the
+  section's plain explanation and a per-node roster instead; no
+  decision-relevant content exists only in the 3D view.
+
+### Changed
+
+- **An invalid ledger can now be diagnosed with the documented commands.** One
+  invalid item still refuses every read and every guarded mutation on that
+  ledger, but the refusals no longer hide what the operator has to read.
+  `inspect` keeps refusing exit 3 `ledger-invalid` — handing back a revision
+  from a ledger the core has not judged would read as a mutation precondition,
+  and there is no flag that skips validation — and its refusal now carries
+  `error.details.item`, the same lossless snapshot the success envelope
+  defines, for the item the request selected, whenever no validation error
+  names that item's path. A faulted item is withheld; `validate` already names
+  its repair. `claim-verify` now reports `result.ledger_validation`, carrying
+  `valid` and `errors` exactly as the bare `validate` result does, plus a
+  `remediation` when the ledger is invalid. Its claim answer is unchanged:
+  `findings`, `state`, and the exit status still describe claim state alone, so
+  a consistent journal over an invalid ledger is still exit 0 with
+  `findings: []` — it just no longer pretends that is a clear road. The report
+  costs no extra ledger read. Fixtures extend item #104's misplaced-item
+  scenario.
+- **The adapter forwards `inspect` refusals instead of calling them protocol
+  errors.** Both the engine and the independent oracle demanded a canonical
+  mutation request before they would accept any error details, which no read
+  command has, so every `inspect` `item-not-found` and `ledger-invalid` refusal
+  was mapped to `core-protocol-error`. The precondition now applies only to
+  mutation commands. The same surfaces accept the `expected_path` and
+  `remediation` that item #104 added to a validation error, and the optional
+  `details.item` on an `inspect` `ledger-invalid` refusal — on `inspect` only;
+  a mutation refusal that carries one is still rejected.
+
+- **The report's content security policy now also forbids `connect-src`.** The
+  report has never opened a connection; the policy now says so.
+
+- **The `item-outside-layout` validation error now names the expected path and
+  the relocation that repairs it.** It keeps its stable code and its actual
+  `path`, and gains `expected_path` plus a `remediation`; its message names
+  both paths. A committed item outside the configured items directory refuses
+  every read and every guarded mutation on that ledger, including ones that
+  never touch the misplaced item, so the refusal has to say where the item
+  belongs. The claim fence is not involved: `claim-verify` reports no finding
+  on such a ledger, refuting the PropertyCompass2 PR #2184 claim that a
+  root-misplaced item makes the fence report `stale-write-detected` with
+  `actual_revision: null`. Fixtures pin both configuration orders — layout
+  bound first, and layout bound after the item was already committed at the
+  root.
+- **The core contract version is now `3`.** Every core command envelope
+  (`capabilities`, `inspect`, `create`, `transition`, `patch`, `mint-id`,
+  `report`) carries `contract_version: 3`, the shipped adapters require core
+  contract version 3, and the installed skill's version check gates on 3. A
+  version 1 or version 2 consumer fails closed against this core, which is the
+  point of the bump. Version 3 is version 2 plus four deltas against published
+  `0.1.0-alpha.4`: the widened `date-before-created` / `date-before-updated`
+  issue shape carrying `item_created` and `item_updated` (the delta that forced
+  the bump — a version 2 consumer validating issue members exactly refuses the
+  six-member shape); the patch field set widening from `number`/`priority` to
+  `priority`/`depends_on`/`related`; number as the core-assigned immutable item
+  identity on schema version 2, with `create` refusing a supplied number and
+  `inspect` accepting `--number`; and `create` deriving its published path from
+  a committed `.wowbagger/layout.json`. The mutation contract's "Contract
+  versions" section carries the full enumeration. The legacy work-claim,
+  ledger-publication, and ledger-mutation envelopes and
+  `result.operations.work_claim.api_version` are separate version domains and
+  stay at 1; the adapter contract stays at 2.
+
+### Added
+
+- The README and the installed skill warn that `git mv` refuses a freshly
+  created item, because `create` writes an untracked file and the `git add -A`
+  behind it in an unchecked batch commits the item at the ledger root instead.
+  Both state the safe sequence: plain `mv`, then `git add`, checking every exit
+  code before the commit. The warning sits in the `0.1.0-alpha.4` boundary text
+  that already tells consumers that core ignores the layout file.
+- **`patch` can replace an item body.** `set.body` takes a JSON string that
+  replaces the whole body under `create`'s body rules, so a consumer whose
+  items mirror an external card updates them through the managed path instead
+  of hand-editing the Markdown. A body patch rewrites no frontmatter byte —
+  anchors, aliases, comments, quoting, styles, member order, and extension
+  members all survive, and only `updated` changes, as it does for every patch.
+  A body may be set in the same `set` as `priority`, `depends_on`, or
+  `related`, in one compare-and-swap write. `null` is refused at `/set/body`:
+  the body is a region of the file, so removing it means `""`, not null. A
+  claimed item, a stale revision, and a non-string body refuse as before. This
+  widens the patch request schema inside core contract version 3 and does not
+  move the version.
+- One envelope rule now covers every `--json` response. The mutation contract
+  states the response domains (core, work-claim, ledger-publication,
+  ledger-mutation, and bare result), the dispatch steps a generic consumer
+  follows, which domain each command's success and each refusal class answers
+  in, and the exact root members of each shape. Both sanctioned exceptions are
+  stated with their reasons: `validate` and `ready` stay bare results because
+  scripts and fixtures depend on those bytes, and a claim-fenced refusal to
+  `create`, `transition`, or `patch` answers in the `ledger-mutation` domain
+  with `command: "<command>-v1"` and `contract_version: 1` because it is the
+  work-claim contract refusing, not the core contract. The work-claim contract
+  now names all three of its `namespace` values.
+  `spec/fixtures/envelope-domains/manifest.json` pins all 37 response classes,
+  and `test/envelope-dispatch.test.js` walks every one of them through the
+  documented dispatch rule and rejects drift in either direction. No emitted
+  byte changed and no contract version moved.
+- `report` now renders a sequencing dashboard instead of a state snapshot. The
+  HTML opens with **Work next**, the ready set in a recommended order with the
+  factors that placed each entry printed beside it; then **Attention**, naming
+  blockers by number, the oldest open work with its age, and started work past
+  this ledger's own 85th-percentile cycle time; then an evidence layer with
+  aging buckets, weekly arrivals against completions, accept-to-complete cycle
+  time, and a Monte Carlo forecast as 50 and 85 percent bands. State counts,
+  item cards, and swarm batches remain, below that decision surface. Relations
+  and readiness reasons inside the drill-down now name items by number.
+  Ordering is a report-layer derivation, recomputed from ledger bytes at render
+  time and never persisted: `ready --json`, its four-step order, and the
+  mutation contract are unchanged. The report file stays self-contained with no
+  external runtime dependency.
+- Report configuration accepts two more `fields` mappings, `class` and `due`.
+  `class` is a class of service from `expedite | fixed-date | standard |
+  intangible`; `expedite` lifts an item above every other ready item, an absent
+  value means `standard`, and an unrecognised value is ranked as standard and
+  reported in the report rather than dropped. `due` is an ISO calendar date
+  ordered by proximity. Both ride the existing extension-member channel, so no
+  core field carries them.
+- The commit-per-mutation invariant is documented. On a provisioned ledger,
+  every mutation must be committed to Git before the next mutating command,
+  and `claim-verify` is the reconciliation procedure for the exit 6
+  `publication-reconciliation-required` refusal. The mutation contract, the
+  work-claim contract, the README, and the installed skill's claimed and
+  unclaimed loops all state the rule and the loop it implies. The mutation
+  contract also records why validating against working-tree bytes was
+  rejected.
+- `claim capabilities --ledger <dir> --json` now advertises
+  `result.backend.write_serialization`. A provisioned Git-journal backend
+  reports `scope: "all-worktrees-of-one-repository"` and
+  `blocks_until: "peer-commit-visible-in-this-checkout"`; an unprovisioned
+  backend reports `scope: "none"`. This makes the serialization the shared
+  Git-common-directory journal already performed discoverable instead of
+  implied. The core `capabilities` envelope is unchanged; this change is not
+  one of the version 3 deltas.
+
+- A `date-before-created` or `date-before-updated` issue now carries
+  `item_created` and `item_updated` after `related_ids` — the target item's own
+  dates at refusal time, both dates on both codes, on `transition` and `patch`
+  alike. One refusal now states the whole acceptable date window, so correcting
+  the request no longer costs an `inspect` round-trip. No other issue code
+  changes shape; a consumer that validates issue members exactly must accept
+  six members for these two codes. This widening is the reason the core
+  contract version moves to 3 (see Changed, above).
+  The mutation contract and the installed skill now also state that `create`
+  derives `created` from the ULID timestamp, which is UTC, with the
+  across-midnight example that produces this refusal.
+
+### Documentation
+
+- **`create` stays journal-silent, and the work-claim contract now says why.**
+  Section 3.1 already stated that `create` records no claim-journal entry and
+  therefore never blocks a sibling worktree. It now records the decision to
+  keep that asymmetry and the three reasons behind it: create's publication is
+  already atomic, no-clobber, and byte-verified; journaling create would
+  serialize every worktree on the highest-volume mutation; and the remaining
+  exposure window closes at the item's first `transition` or `patch`. The
+  window is stated honestly — until that first journal-visible mutation an
+  out-of-protocol overwrite of a created item is not detected, and a commit
+  alone does not close the window, because reconciliation compares only the
+  revisions the journal expects. `test/create-journal-asymmetry.test.js` pins
+  both halves end to end. No behaviour changed.
 
 ### Fixed
+
+- A claim-fence refusal no longer reaches the agent as
+  `mutation-outcome-unknown`. Both adapter engines classified every response
+  with the core envelope validator, so a fenced refusal — `namespace:
+  "ledger-mutation"`, `command: "<command>-v1"`, `contract_version: 1`, `state:
+  "unchanged"` — failed core validation and became "the mutation may have been
+  applied; inspect current state before retrying", on every fenced refusal on a
+  provisioned ledger, about a write that provably never ran. The adapter now
+  dispatches on the response domain first, exactly as the mutation contract's
+  section 2 rule requires, and validates a fenced refusal on the work-claim
+  contract's terms: `claimed-item-write-refused` on `create`,
+  `active-claim-write-refused` on `transition` and `patch`, and
+  `claim-store-unavailable` on any mutation, each with its pinned message, exit,
+  and permitted states, its read-back bound to the item the caller asked to
+  write, and its reason plus findings and remediation forwarded verbatim. A
+  `claim-store-unavailable` refusal that declares `state: "unknown"` stays an
+  unknown outcome, and so does any namespaced envelope the adapter cannot
+  classify. Adapter contract section 6.1 states the rule and the honest-outcome
+  guarantee; five conformance vectors pin it, the differential test replays each
+  through both engines, and no version moved in either domain.
+- A mutation on a claim-protected ledger now reads the complete ledger twice
+  instead of three times. Journal reconciliation and the mutation engine's
+  pre-lock phase were separate unlocked reads of the same directory inside one
+  claim-lock hold, and reconciliation writes nothing a complete load reads, so
+  the pre-lock phase reuses reconciliation's snapshot. On a 1,500-item
+  provisioned fixture a create fell from about 1.15 s to about 0.89 s and a
+  transition from about 1.17 s to about 0.91 s, matching one full load at about
+  0.29 s. The read under lock stays: it is what decides the revision
+  compare-and-swap and the lock-closure stability check, and every decision
+  drawn from the shared snapshot is re-made against it. A lock-closure retry
+  still reads fresh. No validation rule changed, and a mutation on a plain
+  directory is unaffected.
+- A mutation on a large provisioned ledger no longer spends its wall time in
+  process spawns. Git HEAD reconciliation read every committed item with its
+  own `git show`, one subprocess per item, serially; it now reads them with
+  one `git cat-file --batch` subprocess per 16 MiB of tree content. On a
+  1,500-item fixture a create fell from about 15.4 s to about 1.2 s and a
+  transition from about 15.4 s to about 1.3 s. The reconciliation reads the
+  same bytes for the same items, and no validation is skipped: candidate
+  validation still validates the complete ledger.
+
+- Every reconciliation finding that blocks a mutation now carries a
+  `remediation` string naming the path to act on and `claim-verify`.
+  `revision-regression`, `legacy-mutation-outcome-unknown`, and
+  `publication-outcome-unknown` previously blocked with no recovery action;
+  they now also carry `expected_path` when it is identifiable.
 
 - A committed `.wowbagger/layout.json` now binds the ledger's item directory.
   `create` derives its path from that configuration. Validation rejects parsed
   items outside it, special or symbolic layout files, and metadata-directory
   aliases. Malformed configuration fails closed. Ledgers without the file
   retain the root-level `<id>.md` layout.
+- A refused legacy mutation and a clean `claim-verify` now leave the ledger
+  working tree byte-identical. The tracked reconciliation log projects only
+  journal entries that record a decision, so per-invocation clock entries no
+  longer dirty it, and a successful legacy mutation now projects its own
+  entries before returning instead of one command later. Batch tooling no
+  longer needs to stage the log after a failure.
 - `claim-verify` now classifies stale writes as unauthorized revisions, missing
   Git finalization, worktree synchronization, or pending claimed publication.
   Working-tree deletions of an authorized Git revision are unauthorized.
   Findings name the expected item path and give a direct recovery action.
+- The contracts and the skill now state that a provisioned ledger's claim
+  journal serializes every worktree of one repository, and that a recorded
+  write blocks mutations in the other worktrees until its commit is visible
+  there. `limits.cross_worktree_coordination: false` is documented as "the
+  core never synchronizes checkouts", not as independent worktree writes.
+  Both stale-write remedies, the moving-`expected_revision` trap, and the
+  failed copy-the-item-in workaround are documented and pinned by tests.
 
 ## 0.1.0-alpha.4 - 2026-08-14
 

@@ -14,7 +14,7 @@ putting a database or hosted service inside your repository.
 > scope is deliberately narrow: cooperative writers in one working copy, one
 > item at a time. A Claude Code adapter and plugin ship from this
 > repository; the adapter answers the negotiation surface of the harness-neutral
-> contract and passes all 183 assertions across all 15 cases on native Darwin.
+> contract and passes all 196 assertions across all 15 cases on native Darwin.
 > The Claude Code adapter declares Darwin `supported`; all other shipped adapter
 > platform declarations remain `unverified`. The shipped core mutation contract
 > and adapter contract are version 2; their frozen version 1 definitions are not
@@ -36,7 +36,7 @@ Install the core CLI, then verify it:
 ```sh
 npm install -g wowbagger@next   # public npm prerelease
 # or, from this release's Git tag:
-# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4
+# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5
 wowbagger capabilities --json
 ```
 
@@ -53,6 +53,38 @@ detectable instead of silent. Its skill reads `wowbagger --version` and
 core contract version 2. It refuses an absent or incompatible core. It will not
 fall back to editing ledger files by hand, because that would bypass validation
 and atomic publication.
+
+Decide where items live **before your first `create`**. A ledger publishes items
+to `<ledger>/<id>.md` unless a committed `<ledger>/.wowbagger/layout.json` binds
+a subdirectory:
+
+```sh
+mkdir -p path/to/ledger/.wowbagger path/to/ledger/items
+echo '{"layout_version":1,"items_directory":"items"}' > path/to/ledger/.wowbagger/layout.json
+```
+
+`layout_version` must be `1` and `items_directory` names the committed item
+directory. `create` then publishes atomically to `<items_directory>/<id>.md`,
+and validation rejects parsed items outside it. Commit the directory the file
+names — `create` publishes into an existing directory and does not make one.
+Nothing is renamed after a create. Cores at `0.1.0-alpha.4` and earlier ignore
+the file and publish every item at the ledger root.
+
+On such a core, relocating an item by hand has a trap. `create` writes an
+untracked file, so `git mv` refuses the path it just published; an unchecked
+batch then runs `git add -A` and commits the item at the ledger root, where it
+silently stays. Use plain `mv`, then `git add` both paths, and check the exit
+code of every command before the commit:
+
+```sh
+mv path/to/ledger/<id>.md path/to/ledger/items/<id>.md || exit 1
+git add path/to/ledger || exit 1
+```
+
+A committed item outside the configured items directory then fails validation
+and refuses every read and every guarded mutation on that ledger, including
+ones that never touch it. The refusal names the expected path and the
+relocation that repairs it.
 
 For an isolated consumer pilot, create or select the disposable worktree before
 the agent starts. Then launch a new session with that worktree as its project
@@ -72,7 +104,7 @@ two supported install routes:
 - **npm registry** — `npm install -g wowbagger@next` installs the current
   prerelease.
 - **git tag** —
-  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4` installs this
+  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5` installs this
   release. Installing at a ref installs the core and every adapter that ref
   carries.
 
@@ -136,7 +168,7 @@ Upgrade the pieces you installed:
 
 ```sh
 npm install -g wowbagger@next                  # public npm registry
-npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4  # immutable Git release
+npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5  # immutable Git release
 git pull && npm ci                            # or: a direct checkout
 ```
 
@@ -153,12 +185,14 @@ wowbagger capabilities --json
 ```
 
 The plugin requires its exact core distribution version and top-level core
-`contract_version: 2`. Direct API consumers must check the contract version
+`contract_version: 3`. Direct API consumers must check the contract version
 they support; installed plugin users must also keep the plugin and core
 distribution versions equal.
 
 The shipped adapter selects only adapter contract version 2 and requires core
-contract version 2. A v1-only consumer receives
+contract version 3. The adapter contract and the core contract are separate
+version domains: the adapter stays at 2 while the core moves to 3. A v1-only
+consumer receives
 `unsupported-adapter-contract-version`; it does not receive v2 behavior. The
 schema-2 transport is available. Ledger migration remains a separate quiesced
 maintenance operation. The
@@ -262,9 +296,9 @@ This checkout ships three adapter packages on one shared entrypoint runtime:
 [`adapters/claude-code/`](adapters/claude-code/), [`adapters/codex/`](adapters/codex/),
 and [`adapters/opencode/`](adapters/opencode/). Each answers the section 3.3 bootstrap
 wire with its own identity and honest host declaration. The native Darwin
-Claude Code report passes all 183 assertions across all 15 cases — run
+Claude Code report passes all 196 assertions across all 15 cases — run
 `node spec/run-adapter-implementation.js` to see the evidence. Codex and
-OpenCode share the version 2 engine and execute all 183 assertions with
+OpenCode share the version 2 engine and execute all 196 assertions with
 `--target codex` or `--target opencode`, but both target reports remain `fail`
 pending target-specific evidence. Invocation forwarding, path and limit guards,
 approval, and context all enter through the shared shipped engine. Platform
@@ -338,7 +372,9 @@ relative `--out` overrides resolve from the caller's working directory.
   "fields": {
     "area": "/priority_area",
     "complexity": "/complexity",
-    "rank": "/priority_rank"
+    "rank": "/priority_rank",
+    "class": "/class",
+    "due": "/due"
   },
   "swarm": { "eligible_complexities": ["small", "medium"] }
 }
@@ -346,9 +382,65 @@ relative `--out` overrides resolve from the caller's working directory.
 
 `repository.logo`, `fields`, and `swarm` are optional. Field values resolve
 from parsed frontmatter with RFC 6901 JSON Pointers. A swarm requires mapped
-`area` and `complexity` fields. The report shows canonical readiness, filters,
-sorting, grouping, three detail levels, terminal history, and area-diverse
-ready batches. It contains no external runtime dependency.
+`area` and `complexity` fields. The report fetches nothing at view time.
+
+The report opens with **Work next**: the ready set in a recommended order,
+each entry carrying the factors that placed it. Below it sit **Attention**
+(blocked work naming its blockers, the oldest open work, and started work past
+this ledger's own 85th-percentile cycle time), the **evidence layer**
+(aging buckets, weekly arrivals against completions, accept-to-complete cycle
+time, and a Monte Carlo forecast as 50 and 85 percent bands), and the **ledger
+graph**. State counts, item cards, filters, grouping, detail levels, terminal
+history, and area-diverse ready batches all remain, demoted below that
+decision surface.
+
+### The ledger graph
+
+Below the evidence layer the report draws the whole ledger as a force-directed
+3D graph. Every item is a node, labelled `#N`, coloured by readiness for open
+items and by terminal status for closed ones, and sized by the same transitive
+unblocking leverage the recommended order uses. Edges run from a prerequisite
+or a parent to the item it releases: a `depends_on` edge is straight and
+arrowed, a `parent` edge is curved and unarrowed. Hovering or clicking a node
+opens a card with its number, title, status, age, leverage, and the same
+reasons line the ranked list prints for it.
+
+The renderer is [`3d-force-graph`](https://github.com/vasturiano/3d-force-graph)
+over Three.js, vendored into `vendor/3d-force-graph/` at a pinned version
+`1.80.0` with its upstream SHA-256 recorded in `VERSIONS.json` and pinned by a
+test. It is inlined into the report at generation time. Nothing is fetched from
+a CDN, at generation time or at view time, and the report's content security
+policy forbids every remote load. The bundle costs roughly 1.3 MB of the
+report's size; the report stays one self-contained file you can attach, open
+offline, and share.
+
+Without WebGL the graph section says so and expands its own roster instead: one
+row per node, carrying that node's number, title, status, age, leverage, and
+reasons. No decision-relevant content exists only in the 3D view.
+
+The recommended order is a report-layer derivation. It is recomputed from
+ledger bytes at render time, never persisted, never a mutation, and it does not
+change `ready`: the core still selects and sorts by priority, created date,
+then ID. Ordering runs as separate, visible steps rather than one opaque score
+— expedite class, then due proximity, then transitive unblocking leverage over
+`depends_on`, then epic enablement from `parent`, then priority, then age, then
+the mapped `complexity` as a WSJF-style size denominator — and every step that
+placed an entry is printed beside it.
+
+Two mapped fields carry the value dimensions the schema deliberately does not:
+
+- **`class`** — a class of service, one of `expedite`, `fixed-date`,
+  `standard`, or `intangible`. `expedite` lifts an item above every other ready
+  item. An absent value means `standard`. An unrecognised value is ranked as
+  standard and reported by number in the report, never silently dropped.
+- **`due`** — an ISO calendar date. The nearest due date sorts first and an
+  overdue one sorts first of all; an item with no due date sorts behind every
+  dated one at that step.
+
+Both ride the ordinary extension-member channel, so the core neither reads nor
+validates them. `complexity` weighs `xs`/`s`/`small` as 1, `m`/`medium` as 2,
+`l`/`large` as 3, and `xl`/`extra-large` as 5; any other value carries no
+weight and is shown as written.
 
 This repository keeps its report configuration in
 `ledger/.wowbagger/report.json`. Generate the ignored local report with:
@@ -367,6 +459,23 @@ item. `patch` changes the caller-supplied `number` and `priority` fields —
 nothing else — under the same lock and compare-and-swap. See
 [the mutation contract](docs/mutation-contract.md) for the JSON request,
 response, recovery, and scope details.
+
+### Diagnosing an invalid ledger
+
+One invalid item refuses every read and every guarded mutation on that ledger,
+including commands that never touch it. That refusal is the diagnosis, and no
+command asks you to parse the Markdown by hand:
+
+- `validate --json` lists every error. An error whose repair the validator can
+  derive also carries `expected_path` and a `remediation` naming the repair.
+- `inspect` still refuses with exit 3 `ledger-invalid` — a revision from an
+  unjudged ledger must never look like a mutation precondition — but the
+  refusal carries `error.details.item`, the complete snapshot of the item you
+  asked for, whenever no validation error names that item's path. A faulted
+  item is withheld; `validate` already names its repair.
+- `claim-verify --json` reports `result.ledger_validation`. Exit 0 with
+  `findings: []` and `ledger_validation.valid: false` says the claim journal is
+  consistent and validation alone is blocking every mutation.
 
 `provision` binds one ledger namespace to the repository. `claim` manages
 durable acquire, read, renew, and release decisions. `publish-claimed` accepts
@@ -387,6 +496,51 @@ the core version. A contract consumer that receives an unsupported version
 refuses rather than guessing. The shipped plugin skill also requires its exact
 core distribution version. Direct checkout use—`./bin/wowbagger.js` from a
 clone—remains supported and is what this repository's own ledger uses.
+
+## Commit each mutation before the next one
+
+On a **provisioned** ledger — one where `provision` has bound a namespace and
+`claim capabilities` reports `mode: "merge-coordinated"` — there is one
+operating rule:
+
+**Commit each mutation to Git before running the next mutating command.**
+
+The durable claim store validates every recorded mutation against Git `HEAD`,
+not against working-tree bytes. That is what makes a recorded mutation durable
+rather than a local edit one `git checkout` away from vanishing. An uncommitted
+mutation is an unreconciled mutation, so the next `create`, `transition`, or
+`patch` refuses instead of writing on top of it.
+
+The loop that works:
+
+```sh
+./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
+git add path/to/ledger && git commit -m "Record the mutation"
+./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
+./bin/wowbagger.js transition --ledger path/to/ledger --input next.json --json
+```
+
+Skip the commit and the next command returns exit 6:
+
+```json
+{"ok":false,"namespace":"ledger-mutation","command":"create-v1","contract_version":1,
+ "state":"unchanged","error":{"code":"claim-store-unavailable",
+ "message":"The durable claim store is unavailable.",
+ "details":{"reason":"publication-reconciliation-required","findings":[{
+   "code":"stale-write-detected","reason":"git-finalization-required",
+   "expected_path":"wb_....md",
+   "remediation":"Commit wb_....md in Git, then run claim-verify."}]}}}
+```
+
+`state: "unchanged"` is exact — nothing was written. **`claim-verify` is the
+reconciliation procedure.** Read `details.findings`, do what each
+`remediation` string says, run `claim-verify` until it returns exit 0, then
+repeat the refused command.
+
+Full rules, the other blocking finding codes, and why validating against
+working-tree bytes was rejected are in
+[the mutation contract](docs/mutation-contract.md) section 12 and
+[the work-claim contract](docs/work-claim-contract.md).
 
 ## Verify a checkout
 
@@ -491,7 +645,7 @@ It is the durable work ledger beneath those systems.
 - Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
   packages share the version 2 engine; the Claude Code manifest declares Darwin
-  `supported` after passing all 183 native assertions. Other adapter targets and
+  `supported` after passing all 196 native assertions. Other adapter targets and
   platform declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses.
 - Implement merge-coordinated work claims for cooperating Git worktrees.

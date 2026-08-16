@@ -83,7 +83,7 @@ Success exits with `0` and prints one compact JSON object followed by LF:
 {
   "ok": true,
   "command": "report",
-  "contract_version": 2,
+  "contract_version": 3,
   "result": {
     "report_version": 1,
     "as_of": "2026-08-14",
@@ -116,7 +116,7 @@ The error shape is:
 {
   "ok": false,
   "command": "report",
-  "contract_version": 2,
+  "contract_version": 3,
   "error": {
     "code": "report-config-invalid",
     "message": "The report configuration is invalid.",

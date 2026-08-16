@@ -88,15 +88,57 @@ test('two create processes leave one complete item and no temporary or lock file
   });
 });
 
-test('the number-index lock keeps concurrent creates from sharing a number', async () => {
-  // The number-index lock is fail-fast, like the item lock: one create wins and
-  // assigns the number, the other refuses with lock-held for the caller to
-  // retry. What must never happen is two committed items sharing a number.
+test('the number-index lock refuses a create that arrives while it is held', async () => {
+  // The number-index lock is fail-fast, like the item lock: the holder assigns
+  // the number, and a create that arrives while it is held refuses with
+  // lock-held for the caller to retry.
+  //
+  // The overlap is forced through the lock-acquired checkpoint rather than
+  // hoped for. Two creates started together only collide if the machine
+  // happens to interleave them, which under full-suite load it often does not
+  // (item 106): the second then starts after the first has released, both
+  // commit, and the assertion that one refused fails on a correct engine.
   const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
   const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HP';
   await withLedger({}, async (ledger) => {
     const firstRequest = path.join(path.dirname(ledger), 'number-first.json');
     const secondRequest = path.join(path.dirname(ledger), 'number-second.json');
+    await writeFile(firstRequest, JSON.stringify(createRequest(firstId, '')));
+    await writeFile(secondRequest, JSON.stringify(createRequest(secondId, '')));
+
+    const suffix = 'number-index';
+    const holder = runTestCli(`pause-after-lock-acquired:${suffix}`,
+      'create', '--ledger', ledger, '--input', firstRequest, '--json');
+    await waitForFile(path.join(ledger, `.wowbagger-test-${suffix}-acquired`));
+
+    const arrival = parseOutput(
+      await runCli('create', '--ledger', ledger, '--input', secondRequest, '--json'),
+    );
+
+    await writeFile(path.join(ledger, `.wowbagger-test-${suffix}-allow-successor`), 'continue\n');
+    const held = parseOutput(await holder);
+    const validation = await runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(arrival.ok, false, JSON.stringify(arrival));
+    assert.equal(arrival.error.code, 'lock-held');
+    assert.equal(held.ok, true, JSON.stringify(held));
+    assert.equal(held.result.item.core.number, 1);
+    assert.equal(validation.status, 0, validation.stdout);
+    assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('concurrent creates never share a number', async () => {
+  // The invariant that holds under every interleaving, so it can be asserted
+  // against two real racing processes: whichever of them commits, no two
+  // committed items share a number, and a create that loses the lock says so.
+  // Whether they collide at all is the machine's choice, not the contract's.
+  const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
+  const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HP';
+  await withLedger({}, async (ledger) => {
+    const firstRequest = path.join(path.dirname(ledger), 'number-race-first.json');
+    const secondRequest = path.join(path.dirname(ledger), 'number-race-second.json');
     const body = `\n${'x'.repeat(1024 * 1024)}\n`;
     await writeFile(firstRequest, JSON.stringify(createRequest(firstId, body)));
     await writeFile(secondRequest, JSON.stringify(createRequest(secondId, body)));
@@ -110,10 +152,11 @@ test('the number-index lock keeps concurrent creates from sharing a number', asy
 
     const committed = outputs.filter((entry) => entry.ok);
     const refused = outputs.filter((entry) => !entry.ok);
-    assert.equal(committed.length, 1, JSON.stringify(outputs));
-    assert.equal(refused.length, 1, JSON.stringify(outputs));
-    assert.equal(refused[0].error.code, 'lock-held');
-    assert.equal(committed[0].result.item.core.number, 1);
+    const numbers = committed.map((entry) => entry.result.item.core.number);
+    assert.ok(committed.length >= 1, JSON.stringify(outputs));
+    assert.deepEqual([...new Set(numbers)].sort(), [...numbers].sort(), JSON.stringify(outputs));
+    assert.deepEqual(numbers.sort(), committed.map((_, index) => index + 1), JSON.stringify(outputs));
+    for (const entry of refused) assert.equal(entry.error.code, 'lock-held', JSON.stringify(entry));
     assert.equal(validation.status, 0, validation.stdout);
     assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
     await assertNoOwnArtifacts(ledger);
@@ -549,6 +592,47 @@ test('a completed writer never removes a successor writer lock during repeated h
       await assertNoOwnArtifacts(ledger);
     });
   }
+});
+
+// The mutation engine reads the ledger twice: once before lock closure to
+// choose the locks, and once under them. Only the second read decides the
+// revision compare-and-swap. A write that lands in the window between the two
+// is therefore refused rather than clobbered — which is what lets the pre-lock
+// read be a shared, slightly older snapshot.
+test('a write that lands after lock closure is refused by the read under lock', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY094';
+  await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
+    const itemPath = path.join(ledger, `${id}.md`);
+    const before = await readFile(itemPath);
+    const requestPath = path.join(path.dirname(ledger), 'transition-late-write.json');
+    await writeFile(requestPath, JSON.stringify({
+      id,
+      expected_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+      to_status: 'backlog',
+      date: '2030-01-16',
+      decision: {
+        summary: 'Accept the late-write item.',
+        rationale: 'Exercise the read under lock.',
+      },
+    }));
+
+    const suffix = 'late-write';
+    const command = runTestCli(`pause-after-lock-acquired:${suffix}`,
+      'transition', '--ledger', ledger, '--input', requestPath, '--json');
+    await waitForFile(path.join(ledger, `.wowbagger-test-${suffix}-acquired`));
+    const interleaved = before.toString('utf8')
+      .replace('updated: 2030-01-14', 'updated: 2030-01-15');
+    assert.notEqual(interleaved, before.toString('utf8'));
+    await writeFile(itemPath, interleaved);
+    await writeFile(path.join(ledger, `.wowbagger-test-${suffix}-allow-successor`), 'continue\n');
+
+    const result = await command;
+
+    assert.equal(result.status, 4, `${result.stderr}\n${result.stdout}`);
+    assert.equal(parseOutput(result).error.code, 'revision-conflict');
+    assert.equal(await readFile(itemPath, 'utf8'), interleaved);
+    await assertNoOwnArtifacts(ledger);
+  });
 });
 
 function createRequest(id, body) {

@@ -83,7 +83,7 @@ function binding() {
     adapter: { id: 'example.reference', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: revision('a'),
-      contract_version: 2,
+      contract_version: 3,
       argv: ['transition', '--ledger', '/approved/workspace/ledger', '--input', '-', '--json'],
       input_base64: 'e30K',
     },
@@ -247,7 +247,7 @@ test('reference oracle forwards an approved patch with exact argv and stdin as a
     adapter: { id: 'example.reference', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: revision('a'),
-      contract_version: 2,
+      contract_version: 3,
       argv,
       input_base64: input.toString('base64'),
     },
@@ -296,7 +296,7 @@ test('reference oracle independently validates definitive patch preconditions', 
   const response = {
     ok: false,
     command: 'patch',
-    contract_version: 2,
+    contract_version: 3,
     state: 'unchanged',
     error: {
       code: 'patch-precondition-failed',
@@ -308,6 +308,8 @@ test('reference oracle independently validates definitive patch preconditions', 
           field: 'date',
           message: 'Patch date must not be earlier than the current updated date.',
           related_ids: [],
+          item_created: '2030-01-14',
+          item_updated: '2030-01-16',
         }],
       },
     },
@@ -329,6 +331,10 @@ test('reference oracle independently validates definitive patch preconditions', 
 
   for (const set of [
     { priority: 0 }, { priority: null },
+    { depends_on: [] }, { related: [] }, { related: null },
+    { depends_on: ['wb_01KDWPVNG0000000000000000A'] },
+    { depends_on: [], related: ['wb_01KDWPVNG0000000000000000A'], priority: 2 },
+    { body: '' }, { body: '\nMirror body.\n' }, { body: 'x', priority: 2 },
   ]) {
     const valid = Buffer.from(`${JSON.stringify({ ...request, set })}\n`);
     assert.equal(outcome(valid), null, JSON.stringify(set));
@@ -346,6 +352,14 @@ test('reference oracle independently validates definitive patch preconditions', 
     { ...request, set: { priority: -1 } },
     { ...request, set: { priority: 1.5 } },
     { ...request, set: { number: Number.MAX_SAFE_INTEGER + 1 } },
+    { ...request, set: { depends_on: 'wb_01KDWPVNG0000000000000000A' } },
+    { ...request, set: { depends_on: ['not-an-item-id'] } },
+    { ...request, set: { related: [null] } },
+    { ...request, set: { related: [['wb_01KDWPVNG0000000000000000A']] } },
+    { ...request, set: { parent: 'wb_01KDWPVNG0000000000000000A' } },
+    { ...request, set: { body: null } },
+    { ...request, set: { body: 5 } },
+    { ...request, set: { body: ['line'] } },
   ]) {
     const malformed = Buffer.from(`${JSON.stringify(malformedRequest)}\n`);
     assert.equal(outcome(malformed).error.code, 'mutation-outcome-unknown');
@@ -893,4 +907,89 @@ test('combined instruction and handoff bytes share context_bytes', () => {
       },
     },
   }).error.code, 'context-limit-exceeded');
+});
+
+test('an items-directory-unavailable create refusal forwards only with its exact documented details', () => {
+  const itemId = 'wb_01KDWPVNG00000000000000000';
+  const refusal = (details) => ({
+    ok: false,
+    command: 'create',
+    contract_version: 3,
+    state: 'unchanged',
+    error: {
+      code: 'items-directory-unavailable',
+      message: 'The configured items directory is unavailable.',
+      details,
+    },
+  });
+  const outcome = (response, exitCode = 2) => mapProcessOutcome({
+    adapter_contract_version: 2,
+    request_id: 'reference-items-directory-0001',
+    command: 'create',
+    core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
+    mutation_request: {
+      id: itemId,
+      item: {
+        title: 'Map a fictional moon route',
+        kind: 'task',
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+        related: [],
+      },
+      body: '\nA fictional Markdown body.\n',
+    },
+    item_id: itemId,
+    expected_revision: null,
+    process: completeProcess({
+      exit_code: exitCode,
+      stdout_base64: Buffer.from(`${JSON.stringify(response)}\n`).toString('base64'),
+    }),
+  });
+
+  for (const details of [
+    {
+      id: itemId,
+      path: 'items',
+      reason: 'absent',
+      remediation: 'Create the ledger directory items and commit it, then retry create.',
+    },
+    {
+      id: itemId,
+      path: 'backlog/items',
+      reason: 'not-a-directory',
+      remediation: 'Replace backlog/items with a directory and commit it, then retry create.',
+    },
+  ]) {
+    assert.equal(outcome(refusal(details)), null, JSON.stringify(details));
+  }
+
+  const valid = {
+    id: itemId,
+    path: 'items',
+    reason: 'absent',
+    remediation: 'Create the ledger directory items and commit it, then retry create.',
+  };
+  for (const details of [
+    { ...valid, reason: 'io-error' },
+    {
+      ...valid,
+      path: 'items/wb_01KDWPVNG00000000000000000.md',
+      remediation: 'Create the ledger directory items/wb_01KDWPVNG00000000000000000.md and commit it, then retry create.',
+    },
+    { ...valid, path: '/items' },
+    { ...valid, path: '../items' },
+    { ...valid, id: 'not-an-item-id' },
+    { ...valid, id: 'wb_01KDWPVNG0000000000000000A' },
+    { ...valid, remediation: 'Create the ledger directory elsewhere and commit it, then retry create.' },
+    { ...valid, remediation: 42 },
+    { ...valid, occupant_kind: 'file' },
+    Object.fromEntries(Object.entries(valid).filter(([key]) => key !== 'remediation')),
+  ]) {
+    assert.notEqual(outcome(refusal(details)), null, JSON.stringify(details));
+  }
+
+  assert.notEqual(outcome(refusal(valid), 6), null, 'exit 6 must not carry this refusal');
+  const wrongMessage = refusal(valid);
+  wrongMessage.error.message = 'The configured items directory does not exist.';
+  assert.notEqual(outcome(wrongMessage), null, 'the stable message is exact');
 });

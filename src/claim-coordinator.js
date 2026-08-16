@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 
 import {
   appendClaimEntry,
   assertClaimJournalCapacity,
   claimJournalPath,
+  claimReconcileLogPath,
   replayClaimJournal,
+  writeReconcileLog,
 } from './claim-journal.js';
 import { resolveWorkClaimCapability } from './claim-capabilities.js';
 import { readBack } from './claim-operations.js';
@@ -42,6 +45,10 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         });
       }
       const observedAt = reconciled.observedAt;
+      // The reconciliation log must gain this command's own journal entries
+      // before the command returns, so the item and the log form one
+      // post-mutation commit set.
+      const projected = [...reconciled.entries];
       const record = reconciled.state.claims.find((entry) => entry.item_id === itemId)
         ?? { item_id: itemId, last_epoch: '0', active: null };
       const mustRefuse = command === 'create-v1'
@@ -90,10 +97,14 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
           resolutionEntry,
         ]);
         intent = await appendClaimEntry(journalPath, intentEntry);
+        projected.push(intent);
       };
       let outcome;
       try {
-        outcome = await write(authorize);
+        // Reconciliation already read the complete ledger under this same
+        // claim lock and changed nothing a load would see. The write reuses
+        // that snapshot for its pre-lock phase and re-reads under lock.
+        outcome = await write(authorize, reconciled.ledger);
       } catch (error) {
         if (intent) {
           return claimStoreUnavailable(command, 'legacy-mutation-outcome-unknown', {
@@ -115,7 +126,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
           }, 'unknown');
         }
         try {
-          await appendClaimEntry(journalPath, {
+          projected.push(await appendClaimEntry(journalPath, {
             type: 'legacy-mutation',
             attempt_id: intent.attempt_id,
             ledger_namespace: namespace,
@@ -124,7 +135,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
             committed_revision: committedRevision,
             observed_at: observedAt,
             item_path: intent.item_path,
-          });
+          }));
         } catch {
           return claimStoreUnavailable(command, 'legacy-mutation-record-failed', {
             attempt_id: intent.attempt_id,
@@ -133,17 +144,27 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         }
       } else if (outcome?.state === 'unchanged') {
         try {
-          await appendClaimEntry(journalPath, {
+          projected.push(await appendClaimEntry(journalPath, {
             type: 'legacy-mutation-abort',
             attempt_id: intent.attempt_id,
             ledger_namespace: namespace,
             item_id: itemId,
             observed_revision: intent.expected_revision,
             observed_at: observedAt,
-          });
+          }));
         } catch {
           return claimStoreUnavailable(command, 'legacy-mutation-record-failed');
         }
+      }
+      try {
+        await writeReconcileLog(
+          claimReconcileLogPath(path.resolve(ledgerDirectory), namespace),
+          namespace,
+          projected,
+        );
+      } catch {
+        // The tracked reconciliation log is derived. The fsync'd journal
+        // already recorded the mutation and the next command rebuilds it.
       }
       return outcome;
     });

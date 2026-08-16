@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -125,6 +125,87 @@ test('create derives the item path from a nested committed items-directory layou
       await readFile(path.join(ledger, item.path), 'utf8'),
       readFileSync(fileURLToPath(new URL('expected-item.md', fixture)), 'utf8'),
     );
+  });
+});
+
+test('create refuses an absent configured items directory by name before it locks or writes', async () => {
+  const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+  await withLedger({
+    '.wowbagger/layout.json': '{"layout_version":1,"items_directory":"backlog/items"}\n',
+  }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, readFileSync(fileURLToPath(new URL('request.json', fixture))));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      ok: false,
+      command: 'create',
+      contract_version: 3,
+      state: 'unchanged',
+      error: {
+        code: 'items-directory-unavailable',
+        message: 'The configured items directory is unavailable.',
+        details: {
+          id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+          path: 'backlog/items',
+          reason: 'absent',
+          remediation: 'Create the ledger directory backlog/items and commit it, then retry create.',
+        },
+      },
+    });
+    assert.deepEqual((await readdir(ledger)).sort(), ['.wowbagger']);
+  });
+});
+
+test('create refuses a configured items directory occupied by a non-directory', async () => {
+  const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+  await withLedger({
+    '.wowbagger/layout.json': '{"layout_version":1,"items_directory":"items"}\n',
+    items: 'not a directory\n',
+  }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, readFileSync(fileURLToPath(new URL('request.json', fixture))));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout).error, {
+      code: 'items-directory-unavailable',
+      message: 'The configured items directory is unavailable.',
+      details: {
+        id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+        path: 'items',
+        reason: 'not-a-directory',
+        remediation: 'Replace items with a directory and commit it, then retry create.',
+      },
+    });
+    assert.deepEqual((await readdir(ledger)).sort(), ['.wowbagger', 'items']);
+  });
+});
+
+test('a symbolic link occupying the configured items directory stays ledger-invalid', async () => {
+  const fixture = new URL('../spec/fixtures/mutations/create/', import.meta.url);
+  await withLedger({
+    '.wowbagger/layout.json': '{"layout_version":1,"items_directory":"items"}\n',
+  }, async (ledger) => {
+    await symlink('/tmp', path.join(ledger, 'items'));
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, readFileSync(fileURLToPath(new URL('request.json', fixture))));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 3, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'ledger-invalid');
+    assert.deepEqual(envelope.error.details.validation_errors, [{
+      path: 'ledger/items',
+      field: 'path',
+      code: 'symlink-not-allowed',
+      message: 'Ledger entries must not be symbolic links.',
+    }]);
   });
 });
 
@@ -399,7 +480,7 @@ test('contract JSON commands return deterministic invalid-request envelopes for 
     const expected = {
       ok: false,
       command,
-      contract_version: 2,
+      contract_version: 3,
       ...(command === 'create' || command === 'transition' ? { state: 'unchanged' } : {}),
       error: {
         code: 'invalid-request',
@@ -420,7 +501,7 @@ test('an unreadable mutation input is an invalid-request input issue before an I
   const expected = {
     ok: false,
     command: 'create',
-    contract_version: 2,
+    contract_version: 3,
     state: 'unchanged',
     error: {
       code: 'invalid-request',

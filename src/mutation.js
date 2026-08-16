@@ -56,34 +56,31 @@ const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 
 export async function inspectItem(ledgerDirectory, id) {
   const ledger = await loadLedger(ledgerDirectory);
-  const validation = validateLedger(ledger);
-  if (!validation.valid) {
-    return { validation };
-  }
-
-  const item = ledger.items.find((candidate) => candidate.data.id === id);
-  if (!item) {
-    return { item: null };
-  }
-
-  return { item: inspectedItem(id, displayItemPath(item.path), item.bytes, item.data, item.body) };
+  return inspectResolved(ledger, ledger.items.find((candidate) => candidate.data.id === id));
 }
 
 // Resolve an item by its number identity. A valid ledger has unique numbers, so
 // at most one item matches; an invalid ledger returns its validation instead.
 export async function inspectItemByNumber(ledgerDirectory, number) {
   const ledger = await loadLedger(ledgerDirectory);
+  return inspectResolved(ledger, ledger.items.find((candidate) => candidate.data.number === number));
+}
+
+// An invalid ledger stays a refusal: a revision handed out here must never look
+// like a mutation precondition. It does carry the resolved item's snapshot when
+// no validation error names that item's path, so the operator can read the very
+// bytes the refusal tells them to repair around. An item the ledger already
+// faults is withheld: its own frontmatter is what is in question.
+function inspectResolved(ledger, item) {
   const validation = validateLedger(ledger);
+  const snapshot = item
+    ? inspectedItem(item.data.id, displayItemPath(item.path), item.bytes, item.data, item.body)
+    : null;
   if (!validation.valid) {
-    return { validation };
+    const faulted = validation.errors.some((error) => error.path === item?.path);
+    return { validation, ...(snapshot && !faulted ? { item: snapshot } : {}) };
   }
-
-  const item = ledger.items.find((candidate) => candidate.data.number === number);
-  if (!item) {
-    return { item: null };
-  }
-
-  return { item: inspectedItem(item.data.id, displayItemPath(item.path), item.bytes, item.data, item.body) };
+  return { item: snapshot };
 }
 
 export function revisionFor(bytes) {
@@ -214,18 +211,23 @@ export async function createItem(ledgerDirectory, request, scenario) {
     ledgerDirectory,
     request.id,
     'create-v1',
-    () => createItemUnfenced(ledgerDirectory, request, scenario),
+    (authorize, ledgerSnapshot) => createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnapshot),
   );
 }
 
-async function createItemUnfenced(ledgerDirectory, request, scenario) {
+async function createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnapshot) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
+  const readPreLockLedger = snapshotReader(root, ledgerSnapshot);
 
   for (let attempt = 0; attempt < MAX_LOCK_CLOSURE_RETRIES; attempt += 1) {
-    const initial = await loadedValidLedger(root);
+    const initial = await readPreLockLedger();
     if (!initial.valid) {
       return ledgerInvalid(initial.validation);
+    }
+    const unavailableDirectory = await itemsDirectoryRefusal(root, initial.ledger, id);
+    if (unavailableDirectory) {
+      return unavailableDirectory;
     }
     const nextIds = lockIdsForCreate(request, initial.ledger);
     if (scenario === 'expand-lock-closure-through-bounded-retry-limit') {
@@ -477,17 +479,19 @@ export function validateTransitionRequest(request, parseIssues = []) {
 }
 
 export async function transitionItem(ledgerDirectory, request, scenario) {
-  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', (authorize) => (
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', (authorize, ledgerSnapshot) => (
     mutateExistingItem(ledgerDirectory, request, scenario, {
       name: 'transition',
       lockIds: lockIdsForTransition,
       build: buildTransition,
       authorize,
-    })
+    }, ledgerSnapshot)
   ));
 }
 
-export async function publishClaimedCandidate(ledgerDirectory, request, scenario) {
+// `ledgerSnapshot`, when supplied, stands in for the first pre-lock read: the
+// caller holds the claim lock and has already read the same directory.
+export async function publishClaimedCandidate(ledgerDirectory, request, scenario, ledgerSnapshot) {
   return mutateExistingItem(ledgerDirectory, {
     ...request,
     id: request.item_id,
@@ -501,7 +505,7 @@ export async function publishClaimedCandidate(ledgerDirectory, request, scenario
       const parsed = parseLedgerItemSource(bytes.toString('utf8'));
       return { successor: parsed.data, bytes };
     },
-  });
+  }, ledgerSnapshot);
 }
 
 // Shared locked-mutation engine for operations that rewrite one existing
@@ -509,12 +513,14 @@ export async function publishClaimedCandidate(ledgerDirectory, request, scenario
 // complete-ledger validation, and atomic same-path publication with the
 // recovery protocol. `operation` supplies the name used in lock metadata and
 // diagnostics, the lock-closure rule, and the request-specific build step.
-async function mutateExistingItem(ledgerDirectory, request, scenario, operation) {
+// `ledgerSnapshot`, when supplied, stands in for the first pre-lock read.
+async function mutateExistingItem(ledgerDirectory, request, scenario, operation, ledgerSnapshot) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
+  const readPreLockLedger = snapshotReader(root, ledgerSnapshot);
 
   for (let attempt = 0; attempt < MAX_LOCK_CLOSURE_RETRIES; attempt += 1) {
-    const initial = await loadedValidLedger(root);
+    const initial = await readPreLockLedger();
     if (!initial.valid) {
       return ledgerInvalid(initial.validation);
     }
@@ -732,13 +738,19 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation)
   return operationFailed(id, 'lock-closure', 'retry-limit-exhausted');
 }
 
-// The exact patchable field set (mutation contract section 8). `number` is the
-// immutable item identity, assigned once at create, so it is not patchable;
-// everything else stays a reviewable hand-edit or a transition concern.
-const PATCHABLE_FIELDS = ['priority'];
-// Where a newly added field lands in the frontmatter; the anchor is a required
-// member, so it always exists.
-const PATCH_FIELD_ANCHORS = { priority: 'kind' };
+// The exact patchable field set (mutation contract section 9), in the order a
+// patch applies them. `number` is the immutable item identity, assigned once at
+// create, so it is not patchable; everything else stays a reviewable hand-edit
+// or a transition concern.
+const PATCHABLE_FIELDS = ['priority', 'depends_on', 'related', 'body'];
+// The patchable fields that live in the frontmatter. `body` is the one patchable
+// value outside it, so it takes its own validation and serialization path.
+const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => field !== 'body');
+// Patchable fields whose value is a whole relation list rather than a scalar.
+const PATCH_RELATION_FIELDS = new Set(['depends_on', 'related']);
+// Where a newly added field lands in the frontmatter; the anchor is a member
+// every valid item carries, so it always exists.
+const PATCH_FIELD_ANCHORS = { priority: 'kind', depends_on: 'provenance', related: 'depends_on' };
 
 export function validatePatchRequest(request, parseIssues = []) {
   const issues = [...parseIssues];
@@ -775,6 +787,23 @@ export function validatePatchRequest(request, parseIssues = []) {
     if (hasOwn(request.set, 'priority') && request.set.priority !== null && !isPatchableInteger(request.set.priority, 0)) {
       issues.push(issue('/set/priority', 'invalid-value', 'Set member priority must be a non-negative integer or null.'));
     }
+    // null removes a frontmatter field, but the body is a required region of
+    // the file: removing it means the empty string, so null is refused here.
+    if (hasOwn(request.set, 'body') && request.set.body === null) {
+      issues.push(issue('/set/body', 'invalid-value', 'Set member body must be a string; use the empty string to remove the body.'));
+    } else if (hasOwn(request.set, 'body') && typeof request.set.body !== 'string') {
+      issues.push(issue('/set/body', 'invalid-type', 'Set member body must be a string.'));
+    }
+    for (const field of PATCH_RELATION_FIELDS) {
+      if (!hasOwn(request.set, field) || request.set[field] === null) {
+        continue;
+      }
+      if (!Array.isArray(request.set[field])) {
+        issues.push(issue(`/set/${field}`, 'invalid-type', `Set member ${field} must be an array or null.`));
+        continue;
+      }
+      validateRelationEntries(request.set[field], field, issues, ['set'], 'Set member');
+    }
   }
   return sortIssues(issues);
 }
@@ -787,23 +816,23 @@ function isPatchableInteger(value, minimum) {
 }
 
 export async function patchItem(ledgerDirectory, request, scenario) {
-  return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize) => (
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize, ledgerSnapshot) => (
     mutateExistingItem(ledgerDirectory, request, scenario, {
       name: 'patch',
       lockIds: (target) => [target.data.id],
       build: buildPatch,
       authorize,
-    })
+    }, ledgerSnapshot)
   ));
 }
 
 function buildPatch(lockedTarget, ledger, request, scenario) {
   const issues = [];
   if (request.date < lockedTarget.data.created) {
-    issues.push(transitionIssue('date-before-created', 'date', 'Patch date must not be earlier than the current created date.', []));
+    issues.push(dateIssue('date-before-created', 'Patch date must not be earlier than the current created date.', lockedTarget.data));
   }
   if (request.date < lockedTarget.data.updated) {
-    issues.push(transitionIssue('date-before-updated', 'date', 'Patch date must not be earlier than the current updated date.', []));
+    issues.push(dateIssue('date-before-updated', 'Patch date must not be earlier than the current updated date.', lockedTarget.data));
   }
   if (issues.length > 0) {
     return { outcome: mutationError('patch-precondition-failed', 'The requested patch failed its preconditions.', 'unchanged', 2, {
@@ -829,7 +858,10 @@ function patchData(data, request) {
     related: [...(data.related ?? [])],
     updated: request.date,
   };
-  for (const [field, value] of Object.entries(request.set)) {
+  // The successor is the frontmatter view the candidate is checked against, so
+  // it takes only the frontmatter fields; the body rides the serializer.
+  for (const field of PATCH_FRONTMATTER_FIELDS.filter((name) => hasOwn(request.set, name))) {
+    const value = request.set[field];
     if (value === null) {
       delete successor[field];
     } else {
@@ -855,11 +887,13 @@ function serializedMutationBytes(lockedTarget, source) {
 
 
 function serializePatch(source, successor, request) {
-  return rewriteFrontmatter(source, (document) => {
+  const rewritten = rewriteFrontmatter(source, (document) => {
     setRootScalar(document, 'updated', successor.updated);
-    for (const field of Object.keys(request.set)) {
+    for (const field of PATCH_FRONTMATTER_FIELDS.filter((name) => hasOwn(request.set, name))) {
       if (!Object.hasOwn(successor, field)) {
         deleteRootFieldPreservingAliases(document, field);
+      } else if (PATCH_RELATION_FIELDS.has(field)) {
+        setRootList(document, field, successor[field]);
       } else if (document.has(field)) {
         setRootScalar(document, field, successor[field]);
       } else {
@@ -867,6 +901,42 @@ function serializePatch(source, successor, request) {
       }
     }
   });
+  return hasOwn(request.set, 'body') ? replaceBody(rewritten, request.set.body) : rewritten;
+}
+
+// The body is every byte after the closing delimiter's newline, so replacing it
+// is a byte splice that cannot reach the frontmatter. The request body is
+// written exactly as given, the same rule create serializes under.
+function replaceBody(source, body) {
+  const bounds = frontmatterBounds(source);
+  const closing = nextLine(source, bounds.end);
+  if (closing.next !== null) {
+    return `${source.slice(0, closing.next)}${body}`;
+  }
+  // An item whose closing delimiter carries no newline has no body at all.
+  // Giving it one has to terminate that delimiter line first.
+  return body.length === 0 ? source : `${source}${bounds.newline}${body}`;
+}
+
+// A relation list is replaced wholesale. An existing sequence node is edited in
+// place, so an anchor on it — and every alias bound to that anchor — survives
+// the patch, and the item keeps the sequence style it was written in. A list
+// this patch adds is written in the flow style create uses.
+function setRootList(document, key, values) {
+  const node = document.get(key, true);
+  if (isSeq(node)) {
+    node.items = values.map((value) => document.createNode(value));
+    return;
+  }
+  if (document.has(key)) {
+    document.set(key, document.createNode(values));
+  } else {
+    insertRootAfter(document, PATCH_FIELD_ANCHORS[key], key, values);
+  }
+  const written = document.get(key, true);
+  if (isSeq(written)) {
+    written.flow = true;
+  }
 }
 
 function rewriteFrontmatter(source, edit) {
@@ -990,10 +1060,10 @@ function transitionEdge(kind, from, to) {
 function transitionPreconditions(target, ledger, request, edge) {
   const issues = [];
   if (request.date < target.data.created) {
-    issues.push(transitionIssue('date-before-created', 'date', 'Transition date must not be earlier than the current created date.', []));
+    issues.push(dateIssue('date-before-created', 'Transition date must not be earlier than the current created date.', target.data));
   }
   if (request.date < target.data.updated) {
-    issues.push(transitionIssue('date-before-updated', 'date', 'Transition date must not be earlier than the current updated date.', []));
+    issues.push(dateIssue('date-before-updated', 'Transition date must not be earlier than the current updated date.', target.data));
   }
   if (!edge.allowed) {
     issues.push(transitionIssue('invalid-edge', 'to_status', 'The requested lifecycle edge is not allowed for this item.', []));
@@ -1049,6 +1119,17 @@ function transitionBlockers(target, ledger, toStatus) {
 
 function transitionIssue(code, field, message, relatedIds) {
   return { code, field, message, related_ids: relatedIds };
+}
+
+// A date refusal names the item's own dates so the caller can correct the
+// request without an inspect round-trip. Both dates ride both codes: the
+// operator needs the whole window, not the one bound that happened to fire.
+function dateIssue(code, message, data) {
+  return {
+    ...transitionIssue(code, 'date', message, []),
+    item_created: data.created,
+    item_updated: data.updated,
+  };
 }
 
 function compareTransitionIssues(left, right) {
@@ -1211,9 +1292,28 @@ function terminalField(status) {
 }
 
 async function loadedValidLedger(root) {
-  const ledger = await loadLedger(root);
+  return validatedLedger(await loadLedger(root));
+}
+
+function validatedLedger(ledger) {
   const validation = validateLedger(ledger);
   return { ledger, validation, valid: validation.valid };
+}
+
+// The pre-lock phase of a mutation reads the ledger only to pick a lock
+// closure and to fail fast; every decision it makes is re-made against the
+// read under lock. A caller that already holds the claim lock and has just
+// read the same directory may therefore hand that snapshot in. It is spent on
+// the first attempt only: a lock-closure retry must see fresh bytes or it
+// would recompute the same closure and exhaust the retry budget.
+function snapshotReader(root, snapshot) {
+  let pending = snapshot ?? null;
+  return async () => {
+    if (!pending) return loadedValidLedger(root);
+    const spent = pending;
+    pending = null;
+    return validatedLedger(spent);
+  };
 }
 
 function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file, expectedData, expectedSource) {
@@ -1506,14 +1606,14 @@ function issue(pathValue, code, message) {
   return { path: pathValue, code, message };
 }
 
-function validateRelationEntries(references, field, issues) {
+function validateRelationEntries(references, field, issues, location = ['item'], noun = 'Item member') {
   for (let index = 0; index < references.length; index += 1) {
     const reference = references[index];
     if (typeof reference !== 'string' || !ULID_PATTERN.test(reference)) {
       issues.push(issue(
-        `/item/${field}/${index}`,
+        pointer([...location, field, String(index)]),
         'invalid-value',
-        `Item member ${field} entries must be canonical Wowbagger item IDs.`,
+        `${noun} ${field} entries must be canonical Wowbagger item IDs.`,
       ));
     }
   }
@@ -1714,6 +1814,43 @@ async function syncDirectoryIfSupported(directory) {
   } finally {
     await handle?.close();
   }
+}
+
+// The committed item layout names the directory create publishes into, and
+// create never creates it. Resolve it before any lock so a ledger whose
+// configured directory was never committed refuses by name instead of failing
+// as a generic temporary-file io-error.
+async function itemsDirectoryRefusal(root, ledger, id) {
+  const itemsDirectory = ledger.layout?.items_directory ?? '';
+  if (!itemsDirectory) {
+    return null;
+  }
+  let stat;
+  try {
+    stat = await lstat(path.join(root, itemsDirectory));
+  } catch (error) {
+    if (error?.code !== 'ENOENT' && error?.code !== 'ENOTDIR') {
+      throw error;
+    }
+    return itemsDirectoryUnavailable(id, itemsDirectory, 'absent');
+  }
+  if (stat.isDirectory()) {
+    return null;
+  }
+  return itemsDirectoryUnavailable(id, itemsDirectory, 'not-a-directory');
+}
+
+function itemsDirectoryUnavailable(id, itemsDirectory, reason) {
+  const remediation = reason === 'absent'
+    ? `Create the ledger directory ${itemsDirectory} and commit it, then retry create.`
+    : `Replace ${itemsDirectory} with a directory and commit it, then retry create.`;
+  return mutationError(
+    'items-directory-unavailable',
+    'The configured items directory is unavailable.',
+    'unchanged',
+    2,
+    { id, path: itemsDirectory, reason, remediation },
+  );
 }
 
 async function pathOccupant(finalPath, ledger) {
