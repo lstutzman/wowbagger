@@ -28,6 +28,15 @@ consolidation. The first tagged release inherits this file.
 
 ### Fixed
 
+- A mutation on a large provisioned ledger no longer spends its wall time in
+  process spawns. Git HEAD reconciliation read every committed item with its
+  own `git show`, one subprocess per item, serially; it now reads them with
+  one `git cat-file --batch` subprocess per 16 MiB of tree content. On a
+  1,500-item fixture a create fell from about 15.4 s to about 1.2 s and a
+  transition from about 15.4 s to about 1.3 s. The reconciliation reads the
+  same bytes for the same items, and no validation is skipped: candidate
+  validation still validates the complete ledger.
+
 - Every reconciliation finding that blocks a mutation now carries a
   `remediation` string naming the path to act on and `claim-verify`.
   `revision-regression`, `legacy-mutation-outcome-unknown`, and
