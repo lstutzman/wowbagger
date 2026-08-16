@@ -70,6 +70,22 @@ names — `create` publishes into an existing directory and does not make one.
 Nothing is renamed after a create. Cores at `0.1.0-alpha.4` and earlier ignore
 the file and publish every item at the ledger root.
 
+On such a core, relocating an item by hand has a trap. `create` writes an
+untracked file, so `git mv` refuses the path it just published; an unchecked
+batch then runs `git add -A` and commits the item at the ledger root, where it
+silently stays. Use plain `mv`, then `git add` both paths, and check the exit
+code of every command before the commit:
+
+```sh
+mv path/to/ledger/<id>.md path/to/ledger/items/<id>.md || exit 1
+git add path/to/ledger || exit 1
+```
+
+A committed item outside the configured items directory then fails validation
+and refuses every read and every guarded mutation on that ledger, including
+ones that never touch it. The refusal names the expected path and the
+relocation that repairs it.
+
 For an isolated consumer pilot, create or select the disposable worktree before
 the agent starts. Then launch a new session with that worktree as its project
 root. Follow the [isolated dogfood pilot runbook](docs/isolated-dogfood-pilot.md);

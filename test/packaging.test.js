@@ -104,6 +104,26 @@ test('the installed skill states the layout binding that decides where create pu
   assert.match(installedSkill, /`?0\.1\.0-alpha\.4`? and earlier ignore/i);
 });
 
+// Field trap 7a: four of five PropertyCompass2 creates landed at the ledger
+// root because `git mv` refused the untracked file create had just written and
+// the unchecked `git add -A` behind it committed the item where it lay.
+for (const [surface, text] of [
+  ['published README', () => readme],
+  ['installed skill', () => installedSkill],
+]) {
+  test(`the ${surface} warns that git mv refuses a freshly created item`, () => {
+    const source = text();
+    const trap = source.slice(source.indexOf('0.1.0-alpha.4` and earlier ignore'));
+
+    assert.match(trap, /`git mv`/);
+    assert.match(trap, /untracked/i);
+    assert.match(trap, /`git add -A`/);
+    assert.match(trap, /commits? .*at the ledger root/i);
+    assert.match(trap, /`mv`.*then.*`git add`/is);
+    assert.match(trap, /exit\s+code/i);
+  });
+}
+
 test('the npm package ships every contract document referenced by the installed skill', () => {
   for (const contract of ['docs/mutation-contract.md', 'docs/work-claim-contract.md']) {
     assert.match(installedSkill, new RegExp(contract.replaceAll('.', '\\.')));

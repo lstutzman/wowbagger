@@ -137,6 +137,21 @@ wowbagger transition --ledger <dir> --input request.json --json
   `<ledger>/<id>.md`. Configure it, and commit the directory it names, before
   the first `create` — no file is renamed afterwards. Cores at
   `0.1.0-alpha.4` and earlier ignore the file and publish at the ledger root.
+- **Never relocate an item with `git mv` straight after a create.** `create`
+  writes an untracked file, so `git mv` refuses it; the `git add -A` behind it
+  in an unchecked batch then commits the item at the ledger root. Use plain
+  `mv`, then `git add`, and check every exit code before you commit:
+
+  ```sh
+  mv <ledger>/<id>.md <ledger>/items/<id>.md || exit 1
+  git add <ledger> || exit 1
+  ```
+
+  A committed item outside the configured items directory fails validation and
+  refuses every read and every guarded mutation on that ledger, including ones
+  that never touch it. The `item-outside-layout` refusal carries
+  `expected_path` and a `remediation` naming the move; make it, commit it, then
+  run `claim-verify`.
 - `create` starts an empty ledger on schema version 2 and returns the selected
   version at `result.item.core.schema_version`. A non-empty schema-version-1
   ledger stays on version 1 until its complete ledger is migrated.
