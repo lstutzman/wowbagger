@@ -4,6 +4,7 @@ id: wb_01M05ESSRYBX4Y63QFD9687CG1
 number: 100
 title: "Collapse the redundant complete-ledger loads per mutation"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
