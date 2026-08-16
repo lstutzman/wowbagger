@@ -39,6 +39,12 @@ consolidation. The first tagged release inherits this file.
   items outside it, special or symbolic layout files, and metadata-directory
   aliases. Malformed configuration fails closed. Ledgers without the file
   retain the root-level `<id>.md` layout.
+- A refused legacy mutation and a clean `claim-verify` now leave the ledger
+  working tree byte-identical. The tracked reconciliation log projects only
+  journal entries that record a decision, so per-invocation clock entries no
+  longer dirty it, and a successful legacy mutation now projects its own
+  entries before returning instead of one command later. Batch tooling no
+  longer needs to stage the log after a failure.
 - `claim-verify` now classifies stale writes as unauthorized revisions, missing
   Git finalization, worktree synchronization, or pending claimed publication.
   Working-tree deletions of an authorized Git revision are unauthorized.
