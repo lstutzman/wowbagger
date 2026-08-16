@@ -5,9 +5,10 @@ number: 92
 title: "Unify mutation envelope shape across refusal paths"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "consumer-field-feedback"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept the PropertyCompass2 field finding into the backlog."
     rationale: "First real production session (21 creates, 27 transitions, alpha.4) recorded this in docs/wowbagger-feedback.md (PR #2196). Verified against this repo source before filing."
+  - action: complete
+    date: 2026-08-16
+    summary: "Documented the response-domain envelope rule; pinned all 37 response classes."
+    rationale: "The wire was already consistent - the rule was missing. Namespace-first dispatch over five domains, both sanctioned exceptions (fence refusals answer in the ledger-mutation v1 domain; validate and ready are bare results) documented with evidence and pinned by a normative fixture plus 10 tests. No emitted byte changed."
 ---
 Field paper-cut 6 (PropertyCompass2 report, PR #2196), verified in source: claim-fence refusals emit `namespace: ledger-mutation`, `command: create-v1`, `contract_version: 1` (src/claim-coordinator.js) while the same command's success and non-fence refusals emit `command: create`, `contract_version: 2`; `validate --json` emits a bare `{valid,errors}` with no envelope at all. A generic JSON consumer cannot dispatch by the documented rule (command namespace + version field) because shapes disagree within one runtime and with the mutation-contract doc.
 
