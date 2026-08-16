@@ -4,6 +4,7 @@ id: wb_01M058NVN7MCXVS61V9JKQMQV6
 number: 94
 title: "Document layout.json as the create items-directory mechanism"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
