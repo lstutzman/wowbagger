@@ -88,15 +88,57 @@ test('two create processes leave one complete item and no temporary or lock file
   });
 });
 
-test('the number-index lock keeps concurrent creates from sharing a number', async () => {
-  // The number-index lock is fail-fast, like the item lock: one create wins and
-  // assigns the number, the other refuses with lock-held for the caller to
-  // retry. What must never happen is two committed items sharing a number.
+test('the number-index lock refuses a create that arrives while it is held', async () => {
+  // The number-index lock is fail-fast, like the item lock: the holder assigns
+  // the number, and a create that arrives while it is held refuses with
+  // lock-held for the caller to retry.
+  //
+  // The overlap is forced through the lock-acquired checkpoint rather than
+  // hoped for. Two creates started together only collide if the machine
+  // happens to interleave them, which under full-suite load it often does not
+  // (item 106): the second then starts after the first has released, both
+  // commit, and the assertion that one refused fails on a correct engine.
   const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
   const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HP';
   await withLedger({}, async (ledger) => {
     const firstRequest = path.join(path.dirname(ledger), 'number-first.json');
     const secondRequest = path.join(path.dirname(ledger), 'number-second.json');
+    await writeFile(firstRequest, JSON.stringify(createRequest(firstId, '')));
+    await writeFile(secondRequest, JSON.stringify(createRequest(secondId, '')));
+
+    const suffix = 'number-index';
+    const holder = runTestCli(`pause-after-lock-acquired:${suffix}`,
+      'create', '--ledger', ledger, '--input', firstRequest, '--json');
+    await waitForFile(path.join(ledger, `.wowbagger-test-${suffix}-acquired`));
+
+    const arrival = parseOutput(
+      await runCli('create', '--ledger', ledger, '--input', secondRequest, '--json'),
+    );
+
+    await writeFile(path.join(ledger, `.wowbagger-test-${suffix}-allow-successor`), 'continue\n');
+    const held = parseOutput(await holder);
+    const validation = await runCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(arrival.ok, false, JSON.stringify(arrival));
+    assert.equal(arrival.error.code, 'lock-held');
+    assert.equal(held.ok, true, JSON.stringify(held));
+    assert.equal(held.result.item.core.number, 1);
+    assert.equal(validation.status, 0, validation.stdout);
+    assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
+    await assertNoOwnArtifacts(ledger);
+  });
+});
+
+test('concurrent creates never share a number', async () => {
+  // The invariant that holds under every interleaving, so it can be asserted
+  // against two real racing processes: whichever of them commits, no two
+  // committed items share a number, and a create that loses the lock says so.
+  // Whether they collide at all is the machine's choice, not the contract's.
+  const firstId = 'wb_01Q45X474N28T5CY4GNF6YY4HN';
+  const secondId = 'wb_01Q45X474N28T5CY4GNF6YY4HP';
+  await withLedger({}, async (ledger) => {
+    const firstRequest = path.join(path.dirname(ledger), 'number-race-first.json');
+    const secondRequest = path.join(path.dirname(ledger), 'number-race-second.json');
     const body = `\n${'x'.repeat(1024 * 1024)}\n`;
     await writeFile(firstRequest, JSON.stringify(createRequest(firstId, body)));
     await writeFile(secondRequest, JSON.stringify(createRequest(secondId, body)));
@@ -110,10 +152,11 @@ test('the number-index lock keeps concurrent creates from sharing a number', asy
 
     const committed = outputs.filter((entry) => entry.ok);
     const refused = outputs.filter((entry) => !entry.ok);
-    assert.equal(committed.length, 1, JSON.stringify(outputs));
-    assert.equal(refused.length, 1, JSON.stringify(outputs));
-    assert.equal(refused[0].error.code, 'lock-held');
-    assert.equal(committed[0].result.item.core.number, 1);
+    const numbers = committed.map((entry) => entry.result.item.core.number);
+    assert.ok(committed.length >= 1, JSON.stringify(outputs));
+    assert.deepEqual([...new Set(numbers)].sort(), [...numbers].sort(), JSON.stringify(outputs));
+    assert.deepEqual(numbers.sort(), committed.map((_, index) => index + 1), JSON.stringify(outputs));
+    for (const entry of refused) assert.equal(entry.error.code, 'lock-held', JSON.stringify(entry));
     assert.equal(validation.status, 0, validation.stdout);
     assert.deepEqual(JSON.parse(validation.stdout), { valid: true, errors: [] });
     await assertNoOwnArtifacts(ledger);

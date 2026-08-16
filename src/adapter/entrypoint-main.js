@@ -122,6 +122,14 @@ export function launchCoreProcess({ executable, argv, cwd, input, limits }) {
 
     child.once('spawn', () => {
       started = true;
+      // The core may already be gone when this write lands — it refused fast,
+      // or this process was descheduled under load between `spawn` and here.
+      // Its read end is then closed and the write fails EPIPE. That is the
+      // core's outcome to report, not the adapter's to die of: an unhandled
+      // stdin error would kill the adapter before it could emit its one §3.3
+      // JSON object, leaving the host a bare non-zero exit and empty stdout.
+      // The `close` handler below still reports the core's real exit.
+      child.stdin.on('error', () => {});
       child.stdin.end(input);
     });
     child.once('error', () => { spawnError = true; });
