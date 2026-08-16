@@ -4,6 +4,7 @@ id: wb_01M05N0VHX4A8JCTJ09SMH8058
 number: 108
 title: "Let an operator diagnose and inspect an invalid ledger"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
