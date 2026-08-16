@@ -4,6 +4,7 @@ id: wb_01M05N0TD6C6W7HZAGED1487HX
 number: 106
 title: "Stop the adapter transport tests flaking under full-suite load"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-16
 updated: 2026-08-16
