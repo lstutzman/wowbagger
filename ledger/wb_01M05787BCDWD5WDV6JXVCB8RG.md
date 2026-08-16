@@ -4,7 +4,7 @@ id: wb_01M05787BCDWD5WDV6JXVCB8RG
 number: 86
 title: "Render the report evidence layer as inline SVG charts"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
