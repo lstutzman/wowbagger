@@ -4,7 +4,7 @@ id: wb_01M05ESSRYBX4Y63QFD9687CG1
 number: 100
 title: "Collapse the redundant complete-ledger loads per mutation"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T14:14:52Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Lee accepted on 2026-08-16. Remaining ~2x latency headroom after the #91 batch fix."
 ---
 
 Follow-up from item #91's profile: after the git cat-file batch fix (12.8x), the remaining ~1.2s per provisioned-ledger mutation at 1,500 items is three complete ledger loads at ~0.3s each — two in `mutateExistingItem` (before and after lock closure) and one in `reconcileClaimJournal`. Ceiling is roughly another 2x.
