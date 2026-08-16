@@ -4,7 +4,7 @@ id: wb_01M05FCM9KQTY7BDW9ABZDD41K
 number: 103
 title: "Bump the core contract version for the widened refusal envelope"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-16T14:25:09Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog."
+    rationale: "Lee decided on 2026-08-16: strict envelope-versioning discipline; the #95 widening carries the bump."
 ---
 
 Lee's call on 2026-08-16, resolving item #95's open question: the widened date-refusal envelope (item_created/item_updated on date-before-created and date-before-updated) breaks the contract's own version-2 compatibility argument ("no envelope member changes, so existing exact-member consumers remain compatible"). Strict envelope-versioning discipline applies: bump CORE_CONTRACT_VERSION 2 to 3.
