@@ -5,9 +5,10 @@ number: 108
 title: "Let an operator diagnose and inspect an invalid ledger"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T16:03:35Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "The tool refuses to show you the thing it tells you to fix; recovery diagnosability."
+  - action: complete
+    date: 2026-08-16
+    summary: "An invalid ledger is now diagnosable end to end."
+    rationale: "claim-verify always reports ledger_validation with the deterministic errors and a remediation when invalid (work-claim domain, additive, version-noted per the write_serialization precedent); inspect's ledger-invalid refusal attaches the requested item's lossless snapshot when no validation error names that item, both selectors. In-scope discovery fixed: both adapter surfaces mapped EVERY inspect refusal to core-protocol-error (pre-existing gate defect) and rejected the #104-enriched validation errors - the documented agent surface could not see the diagnosis at all. Mirrored both directions, mutation-guarded."
 ---
 
 Diagnosability follow-up from item #104's repro: on a ledger with one invalid item (e.g. item-outside-layout), EVERY read and mutation refuses exit 3 ledger-invalid — including `inspect` of a perfectly valid item, which the operator needs to get the revision for the fix, and `claim-verify`, the documented reconciliation verb, exits 0 with findings [] and explains nothing about why every mutation is blocked. The enriched #104 refusal (expected_path + remediation) makes recovery survivable, but the read-path behavior is a trap: the tool refuses to show you the thing it is telling you to fix.
