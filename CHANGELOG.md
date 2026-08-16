@@ -124,6 +124,21 @@ consolidation. The first tagged release inherits this file.
   derives `created` from the ULID timestamp, which is UTC, with the
   across-midnight example that produces this refusal.
 
+### Documentation
+
+- **`create` stays journal-silent, and the work-claim contract now says why.**
+  Section 3.1 already stated that `create` records no claim-journal entry and
+  therefore never blocks a sibling worktree. It now records the decision to
+  keep that asymmetry and the three reasons behind it: create's publication is
+  already atomic, no-clobber, and byte-verified; journaling create would
+  serialize every worktree on the highest-volume mutation; and the remaining
+  exposure window closes at the item's first `transition` or `patch`. The
+  window is stated honestly — until that first journal-visible mutation an
+  out-of-protocol overwrite of a created item is not detected, and a commit
+  alone does not close the window, because reconciliation compares only the
+  revisions the journal expects. `test/create-journal-asymmetry.test.js` pins
+  both halves end to end. No behaviour changed.
+
 ### Fixed
 
 - A claim-fence refusal no longer reaches the agent as
