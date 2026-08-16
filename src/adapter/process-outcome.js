@@ -26,6 +26,7 @@ const CORE_ERROR_EXIT_CODES = new Map([
   ['transition-precondition-failed', 2],
   ['patch-precondition-failed', 2],
   ['candidate-invalid', 2],
+  ['items-directory-unavailable', 2],
   ['ledger-invalid', 3],
   ['revision-conflict', 4],
   ['lock-held', 4],
@@ -45,8 +46,8 @@ const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
   inspect: new Set(['invalid-request', 'item-not-found', 'ledger-invalid']),
   create: new Set([
     'invalid-request', 'ledger-invalid', 'lock-held', 'id-collision', 'path-collision',
-    'candidate-invalid', 'capability-unavailable', 'operation-failed',
-    'post-commit-recovery-required', 'write-outcome-unknown',
+    'candidate-invalid', 'items-directory-unavailable', 'capability-unavailable',
+    'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
   ]),
   transition: new Set([
     'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
@@ -137,6 +138,10 @@ function nonEmptyTrimmedString(value) {
 
 function nonEmptyControlFreeString(value) {
   return typeof value === 'string' && value.length > 0 && !CONTROL_CHARACTER.test(value);
+}
+
+function isSafeLedgerDirectoryPath(value) {
+  return isSafeLogicalPath(value) && value !== '.' && !value.endsWith('.md');
 }
 
 function isSafeLedgerDisplayPath(value) {
@@ -737,6 +742,7 @@ function coreErrorMessageMatches(code, command, message) {
     'transition-precondition-failed': 'The requested lifecycle transition failed its preconditions.',
     'patch-precondition-failed': 'The requested patch failed its preconditions.',
     'candidate-invalid': 'The proposed item would make the ledger invalid.',
+    'items-directory-unavailable': 'The configured items directory is unavailable.',
     'revision-conflict': 'The item changed after it was inspected.',
     'lock-held': 'The item is locked by another cooperative Wowbagger writer.',
     'id-collision': 'The requested item ID already exists.',
@@ -793,6 +799,8 @@ function validCoreErrorDetails(code, details, command, responseContext) {
     ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validTransitionBlockers(details.blockers)
       && validTransitionIssues(details.precondition_issues);
+    case 'items-directory-unavailable': return validItemsDirectoryDetails(details)
+      && matchesItemId(details.id);
     case 'capability-unavailable': return validCapabilityUnavailableDetails(details);
     case 'operation-failed': return validOperationFailedDetails(details) && matchesItemId(details.id);
     case 'post-commit-recovery-required': return hasExactMembers(details, [
@@ -915,6 +923,18 @@ function validPathCollisionDetails(value) {
   return value.occupant_kind === 'item'
     ? Object.hasOwn(value, 'occupying_id') && WOWBAGGER_ID.test(value.occupying_id)
     : !Object.hasOwn(value, 'occupying_id');
+}
+
+// The configured items directory is ledger setup, not a request member: the
+// refusal names the ledger-relative directory and the operator action that
+// makes create possible.
+function validItemsDirectoryDetails(value) {
+  if (!hasExactMembers(value, ['id', 'path', 'reason', 'remediation'])
+    || !WOWBAGGER_ID.test(value.id)
+    || !isSafeLedgerDirectoryPath(value.path)
+    || !new Set(['absent', 'not-a-directory']).has(value.reason)
+    || typeof value.remediation !== 'string') return false;
+  return value.remediation.includes(value.path) && value.remediation.includes('create');
 }
 
 function validCapabilityUnavailableDetails(value) {

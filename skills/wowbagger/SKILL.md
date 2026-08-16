@@ -135,7 +135,9 @@ wowbagger transition --ledger <dir> --input request.json --json
   `{"layout_version":1,"items_directory":"items"}` makes `create` publish
   atomically to `<items_directory>/<id>.md`; without the file it publishes to
   `<ledger>/<id>.md`. Configure it, and commit the directory it names, before
-  the first `create` — no file is renamed afterwards. Cores at
+  the first `create` — no file is renamed afterwards. If that directory is
+  missing, `create` refuses `items-directory-unavailable`, exit 2, and its
+  `error.details.remediation` names the directory to create. Cores at
   `0.1.0-alpha.4` and earlier ignore the file and publish at the ledger root.
 - `create` starts an empty ledger on schema version 2 and returns the selected
   version at `result.item.core.schema_version`. A non-empty schema-version-1

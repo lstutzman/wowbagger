@@ -1617,3 +1617,60 @@ function coreItemWithSource(item, source, core) {
     core,
   };
 }
+
+test('forwards an items-directory-unavailable create refusal instead of calling it unknown', async () => {
+  const { mapProcessOutcome: mapEngineOutcome } = await import('../src/adapter/process-outcome.js');
+  const refusal = (details) => ({
+    ok: false,
+    command: 'create',
+    contract_version: 3,
+    state: 'unchanged',
+    error: {
+      code: 'items-directory-unavailable',
+      message: 'The configured items directory is unavailable.',
+      details,
+    },
+  });
+  const context = (response) => ({
+    adapter_contract_version: 2,
+    request_id: 'review-items-directory-0001',
+    command: 'create',
+    core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
+    mutation_request: {
+      id: CREATE_ID,
+      item: {
+        title: 'Map a fictional moon route',
+        kind: 'task',
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+        related: [],
+      },
+      body: '\nA fictional Markdown body.\n',
+    },
+    item_id: CREATE_ID,
+    expected_revision: null,
+    process: processObservation(response, { exit_code: 2 }),
+  });
+  const valid = {
+    id: CREATE_ID,
+    path: 'items',
+    reason: 'absent',
+    remediation: 'Create the ledger directory items and commit it, then retry create.',
+  };
+
+  assert.equal(mapEngineOutcome(context(refusal(valid))), null);
+  assert.equal(mapProcessOutcome(context(refusal(valid))), null);
+
+  for (const details of [
+    { ...valid, reason: 'io-error' },
+    { ...valid, path: 'items/wb_01Q45X474N28T5CY4GNF6YY4HM.md' },
+    { ...valid, remediation: 'Ask somebody.' },
+    Object.fromEntries(Object.entries(valid).filter(([key]) => key !== 'path')),
+  ]) {
+    assert.equal(
+      mapEngineOutcome(context(refusal(details))).error.code,
+      'mutation-outcome-unknown',
+      JSON.stringify(details),
+    );
+  }
+});

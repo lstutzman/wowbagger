@@ -1108,8 +1108,9 @@ lock conflicts; aggregate all multi-item blockers and ordinary precondition
 issues; atomic-scope-required when blockers exist; otherwise
 transition-precondition-failed when ordinary issues exist; otherwise
 candidate-invalid when the candidate validator reports errors. For create,
-id-collision precedes path-collision as specified in section 7, and both
-precede candidate-invalid. No validator issue already represented by the
+items-directory-unavailable precedes id-collision, id-collision precedes
+path-collision as specified in section 7, and all three precede
+candidate-invalid. No validator issue already represented by the
 selected more-specific response is duplicated in a second envelope. A proposed
 ledger that remains invalid for any reason is never published.
 
@@ -1236,6 +1237,7 @@ patch.
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
 | path-collision | id, path, occupant_kind; occupying_id iff occupant_kind is item |
+| items-directory-unavailable | id, path, reason, remediation |
 | atomic-scope-required | id, blockers, precondition_issues |
 | capability-unavailable | capability, reason, recovery_artifacts, recovery_artifacts_truncated |
 | operation-failed | id, operation, reason, recovery_artifacts, recovery_artifacts_truncated |

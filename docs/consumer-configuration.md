@@ -19,7 +19,10 @@ consumer's side of the seam:
   chooses, and item filenames follow the identity-derived default. Where
   inside the ledger those files land is bound by the committed
   `<ledger>/.wowbagger/layout.json` (mutation contract section 7), not by a
-  rename after create.
+  rename after create. Creating that directory is the consumer's job:
+  `create` publishes into it and never creates it, and refuses
+  `items-directory-unavailable`, exit 2, naming the directory, when it is
+  missing.
 - **Branch names and Git policy**: out of core scope permanently. The core
   performs no Git operations; ADR-0001 keeps branch policy with the
   consumer.
