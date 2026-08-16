@@ -5,9 +5,10 @@ number: 104
 title: "Stop a root-misplaced item from poisoning the claim fence"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T14:28:25Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "Field trap 7a with a fence-poisoning damage claim (PropertyCompass2 PR 2184); needs repro and an honest refusal."
+  - action: complete
+    date: 2026-08-16
+    summary: "Misplaced-item block reproduced; the refusal now names the mismatch."
+    rationale: "Consumer's fence mechanism refuted - claim-verify was never involved; the real block is item-outside-layout failing whole-ledger validation, refusing every read and mutation. That error now carries expected_path and a remediation naming the move, commit, and claim-verify. Both configuration orders pinned; the alpha.4 untracked-file git mv trap documented in README and skill."
 ---
 
 Field trap 7a from PropertyCompass2 (docs/wowbagger-feedback.md, commits 0f1243821/badcd6bf2; extends corrected entry 7; cost the consumer a second PR on 2026-08-16). The relocation ritual itself is already dead in source — layout.json is documented (#94) and the missing-directory refusal is filed (#102) — but 7a adds two claims that need their own work:
