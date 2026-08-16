@@ -5,7 +5,7 @@ number: 102
 title: "Refuse a missing configured items directory by name"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
