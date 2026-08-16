@@ -21,14 +21,12 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.4` and core `contract_version: 3`.**
+`0.1.0-alpha.5` and core `contract_version: 3`.**
 
-Those two pins do not currently name one published artifact, and that is
-deliberate. The published `0.1.0-alpha.4` core reports `contract_version: 2`;
-core contract version 3 is in the source tree and is not released yet. Until
-the next distribution release, this skill refuses every installed core and
-teaches nothing against a core that cannot honor it. Do not soften either pin
-to make a check pass, and do not invent a release that has not been cut.
+Both pins name the published `0.1.0-alpha.5` release. Earlier cores —
+`0.1.0-alpha.4` and before — report `contract_version: 2` and lack behavior
+this skill requires, so the version check refuses them. Do not soften either
+pin to make a check pass.
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to

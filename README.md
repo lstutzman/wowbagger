@@ -36,7 +36,7 @@ Install the core CLI, then verify it:
 ```sh
 npm install -g wowbagger@next   # public npm prerelease
 # or, from this release's Git tag:
-# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4
+# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5
 wowbagger capabilities --json
 ```
 
@@ -104,7 +104,7 @@ two supported install routes:
 - **npm registry** — `npm install -g wowbagger@next` installs the current
   prerelease.
 - **git tag** —
-  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4` installs this
+  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5` installs this
   release. Installing at a ref installs the core and every adapter that ref
   carries.
 
@@ -168,7 +168,7 @@ Upgrade the pieces you installed:
 
 ```sh
 npm install -g wowbagger@next                  # public npm registry
-npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.4  # immutable Git release
+npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5  # immutable Git release
 git pull && npm ci                            # or: a direct checkout
 ```
 
