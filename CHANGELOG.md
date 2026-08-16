@@ -96,6 +96,19 @@ consolidation. The first tagged release inherits this file.
 
 ### Fixed
 
+- A mutation on a claim-protected ledger now reads the complete ledger twice
+  instead of three times. Journal reconciliation and the mutation engine's
+  pre-lock phase were separate unlocked reads of the same directory inside one
+  claim-lock hold, and reconciliation writes nothing a complete load reads, so
+  the pre-lock phase reuses reconciliation's snapshot. On a 1,500-item
+  provisioned fixture a create fell from about 1.15 s to about 0.89 s and a
+  transition from about 1.17 s to about 0.91 s, matching one full load at about
+  0.29 s. The read under lock stays: it is what decides the revision
+  compare-and-swap and the lock-closure stability check, and every decision
+  drawn from the shared snapshot is re-made against it. A lock-closure retry
+  still reads fresh. No validation rule changed, and a mutation on a plain
+  directory is unaffected.
+
 - A mutation on a large provisioned ledger no longer spends its wall time in
   process spawns. Git HEAD reconciliation read every committed item with its
   own `git show`, one subprocess per item, serially; it now reads them with
