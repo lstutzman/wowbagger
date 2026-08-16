@@ -6,7 +6,7 @@
 // under lock is what makes the revision compare-and-swap meaningful and stays.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -121,3 +121,77 @@ test('an unprovisioned mutation still reads the complete ledger twice', async ()
     assert.equal(measured.loads, 2);
   });
 });
+
+// When the read under lock discovers a wider lock closure than the shared
+// snapshot chose, the mutation drops its locks and retries. The retry must
+// read the ledger fresh: replaying the same snapshot would choose the same
+// too-narrow closure on every attempt and exhaust the retry budget.
+test('a lock closure that widens after the shared snapshot still commits on retry', async () => {
+  await withLedger(true, async ({ ledger, commit }) => {
+    const id = mintId(DATE);
+    assert.equal((await createItem(ledger, createRequest(id))).ok, true);
+    commit('create the item');
+    const inspected = await inspectItem(ledger, id);
+
+    const suffix = 'widen-closure';
+    const pending = transitionItem(ledger, {
+      id,
+      expected_revision: inspected.item.revision,
+      to_status: 'backlog',
+      date: DATE,
+      decision: { summary: 'Accept.', rationale: 'Exercise the lock-closure retry.' },
+    }, `pause-after-lock-acquired:${suffix}`);
+    await waitForFile(path.join(ledger, `.wowbagger-test-${suffix}-acquired`));
+    await writeFile(path.join(ledger, `${referringId(id)}.md`), referringSource(id));
+    await writeFile(path.join(ledger, `.wowbagger-test-${suffix}-allow-successor`), 'continue\n');
+
+    const outcome = await pending;
+
+    assert.equal(outcome.ok, true, JSON.stringify(outcome));
+    assert.equal(outcome.item.core.status, 'backlog');
+  });
+});
+
+function referringId(targetId) {
+  return `${targetId.slice(0, -1)}${targetId.endsWith('Z') ? 'Y' : 'Z'}`;
+}
+
+// A hand-written second item that depends on the transition target, so the
+// read under lock computes a wider closure than the snapshot did.
+function referringSource(targetId) {
+  return `---
+schema_version: 2
+id: ${referringId(targetId)}
+number: 2
+title: "Referring item"
+kind: task
+priority: 50
+status: triage
+created: ${DATE}
+updated: ${DATE}
+provenance:
+  source: "load-count"
+  recorded_at: "${DATE}T00:00:00.000Z"
+depends_on:
+  - ${targetId}
+related: []
+decisions: []
+---
+
+Hand-written to widen the lock closure mid-mutation.
+`;
+}
+
+async function waitForFile(file) {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      await lstat(file);
+      return;
+    } catch (error) {
+      assert.equal(error.code, 'ENOENT');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(`Timed out waiting for ${path.basename(file)}`);
+}
