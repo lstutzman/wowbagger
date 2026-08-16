@@ -178,7 +178,7 @@ It is not exclusive coordination. Direct filesystem writes, hostile processes,
 other clones, and alternate tools can bypass the protocol. Never present a
 claim as a lock or build a dispatch loop that requires exclusive ownership.
 
-## One worktree's write blocks the others
+### One worktree's write blocks the others
 
 The claim journal lives in the shared Git common directory, so **one journal
 serializes every worktree of one repository**. Read the scope from
