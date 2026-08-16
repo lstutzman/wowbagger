@@ -240,3 +240,14 @@ test('uses the CLI output override and resolves a configured logo', async () => 
     assert.match(await report.readLogoDataUrl(config.repository.logo), /^data:image\/svg\+xml;base64,/);
   });
 });
+
+test('accepts class-of-service and due-date field mappings', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, validConfig({ fields: { class: '/class', due: '/due' } }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    const config = await loadReportConfig(ledger);
+
+    assert.deepEqual(config.fields, { class: '/class', due: '/due' });
+  });
+});
