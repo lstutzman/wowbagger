@@ -66,7 +66,16 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
   parsed item outside it (section 5). A ledger without that file keeps the
   version 2 `<ledger>/<id>.md` path. `create` refuses the new
   `items-directory-unavailable`, exit 2, `unchanged`, when the configured
-  directory is not an existing directory (section 7).
+  directory is not an existing directory (section 7); and
+- **the diagnosable inspect refusal.** An `inspect` `ledger-invalid` refusal may
+  carry `details.item`, the lossless snapshot of the item the request selected,
+  when that item resolves and no validation error names its path (section 5).
+  The version stays 3: this widens one read-only refusal's details on one
+  command, and version 3 is not yet published, so no consumer can have
+  negotiated the narrower shape. A consumer that reads only
+  `details.validation_errors` cannot observe the difference; a consumer that
+  matches `ledger-invalid` details exactly must accept the optional member on
+  `inspect`, which is why this is listed as a delta rather than left silent.
 
 Two version-2-era changes are deliberately **not** version 3 deltas. The
 section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
@@ -596,6 +605,29 @@ begins with LF.
 item-not-found exits 2 and has details containing only id. ledger-invalid exits
 3 and has details.validation_errors equal to the existing deterministic
 SPEC.md validation-error sequence. Neither read-only error has state.
+
+An invalid ledger stays a refusal. Inspect does not fall back to reading one
+item without validating the rest, and there is no escape flag that skips
+validation: a success envelope carrying a revision is what a caller feeds to
+expected_revision, and that revision must never come from a ledger state the
+core has not judged.
+
+The refusal still shows the operator the item they asked for. On inspect only,
+ledger-invalid details carry an optional item, and it is the same lossless
+snapshot the successful item shape above defines, for the item the request
+selected. It is present when the request resolves an item and no validation
+error names that item's path. It is absent when nothing resolves, and absent
+when the resolved item is itself faulted, because that item's own frontmatter
+or placement is what validation rejects. A create, transition, or patch
+ledger-invalid refusal never carries it.
+
+This keeps the section 5 rule intact — inspect loads and validates the complete
+ledger, and every member of the attached snapshot comes from the one raw byte
+buffer that item's own handle supplied — while removing the trap the refusal
+used to set: the tool refusing to show the item it tells the operator to fix.
+An operator repairing an invalid ledger reads the bytes and revision of the
+items around the fault with `inspect`, and reads the fault itself from
+`validation_errors`, whose `expected_path` and `remediation` name the repair.
 
 ## 6. Cooperative lock and snapshot protocol
 
@@ -1274,7 +1306,7 @@ patch.
 |---|---|
 | invalid-request | issues |
 | item-not-found | id |
-| ledger-invalid | validation_errors |
+| ledger-invalid | validation_errors; item iff the command is inspect and the request resolves an unfaulted item |
 | transition-precondition-failed | id, issues |
 | patch-precondition-failed | id, issues |
 | candidate-invalid | id, validation_errors |

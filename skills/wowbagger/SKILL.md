@@ -178,6 +178,25 @@ wowbagger patch      --ledger <dir> --input request.json --json
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
 
+### Diagnosing an invalid ledger
+
+An invalid ledger refuses every read and every guarded mutation, so the exit 3
+`ledger-invalid` refusals are the diagnosis. Read them; do not hand-parse the
+Markdown.
+
+- `validate --ledger <dir> --json` lists every error, each with its `path`,
+  `code`, and `message`, and with `expected_path` and `remediation` where the
+  validator can derive the repair.
+- `inspect` still refuses with exit 3, but its
+  `error.details.item` carries the complete snapshot — `revision`,
+  `source_base64`, `core`, `body` — of the item you asked for, whenever no
+  validation error names that item's path. An item the ledger faults is
+  withheld: `validate` already names its repair.
+- `claim-verify --ledger <dir> --json` reports `result.ledger_validation`. An
+  exit 0 with `findings: []` and `ledger_validation.valid: false` means the
+  claim journal is consistent and validation is what blocks every mutation.
+  Repair validation first; the claim state needs nothing.
+
 ### Patch edits fields, never lifecycle
 
 `patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.

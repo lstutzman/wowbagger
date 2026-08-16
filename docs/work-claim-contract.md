@@ -629,6 +629,29 @@ is a `publish-claimed` refusal that reaches a durable `publish-final` terminal:
 that terminal binds the operation identity permanently, so the log changes
 although no item did.
 
+`claim-verify` also reports ledger validity, because it is the verb every
+remediation string names and the caller runs it to learn why the next mutation
+is blocked. `result.ledger_validation` is always present. It carries `valid`
+and `errors`, the same members and the same deterministic SPEC.md error
+sequence the bare `validate` result carries. When `valid` is `false` it also
+carries `remediation`, naming the repair and `claim-verify`; a valid ledger has
+nothing to remedy and carries neither extra member. Reporting costs no extra
+ledger read: reconciliation already loads the ledger it judges.
+
+This member widens a version 1 envelope and the version does not move. The
+legacy claim-envelope `contract_version` stays `1`, matching the
+`write_serialization` precedent: an added `result` member is additive, no root
+member changes, and a version 1 consumer that reads `findings`, `state`, and
+`publications` is unaffected. The version to negotiate remains
+`result.operations.work_claim.api_version`.
+
+`ledger_validation` never changes the claim answer. `findings`, `state`, and
+the exit status describe claim state alone: an invalid ledger with a consistent
+journal still returns exit 0, `state: "committed"`, and `findings: []`. It is
+not a claim finding, and a caller MUST NOT treat it as one. It is the honest
+statement that a clean claim answer is not a clear road, and the caller must
+repair validation before the next mutation will run.
+
 A clean verification returns exit 0 and `state: "committed"`. Findings named
 `pending-intent-resolved` are clean recovery. Any
 `legacy-mutation-outcome-unknown`, `publication-outcome-unknown`,

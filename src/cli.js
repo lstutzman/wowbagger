@@ -180,7 +180,10 @@ export async function runCli(argumentsList, { scenario } = {}) {
         error: {
           code: 'ledger-invalid',
           message: 'The configured ledger is invalid.',
-          details: { validation_errors: result.validation.errors },
+          details: {
+            validation_errors: result.validation.errors,
+            ...(result.item ? { item: result.item } : {}),
+          },
         },
       })}\n`);
       process.exitCode = 3;

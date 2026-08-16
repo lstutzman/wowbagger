@@ -697,6 +697,19 @@ function publicationStatuses(entries) {
 }
 
 
+// claim-verify is the verb every remediation string names, so a consistent
+// journal alone is a misleading answer while ledger validation blocks every
+// mutation. The report names that blocker without pretending it is a claim
+// finding: findings and the exit status still describe claim state only.
+function ledgerValidationReport(ledger) {
+  const validation = validateLedger(ledger);
+  if (validation.valid) return validation;
+  return {
+    ...validation,
+    remediation: 'The ledger is invalid and every mutation is blocked; claim state is consistent. Repair each validation error, commit the repair, then run claim-verify.',
+  };
+}
+
 export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace }) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
@@ -721,6 +734,7 @@ export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namesp
             ledger_namespace: namespace,
             observed_at: reconciled.observedAt,
             findings: reconciled.findings,
+            ledger_validation: ledgerValidationReport(reconciled.ledger),
             publications: publicationStatuses(reconciled.entries),
           },
         },

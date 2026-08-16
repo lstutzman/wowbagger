@@ -460,6 +460,23 @@ nothing else — under the same lock and compare-and-swap. See
 [the mutation contract](docs/mutation-contract.md) for the JSON request,
 response, recovery, and scope details.
 
+### Diagnosing an invalid ledger
+
+One invalid item refuses every read and every guarded mutation on that ledger,
+including commands that never touch it. That refusal is the diagnosis, and no
+command asks you to parse the Markdown by hand:
+
+- `validate --json` lists every error. An error whose repair the validator can
+  derive also carries `expected_path` and a `remediation` naming the repair.
+- `inspect` still refuses with exit 3 `ledger-invalid` — a revision from an
+  unjudged ledger must never look like a mutation precondition — but the
+  refusal carries `error.details.item`, the complete snapshot of the item you
+  asked for, whenever no validation error names that item's path. A faulted
+  item is withheld; `validate` already names its repair.
+- `claim-verify --json` reports `result.ledger_validation`. Exit 0 with
+  `findings: []` and `ledger_validation.valid: false` says the claim journal is
+  consistent and validation alone is blocking every mutation.
+
 `provision` binds one ledger namespace to the repository. `claim` manages
 durable acquire, read, renew, and release decisions. `publish-claimed` accepts
 the exact candidate item bytes and fences their publication against the active

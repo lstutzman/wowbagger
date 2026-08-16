@@ -1820,10 +1820,15 @@ function validCoreValidateEnvelope(value, exitCode) {
     && (value.valid ? value.errors.length === 0 : value.errors.length > 0);
 }
 
+// SPEC.md requires a code, path, field, and message. A validator that can also
+// derive the repair states it: expected_path and remediation ride along on the
+// errors that have one, and nowhere else.
 function validValidationErrors(value) {
   return Array.isArray(value) && value.every((error) => hasExactKeys(error, [
     'path', 'field', 'code', 'message',
-  ])
+  ], ['expected_path', 'remediation'])
+    && (!Object.hasOwn(error, 'expected_path') || nonEmptyControlFreeString(error.expected_path))
+    && (!Object.hasOwn(error, 'remediation') || nonEmptyControlFreeString(error.remediation))
     && nonEmptyControlFreeString(error.path)
     && nonEmptyControlFreeString(error.field)
     && nonEmptyControlFreeString(error.code)
@@ -1952,7 +1957,11 @@ function validCoreErrorDetails(code, details, command, responseContext) {
   const expectedRevision = responseExpectedRevision(responseContext, command);
   const expectedCreateRevision = expectedCreateCandidateRevision(responseContext, command);
   const matchesItemId = (id) => expectedItemId === undefined || id === expectedItemId;
-  if (code !== 'invalid-request' && !hasCanonicalMutationRequest(responseContext, command)) {
+  // Canonicality is a property of a mutation request. inspect and the other
+  // read commands never carry one, so this precondition only applies where a
+  // request exists to judge; otherwise no read refusal could ever forward.
+  if (code !== 'invalid-request' && isMutationCommand(command)
+    && !hasCanonicalMutationRequest(responseContext, command)) {
     return false;
   }
   switch (code) {
@@ -1960,8 +1969,14 @@ function validCoreErrorDetails(code, details, command, responseContext) {
       && validInvalidRequestDetails(details);
     case 'item-not-found': return hasExactKeys(details, ['id'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id);
-    case 'ledger-invalid': return hasExactKeys(details, ['validation_errors'])
-      && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
+    // The refusal stands, and inspect may still hand back the snapshot of the
+    // item this request named. Only inspect may; a mutation refusal that
+    // carries an item is not the refusal this contract describes.
+    case 'ledger-invalid': return hasExactKeys(details, ['validation_errors'],
+      command === 'inspect' ? ['item'] : [])
+      && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0
+      && (!Object.hasOwn(details, 'item')
+        || (validCoreItemShape(details.item) && matchesItemId(details.item.id)));
     case 'transition-precondition-failed': return hasExactKeys(details, ['id', 'issues'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validTransitionIssues(details.issues) && details.issues.length > 0;

@@ -1721,3 +1721,117 @@ test('forwards an items-directory-unavailable create refusal instead of calling 
     );
   }
 });
+
+// A refusal an operator cannot read is the whole complaint behind item #108.
+// The adapter forwards inspect's ledger-invalid and item-not-found refusals
+// verbatim, including the enriched validation errors and the requested item's
+// snapshot, and still rejects a refusal that does not answer this request.
+test('forwards an inspect refusal on an invalid ledger instead of calling it a protocol error', async () => {
+  const { mapProcessOutcome: mapEngineOutcome } = await import('../src/adapter/process-outcome.js');
+  const misplaced = {
+    path: `ledger/${CREATE_ID}.md`,
+    field: 'path',
+    code: 'item-outside-layout',
+    message: `Ledger item ledger/${CREATE_ID}.md is outside the configured items directory; the committed layout expects it at ledger/items/${CREATE_ID}.md.`,
+    expected_path: `ledger/items/${CREATE_ID}.md`,
+    remediation: `Move ledger/${CREATE_ID}.md to ledger/items/${CREATE_ID}.md, stage the move with git add, commit it, then run claim-verify.`,
+  };
+  const plain = Object.fromEntries(Object.entries(misplaced)
+    .filter(([key]) => !['expected_path', 'remediation'].includes(key)));
+  const context = (error, exitCode) => ({
+    adapter_contract_version: 2,
+    request_id: 'review-inspect-refusal-0001',
+    command: 'inspect',
+    core_request: { command: 'inspect', ledger: 'ledger', id: CREATE_ID },
+    process: processObservation({
+      ok: false,
+      command: 'inspect',
+      contract_version: 3,
+      error,
+    }, { exit_code: exitCode }),
+  });
+  const refusal = (details) => ({
+    code: 'ledger-invalid',
+    message: 'The configured ledger is invalid.',
+    details,
+  });
+  const both = (error, exitCode) => {
+    const engine = mapEngineOutcome(context(error, exitCode));
+    const oracle = mapProcessOutcome(context(error, exitCode));
+    assert.deepEqual(engine, oracle, JSON.stringify(error));
+    return engine;
+  };
+
+  for (const error of [
+    refusal({ validation_errors: [plain] }),
+    refusal({ validation_errors: [misplaced] }),
+    refusal({ validation_errors: [misplaced], item: validCoreItem() }),
+    { code: 'item-not-found', message: 'The requested item was not found.', details: { id: CREATE_ID } },
+  ]) {
+    const exitCode = error.code === 'item-not-found' ? 2 : 3;
+    assert.equal(both(error, exitCode), null, JSON.stringify(error));
+  }
+
+  const foreign = coreItemWithId(validCoreItem(), 'wb_01Q45X474N28T5CY4GNF6YY4HN');
+  const shortItem = Object.fromEntries(Object.entries(validCoreItem())
+    .filter(([key]) => key !== 'body'));
+  for (const error of [
+    refusal({ validation_errors: [misplaced], item: foreign }),
+    refusal({ validation_errors: [misplaced], item: shortItem }),
+    refusal({ validation_errors: [misplaced], item: { ...validCoreItem(), number: 7 } }),
+    refusal({ validation_errors: [misplaced], snapshot: validCoreItem() }),
+    refusal({ validation_errors: [{ ...misplaced, hint: 'move it' }] }),
+    refusal({ item: validCoreItem() }),
+  ]) {
+    assert.equal(both(error, 3)?.error?.code, 'core-protocol-error', JSON.stringify(error));
+  }
+});
+
+test('refuses a mutation ledger-invalid that smuggles an item snapshot', async () => {
+  const { mapProcessOutcome: mapEngineOutcome } = await import('../src/adapter/process-outcome.js');
+  const validationError = {
+    path: `ledger/${CREATE_ID}.md`,
+    field: 'path',
+    code: 'item-outside-layout',
+    message: 'Ledger item is outside the configured items directory.',
+  };
+  const context = (details) => ({
+    adapter_contract_version: 2,
+    request_id: 'review-create-ledger-invalid-0001',
+    command: 'create',
+    core_request: { command: 'create', ledger: 'ledger', input_base64: '' },
+    mutation_request: {
+      id: CREATE_ID,
+      item: {
+        title: 'Map a fictional moon route',
+        kind: 'task',
+        provenance: { source: 'fixture/mutations', recorded_at: '2030-01-10T12:34:56.789Z' },
+        depends_on: [],
+        related: [],
+      },
+      body: '\nA fictional Markdown body.\n',
+    },
+    item_id: CREATE_ID,
+    expected_revision: null,
+    process: processObservation({
+      ok: false,
+      command: 'create',
+      contract_version: 3,
+      state: 'unchanged',
+      error: {
+        code: 'ledger-invalid',
+        message: 'The configured ledger is invalid.',
+        details,
+      },
+    }, { exit_code: 3 }),
+  });
+
+  assert.equal(mapEngineOutcome(context({ validation_errors: [validationError] })), null);
+  assert.equal(mapProcessOutcome(context({ validation_errors: [validationError] })), null);
+  for (const engine of [mapEngineOutcome, mapProcessOutcome]) {
+    assert.equal(
+      engine(context({ validation_errors: [validationError], item: validCoreItem() }))?.error?.code,
+      'mutation-outcome-unknown',
+    );
+  }
+});

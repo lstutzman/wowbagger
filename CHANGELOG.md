@@ -26,6 +26,33 @@ consolidation. The first tagged release inherits this file.
 
 ### Changed
 
+- **An invalid ledger can now be diagnosed with the documented commands.** One
+  invalid item still refuses every read and every guarded mutation on that
+  ledger, but the refusals no longer hide what the operator has to read.
+  `inspect` keeps refusing exit 3 `ledger-invalid` — handing back a revision
+  from a ledger the core has not judged would read as a mutation precondition,
+  and there is no flag that skips validation — and its refusal now carries
+  `error.details.item`, the same lossless snapshot the success envelope
+  defines, for the item the request selected, whenever no validation error
+  names that item's path. A faulted item is withheld; `validate` already names
+  its repair. `claim-verify` now reports `result.ledger_validation`, carrying
+  `valid` and `errors` exactly as the bare `validate` result does, plus a
+  `remediation` when the ledger is invalid. Its claim answer is unchanged:
+  `findings`, `state`, and the exit status still describe claim state alone, so
+  a consistent journal over an invalid ledger is still exit 0 with
+  `findings: []` — it just no longer pretends that is a clear road. The report
+  costs no extra ledger read. Fixtures extend item #104's misplaced-item
+  scenario.
+- **The adapter forwards `inspect` refusals instead of calling them protocol
+  errors.** Both the engine and the independent oracle demanded a canonical
+  mutation request before they would accept any error details, which no read
+  command has, so every `inspect` `item-not-found` and `ledger-invalid` refusal
+  was mapped to `core-protocol-error`. The precondition now applies only to
+  mutation commands. The same surfaces accept the `expected_path` and
+  `remediation` that item #104 added to a validation error, and the optional
+  `details.item` on an `inspect` `ledger-invalid` refusal — on `inspect` only;
+  a mutation refusal that carries one is still rejected.
+
 - **The report's content security policy now also forbids `connect-src`.** The
   report has never opened a connection; the policy now says so.
 
