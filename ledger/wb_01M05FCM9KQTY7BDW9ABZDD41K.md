@@ -5,9 +5,10 @@ number: 103
 title: "Bump the core contract version for the widened refusal envelope"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T14:25:09Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "Lee decided on 2026-08-16: strict envelope-versioning discipline; the #95 widening carries the bump."
+  - action: complete
+    date: 2026-08-16
+    summary: "Core contract version bumped to 3 across every core-domain surface."
+    rationale: "Lee's strict-versioning call on the #95 widening. Source constant, oracle mirror (independent, mutation-guarded both directions), 3 adapter manifests, 48 fixtures, 13 test files, docs, and the skill all moved; the v1 legacy domains and the adapter contract 2 stayed, proven by the envelope-dispatch suite. The contract's Version 3 note enumerates the full delta over published v2 (#95 widened date refusals, #90 patch field set, #84 number identity, #94 layout paths). Gate green on three runtimes. Consequence recorded: the next release is now a hard gate - shipped skill and adapter manifests refuse every published core until it lands."
 ---
 
 Lee's call on 2026-08-16, resolving item #95's open question: the widened date-refusal envelope (item_created/item_updated on date-before-created and date-before-updated) breaks the contract's own version-2 compatibility argument ("no envelope member changes, so existing exact-member consumers remain compatible"). Strict envelope-versioning discipline applies: bump CORE_CONTRACT_VERSION 2 to 3.
