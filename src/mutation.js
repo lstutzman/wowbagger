@@ -214,16 +214,17 @@ export async function createItem(ledgerDirectory, request, scenario) {
     ledgerDirectory,
     request.id,
     'create-v1',
-    () => createItemUnfenced(ledgerDirectory, request, scenario),
+    (authorize, ledgerSnapshot) => createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnapshot),
   );
 }
 
-async function createItemUnfenced(ledgerDirectory, request, scenario) {
+async function createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnapshot) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
+  const readPreLockLedger = snapshotReader(root, ledgerSnapshot);
 
   for (let attempt = 0; attempt < MAX_LOCK_CLOSURE_RETRIES; attempt += 1) {
-    const initial = await loadedValidLedger(root);
+    const initial = await readPreLockLedger();
     if (!initial.valid) {
       return ledgerInvalid(initial.validation);
     }
@@ -477,13 +478,13 @@ export function validateTransitionRequest(request, parseIssues = []) {
 }
 
 export async function transitionItem(ledgerDirectory, request, scenario) {
-  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', (authorize) => (
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'transition-v1', (authorize, ledgerSnapshot) => (
     mutateExistingItem(ledgerDirectory, request, scenario, {
       name: 'transition',
       lockIds: lockIdsForTransition,
       build: buildTransition,
       authorize,
-    })
+    }, ledgerSnapshot)
   ));
 }
 
@@ -509,12 +510,14 @@ export async function publishClaimedCandidate(ledgerDirectory, request, scenario
 // complete-ledger validation, and atomic same-path publication with the
 // recovery protocol. `operation` supplies the name used in lock metadata and
 // diagnostics, the lock-closure rule, and the request-specific build step.
-async function mutateExistingItem(ledgerDirectory, request, scenario, operation) {
+// `ledgerSnapshot`, when supplied, stands in for the first pre-lock read.
+async function mutateExistingItem(ledgerDirectory, request, scenario, operation, ledgerSnapshot) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
+  const readPreLockLedger = snapshotReader(root, ledgerSnapshot);
 
   for (let attempt = 0; attempt < MAX_LOCK_CLOSURE_RETRIES; attempt += 1) {
-    const initial = await loadedValidLedger(root);
+    const initial = await readPreLockLedger();
     if (!initial.valid) {
       return ledgerInvalid(initial.validation);
     }
@@ -800,13 +803,13 @@ function isPatchableInteger(value, minimum) {
 }
 
 export async function patchItem(ledgerDirectory, request, scenario) {
-  return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize) => (
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize, ledgerSnapshot) => (
     mutateExistingItem(ledgerDirectory, request, scenario, {
       name: 'patch',
       lockIds: (target) => [target.data.id],
       build: buildPatch,
       authorize,
-    })
+    }, ledgerSnapshot)
   ));
 }
 
@@ -1258,9 +1261,28 @@ function terminalField(status) {
 }
 
 async function loadedValidLedger(root) {
-  const ledger = await loadLedger(root);
+  return validatedLedger(await loadLedger(root));
+}
+
+function validatedLedger(ledger) {
   const validation = validateLedger(ledger);
   return { ledger, validation, valid: validation.valid };
+}
+
+// The pre-lock phase of a mutation reads the ledger only to pick a lock
+// closure and to fail fast; every decision it makes is re-made against the
+// read under lock. A caller that already holds the claim lock and has just
+// read the same directory may therefore hand that snapshot in. It is spent on
+// the first attempt only: a lock-closure retry must see fresh bytes or it
+// would recompute the same closure and exhaust the retry budget.
+function snapshotReader(root, snapshot) {
+  let pending = snapshot ?? null;
+  return async () => {
+    if (!pending) return loadedValidLedger(root);
+    const spent = pending;
+    pending = null;
+    return validatedLedger(spent);
+  };
 }
 
 function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file, expectedData, expectedSource) {

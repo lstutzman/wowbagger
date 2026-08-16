@@ -101,7 +101,10 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
       };
       let outcome;
       try {
-        outcome = await write(authorize);
+        // Reconciliation already read the complete ledger under this same
+        // claim lock and changed nothing a load would see. The write reuses
+        // that snapshot for its pre-lock phase and re-reads under lock.
+        outcome = await write(authorize, reconciled.ledger);
       } catch (error) {
         if (intent) {
           return claimStoreUnavailable(command, 'legacy-mutation-outcome-unknown', {

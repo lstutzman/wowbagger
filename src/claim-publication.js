@@ -607,6 +607,13 @@ export async function reconcileClaimJournal({
   return {
     entries,
     findings,
+    // The snapshot reconciliation judged. Reconciliation writes only the
+    // journal, the claim state, and the ledger's `.wowbagger` reconcile log,
+    // none of which a complete ledger load reads, so these are still the bytes
+    // on disk when reconciliation returns. A caller holding the claim lock may
+    // reuse it instead of loading the same directory again, provided every
+    // decision it draws from the snapshot is re-made under lock.
+    ledger,
     observedAt,
     state: replayed.state,
     unsafe: findings.some((finding) => finding.code !== 'pending-intent-resolved'),

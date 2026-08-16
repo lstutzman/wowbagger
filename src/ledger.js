@@ -7,7 +7,18 @@ import { parseDocument } from 'yaml';
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 const DEFAULT_FILE_SYSTEM = { lstat, open, readdir };
 
+// A complete ledger load reads and parses every item file, so it is the unit
+// of cost a large-ledger command is measured in. The monotonic counter lets
+// tests and the benchmark assert how many complete loads one command performs
+// without timing anything.
+let completeLoadCount = 0;
+
+export function ledgerLoadCount() {
+  return completeLoadCount;
+}
+
 export async function loadLedger(ledgerDirectory, fileSystem = DEFAULT_FILE_SYSTEM) {
+  completeLoadCount += 1;
   const root = path.resolve(ledgerDirectory);
   let rootStat;
   try {
