@@ -47,6 +47,15 @@ every core mutation, are omitted from the normalized `core` view, and remain
 recoverable from `source_base64`. A consumer may stamp rubric factors,
 confidence signals, or area labels there. The core will never read them.
 
+The HTML report reads a few of them by consumer-declared mapping only, through
+`.wowbagger/report.json` `fields` (README, `report`). Two carry sequencing
+meaning in that view: `class`, a class of service from
+`expedite | fixed-date | standard | intangible`, and `due`, an ISO calendar
+date. They order the report's recommended list; they change no core selection,
+no `ready` output, and no stored state. An unrecognised `class` value is
+reported rather than dropped, so a consumer typo surfaces instead of silently
+demoting an item.
+
 ## 4. What policy must never do
 
 - Change lifecycle validity or readiness membership. An item enters `ready`

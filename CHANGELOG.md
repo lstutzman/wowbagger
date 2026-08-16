@@ -24,6 +24,26 @@ consolidation. The first tagged release inherits this file.
   and `test/envelope-dispatch.test.js` walks every one of them through the
   documented dispatch rule and rejects drift in either direction. No emitted
   byte changed and no contract version moved.
+- `report` now renders a sequencing dashboard instead of a state snapshot. The
+  HTML opens with **Work next**, the ready set in a recommended order with the
+  factors that placed each entry printed beside it; then **Attention**, naming
+  blockers by number, the oldest open work with its age, and started work past
+  this ledger's own 85th-percentile cycle time; then an evidence layer with
+  aging buckets, weekly arrivals against completions, accept-to-complete cycle
+  time, and a Monte Carlo forecast as 50 and 85 percent bands. State counts,
+  item cards, and swarm batches remain, below that decision surface. Relations
+  and readiness reasons inside the drill-down now name items by number.
+  Ordering is a report-layer derivation, recomputed from ledger bytes at render
+  time and never persisted: `ready --json`, its four-step order, and the
+  mutation contract are unchanged. The report file stays self-contained with no
+  external runtime dependency.
+- Report configuration accepts two more `fields` mappings, `class` and `due`.
+  `class` is a class of service from `expedite | fixed-date | standard |
+  intangible`; `expedite` lifts an item above every other ready item, an absent
+  value means `standard`, and an unrecognised value is ranked as standard and
+  reported in the report rather than dropped. `due` is an ISO calendar date
+  ordered by proximity. Both ride the existing extension-member channel, so no
+  core field carries them.
 - The commit-per-mutation invariant is documented. On a provisioned ledger,
   every mutation must be committed to Git before the next mutating command,
   and `claim-verify` is the reconciliation procedure for the exit 6

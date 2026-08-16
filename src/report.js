@@ -1,6 +1,15 @@
 import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { projectReadiness } from './ready.js';
+import { buildAttention } from './report-attention.js';
+import { buildEvidence } from './report-evidence.js';
+import {
+  classifyItem,
+  collectUnknownClasses,
+  computeEpicEnablement,
+  computeLeverage,
+  rankWorkNext,
+} from './report-sequencing.js';
 import { randomUUID } from 'node:crypto';
 
 const REPORT_FILE_SYSTEM = { mkdir, open, rename, rm };
@@ -16,6 +25,8 @@ const CONFIG_KEYS = new Set(['report_version', 'repository', 'title', 'output', 
 const REPOSITORY_KEYS = new Set(['name', 'logo']);
 const FIELD_KEYS = new Set([
   'area',
+  'class',
+  'due',
   'rank',
   'score',
   'complexity',
@@ -72,6 +83,20 @@ export function buildReportModel(items, config, asOf) {
     .filter((item) => item.terminalDate !== null)
     .sort((left, right) => compareText(right.terminalDate, left.terminalDate) || compareText(left.id, right.id));
 
+  const leverageById = computeLeverage(reportItems);
+  const epicById = computeEpicEnablement(projected);
+  for (const reportItem of reportItems) {
+    reportItem.sequencing = {
+      ...classifyItem(reportItem, asOf),
+      leverage: leverageById.get(reportItem.id),
+      epic: epicById.get(reportItem.id),
+    };
+  }
+
+  const workNext = rankWorkNext(reportItems.filter((item) => item.readiness.state === 'ready'));
+
+  const evidence = buildEvidence(reportItems, terminalItems, asOf);
+
   const swarmBatches = config.swarm === null
     ? []
     : buildSwarmBatches(reportItems, config.swarm.eligibleComplexities);
@@ -82,6 +107,10 @@ export function buildReportModel(items, config, asOf) {
     asOf,
     items: reportItems,
     terminalItems,
+    workNext,
+    unknownClasses: collectUnknownClasses(reportItems),
+    evidence,
+    attention: buildAttention(reportItems, terminalItems, evidence.cycleTime, asOf),
     stats: {
       total: projected.length,
       open: reportItems.length,

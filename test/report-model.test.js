@@ -85,6 +85,14 @@ test('builds a complete report model with readiness and mapped fields', async ()
     body: '# Ready body',
     readiness: { state: 'ready', reasons: [] },
     fields: { area: 'Core', complexity: 'small' },
+    sequencing: {
+      class: { value: 'standard', raw: null, known: true },
+      due: null,
+      ageDays: 13,
+      size: { value: 'small', weight: 1 },
+      leverage: { count: 1, numbers: [2] },
+      epic: null,
+    },
   });
   assert.deepEqual(
     model?.items.find(({ id }) => id === blockedId)?.readiness,
