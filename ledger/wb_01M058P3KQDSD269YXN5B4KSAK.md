@@ -5,9 +5,10 @@ number: 96
 title: "Stop failed mutations leaving reconcile-log residue that blocks the next write"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "consumer-field-feedback"
   recorded_at: "2026-08-16T00:00:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept the corrected/new PropertyCompass2 field finding."
     rationale: "Field paper-cut 10: no-op mutations should not dirty the working tree; residue interacts with the commit-at-HEAD invariant (#88)."
+  - action: complete
+    date: 2026-08-16
+    summary: "Refused mutations now leave the ledger working tree byte-identical."
+    rationale: "Repro proved the consumer's causal claim false: reconcile-log residue never refused anything (the git-HEAD check on uncommitted items does). Clock journal entries no longer project into the tracked log; the fence writes the log in the same command. One documented exception: a publish-claimed refusal reaching a durable terminal. Pinned by seven tests."
 ---
 Field paper-cut 10 (report: .PropertyCompass2/worktrees/260815-212735/docs/wowbagger-feedback.md): a FAILED transition (ok:false, state:unchanged) still rewrote `ledger/.wowbagger/reconcile-*.md`, and the consumer reports the next mutation then trips the commit-at-HEAD blocker on that file unless batch tooling git-adds after failures too. Write-on-failure is verified in source: the legacy fence appends intent and abort journal entries and the reconciliation surfaces rewrite the reconcile log regardless of mutation outcome (src/claim-coordinator.js, src/claim-publication.js writeReconcileLog call sites). This repo’s own sessions hit the residue twice on 2026-08-16 (trailing "Record ledger reconciliation" commits).
 
