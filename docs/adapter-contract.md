@@ -671,6 +671,63 @@ incomplete, mismatched-command, mismatched-version, mismatched-state,
 result/error, or exit-inconsistent mutation envelope is likewise
 `mutation-outcome-unknown` with section 6 recovery.
 
+### 6.1 Response domains and claim-fence refusals
+
+The adapter selects the envelope schema by response domain before it applies
+any of the checks above. This is the mutation contract's own dispatch rule
+(mutation contract section 2), and an adapter that skips it misclassifies a
+whole class of honest refusals.
+
+1. A response carrying a root `namespace` member belongs to the domain that
+   member names. The adapter validates it against that domain's schema and that
+   domain's own version field.
+2. A response with no `namespace` member belongs to the core domain and carries
+   this contract's required core `contract_version`.
+
+Dispatching on `command` first is wrong: `create`, `transition`, and `patch`
+each answer in two domains.
+
+The only namespaced response a core command produces is a **claim-fence
+refusal** in the `ledger-mutation` domain. A merge-coordinated backend emits it
+when the fence refused the write before the core mutation ran. It has exactly
+`ok: false`, `namespace: "ledger-mutation"`, `command: "<command>-v1"`,
+`contract_version: 1` (the legacy work-claim envelope marker, never this
+contract's core version), `state`, and `error`. The adapter recognizes exactly
+three refusal classes:
+
+| Error code | Command | Exit | State |
+|---|---|---|---|
+| `claimed-item-write-refused` | `create` | 4 | `unchanged` |
+| `active-claim-write-refused` | `transition`, `patch` | 4 | `unchanged` |
+| `claim-store-unavailable` | any mutation | 6 | `unchanged` or `unknown` |
+
+Each code carries the exact message the work-claim contract fixes for it;
+free-form prose in place of that message is a protocol failure. The two legacy
+refusals carry the claim read-back — `ledger_namespace`, `item_id`,
+`observed_at`, `last_epoch`, and `active` — whose `item_id` must be the item the
+caller asked to write, and whose read-back must exhibit the condition its code
+names: `claimed-item-write-refused` reports a nonzero `last_epoch`, and
+`active-claim-write-refused` reports a non-null `active`. `claim-store-
+unavailable` carries a backend-defined `reason`; when that reason is
+`publication-reconciliation-required` it also carries a nonempty `findings`
+array in which at least one finding names a `remediation` the caller can run.
+A refusal that contradicts its own code is not deterministic and is refused.
+
+**The honest-outcome guarantee.** A fence refusal that declares
+`state: "unchanged"` proves the mutation never ran. The adapter forwards it as
+an ordinary complete core observation: the exact refusal bytes, the exact core
+exit code, and no adapter error. The agent then reads the claim-domain error
+code, reason, findings, and remediation directly and acts on them. The adapter
+MUST NOT relabel such a refusal `mutation-outcome-unknown`.
+
+`mutation-outcome-unknown` is reserved for outcomes the adapter genuinely
+cannot observe. A `claim-store-unavailable` refusal declaring
+`state: "unknown"` is one of them and keeps that outcome, exactly as a core
+`write-outcome-unknown` does. So does any namespaced envelope that fails the
+checks above: fail-closed is unchanged in both version 1 and version 2
+direction, because a response the adapter cannot classify is never forwarded as
+a result.
+
 Before forwarding a complete core envelope, the adapter also binds every
 request-derived response member to the exact canonical request it launched.
 `ready` success repeats the requested `as_of`; an `inspect` item or
@@ -1166,7 +1223,7 @@ adapter, so its implementation statuses remain `unverified`.
 `node spec/run-adapter-implementation.js` accepts the same fixture directory,
 evaluates transactions through the shipped Claude Code entrypoint and emits the
 same result shape with an evidence platform. Its current native Darwin run is
-`pass`: 183 of 183 assertions and 15 of 15 cases pass. That native common-vector
+`pass`: 196 of 196 assertions and 15 of 15 cases pass. That native common-vector
 evidence earns the Claude Code manifest's Darwin `supported` declaration.
 Codex, Kimi, and generic adapter implementations remain `unverified`.
 
@@ -1272,6 +1329,19 @@ decoded bytes to standard input, and treats
 patch as a mutation for trusted consumer approval, process doubt, and
 revision-based recovery. It does not accept an arbitrary input-file path from
 the invocation.
+
+The section 6.1 response-domain rule is deliberately **not** a version 2 delta.
+It adds no request or response member, removes none, renames none, and adds no
+error code to the public registry; the `ledger-mutation` refusal it teaches the
+adapter to recognize is a wire that core contract versions 1, 2, and 3 all
+emit, pinned by `spec/fixtures/envelope-domains/manifest.json`. What changes is
+that the adapter classifies a response class it previously mislabelled, so the
+set of responses it accepts widens and the set it refuses shrinks. Version 2
+consumers gain a correct outcome where they had an unobservable one; none of
+them loses a documented guarantee. Version 1 and version 2 fail-closed
+negotiation is untouched: a v1-only consumer still receives
+`unsupported-adapter-contract-version`, and an adapter probing a version 1 or 2
+core still refuses `core-contract-version-mismatch`.
 
 Bootstrap wire version 1 and the manifest, approval, instruction-input,
 handoff, and adapter-vector format versions remain 1; they are separate

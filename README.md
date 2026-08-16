@@ -14,7 +14,7 @@ putting a database or hosted service inside your repository.
 > scope is deliberately narrow: cooperative writers in one working copy, one
 > item at a time. A Claude Code adapter and plugin ship from this
 > repository; the adapter answers the negotiation surface of the harness-neutral
-> contract and passes all 183 assertions across all 15 cases on native Darwin.
+> contract and passes all 196 assertions across all 15 cases on native Darwin.
 > The Claude Code adapter declares Darwin `supported`; all other shipped adapter
 > platform declarations remain `unverified`. The shipped core mutation contract
 > and adapter contract are version 2; their frozen version 1 definitions are not
@@ -280,9 +280,9 @@ This checkout ships three adapter packages on one shared entrypoint runtime:
 [`adapters/claude-code/`](adapters/claude-code/), [`adapters/codex/`](adapters/codex/),
 and [`adapters/opencode/`](adapters/opencode/). Each answers the section 3.3 bootstrap
 wire with its own identity and honest host declaration. The native Darwin
-Claude Code report passes all 183 assertions across all 15 cases — run
+Claude Code report passes all 196 assertions across all 15 cases — run
 `node spec/run-adapter-implementation.js` to see the evidence. Codex and
-OpenCode share the version 2 engine and execute all 183 assertions with
+OpenCode share the version 2 engine and execute all 196 assertions with
 `--target codex` or `--target opencode`, but both target reports remain `fail`
 pending target-specific evidence. Invocation forwarding, path and limit guards,
 approval, and context all enter through the shared shipped engine. Platform
@@ -587,7 +587,7 @@ It is the durable work ledger beneath those systems.
 - Stabilize the machine-readable command contract and compatibility evidence.
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
   packages share the version 2 engine; the Claude Code manifest declares Darwin
-  `supported` after passing all 183 native assertions. Other adapter targets and
+  `supported` after passing all 196 native assertions. Other adapter targets and
   platform declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses.
 - Implement merge-coordinated work claims for cooperating Git worktrees.
