@@ -403,9 +403,7 @@ export async function reconcileClaimJournal({
       item_id: intent.item_id,
       outcome,
     }));
-    const unknownPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
-      ?? intent.item_path
-      ?? null;
+    const unknownPath = itemPathRelativeToLedger(ledgerDirectory, item?.file);
     findings.push({
       code: outcome.stdout.state === 'unknown'
         ? 'publication-outcome-unknown'
