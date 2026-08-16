@@ -4,15 +4,20 @@ id: wb_01KZYS31008RT7QHS6CGKDVNTS
 number: 75
 title: "Derive missing PropertyCompass migration metadata from Git evidence"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 provenance:
   source: "propertycompass-migration-inventory"
   recorded_at: "2026-08-14T13:24:17.000Z"
 depends_on: []
-related: [wb_01KZ77NSW8363H1V6QG1HZRG11]
+related: [ wb_01KZ77NSW8363H1V6QG1HZRG11 ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept into the backlog at triage review."
+    rationale: "Reviewed Git-evidence derivation rule for missing dates; required for any schema-2 projection of the 1,501-card corpus."
 ---
 
 # Problem
