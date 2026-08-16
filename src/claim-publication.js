@@ -637,7 +637,7 @@ function reconciliationDiagnosis({
     return {
       reason: 'worktree-synchronization-required',
       ...(expectedPath ? { expected_path: expectedPath } : {}),
-      remediation: `Run claim-verify in the worktree that wrote ${pathLabel} after committing it, or synchronize this worktree to that commit.`,
+      remediation: `Synchronize this worktree to the commit that wrote ${pathLabel} (pull or merge), then run claim-verify.`,
     };
   }
   return {

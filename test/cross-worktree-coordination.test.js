@@ -130,7 +130,7 @@ test('a committed sibling worktree write blocks create elsewhere with the synchr
     observed_surface: 'working-tree',
     reason: 'worktree-synchronization-required',
     expected_path: `${writtenId}.md`,
-    remediation: `Run claim-verify in the worktree that wrote ${writtenId}.md after committing it, or synchronize this worktree to that commit.`,
+    remediation: `Synchronize this worktree to the commit that wrote ${writtenId}.md (pull or merge), then run claim-verify.`,
   }]);
 });
 
