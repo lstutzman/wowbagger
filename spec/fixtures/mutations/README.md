@@ -105,6 +105,7 @@ named source and hash to the declared revision.
 | Transition lifecycle | task terminalization, archive restore, epic completion |
 | Multi-item refusal | dependent cleanup, dependent disposition, child disposition, terminal referrer, combined blockers |
 | Patch relations | re-scoped dependent, dangling depends_on reference |
+| Patch body | mirror-sync body swap with untouched frontmatter, refused null body |
 | Mutation states | unchanged, committed, and unknown |
 
 Claims, adapters, PropertyCompass data, Git transport, and multi-item

@@ -1531,6 +1531,48 @@ test('reference oracle correlates a patch success with the requested fields', ()
   );
 });
 
+test('reference oracle correlates a patch success with the requested body', () => {
+  const before = consumerCoreItem();
+  const patched = '\nThe mirror card now says done.\n';
+  const source = Buffer.from(before.source_base64, 'base64').toString('utf8')
+    .replace('updated: 2030-01-10', 'updated: 2030-01-15')
+    .replace(before.body, patched);
+  const after = {
+    ...coreItemWithSource(before, source, { ...before.core, updated: '2030-01-15' }),
+    body: patched,
+  };
+  const request = {
+    id: before.id,
+    expected_revision: before.revision,
+    date: '2030-01-15',
+    set: { body: patched },
+  };
+  const outcome = (mutationRequest) => mapProcessOutcome({
+    adapter_contract_version: 2,
+    request_id: 'review-patch-body-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_request: mutationRequest,
+    item_id: before.id,
+    expected_revision: before.revision,
+    process: processObservation({
+      ok: true,
+      command: 'patch',
+      contract_version: 3,
+      state: 'committed',
+      result: { item: after },
+    }),
+  });
+
+  assert.equal(outcome(request), null);
+  assert.equal(outcome({ ...request, set: { body: '\nsomething else\n' } }).error.code,
+    'mutation-outcome-unknown');
+  assert.equal(outcome({ ...request, set: { body: null } }).error.code,
+    'mutation-outcome-unknown');
+  assert.equal(outcome({ ...request, set: { body: 7 } }).error.code,
+    'mutation-outcome-unknown');
+});
+
 // The consumer-supplied schema-1 fields (number, priority) belong to the core
 // view; the oracle must accept an engine item that reports them.
 function consumerCoreItem() {

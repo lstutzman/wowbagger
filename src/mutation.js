@@ -743,7 +743,10 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
 // patch applies them. `number` is the immutable item identity, assigned once at
 // create, so it is not patchable; everything else stays a reviewable hand-edit
 // or a transition concern.
-const PATCHABLE_FIELDS = ['priority', 'depends_on', 'related'];
+const PATCHABLE_FIELDS = ['priority', 'depends_on', 'related', 'body'];
+// The patchable fields that live in the frontmatter. `body` is the one patchable
+// value outside it, so it takes its own validation and serialization path.
+const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => field !== 'body');
 // Patchable fields whose value is a whole relation list rather than a scalar.
 const PATCH_RELATION_FIELDS = new Set(['depends_on', 'related']);
 // Where a newly added field lands in the frontmatter; the anchor is a member
@@ -784,6 +787,13 @@ export function validatePatchRequest(request, parseIssues = []) {
     }
     if (hasOwn(request.set, 'priority') && request.set.priority !== null && !isPatchableInteger(request.set.priority, 0)) {
       issues.push(issue('/set/priority', 'invalid-value', 'Set member priority must be a non-negative integer or null.'));
+    }
+    // null removes a frontmatter field, but the body is a required region of
+    // the file: removing it means the empty string, so null is refused here.
+    if (hasOwn(request.set, 'body') && request.set.body === null) {
+      issues.push(issue('/set/body', 'invalid-value', 'Set member body must be a string; use the empty string to remove the body.'));
+    } else if (hasOwn(request.set, 'body') && typeof request.set.body !== 'string') {
+      issues.push(issue('/set/body', 'invalid-type', 'Set member body must be a string.'));
     }
     for (const field of PATCH_RELATION_FIELDS) {
       if (!hasOwn(request.set, field) || request.set[field] === null) {
@@ -849,7 +859,10 @@ function patchData(data, request) {
     related: [...(data.related ?? [])],
     updated: request.date,
   };
-  for (const [field, value] of Object.entries(request.set)) {
+  // The successor is the frontmatter view the candidate is checked against, so
+  // it takes only the frontmatter fields; the body rides the serializer.
+  for (const field of PATCH_FRONTMATTER_FIELDS.filter((name) => hasOwn(request.set, name))) {
+    const value = request.set[field];
     if (value === null) {
       delete successor[field];
     } else {
@@ -875,9 +888,9 @@ function serializedMutationBytes(lockedTarget, source) {
 
 
 function serializePatch(source, successor, request) {
-  return rewriteFrontmatter(source, (document) => {
+  const rewritten = rewriteFrontmatter(source, (document) => {
     setRootScalar(document, 'updated', successor.updated);
-    for (const field of PATCHABLE_FIELDS.filter((name) => hasOwn(request.set, name))) {
+    for (const field of PATCH_FRONTMATTER_FIELDS.filter((name) => hasOwn(request.set, name))) {
       if (!Object.hasOwn(successor, field)) {
         deleteRootFieldPreservingAliases(document, field);
       } else if (PATCH_RELATION_FIELDS.has(field)) {
@@ -889,6 +902,21 @@ function serializePatch(source, successor, request) {
       }
     }
   });
+  return hasOwn(request.set, 'body') ? replaceBody(rewritten, request.set.body) : rewritten;
+}
+
+// The body is every byte after the closing delimiter's newline, so replacing it
+// is a byte splice that cannot reach the frontmatter. The request body is
+// written exactly as given, the same rule create serializes under.
+function replaceBody(source, body) {
+  const bounds = frontmatterBounds(source);
+  const closing = nextLine(source, bounds.end);
+  if (closing.next !== null) {
+    return `${source.slice(0, closing.next)}${body}`;
+  }
+  // An item whose closing delimiter carries no newline has no body at all.
+  // Giving it one has to terminate that delimiter line first.
+  return body.length === 0 ? source : `${source}${bounds.newline}${body}`;
 }
 
 // A relation list is replaced wholesale. An existing sequence node is edited in

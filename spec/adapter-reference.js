@@ -2148,9 +2148,16 @@ function validPatchRequest(request) {
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactKeys(request.set, [], ['priority', 'depends_on', 'related'])
+    || !hasExactKeys(request.set, [], ['priority', 'depends_on', 'related', 'body'])
     || Object.keys(request.set).length === 0) return false;
   for (const [field, value] of Object.entries(request.set)) {
+    // body is the one patchable value outside the frontmatter, and the one
+    // that null does not remove: the body region always exists, so removing it
+    // is the empty string and null is refused.
+    if (field === 'body') {
+      if (typeof value !== 'string') return false;
+      continue;
+    }
     if (value === null) continue;
     if (field === 'priority') {
       if (parsedIntegerValue(value, 0) === undefined) return false;
@@ -2179,6 +2186,10 @@ function validPatchResultCorrelation(item, request) {
     || item.revision === request.expected_revision
     || item.core.updated !== request.date) return false;
   for (const [field, requested] of Object.entries(request.set)) {
+    if (field === 'body') {
+      if (item.body !== requested) return false;
+      continue;
+    }
     if (field === 'priority') {
       if (requested === null) {
         if (Object.hasOwn(item.core, field)) return false;
