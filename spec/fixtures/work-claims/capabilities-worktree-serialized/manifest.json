@@ -1,12 +1,12 @@
 {
-  "case": "capabilities-fenced",
+  "case": "capabilities-worktree-serialized",
   "fixture_version": 2,
   "status": "normative-reference-model",
-  "description": "All mutation paths are atomically fenced, absent, or refuse claimed items, so exclusive dispatch is safe.",
+  "description": "A Git common-directory journal serializes every worktree of one repository. It must declare that write serialization, and it is still not a transactional coordinator, so the reference model refuses to certify it as fenced.",
   "coverage": [
+    "advisory",
     "capabilities",
-    "legacy-bypass",
-    "safe-exclusive-dispatch"
+    "write-serialization"
   ],
   "clock": {
     "authority": "backend-effective-utc",
@@ -27,8 +27,8 @@
   ],
   "initial": {
     "backend": {
-      "name": "reference-backend",
-      "coordination_scope": "shared-transactional-coordinator",
+      "name": "git-journal-reference-backend",
+      "coordination_scope": "shared-git-common-dir-serialized-journal",
       "durability": "durable-coordinator",
       "ledger_binding": {
         "mode": "explicit-allowlist",
@@ -39,13 +39,13 @@
       },
       "write_paths": {
         "alternate": "none",
-        "claimed_publication_v1": "atomic-fence",
+        "claimed_publication_v1": "git-journal-fence",
         "legacy_create_v1": "reject-claimed-id",
         "legacy_transition_v1": "reject-active-claim"
       },
       "write_serialization": {
-        "scope": "shared-coordinator-writers",
-        "blocks_until": "coordinator-transaction-complete"
+        "scope": "all-worktrees-of-one-repository",
+        "blocks_until": "peer-commit-visible-in-this-checkout"
       }
     },
     "faults": {},
@@ -76,8 +76,8 @@
           "contract_version": 1,
           "result": {
             "backend": {
-              "name": "reference-backend",
-              "coordination_scope": "shared-transactional-coordinator",
+              "name": "git-journal-reference-backend",
+              "coordination_scope": "shared-git-common-dir-serialized-journal",
               "ledger_binding": {
                 "mode": "explicit-allowlist",
                 "namespaces": [
@@ -86,21 +86,21 @@
                 ]
               },
               "write_serialization": {
-                "scope": "shared-coordinator-writers",
-                "blocks_until": "coordinator-transaction-complete"
+                "scope": "all-worktrees-of-one-repository",
+                "blocks_until": "peer-commit-visible-in-this-checkout"
               }
             },
             "operations": {
               "work_claim": {
                 "supported": true,
                 "api_version": 1,
-                "mode": "fenced",
-                "claim_protected_publication": true,
-                "fencing_enforced_at": "ledger-publication-commit-boundary",
-                "safe_exclusive_dispatch": true,
+                "mode": "advisory",
+                "claim_protected_publication": false,
+                "fencing_enforced_at": "none",
+                "safe_exclusive_dispatch": false,
                 "write_paths": {
                   "alternate": "none",
-                  "claimed_publication_v1": "atomic-fence",
+                  "claimed_publication_v1": "git-journal-fence",
                   "legacy_create_v1": "reject-claimed-id",
                   "legacy_transition_v1": "reject-active-claim"
                 }
@@ -112,8 +112,8 @@
     ],
     "final": {
       "backend": {
-        "name": "reference-backend",
-        "coordination_scope": "shared-transactional-coordinator",
+        "name": "git-journal-reference-backend",
+        "coordination_scope": "shared-git-common-dir-serialized-journal",
         "durability": "durable-coordinator",
         "ledger_binding": {
           "mode": "explicit-allowlist",
@@ -124,13 +124,13 @@
         },
         "write_paths": {
           "alternate": "none",
-          "claimed_publication_v1": "atomic-fence",
+          "claimed_publication_v1": "git-journal-fence",
           "legacy_create_v1": "reject-claimed-id",
           "legacy_transition_v1": "reject-active-claim"
         },
         "write_serialization": {
-          "scope": "shared-coordinator-writers",
-          "blocks_until": "coordinator-transaction-complete"
+          "scope": "all-worktrees-of-one-repository",
+          "blocks_until": "peer-commit-visible-in-this-checkout"
         }
       },
       "faults": {},
