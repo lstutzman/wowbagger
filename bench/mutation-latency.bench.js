@@ -14,7 +14,7 @@ import { rm } from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { createFixtureLedger } from './ledger-fixture.js';
 import { readGitHeadLedger } from '../src/git-reconciliation.js';
-import { loadLedger } from '../src/ledger.js';
+import { ledgerLoadCount, loadLedger } from '../src/ledger.js';
 import { mintId } from '../src/mint.js';
 import { createItem, inspectItem, transitionItem } from '../src/mutation.js';
 import { provisionNamespace } from '../src/namespace.js';
@@ -48,10 +48,24 @@ async function provisionLedger(root, ledger) {
   await provisionNamespace(ledger);
 }
 
+// Complete-ledger loads per mutation before item #100 collapsed the redundant
+// unlocked reads. A claim-protected mutation read the whole directory three
+// times: once in reconcileClaimJournal, once before lock closure, and once
+// under lock. A plain-directory mutation skipped reconciliation and read
+// twice. Measured on this fixture at 1,500 items; the run below reports the
+// live count against these.
+const LOADS_BEFORE_ITEM_100 = { provisioned: 3, plain: 2 };
+
 async function timed(label, run) {
   const started = performance.now();
+  const loadsBefore = ledgerLoadCount();
   const value = await run();
-  return { label, milliseconds: performance.now() - started, value };
+  return {
+    label,
+    milliseconds: performance.now() - started,
+    loads: ledgerLoadCount() - loadsBefore,
+    value,
+  };
 }
 
 function assertOk(label, outcome) {
@@ -90,7 +104,7 @@ async function measureCreate(ledger, date) {
   };
   const created = await timed('create', () => createItem(ledger, request));
   assertOk('create', created.value);
-  return { milliseconds: created.milliseconds, id: request.id };
+  return { milliseconds: created.milliseconds, loads: created.loads, id: request.id };
 }
 
 async function measureTransition(ledger, id, date) {
@@ -106,7 +120,7 @@ async function measureTransition(ledger, id, date) {
   };
   const transitioned = await timed('transition', () => transitionItem(ledger, request));
   assertOk('transition', transitioned.value);
-  return { milliseconds: transitioned.milliseconds };
+  return { milliseconds: transitioned.milliseconds, loads: transitioned.loads };
 }
 
 function report(options, samples, baseline) {
@@ -131,6 +145,26 @@ function report(options, samples, baseline) {
   }
   console.log(`create    best ${format(creates.best)}  median ${format(creates.median)}  worst ${format(creates.worst)}`);
   console.log(`transition best ${format(transitions.best)}  median ${format(transitions.median)}  worst ${format(transitions.worst)}`);
+  reportLoads(options, samples, baseline);
+}
+
+// Load-count attribution. Wall time on this fixture is noisy — the claim
+// journal grows with every round and Git HEAD reads dominate the provisioned
+// path — so the load count is the honest before/after number, and one full
+// load is the price each dropped read stops paying.
+function reportLoads(options, samples, baseline) {
+  const before = options.provisioned
+    ? LOADS_BEFORE_ITEM_100.provisioned
+    : LOADS_BEFORE_ITEM_100.plain;
+  const distinct = (values) => [...new Set(values)].sort((left, right) => left - right).join('/');
+  const createLoads = distinct(samples.map((sample) => sample.createLoads));
+  const transitionLoads = distinct(samples.map((sample) => sample.transitionLoads));
+  const saved = before - Math.max(...samples.map((sample) => sample.transitionLoads));
+
+  console.log(`complete ledger loads per mutation: create ${createLoads}`
+    + `  transition ${transitionLoads}  (before item #100: ${before})`);
+  console.log(`loads saved per mutation: ${saved}`
+    + `  at ${baseline.load.toFixed(1)} ms per load = ${(saved * baseline.load).toFixed(1)} ms`);
 }
 
 async function main() {
@@ -151,7 +185,12 @@ async function main() {
         targets[Math.floor(targets.length / 2) + round].id,
         date,
       );
-      samples.push({ create: created.milliseconds, transition: accepted.milliseconds });
+      samples.push({
+        create: created.milliseconds,
+        createLoads: created.loads,
+        transition: accepted.milliseconds,
+        transitionLoads: accepted.loads,
+      });
     }
     report(options, samples, baseline);
   } finally {
