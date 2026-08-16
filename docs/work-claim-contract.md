@@ -275,6 +275,31 @@ the writing commit is visible where the next mutation runs.** `create` records
 nothing, so `create` never causes a block; `transition` and `patch` do, and
 `create` is the operation most often refused by one.
 
+**Decided: create stays journal-silent.** The asymmetry is intended. Three
+reasons hold it:
+
+1. Create already protects its own instant. Publication is atomic, it refuses
+   to clobber an existing path, and it verifies the published bytes exactly
+   after the write. A journal entry adds no protection to that instant.
+2. A journaled create would serialize every worktree on the highest-volume
+   mutation. The field reports name create as the most frequent mutation and as
+   the most frequent victim of a block. Making create a blocker as well as a
+   victim multiplies a cost that consumers already report.
+3. The remaining exposure window is real but narrow, and it closes at the
+   item's first journal-visible mutation.
+
+**The exposure window, stated honestly.** The journal does not know a created
+item until that item's first journal-visible mutation, which is a `transition`
+or a `patch`. Until then an out-of-protocol overwrite of the item's bytes is
+not detected. A commit alone does not close the window, because reconciliation
+compares only the revisions the journal expects, and the journal expects none
+for that item. From the first `transition` or `patch`, the ordinary surfaces
+cover the item: with the authorized revision committed, an out-of-protocol
+overwrite of the working-tree bytes reports `unauthorized-revision` and the
+next mutation refuses. Inside the window, only an actor that bypasses this tool
+can overwrite the item, and this protocol does not defend against that actor.
+It is merge-coordinated, not exclusive.
+
 Each refusal carries a `reason` that separates the two cases:
 
 | `reason` | Cause | Remedy |
