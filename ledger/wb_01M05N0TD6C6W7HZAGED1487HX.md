@@ -5,9 +5,10 @@ number: 106
 title: "Stop the adapter transport tests flaking under full-suite load"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T16:03:34Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "Hits every future gate run; observed by four independent workers on 2026-08-16."
+  - action: complete
+    date: 2026-08-16
+    summary: "The transport flake is dead: production EPIPE fix plus a de-raced test."
+    rationale: "Two mechanisms, both reproduced under injected load with captured stderr: launchCoreProcess killed the adapter with an unhandled EPIPE on the core child's stdin (production defect in the shared launch discipline, shipped in every adapter - fixed with an error handler, deterministic 20/20 repro test); and the number-index test asserted a scheduling accident (split into a deterministic checkpoint collision test plus an all-interleavings invariant). All three transports now carry the child's stderr into failures. 10/10 loaded full-suite runs green on both runtimes plus 3/3 on v26."
 ---
 
 Reproducible-hazard flake, observed independently by four workers on 2026-08-16 (items #98, #102, #104, #105, #97 reports): under default parallel `node --test test/*.test.js`, roughly one full-suite run in three fails ONE adapter child-process test — a different one each time. Observed failures: adapter-opencode-wire "refuses a malformed wire request and still exits zero" (exit 1), adapter-bootstrap-wire "refuses a request with trailing bytes / invalid UTF-8 and still exits zero", several adapter-implementation-runner cases ("adapter transport failed (1)"), mutation-process "the number-index lock keeps concurrent creates from sharing a number". Every one passes in isolation (8-10 consecutive runs); the full suite is green at --test-concurrency=1 and =2; both Node runtimes affected equally.
