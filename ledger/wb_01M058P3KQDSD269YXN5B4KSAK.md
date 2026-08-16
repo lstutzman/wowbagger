@@ -4,14 +4,19 @@ id: wb_01M058P3KQDSD269YXN5B4KSAK
 number: 96
 title: "Stop failed mutations leaving reconcile-log residue that blocks the next write"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-16
 updated: 2026-08-16
 provenance:
   source: "consumer-field-feedback"
   recorded_at: "2026-08-16T00:00:00.000Z"
 depends_on: []
-related: [wb_01M057PTYZ18N6EE76AEW46E0R]
+related: [ wb_01M057PTYZ18N6EE76AEW46E0R ]
+decisions:
+  - action: accept
+    date: 2026-08-16
+    summary: "Accept the corrected/new PropertyCompass2 field finding."
+    rationale: "Field paper-cut 10: no-op mutations should not dirty the working tree; residue interacts with the commit-at-HEAD invariant (#88)."
 ---
 Field paper-cut 10 (report: .PropertyCompass2/worktrees/260815-212735/docs/wowbagger-feedback.md): a FAILED transition (ok:false, state:unchanged) still rewrote `ledger/.wowbagger/reconcile-*.md`, and the consumer reports the next mutation then trips the commit-at-HEAD blocker on that file unless batch tooling git-adds after failures too. Write-on-failure is verified in source: the legacy fence appends intent and abort journal entries and the reconciliation surfaces rewrite the reconcile log regardless of mutation outcome (src/claim-coordinator.js, src/claim-publication.js writeReconcileLog call sites). This repo’s own sessions hit the residue twice on 2026-08-16 (trailing "Record ledger reconciliation" commits).
 
