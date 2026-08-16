@@ -169,12 +169,14 @@ wowbagger capabilities --json
 ```
 
 The plugin requires its exact core distribution version and top-level core
-`contract_version: 2`. Direct API consumers must check the contract version
+`contract_version: 3`. Direct API consumers must check the contract version
 they support; installed plugin users must also keep the plugin and core
 distribution versions equal.
 
 The shipped adapter selects only adapter contract version 2 and requires core
-contract version 2. A v1-only consumer receives
+contract version 3. The adapter contract and the core contract are separate
+version domains: the adapter stays at 2 while the core moves to 3. A v1-only
+consumer receives
 `unsupported-adapter-contract-version`; it does not receive v2 behavior. The
 schema-2 transport is available. Ledger migration remains a separate quiesced
 maintenance operation. The

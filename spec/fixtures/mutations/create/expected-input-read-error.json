@@ -1,7 +1,7 @@
 {
   "ok": false,
   "command": "create",
-  "contract_version": 2,
+  "contract_version": 3,
   "state": "unchanged",
   "error": {
     "code": "invalid-request",

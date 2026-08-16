@@ -54,7 +54,7 @@ import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
-const MUTATION_CONTRACT_VERSION = 2;
+const MUTATION_CONTRACT_VERSION = 3;
 
 const MAX_PUBLICATION_REQUEST_BYTES = 11 * 1024 * 1024;
 const DISTRIBUTION_VERSION = JSON.parse(

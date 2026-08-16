@@ -31,7 +31,7 @@
     },
     {
       "path": "approved-authority.json",
-      "sha256": "sha256:11af6e2a749416f68284312c33506c5f73ce85f9ffbc31cfbf1ce83aadcb2184"
+      "sha256": "sha256:03ae540c8d8fe8938840c2aaa43327d4df89c60c8415e978e596f1b785de115b"
     },
     {
       "path": "expected-refusal.json",

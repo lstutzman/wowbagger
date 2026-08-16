@@ -21,20 +21,29 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.4` and core `contract_version: 2`.**
+`0.1.0-alpha.4` and core `contract_version: 3`.**
+
+Those two pins do not currently name one published artifact, and that is
+deliberate. The published `0.1.0-alpha.4` core reports `contract_version: 2`;
+core contract version 3 is in the source tree and is not released yet. Until
+the next distribution release, this skill refuses every installed core and
+teaches nothing against a core that cannot honor it. Do not soften either pin
+to make a check pass, and do not invent a release that has not been cut.
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to
   editing ledger files by hand — hand-edits bypass validation and atomic
   publication, which is the whole point of the tool.
 - If the distribution version is missing or is different, stop and report the
-  installed and required versions. An older core can share contract version 2
+  installed and required versions. An older core can share a contract version
   while still lacking behavior this skill requires. Do not guess from the
   contract version alone.
-- `contract_version` is anything other than `2` → stop and say so plainly. A
+- `contract_version` is anything other than `3` → stop and say so plainly. A
   core reporting `1` predates schema version 2, where `depends_on` records
-  declared prerequisites rather than only live blockers; an older or newer core
-  may have changed the request or response shape. Do not guess.
+  declared prerequisites rather than only live blockers. A core reporting `2`
+  predates the widened date-refusal issue shape, the `depends_on`/`related`
+  patch field set, and core-assigned item numbers. An older or newer core may
+  have changed the request or response shape. Do not guess.
 
 Run both commands once per session before the first ledger command, not before
 every command.
@@ -93,7 +102,7 @@ ledger. Do not use an npm script as a machine protocol; invoke `wowbagger`
 directly so standard output contains exactly one compact JSON object.
 
 On success, require exit `0`, `ok: true`, `command: "report"`,
-`contract_version: 2`, `result.report_version: 1`, and the requested
+`contract_version: 3`, `result.report_version: 1`, and the requested
 `result.as_of`. Read the generated file from the absolute `result.output`.
 On failure, require `ok: false` and inspect `error.code`; do not treat an
 existing output as fresh because failed publication preserves the prior report.

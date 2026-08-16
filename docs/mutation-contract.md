@@ -1,7 +1,7 @@
 # Local mutation contract
 
-Status: versions 1 and 2 are defined; the pre-alpha standalone
-local-filesystem runtime currently emits version 2.
+Status: versions 1, 2, and 3 are defined; the pre-alpha standalone
+local-filesystem runtime currently emits version 3.
 
 This document defines the machine contract implemented by the local-filesystem
 mutation backend. It supplements [SPEC.md](../SPEC.md) and
@@ -15,19 +15,65 @@ backend can provide a particular write guarantee.
 ## Contract versions
 
 Version 1 remains the frozen contract described by the version 1 envelopes and
-capability example below. Version 2 retains every version 1 request, response,
+capability example below. Version 2 retained every version 1 request, response,
 state, exit, locking, CAS, publication, and recovery rule except for these
 explicit deltas:
 
-- every core command envelope in this contract carries `contract_version: 2`;
+- every core command envelope carried `contract_version: 2`;
 - one non-empty ledger may use schema version 1 or schema version 2, but never a
   mixture;
 - the capability envelope uses the fixed local mutation scope described in
   section 4 and advertises `patch`; and
 - adapter contract version 2 may invoke `patch` as an approved mutation.
 
+### Version 3
+
+Version 3 is the version this document defines and the runtime emits. It
+retains every version 2 request, response, state, exit, locking, CAS,
+publication, and recovery rule except for these explicit deltas, which are the
+complete difference against published version 2 (`0.1.0-alpha.4`):
+
+- every core command envelope carries `contract_version: 3`;
+- **the widened date-refusal issue shape.** `date-before-created` and
+  `date-before-updated` carry `item_created` and `item_updated` after
+  `related_ids`, on `transition` and `patch` alike (section 7). These two codes
+  are the only ones that carry them; every other issue code keeps its
+  four-member shape. This is the delta that requires the bump: a version 2
+  consumer that validates issue members exactly refuses the six-member shape,
+  so the version 2 compatibility argument below no longer holds for these two
+  codes;
+- **the widened patch field set.** The patchable set is `priority`,
+  `depends_on`, and `related`, replacing version 2's `number` and `priority`
+  (section 9). A relation value replaces the whole list; `null` removes the
+  field, and removing the required `depends_on` returns `candidate-invalid`.
+  Relations patches ride the same lock, CAS, candidate-validation, publication,
+  and claim rules as any other patch;
+- **number as item identity on schema version 2.** The core assigns `number` at
+  `create` as one more than the highest existing number; a `create` request
+  that supplies one is refused, `number` is no longer patchable, and `inspect`
+  accepts `--number <n>` as an alternative selector to `--id`. Schema version 1
+  ledgers are unaffected; and
+- **the configured item directory.** `create` derives the published path from
+  the committed `<ledger>/.wowbagger/layout.json`, and validation rejects a
+  parsed item outside it (section 5). A ledger without that file keeps the
+  version 2 `<ledger>/<id>.md` path.
+
+Two version-2-era changes are deliberately **not** version 3 deltas. The
+section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
+it adds no member, removes none, and renames none, so it is not a version
+delta. What changed is that the rule is now stated once, the `ledger-mutation`
+domain is named, and `spec/fixtures/envelope-domains/manifest.json` pins every
+response class. The `claim capabilities` backend now advertises
+`result.backend.write_serialization`, which belongs to the work-claim version
+domain and leaves the core capability envelope unchanged.
+
+A version 1 or version 2 consumer fails closed against a version 3 core: it
+reads `contract_version: 3` from `capabilities --json`, does not recognize it,
+and stops. That is the intended outcome, not a regression.
+
 The bootstrap wire, work-claim API, adapter approval, instruction, handoff, and
-fixture-format versions are separate version domains and remain version 1.
+fixture-format versions are separate version domains and remain version 1. The
+adapter contract remains version 2; only the core contract moves to 3.
 
 Version negotiation uses distinct existing fields. A core consumer MUST read
 the top-level `contract_version` from `capabilities --json`. A work-claim
@@ -39,13 +85,9 @@ remains the version 1 envelope marker for exact version 1 consumers.
 This rule is the migration path for generic consumers: dispatch by response
 domain first, then check the version field for that domain. Section 2 states
 the domains, the exact dispatch steps, and the two sanctioned exceptions. No
-envelope member changes, so existing exact-member consumers remain compatible.
-
-The envelope rule in section 2 is documentation of the wire that versions 1 and
-2 already emit. It adds no member, removes none, and renames none, so it is not
-a version delta and needs no version bump. What changed is that the rule is now
-stated once, the `ledger-mutation` domain is named, and
-`spec/fixtures/envelope-domains/manifest.json` pins every response class.
+root envelope member changes across versions 1, 2, and 3, so a consumer that
+matches root members exactly still matches; a consumer that matches issue
+members exactly must negotiate version 3 before reading a date refusal.
 
 ## 1. Scope
 
@@ -62,7 +104,7 @@ Git common directory, but they do not protect publication or coordinate a
 mutation. A write lock protects a short mutation attempt; it is not a claim,
 assignment, lease, or reservation. The separate [fenced work-claim
 contract](work-claim-contract.md) defines a future backend protocol; it does
-not add a fencing guarantee to either mutation-contract version.
+not add a fencing guarantee to any mutation-contract version.
 
 If a future backend advertises safely fenced claims while retaining these
 legacy entry points, it must run them through the same coordinator: transition
@@ -141,7 +183,7 @@ answer in two domains.
 
 | Domain | Root `namespace` | `contract_version` | Version to negotiate |
 |---|---|---|---|
-| core | absent | 2 | top-level `contract_version` of `capabilities --json` |
+| core | absent | 3 | top-level `contract_version` of `capabilities --json` |
 | work-claim | `work-claim` | 1, the legacy envelope marker | `result.operations.work_claim.api_version` of `claim capabilities --json` |
 | ledger-publication | `ledger-publication` | 1, the legacy envelope marker | the same work-claim `api_version` |
 | ledger-mutation | `ledger-mutation` | 1, the legacy envelope marker | the same work-claim `api_version` |
@@ -423,15 +465,15 @@ members above. This is the one input to `capabilities`, so the response is
 deterministic for a given working directory but not fixed across working
 directories.
 
-### Contract version 2 capability delta
+### Contract version 3 capability delta
 
 The preceding JSON and three-member Git-dependent coupling remain the exact
-version 1 definition. Version 2 changes only the following capability paths;
-all omitted paths retain their version 1 values:
+version 1 definition. Versions 2 and 3 change only the following capability
+paths; all omitted paths retain their version 1 values:
 
-| Path | Version 2 value |
+| Path | Version 3 value |
 |---|---|
-| `contract_version` | `2` |
+| `contract_version` | `3` |
 | `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
 | `result.limits.cross_worktree_coordination` | `false` |
@@ -525,8 +567,8 @@ core contains only fields defined by supported item schema versions:
 - provenance.source and provenance.recorded_at;
 - depends_on and related;
 - optional parent, snoozed_until, completed, killed, archived;
-- optional number and priority, the caller-supplied schema fields;
-  and
+- optional number, the core-assigned item identity on schema version 2, and
+  optional priority, the caller-supplied schema priority; and
 - decisions with only their defined action, date, summary, rationale, and
   optional rollup id/status members.
 
@@ -644,7 +686,7 @@ Create accepts exactly:
 | item.related | No | Valid relation list; omitted means empty. |
 | item.parent | No | Valid epic ID. |
 | item.snoozed_until | No | Valid ISO calendar date. |
-| item.number | No | Positive integer; the caller-supplied schema handle. |
+| item.number | No | Refused. On schema version 2, number is the item identity and create assigns it. |
 | item.priority | No | Non-negative integer; the caller-supplied schema priority. |
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
@@ -664,13 +706,15 @@ prints a canonical ID for now, `--date` selects another creation date, and
 `src/mint.js` exports `mintId` so an adapter or plugin can mint one without
 shelling out.
 
-item must not supply schema_version, id, status, created, updated, completed,
-killed, archived, decisions, or body. For a non-empty valid ledger, create
-inserts the schema_version already used by every existing item. For an empty
-ledger, it inserts schema_version 2. Create returns that selection in
+item must not supply schema_version, id, number, status, created, updated,
+completed, killed, archived, decisions, or body. For a non-empty valid ledger,
+create inserts the schema_version already used by every existing item. For an
+empty ledger, it inserts schema_version 2. Create returns that selection in
 `result.item.core.schema_version`. It also inserts status triage, created
 and updated equal to the UTC date encoded by id, and related [] when omitted.
-It adds no terminal date or decision.
+On a schema version 2 ledger it inserts number as one more than the highest
+existing number, assigned under a number-index lock so concurrent creates
+cannot collide. It adds no terminal date or decision.
 
 The candidate complete ledger must validate before publication. After the
 requested-ID lock and locked revalidation, create applies this collision

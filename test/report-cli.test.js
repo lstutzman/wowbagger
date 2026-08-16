@@ -47,7 +47,7 @@ test('report writes the configured HTML and one success envelope', async () => {
     assert.deepEqual(JSON.parse(result.stdout), {
       ok: true,
       command: 'report',
-      contract_version: 2,
+      contract_version: 3,
       result: {
         report_version: 1,
         as_of: '2030-01-15',
@@ -68,7 +68,7 @@ test('report rejects missing required arguments with one JSON envelope', () => {
   assert.deepEqual(JSON.parse(result.stdout), {
     ok: false,
     command: 'report',
-    contract_version: 2,
+    contract_version: 3,
     error: {
       code: 'invalid-request',
       message: 'The report request is invalid.',
@@ -107,7 +107,7 @@ test('report validates the ledger before reading report configuration', async ()
     assert.deepEqual(Object.keys(output), ['ok', 'command', 'contract_version', 'error']);
     assert.equal(output.ok, false);
     assert.equal(output.command, 'report');
-    assert.equal(output.contract_version, 2);
+    assert.equal(output.contract_version, 3);
     assert.equal(output.error.code, 'ledger-invalid');
     assert.equal(output.error.message, 'The configured ledger is invalid.');
     assert.ok(Array.isArray(output.error.details.errors));

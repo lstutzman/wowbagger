@@ -22,7 +22,7 @@ const BASE_MANIFEST = {
   adapter_version: '1.0.0',
   adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 2,
+  required_core_contract_version: 3,
   entrypoints: {
     describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },
@@ -959,9 +959,9 @@ test('verifyCoreProbe refuses a probe whose ok member is not true', () => {
 });
 
 // A protocol-version-1 probe is a schema issue (this engine only speaks
-// core contract version 2) even when its number happens to equal the
+// core contract version 3) even when its number happens to equal the
 // describe result's required core contract version.
-test('verifyCoreProbe refuses a probe with a contract_version other than 2', () => {
+test('verifyCoreProbe refuses a probe with a contract_version other than 3', () => {
   const describe = structuredClone(SCENARIOS.base_dynamic);
   describe.core.required_core_contract_version = 1;
   const probe = { ...coreCapabilities(), contract_version: 1 };
@@ -1104,7 +1104,7 @@ test('verifyCoreProbe accepts cross-worktree advisory claim visibility independe
   assert.equal(result.ok, true);
 });
 
-test('version 2 advertises patch in the fixed core order and exact capability shape', () => {
+test('version 3 advertises patch in the fixed core order and exact capability shape', () => {
   assert.deepEqual(CORE_COMMAND_ORDER, [
     'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
   ]);

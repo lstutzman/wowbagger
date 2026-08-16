@@ -5,7 +5,7 @@
     "nonce": "single-use-approval-0001",
     "issued_at": "2030-01-15T12:00:00Z",
     "expires_at": "2030-01-15T12:05:00Z",
-    "invocation_digest": "sha256:490ea75b8b8e426008cf7dffcf7f24ea46eec02b952512a8a8de4d8be1c97fb4"
+    "invocation_digest": "sha256:dbc1adb9a46ad121d0e391bfb4ea4bf18cb62bd21b6160369dc40bdd6e8ef2f9"
   },
   "approval_options": {
     "binding": {
@@ -13,7 +13,7 @@
       "adapter": { "id": "example.reference", "version": "1.0.0", "contract_version": 2 },
       "core": {
         "executable_identity": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "contract_version": 2,
+        "contract_version": 3,
         "argv": ["transition", "--ledger", "/approved/workspace/ledger", "--input", "-", "--json"],
         "input_base64": "e30K"
       },

@@ -1,7 +1,7 @@
 {
   "ok": true,
   "command": "patch",
-  "contract_version": 2,
+  "contract_version": 3,
   "state": "committed",
   "result": {
     "item": {

@@ -1,12 +1,12 @@
 import { hasExactMembers } from './schema-helpers.js';
 
-// The version 2 core command list, in the fixed advertising order (contract
+// The version 3 core command list, in the fixed advertising order (contract
 // section 3). `describe.js` also needs this order to validate the
 // `core.commands` subset it accepts, so it is exported from here.
 export const CORE_COMMAND_ORDER = Object.freeze([
   'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
-export const CORE_CONTRACT_VERSION = 2;
+export const CORE_CONTRACT_VERSION = 3;
 
 function refuse(error_code, detail) {
   return { ok: false, error_code, detail };
@@ -155,7 +155,7 @@ function sameCommandOrder(commands) {
 
 // verifyCoreProbe(describe, probe) checks the independently-launched core
 // `capabilities --json` probe against an already-validated describe
-// result (contract section 3): the probe must match the exact version 2
+// result (contract section 3): the probe must match the exact version 3
 // envelope, its contract version must match the required core contract
 // version, its command list must match the advertised one, and neither
 // optional feature may be elevated beyond what the probe actually supports.
