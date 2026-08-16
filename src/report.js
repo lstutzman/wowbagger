@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { projectReadiness } from './ready.js';
+import { buildEvidence } from './report-evidence.js';
 import {
   classifyItem,
   collectUnknownClasses,
@@ -105,6 +106,7 @@ export function buildReportModel(items, config, asOf) {
     terminalItems,
     workNext,
     unknownClasses: collectUnknownClasses(reportItems),
+    evidence: buildEvidence(reportItems, terminalItems, asOf),
     stats: {
       total: projected.length,
       open: reportItems.length,
