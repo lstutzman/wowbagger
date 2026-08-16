@@ -1838,7 +1838,6 @@ function compareValidationErrors(left, right) {
 }
 
 function validClaimFenceRefusalEnvelope(value, command, exitCode, responseContext) {
-  if (!isMutationCommand(command)) return false;
   if (!hasExactKeys(value, ['ok', 'namespace', 'command', 'contract_version', 'state', 'error'])) {
     return false;
   }

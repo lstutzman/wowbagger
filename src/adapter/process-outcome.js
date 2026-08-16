@@ -752,8 +752,7 @@ function validPatchResultCorrelation(item, request) {
 // command. It proves the write never ran, so it is a deterministic outcome the
 // adapter forwards verbatim rather than an unobservable one.
 function validLedgerMutationRefusalEnvelope(value, command, exitCode, responseContext) {
-  if (!isMutationCommand(command)
-    || !hasExactMembers(value, ['ok', 'namespace', 'command', 'contract_version', 'state', 'error'])
+  if (!hasExactMembers(value, ['ok', 'namespace', 'command', 'contract_version', 'state', 'error'])
     || value.ok !== false
     || value.namespace !== LEDGER_MUTATION_NAMESPACE
     || value.command !== `${command}-v1`
