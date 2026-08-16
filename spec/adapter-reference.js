@@ -41,6 +41,34 @@ const MUTATION_ERROR_STATES = new Map([
   ['post-commit-recovery-required', 'committed'],
   ['write-outcome-unknown', 'unknown'],
 ]);
+// A mutating command may also be answered by the claim fence, which speaks the
+// ledger-mutation domain and carries the legacy work-claim envelope marker
+// rather than the core contract version.
+const CLAIM_DOMAIN_ENVELOPE_VERSION = 1;
+const CLAIM_NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
+const UNSIGNED_DECIMAL = /^(0|[1-9][0-9]*)$/;
+const FENCE_REFUSAL_MESSAGES = new Map([
+  ['claimed-item-write-refused', 'Legacy create cannot write an item identity with claim history.'],
+  ['active-claim-write-refused', 'Legacy transition cannot write an item with an active claim.'],
+  ['claim-store-unavailable', 'The durable claim store is unavailable.'],
+]);
+const FENCE_REFUSAL_EXITS = new Map([
+  ['claimed-item-write-refused', 4],
+  ['active-claim-write-refused', 4],
+  ['claim-store-unavailable', 6],
+]);
+const FENCE_REFUSAL_COMMANDS = new Map([
+  ['claimed-item-write-refused', ['create']],
+  ['active-claim-write-refused', ['transition', 'patch']],
+  ['claim-store-unavailable', ['create', 'transition', 'patch']],
+]);
+// Only the durable-store refusal can leave the outcome genuinely unobservable;
+// the two legacy refusals always prove the write never started.
+const FENCE_REFUSAL_STATES = new Map([
+  ['claimed-item-write-refused', ['unchanged']],
+  ['active-claim-write-refused', ['unchanged']],
+  ['claim-store-unavailable', ['unchanged', 'unknown']],
+]);
 const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
   inspect: new Set(['invalid-request', 'item-not-found', 'ledger-invalid']),
   create: new Set([
@@ -1493,6 +1521,11 @@ function hasRequiredFinalLf(bytes) {
 
 function validCoreCommandEnvelope(value, command, exitCode, responseContext) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  // Dispatch on the response domain before the command: a root namespace
+  // member names the domain, and only ledger-mutation answers a core command.
+  if (Object.hasOwn(value, 'namespace')) {
+    return validClaimFenceRefusalEnvelope(value, command, exitCode, responseContext);
+  }
   if (command === 'validate') {
     return validCoreValidateEnvelope(value, exitCode);
   }
@@ -1802,6 +1835,66 @@ function compareValidationErrors(left, right) {
     || compareText(left.field, right.field)
     || compareText(left.code, right.code)
     || compareText(left.message, right.message);
+}
+
+function validClaimFenceRefusalEnvelope(value, command, exitCode, responseContext) {
+  if (!hasExactKeys(value, ['ok', 'namespace', 'command', 'contract_version', 'state', 'error'])) {
+    return false;
+  }
+  if (value.ok !== false || value.namespace !== 'ledger-mutation') return false;
+  if (value.command !== `${command}-v1`) return false;
+  if (value.contract_version !== CLAIM_DOMAIN_ENVELOPE_VERSION) return false;
+  if (!hasExactKeys(value.error, ['code', 'message', 'details'])) return false;
+  const code = value.error.code;
+  if (!FENCE_REFUSAL_MESSAGES.has(code)) return false;
+  if (value.error.message !== FENCE_REFUSAL_MESSAGES.get(code)) return false;
+  if (exitCode !== FENCE_REFUSAL_EXITS.get(code)) return false;
+  if (!FENCE_REFUSAL_COMMANDS.get(code).includes(command)) return false;
+  if (!FENCE_REFUSAL_STATES.get(code).includes(value.state)) return false;
+  // The core validates the request before the fence sees it, so a fence
+  // refusal cannot answer a request that was never canonical.
+  if (!hasCanonicalMutationRequest(responseContext, command)) return false;
+  if (code === 'claim-store-unavailable') return validUnavailableStoreDetails(value.error.details);
+  return validClaimReadBackDetails(code, value.error.details, responseItemId(responseContext, command));
+}
+
+function validClaimReadBackDetails(code, details, expectedItemId) {
+  const members = ['ledger_namespace', 'item_id', 'observed_at', 'last_epoch', 'active'];
+  if (!hasExactKeys(details, members)) return false;
+  if (!CLAIM_NAMESPACE_ID.test(details.ledger_namespace)) return false;
+  if (!WOWBAGGER_ID.test(details.item_id)) return false;
+  if (expectedItemId !== undefined && details.item_id !== expectedItemId) return false;
+  if (!isCoreRfc3339Utc(details.observed_at)) return false;
+  if (typeof details.last_epoch !== 'string' || !UNSIGNED_DECIMAL.test(details.last_epoch)) {
+    return false;
+  }
+  if (details.active !== null) {
+    const active = details.active;
+    if (!hasExactKeys(active, ['owner_id', 'epoch', 'issued_at', 'expires_at'])) return false;
+    if (!nonEmptyControlFreeString(active.owner_id)) return false;
+    if (typeof active.epoch !== 'string' || !UNSIGNED_DECIMAL.test(active.epoch)) return false;
+    if (!isCoreRfc3339Utc(active.issued_at) || !isCoreRfc3339Utc(active.expires_at)) return false;
+  }
+  // The read-back must exhibit the condition its own code names.
+  if (code === 'claimed-item-write-refused') return details.last_epoch !== '0';
+  return details.active !== null;
+}
+
+function validUnavailableStoreDetails(details) {
+  if (!plainObject(details)) return false;
+  if (!nonEmptyControlFreeString(details.reason)) return false;
+  if (!Object.hasOwn(details, 'findings')) {
+    return details.reason !== 'publication-reconciliation-required';
+  }
+  const findings = details.findings;
+  if (!Array.isArray(findings) || findings.length === 0) return false;
+  for (const finding of findings) {
+    if (!plainObject(finding)) return false;
+    if (!nonEmptyControlFreeString(finding.code)) return false;
+    if (!WOWBAGGER_ID.test(finding.item_id)) return false;
+  }
+  // Reconciliation is only actionable when some finding names a remediation.
+  return findings.some((finding) => nonEmptyControlFreeString(finding.remediation));
 }
 
 function validCoreMutationEnvelope(value, command, exitCode, responseContext) {

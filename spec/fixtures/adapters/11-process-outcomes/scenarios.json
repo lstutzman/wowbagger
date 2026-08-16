@@ -632,6 +632,211 @@
       },
       "expected_code": "mutation-outcome-unknown",
       "expected_mutation_outcome": "unknown"
+    },
+    {
+      "id": "mutation-fence-claimed-item-write-refused",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "fence-create",
+        "command": "create",
+        "core_request": {
+          "command": "create",
+          "ledger": "ledger",
+          "input_base64": ""
+        },
+        "mutation_request": {
+          "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+          "item": {
+            "title": "Map a fictional moon route",
+            "kind": "task",
+            "provenance": {
+              "source": "fixture/mutations",
+              "recorded_at": "2030-01-10T12:34:56.789Z"
+            },
+            "depends_on": [],
+            "related": []
+          },
+          "body": "\nPlot a fictional route from Brindle Station to Lumen Reef.\n"
+        },
+        "item_id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+        "expected_revision": null,
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": 4,
+          "signal": null,
+          "timed_out": false,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJvayI6ZmFsc2UsIm5hbWVzcGFjZSI6ImxlZGdlci1tdXRhdGlvbiIsImNvbW1hbmQiOiJjcmVhdGUtdjEiLCJjb250cmFjdF92ZXJzaW9uIjoxLCJzdGF0ZSI6InVuY2hhbmdlZCIsImVycm9yIjp7ImNvZGUiOiJjbGFpbWVkLWl0ZW0td3JpdGUtcmVmdXNlZCIsIm1lc3NhZ2UiOiJMZWdhY3kgY3JlYXRlIGNhbm5vdCB3cml0ZSBhbiBpdGVtIGlkZW50aXR5IHdpdGggY2xhaW0gaGlzdG9yeS4iLCJkZXRhaWxzIjp7ImxlZGdlcl9uYW1lc3BhY2UiOiJ3Ym5zXzExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTFmIiwiaXRlbV9pZCI6IndiXzAxUTQ1WDQ3NE4yOFQ1Q1k0R05GNllZNEhNIiwib2JzZXJ2ZWRfYXQiOiIyMDMwLTAxLTExVDA5OjAwOjAxLjAwMFoiLCJsYXN0X2Vwb2NoIjoiNiIsImFjdGl2ZSI6eyJvd25lcl9pZCI6ImFnZW50LWEtcnVuLTEiLCJlcG9jaCI6IjYiLCJpc3N1ZWRfYXQiOiIyMDMwLTAxLTExVDA5OjAwOjAwLjAwMFoiLCJleHBpcmVzX2F0IjoiMjAzMC0wMS0xMVQwOTowNTowMC4wMDBaIn19fX0K",
+          "stderr_base64": ""
+        }
+      },
+      "expected_code": null,
+      "expected_mutation_outcome": null
+    },
+    {
+      "id": "mutation-fence-active-claim-write-refused",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "fence-transition",
+        "command": "transition",
+        "core_request": {
+          "command": "transition",
+          "ledger": "ledger",
+          "input_base64": ""
+        },
+        "mutation_request": {
+          "id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "to_status": "done",
+          "date": "2030-01-11",
+          "decision": {
+            "summary": "Complete the fictional chart update.",
+            "rationale": "The fenced publication vector commits this valid successor."
+          }
+        },
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": 4,
+          "signal": null,
+          "timed_out": false,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJvayI6ZmFsc2UsIm5hbWVzcGFjZSI6ImxlZGdlci1tdXRhdGlvbiIsImNvbW1hbmQiOiJ0cmFuc2l0aW9uLXYxIiwiY29udHJhY3RfdmVyc2lvbiI6MSwic3RhdGUiOiJ1bmNoYW5nZWQiLCJlcnJvciI6eyJjb2RlIjoiYWN0aXZlLWNsYWltLXdyaXRlLXJlZnVzZWQiLCJtZXNzYWdlIjoiTGVnYWN5IHRyYW5zaXRpb24gY2Fubm90IHdyaXRlIGFuIGl0ZW0gd2l0aCBhbiBhY3RpdmUgY2xhaW0uIiwiZGV0YWlscyI6eyJsZWRnZXJfbmFtZXNwYWNlIjoid2Juc18xMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExZiIsIml0ZW1faWQiOiJ3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNiIsIm9ic2VydmVkX2F0IjoiMjAzMC0wMS0xMVQwOTowMDowMS4wMDBaIiwibGFzdF9lcG9jaCI6IjYiLCJhY3RpdmUiOnsib3duZXJfaWQiOiJhZ2VudC1hLXJ1bi0xIiwiZXBvY2giOiI2IiwiaXNzdWVkX2F0IjoiMjAzMC0wMS0xMVQwOTowMDowMC4wMDBaIiwiZXhwaXJlc19hdCI6IjIwMzAtMDEtMTFUMDk6MDU6MDAuMDAwWiJ9fX19Cg==",
+          "stderr_base64": ""
+        }
+      },
+      "expected_code": null,
+      "expected_mutation_outcome": null
+    },
+    {
+      "id": "mutation-fence-patch-active-claim-write-refused",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "fence-patch",
+        "command": "patch",
+        "core_request": {
+          "command": "patch",
+          "ledger": "ledger",
+          "input_base64": ""
+        },
+        "mutation_request": {
+          "id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "date": "2030-01-11",
+          "set": {
+            "priority": 1
+          }
+        },
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": 4,
+          "signal": null,
+          "timed_out": false,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJvayI6ZmFsc2UsIm5hbWVzcGFjZSI6ImxlZGdlci1tdXRhdGlvbiIsImNvbW1hbmQiOiJwYXRjaC12MSIsImNvbnRyYWN0X3ZlcnNpb24iOjEsInN0YXRlIjoidW5jaGFuZ2VkIiwiZXJyb3IiOnsiY29kZSI6ImFjdGl2ZS1jbGFpbS13cml0ZS1yZWZ1c2VkIiwibWVzc2FnZSI6IkxlZ2FjeSB0cmFuc2l0aW9uIGNhbm5vdCB3cml0ZSBhbiBpdGVtIHdpdGggYW4gYWN0aXZlIGNsYWltLiIsImRldGFpbHMiOnsibGVkZ2VyX25hbWVzcGFjZSI6IndibnNfMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMWYiLCJpdGVtX2lkIjoid2JfMDFRNDgzN0JNMDFXNzBUMzBCMTg0R0cxUjYiLCJvYnNlcnZlZF9hdCI6IjIwMzAtMDEtMTFUMDk6MDA6MDEuMDAwWiIsImxhc3RfZXBvY2giOiI2IiwiYWN0aXZlIjp7Im93bmVyX2lkIjoiYWdlbnQtYS1ydW4tMSIsImVwb2NoIjoiNiIsImlzc3VlZF9hdCI6IjIwMzAtMDEtMTFUMDk6MDA6MDAuMDAwWiIsImV4cGlyZXNfYXQiOiIyMDMwLTAxLTExVDA5OjA1OjAwLjAwMFoifX19fQo=",
+          "stderr_base64": ""
+        }
+      },
+      "expected_code": null,
+      "expected_mutation_outcome": null
+    },
+    {
+      "id": "mutation-fence-claim-store-unavailable",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "fence-store",
+        "command": "create",
+        "core_request": {
+          "command": "create",
+          "ledger": "ledger",
+          "input_base64": ""
+        },
+        "mutation_request": {
+          "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+          "item": {
+            "title": "Map a fictional moon route",
+            "kind": "task",
+            "provenance": {
+              "source": "fixture/mutations",
+              "recorded_at": "2030-01-10T12:34:56.789Z"
+            },
+            "depends_on": [],
+            "related": []
+          },
+          "body": "\nPlot a fictional route from Brindle Station to Lumen Reef.\n"
+        },
+        "item_id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+        "expected_revision": null,
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": 6,
+          "signal": null,
+          "timed_out": false,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJvayI6ZmFsc2UsIm5hbWVzcGFjZSI6ImxlZGdlci1tdXRhdGlvbiIsImNvbW1hbmQiOiJjcmVhdGUtdjEiLCJjb250cmFjdF92ZXJzaW9uIjoxLCJzdGF0ZSI6InVuY2hhbmdlZCIsImVycm9yIjp7ImNvZGUiOiJjbGFpbS1zdG9yZS11bmF2YWlsYWJsZSIsIm1lc3NhZ2UiOiJUaGUgZHVyYWJsZSBjbGFpbSBzdG9yZSBpcyB1bmF2YWlsYWJsZS4iLCJkZXRhaWxzIjp7InJlYXNvbiI6InB1YmxpY2F0aW9uLXJlY29uY2lsaWF0aW9uLXJlcXVpcmVkIiwiZmluZGluZ3MiOlt7ImNvZGUiOiJzdGFsZS13cml0ZS1kZXRlY3RlZCIsIml0ZW1faWQiOiJ3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNiIsImFjdHVhbF9yZXZpc2lvbiI6bnVsbCwiZXhwZWN0ZWRfcmV2aXNpb24iOiJzaGEyNTY6MTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsIm9ic2VydmVkX3N1cmZhY2UiOiJnaXQtaGVhZCIsInJlYXNvbiI6ImdpdC1maW5hbGl6YXRpb24tcmVxdWlyZWQiLCJleHBlY3RlZF9wYXRoIjoid2JfMDFRNDgzN0JNMDFXNzBUMzBCMTg0R0cxUjYubWQiLCJyZW1lZGlhdGlvbiI6IkNvbW1pdCB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNi5tZCBpbiBHaXQsIHRoZW4gcnVuIGNsYWltLXZlcmlmeS4ifV19fX0K",
+          "stderr_base64": ""
+        }
+      },
+      "expected_code": null,
+      "expected_mutation_outcome": null
+    },
+    {
+      "id": "mutation-fence-claim-store-outcome-unknown",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "fence-store-unknown",
+        "command": "create",
+        "core_request": {
+          "command": "create",
+          "ledger": "ledger",
+          "input_base64": ""
+        },
+        "mutation_request": {
+          "id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+          "item": {
+            "title": "Map a fictional moon route",
+            "kind": "task",
+            "provenance": {
+              "source": "fixture/mutations",
+              "recorded_at": "2030-01-10T12:34:56.789Z"
+            },
+            "depends_on": [],
+            "related": []
+          },
+          "body": "\nPlot a fictional route from Brindle Station to Lumen Reef.\n"
+        },
+        "item_id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+        "expected_revision": null,
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": 6,
+          "signal": null,
+          "timed_out": false,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJvayI6ZmFsc2UsIm5hbWVzcGFjZSI6ImxlZGdlci1tdXRhdGlvbiIsImNvbW1hbmQiOiJjcmVhdGUtdjEiLCJjb250cmFjdF92ZXJzaW9uIjoxLCJzdGF0ZSI6InVua25vd24iLCJlcnJvciI6eyJjb2RlIjoiY2xhaW0tc3RvcmUtdW5hdmFpbGFibGUiLCJtZXNzYWdlIjoiVGhlIGR1cmFibGUgY2xhaW0gc3RvcmUgaXMgdW5hdmFpbGFibGUuIiwiZGV0YWlscyI6eyJyZWFzb24iOiJsZWdhY3ktbXV0YXRpb24tb3V0Y29tZS11bmtub3duIiwiYXR0ZW1wdF9pZCI6IjVmNGQyYzFiLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMCIsImNhbmRpZGF0ZV9yZXZpc2lvbiI6InNoYTI1NjoxMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExIn19fQo=",
+          "stderr_base64": ""
+        }
+      },
+      "expected_code": "mutation-outcome-unknown",
+      "expected_mutation_outcome": "unknown"
     }
   ]
 }
