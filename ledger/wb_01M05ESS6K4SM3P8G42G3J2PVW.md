@@ -5,9 +5,10 @@ number: 99
 title: "Decide whether create should record a claim-journal entry"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-08-16
 updated: 2026-08-16
+completed: 2026-08-16
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T14:14:52Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "Lee accepted on 2026-08-16. Design decision on create journal asymmetry needs recording either way."
+  - action: complete
+    date: 2026-08-16
+    summary: "Create stays journal-silent; the decision and its honest window are recorded."
+    rationale: "Rationale: create's atomic no-clobber publication protects the creation instant; journaling creates would serialize every worktree on the highest-volume mutation; the window closes at the item's first journal-visible transition - NOT at commit, which the fixture proved against the original rationale. The journal schema independently refuses create-v1 entries. Fixtures pin the undetected-overwrite window, the post-transition detection, and the no-cross-worktree-block property."
 ---
 
 Design question surfaced during item #89: `createItem` does not pass `authorize` to `withLegacyMutationFence`, so a create records no journal entry on a provisioned ledger. Consequences, now documented in work-claim-contract section 3.1: create never causes a cross-worktree block (only transition and patch do), and — the open risk — the journal cannot detect an unauthorized overwrite of a freshly created item until its first transition records it.
