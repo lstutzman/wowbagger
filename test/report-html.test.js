@@ -82,6 +82,9 @@ function model() {
       aging: [
         { id: 'wb_old', number: 3, title: 'Old item', status: 'backlog', state: 'ready', ageDays: 225 },
       ],
+      blockedTotal: 3,
+      agingTotal: 1,
+      stuckTotal: 1,
       stuck: [{
         id: 'wb_stuck',
         number: 10,
@@ -211,4 +214,11 @@ test('names related items by number inside the drill-down detail', async () => {
   assert.match(detail, /<dt>Depends on<\/dt><dd>#8<\/dd>/);
   assert.match(detail, /<dt>Related<\/dt><dd>wb_missing<\/dd>/);
   assert.match(detail, /<li>Dependency is not done: #8<\/li>/);
+});
+
+test('says how much of a truncated attention list is not shown', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model()));
+
+  assert.match(surface, /Showing 1 of 3\./);
 });

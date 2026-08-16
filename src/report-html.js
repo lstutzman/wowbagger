@@ -137,7 +137,15 @@ function renderAttention(attention) {
     ? '<p class="muted">Nothing started is past the historical 85th percentile.</p>'
     : `<ul class="plain">${attention.stuck.map((entry) => `<li><span class="handle">${escapeHtml(numberHandle(entry))}</span> ${escapeHtml(entry.title)}<br><span class="muted">${entry.elapsedDays}d since accept ${escapeHtml(entry.startedOn)} · p85 ${entry.thresholdDays}d</span></li>`).join('')}</ul>`;
 
-  return `<section id="attention" class="panel"><div class="section-heading"><div><p class="eyebrow">Needs a decision</p><h2>Attention</h2></div><p class="muted">Blocked work, the oldest open work, and started work past this ledger's own 85th-percentile cycle time.</p></div><div class="attention-grid"><section><h3>Blocked</h3>${blocked}</section><section><h3>Aging</h3>${aging}</section><section><h3>Past p85</h3>${stuck}</section></div></section>`;
+  return `<section id="attention" class="panel"><div class="section-heading"><div><p class="eyebrow">Needs a decision</p><h2>Attention</h2></div><p class="muted">Blocked work, the oldest open work, and started work past this ledger's own 85th-percentile cycle time.</p></div><div class="attention-grid"><section><h3>Blocked</h3>${blocked}${renderTruncation(attention.blocked, attention.blockedTotal)}</section><section><h3>Aging</h3>${aging}${renderTruncation(attention.aging, attention.agingTotal)}</section><section><h3>Past p85</h3>${stuck}${renderTruncation(attention.stuck, attention.stuckTotal)}</section></div></section>`;
+}
+
+// A shortened list has to say so. Silent truncation reads as "that is all of
+// it", which is the one thing an attention list must never imply.
+function renderTruncation(shown, total) {
+  return shown.length >= total
+    ? ''
+    : `<p class="muted truncation">Showing ${shown.length} of ${total}. The rest are in the drill-down.</p>`;
 }
 
 function renderEvidence(evidence) {

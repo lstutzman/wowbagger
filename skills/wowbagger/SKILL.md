@@ -104,6 +104,11 @@ at generation time, but the file is only a static view. Area-diverse batches are
 scheduling hints. Use `inspect` plus `transition` for lifecycle changes and the
 claim commands below for coordination.
 
+The report's "Work next" list is a recommended order derived in the report
+layer for a human reader. It is not the queue. `ready --json` remains the only
+machine queue, and its order is priority, created date, then ID. Do not dispatch
+from the report and do not present its order as core output.
+
 ## Writing
 
 Every write is an explicit, reviewable Git change. Show the user the command

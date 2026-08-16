@@ -4,13 +4,22 @@
 // normally takes.
 import { daysBetween } from './report-sequencing.js';
 
-const AGING_LIMIT = 10;
+// Each attention list is a call to act, so it stays short enough to read. The
+// full set is always one section further down, in the drill-down.
+const LIST_LIMIT = 10;
 
-export function buildAttention(openItems, cycleTime, asOf) {
+export function buildAttention(openItems, terminalItems, cycleTime, asOf) {
+  const blocked = buildBlocked(openItems, terminalItems, asOf);
+  const aging = buildAging(openItems, asOf);
+  const stuck = buildStuck(openItems, cycleTime, asOf);
+
   return {
-    blocked: buildBlocked(openItems, asOf),
-    aging: buildAging(openItems, asOf),
-    stuck: buildStuck(openItems, cycleTime, asOf),
+    blocked: blocked.slice(0, LIST_LIMIT),
+    blockedTotal: blocked.length,
+    aging: aging.slice(0, LIST_LIMIT),
+    agingTotal: aging.length,
+    stuck: stuck.slice(0, LIST_LIMIT),
+    stuckTotal: stuck.length,
   };
 }
 
@@ -58,8 +67,7 @@ function buildAging(openItems, asOf) {
       state: item.readiness.state,
       ageDays: daysBetween(item.created, asOf) ?? 0,
     }))
-    .sort((left, right) => right.ageDays - left.ageDays || compareText(left.id, right.id))
-    .slice(0, AGING_LIMIT);
+    .sort((left, right) => right.ageDays - left.ageDays || compareText(left.id, right.id));
 }
 
 function compareText(left, right) {
@@ -68,8 +76,8 @@ function compareText(left, right) {
 
 // A blocker is named by its number, never by its ULID: the reader has to be
 // able to say it out loud.
-function buildBlocked(openItems, asOf) {
-  const byId = new Map(openItems.map((item) => [item.id, item]));
+function buildBlocked(openItems, terminalItems, asOf) {
+  const byId = new Map([...openItems, ...terminalItems].map((item) => [item.id, item]));
 
   return openItems
     .filter((item) => item.readiness.state === 'blocked')

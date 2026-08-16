@@ -110,7 +110,7 @@ export function buildReportModel(items, config, asOf) {
     workNext,
     unknownClasses: collectUnknownClasses(reportItems),
     evidence,
-    attention: buildAttention(reportItems, evidence.cycleTime, asOf),
+    attention: buildAttention(reportItems, terminalItems, evidence.cycleTime, asOf),
     stats: {
       total: projected.length,
       open: reportItems.length,

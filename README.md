@@ -354,7 +354,9 @@ relative `--out` overrides resolve from the caller's working directory.
   "fields": {
     "area": "/priority_area",
     "complexity": "/complexity",
-    "rank": "/priority_rank"
+    "rank": "/priority_rank",
+    "class": "/class",
+    "due": "/due"
   },
   "swarm": { "eligible_complexities": ["small", "medium"] }
 }
@@ -362,9 +364,40 @@ relative `--out` overrides resolve from the caller's working directory.
 
 `repository.logo`, `fields`, and `swarm` are optional. Field values resolve
 from parsed frontmatter with RFC 6901 JSON Pointers. A swarm requires mapped
-`area` and `complexity` fields. The report shows canonical readiness, filters,
-sorting, grouping, three detail levels, terminal history, and area-diverse
-ready batches. It contains no external runtime dependency.
+`area` and `complexity` fields. It contains no external runtime dependency.
+
+The report opens with **Work next**: the ready set in a recommended order,
+each entry carrying the factors that placed it. Below it sit **Attention**
+(blocked work naming its blockers, the oldest open work, and started work past
+this ledger's own 85th-percentile cycle time) and the **evidence layer**
+(aging buckets, weekly arrivals against completions, accept-to-complete cycle
+time, and a Monte Carlo forecast as 50 and 85 percent bands). State counts,
+item cards, filters, grouping, detail levels, terminal history, and
+area-diverse ready batches all remain, demoted below that decision surface.
+
+The recommended order is a report-layer derivation. It is recomputed from
+ledger bytes at render time, never persisted, never a mutation, and it does not
+change `ready`: the core still selects and sorts by priority, created date,
+then ID. Ordering runs as separate, visible steps rather than one opaque score
+— expedite class, then due proximity, then transitive unblocking leverage over
+`depends_on`, then epic enablement from `parent`, then priority, then age, then
+the mapped `complexity` as a WSJF-style size denominator — and every step that
+placed an entry is printed beside it.
+
+Two mapped fields carry the value dimensions the schema deliberately does not:
+
+- **`class`** — a class of service, one of `expedite`, `fixed-date`,
+  `standard`, or `intangible`. `expedite` lifts an item above every other ready
+  item. An absent value means `standard`. An unrecognised value is ranked as
+  standard and reported by number in the report, never silently dropped.
+- **`due`** — an ISO calendar date. The nearest due date sorts first and an
+  overdue one sorts first of all; an item with no due date sorts behind every
+  dated one at that step.
+
+Both ride the ordinary extension-member channel, so the core neither reads nor
+validates them. `complexity` weighs `xs`/`s`/`small` as 1, `m`/`medium` as 2,
+`l`/`large` as 3, and `xl`/`extra-large` as 5; any other value carries no
+weight and is shown as written.
 
 This repository keeps its report configuration in
 `ledger/.wowbagger/report.json`. Generate the ignored local report with:

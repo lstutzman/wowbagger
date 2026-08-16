@@ -110,3 +110,36 @@ test('flags started work past the historical 85th-percentile cycle time', () => 
     thresholdDays: 20,
   }]);
 });
+
+test('names a terminal blocker by number', () => {
+  const deferredEpic = 'wb_deferred_epic';
+  const items = [
+    item(deferredEpic, { number: 21, title: 'Deferred epic', kind: 'epic', status: 'deferred', deferred: '2026-08-02' }),
+    item('wb_child', { number: 38, title: 'Child', parent: deferredEpic }),
+  ];
+
+  const model = buildReportModel(items, config(), '2026-08-14');
+
+  assert.deepEqual(model.attention.blocked[0].blockers, [
+    { code: 'ancestor-not-backlog', id: deferredEpic, number: 21, title: 'Deferred epic', status: 'deferred' },
+  ]);
+});
+
+test('truncates each attention list and reports what it left out', () => {
+  const blocker = 'wb_blocker';
+  const items = [
+    item(blocker, { number: 1, status: 'triage' }),
+    ...Array.from({ length: 12 }, (unused, index) => item(`wb_blocked_${index}`, {
+      number: 100 + index,
+      created: '2026-08-01',
+      depends_on: [blocker],
+    })),
+  ];
+
+  const model = buildReportModel(items, config(), '2026-08-14');
+
+  assert.equal(model.attention.blocked.length, 10);
+  assert.deepEqual(model.attention.blockedTotal, 12);
+  assert.equal(model.attention.aging.length, 10);
+  assert.equal(model.attention.agingTotal, 13);
+});
