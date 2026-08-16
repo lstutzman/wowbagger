@@ -10,15 +10,23 @@
 // It generates a fixture ledger in a temporary directory. It never reads or
 // writes this repository's own `ledger/`.
 import { execFileSync } from 'node:child_process';
-import { rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 import { createFixtureLedger } from './ledger-fixture.js';
+import { appendClaimEntry, claimJournalPath } from '../src/claim-journal.js';
+import { operationDigest, publishClaimed } from '../src/claim-publication.js';
+import { resolveGitCommonDir } from '../src/claim-store.js';
 import { readGitHeadLedger } from '../src/git-reconciliation.js';
 import { ledgerLoadCount, loadLedger } from '../src/ledger.js';
 import { mintId } from '../src/mint.js';
 import { createItem, inspectItem, transitionItem } from '../src/mutation.js';
-import { provisionNamespace } from '../src/namespace.js';
+import { provisionNamespace, readNamespace } from '../src/namespace.js';
 import { validateLedger } from '../src/validate.js';
+
+const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 
 function parseArguments(argumentList) {
   const options = { items: 1500, repeat: 1, seed: 20260816, provisioned: false };
@@ -55,6 +63,14 @@ async function provisionLedger(root, ledger) {
 // twice. Measured on this fixture at 1,500 items; the run below reports the
 // live count against these.
 const LOADS_BEFORE_ITEM_100 = { provisioned: 3, plain: 2 };
+
+// Complete-ledger loads per `publish-claimed` before item #107 collapsed its
+// redundant unlocked reads, measured on this fixture at 1,500 items. The plain
+// call read three times — validateCandidateLedger, then the mutation engine's
+// pre-lock and locked reads — and four when an unresolved publish-intent forced
+// journal reconciliation to read the ledger first. The run below reports the
+// live count against these.
+const LOADS_BEFORE_ITEM_107 = { publish: 3, reconciledPublish: 4 };
 
 async function timed(label, run) {
   const started = performance.now();
@@ -123,7 +139,119 @@ async function measureTransition(ledger, id, date) {
   return { milliseconds: transitioned.milliseconds, loads: transitioned.loads };
 }
 
-function report(options, samples, baseline) {
+// The full claimed loop the field report runs: provision, acquire the claim,
+// inspect the target, build candidate bytes, then publish under the fence.
+// Only the publication itself is timed and load-counted; setup is not.
+async function acquireClaim(ledger, root, namespace, itemId) {
+  const requestPath = path.join(root, 'bench-acquire.json');
+  await writeFile(requestPath, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: itemId,
+    owner_id: 'benchmark-agent',
+    lease_duration_ms: 600_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const stdout = execFileSync(
+    process.execPath,
+    [CLI, 'claim', 'acquire', '--ledger', ledger, '--input', requestPath, '--json'],
+    { encoding: 'utf8' },
+  );
+  const envelope = JSON.parse(stdout);
+  assertOk('claim acquire', envelope);
+  return envelope.result.claim;
+}
+
+function sha256(bytes) {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+function publicationRequest(namespace, itemId, inspected, claim, operationId, title) {
+  const candidate = Buffer.from(Buffer.from(inspected.item.source_base64, 'base64')
+    .toString('utf8')
+    .replace(/^title: .*$/m, `title: "${title}"`), 'utf8');
+  return {
+    operation_id: operationId,
+    ledger_namespace: namespace,
+    item_id: itemId,
+    expected_revision: inspected.item.revision,
+    candidate_source_base64: candidate.toString('base64'),
+    candidate_sha256: sha256(candidate),
+    claim_fence: {
+      ledger_namespace: namespace,
+      item_id: itemId,
+      owner_id: claim.owner_id,
+      epoch: claim.epoch,
+    },
+  };
+}
+
+// A second publication measured behind an unresolved publish-intent, which
+// forces the journal reconciliation that reads the complete ledger again. The
+// intent names the revision already on disk, so reconciliation rolls it back
+// and reports `pending-intent-resolved` rather than refusing the publication.
+async function appendPendingIntent(journalPath, namespace, request, revision) {
+  await appendClaimEntry(journalPath, {
+    type: 'publish-intent',
+    operation_id: 'pub_bench_pending',
+    operation_digest: operationDigest(request),
+    ledger_namespace: namespace,
+    item_id: request.item_id,
+    fence: request.claim_fence,
+    expected_revision: revision,
+    candidate_sha256: sha256(Buffer.from('benchmark pending candidate', 'utf8')),
+    state: 'pending',
+  });
+}
+
+async function measurePublishClaimed(fixture, target) {
+  const namespace = await readNamespace(fixture.ledger);
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const journalPath = claimJournalPath(gitCommonDir, namespace);
+  const claim = await acquireClaim(fixture.ledger, fixture.root, namespace, target.id);
+
+  const first = publicationRequest(
+    namespace,
+    target.id,
+    await inspectItem(fixture.ledger, target.id),
+    claim,
+    'pub_bench_0001',
+    'Benchmark publication',
+  );
+  const published = await timed('publish-claimed', () => publishClaimed({
+    ledgerDirectory: fixture.ledger,
+    gitCommonDir,
+    namespace,
+    request: first,
+  }));
+  assertOk('publish-claimed', published.value);
+
+  const inspected = await inspectItem(fixture.ledger, target.id);
+  const second = publicationRequest(
+    namespace,
+    target.id,
+    inspected,
+    claim,
+    'pub_bench_0002',
+    'Benchmark publication after reconciliation',
+  );
+  await appendPendingIntent(journalPath, namespace, second, inspected.item.revision);
+  const reconciled = await timed('publish-claimed-reconciled', () => publishClaimed({
+    ledgerDirectory: fixture.ledger,
+    gitCommonDir,
+    namespace,
+    request: second,
+  }));
+  assertOk('publish-claimed after pending intent', reconciled.value);
+
+  return {
+    publish: published.milliseconds,
+    publishLoads: published.loads,
+    reconciledPublish: reconciled.milliseconds,
+    reconciledPublishLoads: reconciled.loads,
+  };
+}
+
+function report(options, samples, baseline, publication) {
   const summarize = (values) => {
     const sorted = [...values].sort((left, right) => left - right);
     return {
@@ -146,6 +274,21 @@ function report(options, samples, baseline) {
   console.log(`create    best ${format(creates.best)}  median ${format(creates.median)}  worst ${format(creates.worst)}`);
   console.log(`transition best ${format(transitions.best)}  median ${format(transitions.median)}  worst ${format(transitions.worst)}`);
   reportLoads(options, samples, baseline);
+  if (publication) {
+    reportPublication(publication, baseline, format);
+  }
+}
+
+function reportPublication(publication, baseline, format) {
+  console.log(`publish-claimed ${format(publication.publish)}`
+    + `  after pending intent ${format(publication.reconciledPublish)}`);
+  console.log('complete ledger loads per publish-claimed:'
+    + ` ${publication.publishLoads} (before item #107: ${LOADS_BEFORE_ITEM_107.publish})`
+    + `  after pending intent ${publication.reconciledPublishLoads}`
+    + ` (before item #107: ${LOADS_BEFORE_ITEM_107.reconciledPublish})`);
+  const saved = LOADS_BEFORE_ITEM_107.publish - publication.publishLoads;
+  console.log(`loads saved per publish-claimed: ${saved}`
+    + `  at ${baseline.load.toFixed(1)} ms per load = ${(saved * baseline.load).toFixed(1)} ms`);
 }
 
 // Load-count attribution. Wall time on this fixture is noisy — the claim
@@ -192,7 +335,12 @@ async function main() {
         transitionLoads: accepted.loads,
       });
     }
-    report(options, samples, baseline);
+    // publish-claimed exists only on a provisioned ledger: it is refused
+    // outright on an advisory backend, so there is nothing to measure there.
+    const publication = options.provisioned
+      ? await measurePublishClaimed(fixture, targets.at(-1))
+      : null;
+    report(options, samples, baseline, publication);
   } finally {
     await rm(fixture.root, { force: true, recursive: true });
   }
