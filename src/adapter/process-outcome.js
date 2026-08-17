@@ -205,7 +205,7 @@ function observationIssue(process) {
   if (!hasExactMembers(process, [
     'started', 'process_tree_contained', 'orphaned', 'exit_code', 'signal', 'timed_out',
     'stdout_complete', 'stderr_complete', 'stdout_base64', 'stderr_base64',
-  ])) return 'members';
+  ], ['input_delivery'])) return 'members';
   for (const member of [
     'started', 'process_tree_contained', 'orphaned', 'timed_out', 'stdout_complete', 'stderr_complete',
   ]) {
