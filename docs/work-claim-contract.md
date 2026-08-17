@@ -300,13 +300,21 @@ next mutation refuses. Inside the window, only an actor that bypasses this tool
 can overwrite the item, and this protocol does not defend against that actor.
 It is merge-coordinated, not exclusive.
 
+**`unauthorized-revision` has two remedies, and only one of them is
+destructive.** Restoring the authorized revision discards the out-of-protocol
+edit. Adopting the committed revision keeps it and moves the coordinator's
+authorized revision instead (section 3.3). Every `unauthorized-revision`
+`remediation` string MUST name both, and MUST say for each one what happens to
+the edit. A refusal that names only the restore path reads as an instruction to
+throw the edit away; a field report did exactly that with reviewed, merged work.
+
 Each refusal carries a `reason` that separates the two cases:
 
 | `reason` | Cause | Remedy |
 |---|---|---|
 | `git-finalization-required` | this worktree wrote the item and has not committed it | commit here, then `claim-verify` |
 | `worktree-synchronization-required` | another worktree wrote the item | synchronize this checkout to that commit |
-| `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision, then `claim-verify` |
+| `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision and discard the edit, then `claim-verify`; or adopt the committed revision and keep the edit, then `claim-verify` (section 3.3) |
 
 ### 3.2 Recovering from a foreign-writer block
 
@@ -342,6 +350,119 @@ finding turns from `worktree-synchronization-required` into
 another worktree's item into its own branch. That duplicates the sibling's
 work, conflicts on merge, and the sibling's next recorded write blocks the
 checkout again at a new revision. Synchronize the checkout instead.
+
+### 3.3 Adopting a committed out-of-protocol revision
+
+`claim-adopt` is the non-destructive remedy for `unauthorized-revision`. It
+records that an operator ruled the current committed bytes legitimate, so the
+coordinator's authorized revision becomes those bytes. **It writes no item
+byte.** `updated`, the body, and every other field the item carries survive
+exactly, because the operation changes coordinator state and nothing else.
+
+```sh
+wowbagger claim-adopt --ledger <dir> --input <request.json> --json
+```
+
+It is a standalone verb in the work-claim domain, a sibling of `claim-verify`,
+answering with `namespace: "work-claim"`, `command: "claim-adopt"`, and
+`contract_version: 1`. It is not a `ledger-mutation` verb, because no core
+mutation runs and no item file changes. It is not a `claim-verify` flag, because
+`claim-verify` is the read-mostly reconciliation report every remediation string
+names, and one command name must not mean both "tell me the state" and "change
+the authorization baseline". It is not a `claim` subcommand, because every claim
+lifecycle subcommand refuses with `publication-reconciliation-required` while
+reconciliation reports blocking findings, and adoption exists to clear exactly
+that state, so it runs while those findings stand.
+
+The request is UTF-8 JSON with exactly these members:
+
+```json
+{
+  "ledger_namespace": "wbns_11111111111111111111111111111111",
+  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+  "from_revision": "sha256:7bd2…",
+  "to_revision": "sha256:d8ba…",
+  "adopted_by": "operator-a"
+}
+```
+
+`from_revision` is the revision the caller believes the journal authorizes.
+`to_revision` is the exact revision being adopted. They MUST differ.
+`adopted_by` follows the `owner_id` grammar. Adoption is therefore **per item and
+per revision explicit**: nothing in this request can adopt a second item or a
+revision the caller did not name, and there is no adopt-all.
+
+**Preconditions.** All of them hold before anything is journaled:
+
+| Precondition | Refusal when it fails | Exit |
+|---|---|---|
+| the request matches the schema above | `invalid-request` | 2 |
+| the namespace is provisioned for this endpoint | `ledger-namespace-unbound` | 2 |
+| `from_revision` names the revision the journal currently authorizes | `adoption-witness-mismatch` | 4 |
+| no unexpired active claim holds the item | `claim-held` | 4 |
+| `to_revision` is the item's revision at Git `HEAD` **and** in the caller's own working tree | `adoption-revision-uncommitted` | 4 |
+| the complete ledger is valid with `to_revision` | `adoption-ledger-invalid` | 3 |
+
+The witness is the compare-and-swap. An item the journal has never authorized
+has no authorized revision, so `from_revision` cannot match it and adoption
+refuses; an item whose revision was already adopted refuses a replay of the same
+request. `details.authorized_revision` names what the journal holds, and is
+`null` when the journal holds none.
+
+Both surfaces matter. Git `HEAD` is what every cooperating checkout can see, so
+adopting bytes that are not there would authorize a revision the siblings cannot
+reach. The caller's working tree is what the operator is actually looking at, so
+adopting past an uncommitted change would authorize bytes nobody reviewed.
+`details.observed_surface` names the first surface that disagreed, `git-head` or
+`working-tree`, and `details.observed_revision` names what it holds.
+
+**The journal record.** On success the backend appends one entry naming who
+ruled, when, and both revisions, so the audit trail says an operator ruled these
+bytes legitimate instead of losing the event:
+
+```json
+{
+  "seq": 12,
+  "type": "revision-adoption",
+  "ledger_namespace": "wbns_11111111111111111111111111111111",
+  "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+  "from_revision": "sha256:7bd2…",
+  "to_revision": "sha256:d8ba…",
+  "adopted_by": "operator-a",
+  "adopted_at": "2030-01-11T09:00:05.000Z",
+  "git_commit": "…",
+  "item_path": "wb_01Q4837BM01W70T30B184GG1R6.md"
+}
+```
+
+`adopted_at` is the authoritative instant, never a client clock. The entry is a
+journal authorization exactly like a committed claimed publication or a legacy
+mutation: reconciliation reads the latest of the three as the item's authorized
+revision, and the reconciliation log projects the entry so every sibling
+worktree learns the ruling. The successful response repeats the durable facts:
+
+```json
+{
+  "ok": true,
+  "namespace": "work-claim",
+  "command": "claim-adopt",
+  "contract_version": 1,
+  "state": "committed",
+  "result": {
+    "ledger_namespace": "wbns_11111111111111111111111111111111",
+    "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+    "from_revision": "sha256:7bd2…",
+    "to_revision": "sha256:d8ba…",
+    "adopted_by": "operator-a",
+    "adopted_at": "2030-01-11T09:00:05.000Z"
+  }
+}
+```
+
+**Adoption is not a fence hole.** It moves the authorized revision to one named
+revision and stops. The next out-of-protocol edit is `unauthorized-revision`
+again, measured against the adopted revision, and needs its own explicit
+adoption or a restore.
 
 ## 4. Durable claim and authoritative time
 
@@ -680,9 +801,12 @@ and `remediation`. `expected_path` is present when the journal or current
 ledger identifies the item path. The reasons are:
 
 - `unauthorized-revision`: the observed bytes do not match an authorized
-  legacy mutation or claimed publication. A missing working-tree item is also
-  unauthorized when Git `HEAD` contains the authorized revision. Restore the
-  named authorized path before repeating verification.
+  legacy mutation, claimed publication, or operator adoption. A missing
+  working-tree item is also unauthorized when Git `HEAD` contains the authorized
+  revision. Two remedies clear it and the `remediation` string names both:
+  restore the named authorized path, which discards the edit, or adopt the
+  committed revision with `claim-adopt` (section 3.3), which keeps it. Repeat
+  verification after either.
 - `git-finalization-required`: the current worktree contains the authorized
   revision, but Git `HEAD` does not. Commit the named path, then repeat
   verification.
@@ -800,6 +924,17 @@ Claim-operation semantic messages are likewise exact:
 | `idempotency-conflict` | `The operation identity is already bound to a different request.` |
 | `publication-outcome-unknown` | `The publication outcome could not be determined.` |
 | `claim-store-unavailable` | `The durable claim store is unavailable.` |
+| `adoption-witness-mismatch` | `The adoption witness no longer names the authorized revision.` |
+| `adoption-revision-uncommitted` | `The adopted revision is not committed at Git HEAD.` |
+| `adoption-ledger-invalid` | `The complete ledger is invalid with the adopted revision.` |
+
+The three adoption codes were added with `claim-adopt` (section 3.3), after the
+version 1 vectors were written. They are additive: they name conditions the
+original text did not model, change no existing code, message, or envelope, and
+no earlier reference vector emits them. `adoption-ledger-invalid` is the
+work-claim domain's only exit 3, and it means the same thing exit 3 means
+everywhere in this contract — the ledger the operation would authorize is
+invalid, so nothing changed.
 
 `claim-store-unavailable` is exit 6 with `state: "unchanged"`. It means the
 backend could not reach the durable store that holds claims, epoch high-water
@@ -858,6 +993,14 @@ barriers, restarts, and fault schedule against that backend and comparing its
 envelopes, durable read-back, and exact ledger bytes to the manifest.
 
 ## 10. Current compatibility
+
+`claim-adopt` (section 3.3) is additive at this version. It adds one command,
+one journal entry type, and three error codes; it changes no existing request
+shape, response shape, or error code, and a caller that never invokes it sees
+the same surface as before. The only visible change to an existing surface is
+that every `unauthorized-revision` `remediation` string now names both remedies,
+which the contract already required to be prose a caller reads rather than a
+value a caller matches.
 
 This contract adds no members to schema version 1 Markdown items and changes no
 create or transition request shape. Existing parsers continue to reject

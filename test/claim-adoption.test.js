@@ -488,3 +488,36 @@ test('a lease whose expiry equals the authoritative instant does not block adopt
   assert.equal(adopted.exit, 0, JSON.stringify(adopted.envelope));
   assert.equal(adopted.envelope.result.adopted_at, fixture.claim.expires_at);
 });
+
+// The contract is the surface a consumer reads before it calls anything, so the
+// codes, messages, and remedies it publishes must be the ones the CLI emits.
+test('the work-claim contract documents the adoption operation it implements', async () => {
+  const contract = (await readFile(
+    fileURLToPath(new URL('../docs/work-claim-contract.md', import.meta.url)),
+    'utf8',
+  )).replace(/\s+/gu, ' ');
+
+  assert.match(contract, /### 3\.3 Adopting a committed out-of-protocol revision/);
+  assert.match(contract, /wowbagger claim-adopt --ledger <dir> --input <request\.json> --json/);
+  assert.match(contract, /It writes no item byte/);
+  assert.match(contract, /per item and per revision explicit/);
+  assert.match(contract, /there is no adopt-all/);
+  assert.match(contract, /Adoption is not a fence hole/);
+  for (const member of ['ledger_namespace', 'item_id', 'from_revision', 'to_revision', 'adopted_by']) {
+    assert.match(contract, new RegExp(`"${member}"`), `the request member ${member} is undocumented`);
+  }
+  assert.match(contract, /"type": "revision-adoption"/);
+  assert.match(contract, /`adopted_at` is the authoritative instant, never a client clock/);
+  for (const [code, message] of Object.entries({
+    'adoption-witness-mismatch': 'The adoption witness no longer names the authorized revision.',
+    'adoption-revision-uncommitted': 'The adopted revision is not committed at Git HEAD.',
+    'adoption-ledger-invalid': 'The complete ledger is invalid with the adopted revision.',
+  })) {
+    assert.match(contract, new RegExp(`\`${code}\``), `${code} is undocumented`);
+    assert.match(contract, new RegExp(`\`${message.replace(/[.]/gu, '\\.')}\``), `${code}'s message is undocumented`);
+  }
+  // Both remedies, with the destructive/non-destructive split, in the
+  // diagnosis table and in the reason list.
+  assert.match(contract, /restore the authorized revision and discard the edit, then `claim-verify`; or adopt the committed revision and keep the edit/);
+  assert.match(contract, /restore the named authorized path, which discards the edit, or adopt the committed revision with `claim-adopt` \(section 3\.3\), which keeps it/);
+});
