@@ -4,7 +4,7 @@ id: wb_01M07MYJ6T43JBYYYDZATE2B3J
 number: 115
 title: "Document epic progress as derived from children"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-17T10:40:49Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Dual-run drift audits report a permanent false positive on active epics; the consumer prefers the derivation model stated over the edge opened."
 ---
 
 Field design conflict from PropertyCompass2's dual-run drift audit on alpha.5 (their worktree 260816-191701; 1,572 legacy vs 1,574 ledger items): exactly one status disagreement, and it is structural, not drift. Legacy epic #1075 is in-progress since 2026-06-16; the ledger mirror (wb_01KTSZN100WNMQHWN8EEECR29X) is backlog and cannot follow - "Epics never enter in-progress" is a deliberate contract rule (allowed-edges table has task backlog->in-progress and no epic equivalent). Consequence: an epic under active work is UNREPRESENTABLE, so any drift audit against a store that models epic activity reports a permanent false positive, and whitelisting epics blinds the audit to genuine epic-status errors.
