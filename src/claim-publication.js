@@ -767,6 +767,8 @@ export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namesp
       };
     });
   } catch (error) {
+    // TEMPORARY win32 CI diagnostic; removed with .github/win32-claim-diagnose.mjs.
+    if (process.env.WOWBAGGER_DEBUG_CLAIM_STORE) console.error(error?.stack ?? error);
     return {
       exit: 6,
       stdout: {
