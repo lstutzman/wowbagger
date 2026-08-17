@@ -1,0 +1,43 @@
+{
+  "case": "provisioned-success",
+  "fixture_version": 1,
+  "status": "normative-envelope",
+  "description": "A provisioned transition --auto-commit creates one commit of the changed item and its reconciliation log, verifies it, runs claim-verify, and adds git_commit, commit_paths, and claim_verified to result.",
+  "coverage": [
+    "auto-commit",
+    "core-domain-success",
+    "exact-commit-set",
+    "fixed-subject",
+    "internal-claim-verify"
+  ],
+  "scenario": {
+    "item_id": "wb_01KZBMBEZKPE7D15HKW9Q3GSZV",
+    "steps": [
+      "provision the ledger, run claim-verify, and commit the namespace and log",
+      "transition the item with --auto-commit"
+    ]
+  },
+  "expected_commit_subject": "wowbagger: transition item #1",
+  "expected_commit_paths": [
+    "{{LOG_PATH}}",
+    "items/wb_01KZBMBEZKPE7D15HKW9Q3GSZV.md"
+  ],
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "ok": true,
+      "command": "transition",
+      "contract_version": 3,
+      "state": "committed",
+      "result": {
+        "item": "{{ITEM}}",
+        "git_commit": "{{GIT_COMMIT}}",
+        "commit_paths": [
+          "{{LOG_PATH}}",
+          "items/wb_01KZBMBEZKPE7D15HKW9Q3GSZV.md"
+        ],
+        "claim_verified": true
+      }
+    }
+  }
+}

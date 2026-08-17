@@ -49,6 +49,8 @@
     "check": "npm test && git diff --check && git diff --cached --check",
     "report": "node bin/wowbagger.js report --ledger ledger --json",
     "test": "node --test test/*.test.js",
+    "release:cut": "node scripts/cut-release.js",
+    "release:channels": "node scripts/release-channels.js",
     "prepublishOnly": "node bin/wowbagger.js validate --ledger ledger --json >/dev/null && node --check bin/wowbagger.js && node scripts/verify-release-tag.js"
   },
   "dependencies": {

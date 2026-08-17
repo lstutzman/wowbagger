@@ -228,11 +228,18 @@ The local commands are:
 ~~~text
 wowbagger capabilities --json
 wowbagger inspect --ledger <dir> --id <id> --json
-wowbagger create --ledger <dir> --input <json-file|-> --json
-wowbagger transition --ledger <dir> --input <json-file|-> --json
-wowbagger patch --ledger <dir> --input <json-file|-> --json
+wowbagger create --ledger <dir> --input <json-file|-> --json [--auto-commit]
+wowbagger transition --ledger <dir> --input <json-file|-> --json [--auto-commit]
+wowbagger patch --ledger <dir> --input <json-file|-> --json [--auto-commit]
 wowbagger mint-id [--date YYYY-MM-DD] --json
+wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json
 ~~~
+
+`--auto-commit` is a bare opt-in flag. It is accepted once on `create`,
+`transition`, `patch`, and `publish-claimed`, and it is an unknown argument
+everywhere else. Repeating it is `invalid-request`. Section 13 defines what it
+does. Without it, every existing invocation keeps its exact stdout, exit,
+files, index, and Git `HEAD`.
 
 A dash for --input means standard input. File and standard-input requests have
 identical semantics. Request bytes must be valid UTF-8 JSON with one top-level
@@ -306,6 +313,7 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `claim capabilities/read/acquire/renew/release` | work-claim | work-claim |
 | `claim-verify` | work-claim | work-claim |
 | `claim-adopt` | work-claim | work-claim |
+| `mutation-finalize` | work-claim | work-claim |
 | `claim verify` | ledger-publication, `command: "read"` | ledger-publication |
 | `publish-claimed` | ledger-publication | ledger-publication |
 
@@ -427,9 +435,9 @@ presence is reported separately as bounded recovery_artifacts.
 | 0 | Successful command; a mutation is state committed. | none |
 | 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, items-directory-unavailable |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
-| 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision |
+| 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision, auto-commit-preflight-failed, mutation-finalize-refused |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
-| 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown |
+| 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown, git-commit-failed, git-commit-outcome-unknown, post-commit-reconciliation-failed |
 
 Only exit 0 is normal completion. A client must inspect mutation state on every
 nonzero create, transition, or patch result.
@@ -1927,6 +1935,9 @@ uncommitted mutation looks like.
 
 `spec/fixtures/mutation-refusals/uncommitted-prior-mutation/manifest.json` is
 the normative envelope for this refusal.
+`spec/fixtures/mutation-autocommit/` is the companion set for section 13: it
+pins the success envelope, the commit-failed envelope, and the recovery
+envelope, subject and commit set included.
 
 ### Reconciliation
 
@@ -1959,3 +1970,195 @@ edit, because both look identical in a working tree.
 The invariant stays. What changed is its visibility: it is stated here, in the
 work-claim contract, in the README workflow, and in the installed skill's
 loops, and every blocking finding now names its own remedy.
+
+## 13. Auto-commit: folding the commit into the mutation
+
+`--auto-commit` performs the section 12 loop inside one invocation. It is
+opt-in per invocation, it exists only on a provisioned merge-coordinated
+ledger, and it never changes what the mutation itself does.
+
+There is no configuration file setting, environment default, or repository
+default for it. A hidden default would make existing automation create Git
+commits unexpectedly, so the flag must appear in the argument vector every
+time.
+
+### Version position
+
+The flag is additive. The core contract stays version 3 and the work-claim API
+stays version 1. An invocation without the flag is byte-identical to the
+version-3 behaviour, and a consumer that never sends the flag can never observe
+a new outcome, so neither version needs to move. A consumer detects the feature
+by sending the flag, not by reading a version.
+
+### What it may commit
+
+Only the paths this invocation owns:
+
+| Command | Commit set |
+|---|---|
+| `create` | the created item |
+| `transition` | the changed item and one `<ledger>/.wowbagger/reconcile-<namespace>.md` |
+| `patch` | the changed item and the same one reconciliation log |
+| `publish-claimed` | the published item and the same one reconciliation log |
+
+`create` is journal-silent by design, so its commit set has no log. For the
+other three the log must already carry this invocation's terminal entry before
+it may be staged; if it does not, the invocation reports `git-commit-failed`
+with `reason: "log-unavailable"` rather than making an item-only commit.
+
+Commit subjects are fixed:
+
+    wowbagger: create item #N
+    wowbagger: transition item #N
+    wowbagger: patch item #N
+    wowbagger: publish claimed item #N
+
+A schema-1 item has no number, so its subject names the canonical item ID
+instead of `#N`. No title, body, decision text, or caller-supplied message text
+ever reaches a commit message.
+
+Git's own author and committer resolution applies. `core.hooksPath`,
+`commit.gpgSign`, signing programs, and every hook are honoured. `--no-verify`
+is never passed, signing is never disabled, and no commit is ever amended,
+squashed, reset, force-updated, or retried blindly. Nothing is pushed, fetched,
+pulled, merged, or rebased: a local commit satisfies the `HEAD` surface this
+contract validates against.
+
+### The preflight
+
+Before the mutation runs, the invocation takes a per-working-tree mutex and
+requires all of:
+
+- No path staged anywhere in the repository.
+- No dirty path under the ledger: tracked, untracked, or partially staged.
+- A Git identity Git can resolve without committing.
+- A `HEAD` that exists. A detached `HEAD` is supported, because a commit works
+  from one; an unborn `HEAD` refuses.
+- A clean internal `claim-verify`, which is also what makes an unreconciled
+  prior mutation refuse before `publish-claimed`.
+
+Unstaged and untracked paths **outside** the ledger are allowed and stay
+byte-identical; they are never staged. Any other failure returns exit 4
+`auto-commit-preflight-failed` with `state: "unchanged"`, and no core mutation,
+staging, or commit occurs. `details.reason` is one of `staged-paths-present`,
+`ledger-not-clean`, `identity-unavailable`, `unborn-head`, `mutex-held`,
+`claim-state-unreconciled`, or `git-unavailable`.
+
+The rule is deliberately strict rather than preserving foreign staged work in a
+temporary index. Reconciliation excludes `.wowbagger/` from the Git item
+surface, and a dirty reconciliation log does not itself refuse a mutation, so a
+broad add would silently commit foreign ledger work. Refusing is the cheaper
+correct answer.
+
+A flagged invocation on an advisory or non-provisioned ledger returns exit 5
+`capability-unavailable` with `state: "unchanged"` before the mutation. It does
+not fall back to manual mode.
+
+### The state machine after the mutation
+
+1. `state: "unchanged"` returns the mutation's own envelope and performs no Git
+   action. This includes a claim-fence refusal, a reconciliation refusal, and a
+   refused `publish-claimed` whose durable refusal terminal legitimately changed
+   the reconciliation log. A refusal never commits.
+2. `state: "unknown"` returns unchanged and performs no Git action. A caller
+   must inspect; auto mode must not guess which bytes to commit.
+3. `state: "committed"` continues even when `ok` is `false`, because that state
+   already proves the published item bytes. The original error, exit, and
+   `recovery_artifacts` are preserved and the Git evidence is added inside
+   `error.details`. A transient lock or temporary file this invocation could not
+   remove is reported there, is never staged, and never counts as foreign ledger
+   dirt: refusing on it would make an already-published item impossible to
+   commit.
+
+On success the response keeps its original domain and adds three members to
+`result`: `git_commit`, `commit_paths`, and `claim_verified: true`. A successful
+invocation does not return until an internal `claim-verify` exits 0 with no
+findings and a valid ledger. For `publish-claimed` the same `claim-verify` must
+also report `git_finalized: true` and the new commit in the publication's
+finalization row.
+
+### The commit-failed contract
+
+Exit 6, `state: "committed"`, code `git-commit-failed`, message
+`The item was published, but its Git commit was not established.` The state
+still describes item publication as section 2 defines it. It does not claim Git
+finalization.
+
+`create`, `transition`, and `patch` keep the core domain: no `namespace`, the
+original command name, and the core `contract_version`. `ledger-mutation` is
+not used, because that domain means the fence refused before the core mutation
+ran. `publish-claimed` keeps `namespace: "ledger-publication"`,
+`command: "publish-claimed"`, its legacy envelope marker, and its top-level
+`operation_id`.
+
+~~~json
+{"ok":false,"command":"transition","contract_version":3,"state":"committed","error":{"code":"git-commit-failed","message":"The item was published, but its Git commit was not established.","details":{"id":"wb_...","published_revision":"sha256:...","expected_path":"items/wb_....md","commit_set":[{"path":".wowbagger/reconcile-wbns_....md","sha256":"sha256:..."},{"path":"items/wb_....md","sha256":"sha256:..."}],"pre_commit_head":"<git-oid>","failure_stage":"prepare-commit-set","reason":"log-unavailable","recovery_token":"<bounded-base64url>"}}}
+~~~
+
+`failure_stage` is `prepare-commit-set`, `stage`, or `commit`. `reason` is one
+of `log-unavailable`, `index-unavailable`, `head-changed`,
+`commit-command-failed`, or `tree-changed`. `commit_set` paths are
+ledger-relative and ordered; a `null` digest means the path was never observed
+and recovery must re-derive it.
+
+An **ambiguous** Git outcome is `git-commit-outcome-unknown`, never
+`git-commit-failed`. A commit is this invocation's only when its parent,
+subject, changed-path set, and every blob match what was prepared; a hook that
+rewrites the subject or the tree lands here. History is never rewritten to make
+it match.
+
+A commit that is established while reconciliation then refuses is exit 6
+`post-commit-reconciliation-failed` with `state: "committed"`. It carries
+`git_commit`, `commit_paths`, and the `findings`. The commit stands.
+
+No failure envelope contains raw hook output, signing output, an absolute path,
+an environment value, or platform exception text. A bounded human diagnostic may
+use standard error under the section 2 transport rule.
+
+### mutation-finalize
+
+One idempotent recovery command completes a failed commit and a lost response
+alike:
+
+~~~sh
+wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json
+~~~
+
+It answers in the work-claim domain, because it changes Git reconciliation
+state and no item byte. The token is not authority to select paths. It binds the
+command, the item, the published revision, the pre-commit `HEAD`, the ordered
+ledger-relative commit set with content digests, the fixed message, and the
+terminal entry the log must carry. `mutation-finalize` re-derives every path
+from the ledger and the provisioned namespace, re-checks the current bytes and
+the foreign-change rules, creates the exact commit if it is absent, then runs
+`claim-verify`.
+
+If `HEAD` already holds the exact commit, it verifies and returns that commit
+without creating a second one, so repeating the command is safe. A changed item,
+a log without this invocation's terminal, a moved `HEAD`, a foreign staged or
+dirty path, or a token that no longer matches the ledger returns exit 4
+`mutation-finalize-refused` with `state: "unchanged"` and no Git write.
+
+A failed attempt leaves its own commit set staged, because the design forbids
+unstaging. Recovery tolerates exactly that residue and still refuses anything
+else staged. Until recovery runs, the next `--auto-commit` invocation refuses on
+`staged-paths-present`, which is the intended signal.
+
+### What auto-commit does not make true
+
+It does not make `safe_exclusive_dispatch` true. Item publication, the Git
+commit, and journal finalization cannot be one transaction in this profile, so a
+crash or `SIGKILL` after publication can still prevent any envelope at all. Auto
+mode removes ceremony and names every failure it can observe; it does not remove
+the need to inspect after a process dies.
+
+The flag is direct-CLI only. No adapter advertises or constructs it, and adapter
+handoff resume still forbids automatic Git commits. The ledger-specific
+`claim capabilities` envelope does not advertise it either: its shape is an
+exact pinned consumer surface, and adding a member there would require a
+coordinated adapter contract change this release does not make. A consumer
+detects the feature by sending the flag.
+
+`spec/fixtures/mutation-autocommit/` pins the success, commit-failed, and
+recovery envelopes; `spec/fixtures/envelope-domains/manifest.json` pins their
+response domains and exact root members.

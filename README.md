@@ -25,6 +25,12 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > version this repository runs its own backlog on. The API is not frozen and the
 > version will move before a stable release.
 >
+> **There is no `latest` channel and a bare `npm install wowbagger` is meant to
+> fail.** While every published release is a prerelease, the package carries no
+> default channel at all, so nothing resolves by accident; `@next` is how you
+> say you accept a prerelease. A `latest` channel appears with the first stable
+> release.
+>
 > **What is proved.** The core validates a Markdown ledger, selects a
 > deterministic ready queue, renders a self-contained HTML report, and
 > implements guarded `inspect`, `create`, `transition`, and `patch`, plus
@@ -243,7 +249,9 @@ Wowbagger ships as an npm package with a single `wowbagger` binary. There are
 two supported install routes:
 
 - **npm registry** — `npm install -g wowbagger@next` installs the current
-  prerelease.
+  prerelease. The `@next` is required: there is no `latest` channel until the
+  first stable release, so a bare `npm install wowbagger` fails instead of
+  resolving to some older build.
 - **git tag** —
   `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.6` installs this
   release. Installing at a ref installs the core and every adapter that ref
@@ -648,6 +656,43 @@ repeat the refused command.
 
 Batch work is where this bites. Filing ten items means ten commits, not one
 commit at the end.
+
+### Or fold the commit into the mutation
+
+`--auto-commit` performs that whole loop inside one invocation, on a provisioned
+ledger only:
+
+```sh
+./bin/wowbagger.js transition --ledger path/to/ledger --input next.json --json --auto-commit
+```
+
+It is opt-in per invocation. There is no configuration setting or environment
+default, because a hidden default would make existing automation create Git
+commits unexpectedly. The flag is accepted on `create`, `transition`, `patch`,
+and `publish-claimed`.
+
+What one flagged invocation does: refuse if anything is staged anywhere or any
+path under the ledger is dirty; reconcile; run the mutation unchanged; commit
+exactly the changed item and at most one
+`.wowbagger/reconcile-<namespace>.md` with a fixed subject such as
+`wowbagger: transition item #7`; verify the commit; then run `claim-verify`
+before it answers. On success the result gains `git_commit`, `commit_paths`, and
+`claim_verified`.
+
+Unstaged and untracked files **outside** the ledger are left alone. Hooks and
+signing are honoured; `--no-verify` is never passed. Nothing is pushed.
+
+A refused mutation never commits. When the item is published but the commit
+fails, the answer is exit 6 `git-commit-failed` with a recovery token, and one
+idempotent command finishes the job:
+
+```sh
+./bin/wowbagger.js mutation-finalize --ledger path/to/ledger --recovery-token <token> --json
+```
+
+Repeating it creates no second commit, so a lost response and a failed commit
+recover the same way. [docs/mutation-contract.md](docs/mutation-contract.md)
+section 13 is the full contract.
 
 ### When the item was changed outside the protocol
 

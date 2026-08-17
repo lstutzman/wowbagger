@@ -53,6 +53,9 @@ function execute(state, action) {
   if (action.operation === 'work-claim.claim-adopt') {
     return claimAdopt(state, action);
   }
+  if (action.operation === 'work-claim.mutation-finalize') {
+    return mutationFinalize(state, action);
+  }
   if (action.operation === 'ledger-publication.preflight') {
     return publicationPreflight(state, action);
   }
@@ -92,6 +95,7 @@ function requestSchemaError(action) {
     'work-claim.release': ['ledger_namespace', 'item_id', 'owner_id', 'epoch', 'expected_expires_at'],
     'work-claim.read': ['ledger_namespace', 'item_id'],
     'work-claim.claim-adopt': ['adopted_by', 'from_revision', 'item_id', 'ledger_namespace', 'to_revision'],
+    'work-claim.mutation-finalize': ['commit_paths', 'git_commit', 'item_id', 'ledger_namespace', 'published_revision'],
   }[action.operation];
   if (exact && (Object.keys(request).sort().join(',') !== exact.slice().sort().join(',') || !NAMESPACE_ID.test(request.ledger_namespace) || !ITEM_ID.test(request.item_id))) return invalidRequestEnvelope(action.operation, 'work-claim');
   if (exact && (typeof request.owner_id !== 'undefined' && typeof request.owner_id !== 'string' || typeof request.epoch !== 'undefined' && typeof request.epoch !== 'string' || typeof request.lease_duration_ms !== 'undefined' && (!Number.isInteger(request.lease_duration_ms) || request.lease_duration_ms < 1 || request.lease_duration_ms > 86400000) || request.expected && (typeof request.expected !== 'object' || Array.isArray(request.expected)))) return invalidRequestEnvelope(action.operation, 'work-claim');
@@ -121,6 +125,16 @@ function requestSchemaError(action) {
   }
   if (['work-claim.renew', 'work-claim.release'].includes(action.operation)
     && (typeof request.expected_expires_at !== 'string' || !isStrictUtcInstant(request.expected_expires_at))) {
+    return invalidRequestEnvelope(action.operation, 'work-claim');
+  }
+  if (action.operation === 'work-claim.mutation-finalize'
+    && (!REVISION.test(request.published_revision ?? '')
+      || typeof request.git_commit !== 'string'
+      || !/^[0-9a-f]{40,64}$/.test(request.git_commit)
+      || !Array.isArray(request.commit_paths)
+      || request.commit_paths.length < 1
+      || request.commit_paths.length > 2
+      || request.commit_paths.some((entry) => typeof entry !== 'string' || entry === ''))) {
     return invalidRequestEnvelope(action.operation, 'work-claim');
   }
   if (['ledger-publication.commit','ledger-publication.preflight'].includes(action.operation)) {
@@ -1048,6 +1062,66 @@ function claimAdopt(state, action) {
         to_revision: request.to_revision,
         adopted_by: request.adopted_by,
         adopted_at: observedAt,
+      },
+    },
+  };
+}
+
+// Recovery of a Git commit an auto-commit mutation could not establish. Derived
+// from the mutation contract section 13 alone: it writes no item byte, so the
+// only durable change it can make is moving the ledger record's committed
+// surface — the shipped profile's Git HEAD — onto bytes the writer's own surface
+// already holds. Everything else refuses without changing state, and a repeat
+// after the surface already matches changes nothing at all.
+function mutationFinalize(state, action) {
+  const request = action.request;
+  if (!namespaceIsBound(state.backend, request.ledger_namespace)) {
+    return namespaceClaimError('mutation-finalize', request);
+  }
+  const ledger = state.durable.ledgers.find((entry) => (
+    entry.ledger_namespace === request.ledger_namespace && entry.item_id === request.item_id
+  )) ?? null;
+  if (ledger === null) return finalizeRefusal(request, 'item-not-readable', {});
+  if (ledger.revision !== request.published_revision) {
+    return finalizeRefusal(request, 'item-changed', { published_revision: request.published_revision });
+  }
+  const committed = ledger.committed_revision ?? null;
+  if (committed !== request.published_revision) {
+    ledger.committed_revision = request.published_revision;
+  }
+  return {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'work-claim',
+      command: 'mutation-finalize',
+      contract_version: 1,
+      state: 'committed',
+      result: {
+        ledger_namespace: request.ledger_namespace,
+        item_id: request.item_id,
+        published_revision: request.published_revision,
+        git_commit: request.git_commit,
+        commit_paths: [...request.commit_paths],
+        claim_verified: true,
+      },
+    },
+  };
+}
+
+function finalizeRefusal(request, reason, details) {
+  return {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'work-claim',
+      command: 'mutation-finalize',
+      contract_version: 1,
+      state: 'unchanged',
+      error: {
+        code: 'mutation-finalize-refused',
+        message: 'Recovery refused before any Git write.',
+        details: { reason, ...details },
       },
     },
   };

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -349,6 +349,101 @@ async function walkEveryResponseClass() {
       item: itemRequest('Next item'),
       body: 'next\n',
     }), '--json'));
+  }
+
+  {
+    // The --auto-commit surface. A generic consumer sees additive members on
+    // success and three named post-publication classes on failure, each still in
+    // the domain its command already answered in.
+    const { ledger, root } = await initialisedRepository('wb-envelopes-autocommit-');
+    await writeFile(path.join(ledger, 'item.md'), ITEM);
+    see('transition.capability-unavailable', run(root, 'transition', '--ledger', ledger, '--input', await requestFile(root, 'auto-unprovisioned.json', {
+      id: ITEM_ID,
+      expected_revision: ITEM_REVISION,
+      to_status: 'in-progress',
+      date: '2026-08-16',
+    }), '--json', '--auto-commit'));
+    run(root, 'provision', '--ledger', ledger, '--json');
+    run(root, 'claim-verify', '--ledger', ledger, '--json');
+    git(root, 'add', '.');
+    git(root, 'commit', '-qm', 'Provision the ledger');
+
+    const request = await requestFile(root, 'auto-transition.json', {
+      id: ITEM_ID,
+      expected_revision: ITEM_REVISION,
+      to_status: 'in-progress',
+      date: '2026-08-16',
+    });
+    await writeFile(path.join(root, 'outside.txt'), 'staged\n');
+    git(root, 'add', 'outside.txt');
+    see('transition.auto-commit-preflight-failed', run(root, 'transition', '--ledger', ledger, '--input', request, '--json', '--auto-commit'));
+    git(root, 'reset', '-q');
+    await rm(path.join(root, 'outside.txt'));
+
+    // A refusing pre-commit hook proves the item is published and the commit is
+    // absent; a rewriting commit-msg hook makes the Git outcome ambiguous.
+    const hooks = path.join(root, 'hooks');
+    await mkdir(hooks);
+    await writeFile(path.join(hooks, 'pre-commit'), '#!/bin/sh\nexit 1\n');
+    await chmod(path.join(hooks, 'pre-commit'), 0o755);
+    git(root, 'config', 'core.hooksPath', hooks);
+    const failed = run(root, 'transition', '--ledger', ledger, '--input', request, '--json', '--auto-commit');
+    see('transition.git-commit-failed', failed);
+    const token = failed.envelope.error.details.recovery_token;
+
+    see('mutation-finalize.invalid-request', run(root, 'mutation-finalize', '--ledger', ledger, '--recovery-token', 'not-a-token', '--json'));
+    // Recovery meets the same hook, so it reports the same absent commit in its
+    // own domain.
+    see('mutation-finalize.git-commit-failed', run(root, 'mutation-finalize', '--ledger', ledger, '--recovery-token', token, '--json'));
+    git(root, 'config', '--unset', 'core.hooksPath');
+    await writeFile(path.join(root, 'foreign.txt'), 'staged\n');
+    git(root, 'add', 'foreign.txt');
+    see('mutation-finalize.mutation-finalize-refused', run(root, 'mutation-finalize', '--ledger', ledger, '--recovery-token', token, '--json'));
+    git(root, 'reset', '-q');
+    await rm(path.join(root, 'foreign.txt'));
+    see('mutation-finalize.success', run(root, 'mutation-finalize', '--ledger', ledger, '--recovery-token', token, '--json'));
+  }
+
+  {
+    // The claimed-publication domain keeps its own envelope, operation_id
+    // included, when Git finalization fails.
+    const { ledger, root } = await initialisedRepository('wb-envelopes-autocommit-claimed-');
+    await writeFile(path.join(ledger, 'item.md'), ITEM);
+    const provisioned = run(root, 'provision', '--ledger', ledger, '--json');
+    const namespace = provisioned.envelope.result.ledger_namespace;
+    run(root, 'claim-verify', '--ledger', ledger, '--json');
+    git(root, 'add', '.');
+    git(root, 'commit', '-qm', 'Provision the ledger');
+    const acquired = run(root, 'claim', 'acquire', '--ledger', ledger, '--input', await requestFile(root, 'acquire.json', {
+      ledger_namespace: namespace,
+      item_id: ITEM_ID,
+      owner_id: 'agent-a',
+      lease_duration_ms: 300000,
+      expected: { last_epoch: '0', active: null },
+    }), '--json');
+    git(root, 'add', '.');
+    git(root, 'commit', '-qm', 'Commit the claim');
+    const candidate = Buffer.from(ITEM.replace('title: "Before"', 'title: "Published"'), 'utf8');
+    const publish = await requestFile(root, 'auto-publish.json', {
+      operation_id: 'pub_autocommit_0001',
+      ledger_namespace: namespace,
+      item_id: ITEM_ID,
+      claim_fence: {
+        ledger_namespace: namespace,
+        item_id: ITEM_ID,
+        owner_id: 'agent-a',
+        epoch: acquired.envelope.result.claim.epoch,
+      },
+      expected_revision: ITEM_REVISION,
+      candidate_sha256: `sha256:${createHash('sha256').update(candidate).digest('hex')}`,
+      candidate_source_base64: candidate.toString('base64'),
+    });
+    const hooks = path.join(root, 'hooks');
+    await mkdir(hooks);
+    await writeFile(path.join(hooks, 'pre-commit'), '#!/bin/sh\nexit 1\n');
+    await chmod(path.join(hooks, 'pre-commit'), 0o755);
+    git(root, 'config', 'core.hooksPath', hooks);
+    see('publish-claimed.git-commit-failed', run(root, 'publish-claimed', '--ledger', ledger, '--input', publish, '--json', '--auto-commit'));
   }
 
   return observed;

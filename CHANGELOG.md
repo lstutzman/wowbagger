@@ -7,6 +7,136 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- **`publish-claimed` now reconciles the journal unconditionally, like every
+  other mutating command.** The work-claim contract has always said an
+  uncommitted prior mutation refuses the next `create`, `transition`, `patch`,
+  **or `publish-claimed`**. The code only reconciled when it happened to
+  observe an unresolved `publish-intent`, and an uncommitted legacy mutation
+  leaves none behind. A fixture pinned the gap: with a legacy create and
+  transition sitting uncommitted, `claim-verify` returned exit 6 and a legacy
+  `create` refused with `publication-reconciliation-required`, while
+  `publish-claimed` on a claimed item published straight over the unreconciled
+  ledger. It now reconciles before the fence decision on every publication and
+  refuses with exit 6 `claim-store-unavailable`,
+  `details.reason: "publication-reconciliation-required"`, and
+  `details.findings` — the same envelope the legacy fence emits, so one
+  `claim-verify` clears every blocked path. **A publication behind an
+  unresolvable prior intent now returns that refusal instead of exit 6
+  `publication-outcome-unknown`.** The old code named the refused publication's
+  own outcome uncertain when it had not run at all; `state: "unchanged"` is the
+  honest answer, and the blocking finding still travels in `details.findings`.
+  The cost is honest about which read is new. Reconciliation adds no
+  complete-ledger read: it produces the snapshot the candidate validation and
+  the mutation engine's pre-lock read already share, so a claimed publication
+  still reads the working-tree ledger exactly twice. It does add the Git `HEAD`
+  read — `rev-parse`, one `ls-tree`, and a batched `cat-file` over every item
+  blob at `HEAD` — to every publication that previously had no unresolved
+  intent. That is the same read `create`, `transition`, `patch`, and every
+  claim lifecycle command already perform, so `publish-claimed` now pays the
+  toll its peers pay rather than a new one. Each publication persists one clock
+  floor, as it did before; a publication behind a pending intent, which used to
+  persist two, now persists one as well.
+### Added
+
+- **The cut is one command, and version drift now fails the cut instead of
+  shipping.** `npm run release:cut -- <version> --date YYYY-MM-DD` runs on the
+  tip of the release branch, proves every version site is accounted for, plans
+  the new bytes in memory, runs the full release gate over them, and leaves one
+  `Cut <version>` commit and one annotated `v<version>` tag. It stops there:
+  push, `npm publish --tag next`, and the registry check stay separate named
+  steps, because no local command can undo any of them. Coverage is proved by
+  exact-set equality against a hand-maintained
+  `scripts/release-version-sites.json`, not by a global grep — the changelog and
+  the dated design records must keep naming old versions, so "grep finds
+  nothing" would be the wrong test. A release site added next month is
+  unmanifested and refuses the cut. `--dry-run` runs the same planner and the
+  same gate against a copy of HEAD and then proves the repository unchanged.
+  Reruns converge rather than repair: a cut tag at a clean HEAD reports
+  `already cut`, a complete cut commit without its tag resumes at tagging, and a
+  tag pointing elsewhere refuses.
+- **The changelog can no longer lose its Unreleased section.** A cut opens a
+  fresh empty `## Unreleased` and files the released notes beneath it. The two
+  previous cuts renamed the heading instead, which left later changes landing
+  under an already published release.
+- **The prerelease channel policy is stated and checkable.**
+  `npm run release:channels -- check|repair <version>` encodes it: exactly
+  `{ next: <published version> }`, no `latest` while every release is a
+  prerelease, and the first published alpha deprecated. `check` is read-only and
+  is the post-publish verification step; `repair` is idempotent and never
+  unpublishes.
+
+- **`--auto-commit` folds the commit-per-mutation ceremony into the mutation.**
+  The invariant is correct and the ceremony around it was the consumer's most
+  frequent daily cost: mutate, `git add`, `git commit`, `claim-verify`, repeat,
+  ten times for ten items. On a provisioned merge-coordinated ledger the new
+  opt-in bare flag on `create`, `transition`, `patch`, and `publish-claimed`
+  does that loop inside one invocation. It takes a per-working-tree mutex,
+  refuses any staged path anywhere and any dirty path under the ledger, checks
+  Git identity, runs an internal pre-mutation `claim-verify`, runs the mutation
+  unchanged, then commits **exactly** the changed item plus at most one
+  `.wowbagger/reconcile-<namespace>.md` under a fixed subject
+  (`wowbagger: transition item #7`; the canonical item ID for a schema-1 item
+  with no number). It verifies the resulting commit's parent, subject,
+  changed-path set, and every blob, then runs `claim-verify` again before it
+  answers. Success adds `git_commit`, `commit_paths`, and `claim_verified` to
+  `result`.
+
+  There is no configuration file setting, environment default, or repository
+  default, because a hidden default would make existing mutation automation
+  create Git commits unexpectedly. An invocation without the flag is
+  byte-identical to before, so the core contract stays 3 and the work-claim API
+  stays 1. The flag is direct-CLI only in this release; no adapter advertises or
+  constructs it.
+
+  What it will not do: commit anything on `state: "unchanged"` or
+  `state: "unknown"`, including the documented reconcile-log residue a refused
+  `publish-claimed` leaves behind; stage a path outside the ledger; broad-add,
+  amend, squash, reset, clean, stash, or unstage; pass `--no-verify` or disable
+  signing; fabricate an author; customize a commit message; or push, fetch,
+  pull, merge, or rebase. Hooks through `core.hooksPath`, `commit.gpgSign`, and
+  signing programs are honoured, and a hook that rewrites the subject or the
+  tree is reported rather than accepted.
+
+- **An honest commit-failed contract, and one idempotent recovery verb.** A
+  post-publication Git failure that proves the commit is absent is exit 6
+  `git-commit-failed` with `state: "committed"` — the state still describes item
+  publication, not Git finalization — carrying the published revision, the exact
+  ledger-relative commit set with digests, `failure_stage`, `reason`, and a
+  bounded `recovery_token`. `create`, `transition`, and `patch` keep the core
+  domain; `publish-claimed` keeps `ledger-publication` and its top-level
+  `operation_id`. An **ambiguous** Git outcome is `git-commit-outcome-unknown`,
+  never `git-commit-failed`, and a commit that stands while reconciliation then
+  refuses is `post-commit-reconciliation-failed`. No failure envelope carries
+  hook output, signing output, absolute paths, or environment values.
+
+  New command: `wowbagger mutation-finalize --ledger <dir> --recovery-token
+  <token> --json`, answering in the work-claim domain because it changes Git
+  reconciliation state and no item byte. It re-derives every path from the
+  ledger and the provisioned namespace — the token is a witness, never authority
+  to select a path — re-checks the current bytes and the foreign-change rules,
+  creates the exact commit if it is absent, then runs `claim-verify`. When
+  `HEAD` already holds that exact commit it verifies and returns it without
+  creating a second one, so a lost response and a failed commit recover through
+  the same command, and repeating it is safe.
+
+  A failed attempt leaves its own commit set staged, because the design forbids
+  unstaging. Recovery tolerates exactly that residue and refuses anything else
+  staged; until it runs, the next `--auto-commit` invocation refuses on
+  `staged-paths-present`, which is the intended signal.
+
+### Changed
+
+- **The README says plainly that a bare `npm install wowbagger` is meant to
+  fail.** There is no `latest` channel until the first stable release, so
+  `@next` is explicit prerelease consent rather than a convenience.
+- **Cuts happen on the release branch, not in a session worktree.** Merge
+  session work first, then cut; the cut command refuses to run anywhere but the
+  branch tip. The previous two-phase topology is why the last two release tags
+  name merge commits rather than their cut commits.
+  `docs/adapter-release-path.md` records the ritual.
+
 ## 0.1.0-alpha.6 - 2026-08-17
 
 ### Added

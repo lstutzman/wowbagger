@@ -1,0 +1,152 @@
+{
+  "manifest_version": 1,
+  "comment": "Every literal occurrence of the current package version in a tracked text file, classified as mutable (moves with the release) or retained (history that keeps naming it). scripts/cut-release.js proves exact-set equality against this file and never edits it. A locator with applies_to_version describes one dated record and is dormant for every other cut. This file is excluded from the scan: its version literals are locator keys, not release sites.",
+  "sites": [
+    {
+      "file": "package.json",
+      "kind": "json-pointer",
+      "pointer": "/version",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "package-lock.json",
+      "kind": "json-pointer",
+      "pointer": "/version",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "package-lock.json",
+      "kind": "json-pointer",
+      "pointer": "/packages//version",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": ".claude-plugin/plugin.json",
+      "kind": "json-pointer",
+      "pointer": "/version",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": ".claude-plugin/marketplace.json",
+      "kind": "json-pointer",
+      "pointer": "/metadata/version",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": ".claude-plugin/marketplace.json",
+      "kind": "json-pointer",
+      "pointer": "/plugins/0/version",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": ".claude-plugin/marketplace.json",
+      "kind": "json-pointer",
+      "pointer": "/plugins/0/source/ref",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "README.md",
+      "kind": "anchored-text",
+      "anchor": "**Status: alpha, published, and self-hosted.** `{version}` is on npm under",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "README.md",
+      "kind": "anchored-text",
+      "anchor": "this repository's `v{version}` tag",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "README.md",
+      "kind": "anchored-text",
+      "anchor": "github:lstutzman/wowbagger#v{version}",
+      "classification": "mutable",
+      "occurrences": 3
+    },
+    {
+      "file": "README.md",
+      "kind": "anchored-text",
+      "anchor": "wowbagger --version         # {version}",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "skills/wowbagger/SKILL.md",
+      "kind": "anchored-text",
+      "anchor": "requires distribution version\n`{version}` and core",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "skills/wowbagger/SKILL.md",
+      "kind": "anchored-text",
+      "anchor": "Both pins name the published `{version}` release.",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "CHANGELOG.md",
+      "kind": "anchored-text",
+      "anchor": "## {version} - ",
+      "classification": "retained",
+      "occurrences": 1
+    },
+    {
+      "file": "docs/adapter-release-path.md",
+      "kind": "anchored-text",
+      "anchor": "and `v{version}` name merge commits",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/ideation/2026-08-17-open-ideation.md",
+      "kind": "anchored-text",
+      "anchor": "Contract v3 published as {version} on npm",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/ideation/enrichments/2026-08-17-bodybound.md",
+      "kind": "anchored-text",
+      "anchor": "`package.json` is `{version}`",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/ideation/enrichments/2026-08-17-bodybound.md",
+      "kind": "anchored-text",
+      "anchor": "local tag `v{version}`",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/ideation/enrichments/2026-08-17-release.md",
+      "kind": "anchored-text",
+      "anchor": "`next={version}`",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/research/2026-08-17-propertycompass-adoption-evaluation.md",
+      "kind": "anchored-text",
+      "anchor": "| 2026-08-17 | {version} published; contract v3 |",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
+    }
+  ]
+}
