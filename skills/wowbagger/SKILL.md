@@ -321,6 +321,35 @@ Read `error.details.findings[0].reason` and say which case it is:
 - `worktree-synchronization-required` — another worktree wrote it. Stop
   writing. Wait for that worktree to commit and push, remove the untracked
   reconcile log, pull or merge, run `claim-verify`, then resume.
+- `unauthorized-revision` — the item was changed outside the protocol. Two
+  remedies, and the choice is the operator's, not yours. **Restore** the
+  authorized revision and `claim-verify`: this discards the edit. **Adopt** the
+  committed revision and `claim-verify`: this keeps the edit and moves the
+  authorized revision to it. Ask before you discard reviewed work.
+
+Adoption is per item and per revision explicit. Name the item and both
+revisions, take them from the finding, and commit the edited bytes first:
+
+```sh
+wowbagger claim-adopt --ledger <dir> --input adopt.json --json
+```
+
+```json
+{
+  "ledger_namespace": "<from claim capabilities>",
+  "item_id": "<finding.item_id>",
+  "from_revision": "<finding.expected_revision>",
+  "to_revision": "<finding.actual_revision>",
+  "adopted_by": "<your owner id>"
+}
+```
+
+It refuses `adoption-revision-uncommitted` until the bytes are at Git `HEAD` and
+in your own working tree, `claim-held` while a claim holds the item,
+`adoption-ledger-invalid` if the ledger would not validate, and
+`adoption-witness-mismatch` if the witness is stale — including a replay of an
+adoption that already succeeded. It writes no item byte, so `updated` and the
+body survive. Run `claim-verify` after it and require exit 0.
 
 Two traps. Do not retry with the `expected_revision` from the refusal: a
 sibling that is still working moves it, and you cannot win that race. Do not
