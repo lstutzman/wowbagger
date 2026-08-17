@@ -4,6 +4,7 @@ id: wb_01M086JMQNGZM5WFGB9PM3M2P6
 number: 120
 title: "Plumb host approvals through the shipped adapter entrypoints"
 kind: task
+priority: 1
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
