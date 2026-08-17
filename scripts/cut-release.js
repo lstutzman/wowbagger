@@ -19,8 +19,8 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync,
-  writeFileSync,
+  existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync,
+  symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -97,6 +97,18 @@ export function releaseGateSteps(cwd, { node20 = DEFAULT_NODE20 } = {}) {
   ];
 }
 
+// The operator needs the name of what broke. A plain tail of a 1300-case TAP
+// run discards every `not ok` line and keeps only the passing cases that
+// happened to run last, so the refusal lines are lifted out first.
+export function summarizeStepOutput({ stdout = '', stderr = '', status } = {}) {
+  const output = stderr || stdout || `exit ${status}`;
+  const refusals = output.split('\n').filter((line) => /^\s*not ok\b/.test(line));
+  const tail = output.slice(-4000);
+  if (refusals.length === 0) return tail;
+  const named = refusals.slice(0, 20).join('\n');
+  return refusals.every((line) => tail.includes(line)) ? tail : `${named}\n...\n${tail}`;
+}
+
 function testFiles(cwd) {
   const directory = path.join(cwd, 'test');
   if (!existsSync(directory)) return [];
@@ -117,10 +129,7 @@ function runReleaseGate({ cwd, node20, log }) {
       maxBuffer: 64 * 1024 * 1024,
     });
     if (result.status !== 0) {
-      failures.push({
-        step: step.name,
-        detail: (result.stderr || result.stdout || `exit ${result.status}`).slice(-4000),
-      });
+      failures.push({ step: step.name, detail: summarizeStepOutput(result) });
       break;
     }
   }
@@ -197,7 +206,15 @@ export function readTrackedTextFiles(cwd, git) {
   for (const relativePath of listed.split('\0').filter(Boolean)) {
     if (relativePath === MANIFEST_PATH) continue; // the coverage declaration, not a release site
     const absolute = path.join(cwd, relativePath);
-    if (!existsSync(absolute)) continue;
+    // Git tracks a symlink as a blob holding its target, and a submodule as a
+    // gitlink. Neither is a text file this command can read or rewrite.
+    let stats;
+    try {
+      stats = lstatSync(absolute);
+    } catch {
+      continue;
+    }
+    if (!stats.isFile()) continue;
     const bytes = readFileSync(absolute);
     if (bytes.includes(0)) continue; // binary
     files.set(relativePath, bytes.toString('utf8'));
@@ -494,12 +511,14 @@ function planInCopy({ cwd, git, head, updates, allowed, runGate, log, version, t
     execFileSync('tar', ['-xf', archive, '-C', path.join(copy, 'repo')]);
     rmSync(archive);
     const workspace = path.join(copy, 'repo');
+    const copyGit = makeGit(workspace);
+    gitOut(copyGit, 'init', '-q');
+    // `.gitignore` says `node_modules/`, which matches a directory and not the
+    // symlink the copy needs, so the exclusion is stated for this copy.
+    writeFileSync(path.join(workspace, '.git', 'info', 'exclude'), '/node_modules\n');
     if (existsSync(path.join(cwd, 'node_modules'))) {
       symlinkSync(path.join(cwd, 'node_modules'), path.join(workspace, 'node_modules'), 'dir');
     }
-
-    const copyGit = makeGit(workspace);
-    gitOut(copyGit, 'init', '-q');
     gitOut(copyGit, 'config', 'user.email', 'cut@example.invalid');
     gitOut(copyGit, 'config', 'user.name', 'Wowbagger dry run');
     gitOut(copyGit, 'add', '-A');
@@ -550,9 +569,15 @@ export function fingerprint(cwd, git = makeGit(cwd)) {
   digest.update(git('status', '--porcelain', '-uall').stdout);
   for (const relativePath of gitOut(git, 'ls-files', '-z').split('\0').filter(Boolean)) {
     const absolute = path.join(cwd, relativePath);
-    if (!existsSync(absolute)) continue;
+    let stats;
+    try {
+      stats = lstatSync(absolute);
+    } catch {
+      continue;
+    }
     digest.update(relativePath);
-    digest.update(readFileSync(absolute));
+    digest.update(stats.isSymbolicLink() ? readlinkSync(absolute) : '');
+    if (stats.isFile()) digest.update(readFileSync(absolute));
   }
   return digest.digest('hex');
 }

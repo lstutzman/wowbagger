@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runCli } from './support.js';
+import { readTrackedTextFiles } from '../scripts/cut-release.js';
 import { planVersionSites, verifyExactSets } from '../scripts/lib/release-sites.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -268,18 +269,14 @@ test('the checked-in manifest classifies every occurrence of the current version
   const sites = JSON.parse(
     readFileSync(path.join(projectRoot, 'scripts', 'release-version-sites.json'), 'utf8'),
   );
-  const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: projectRoot, encoding: 'utf8' });
-  assert.equal(tracked.status, 0, tracked.stderr);
-  const files = new Map();
+  const files = readTrackedTextFiles(projectRoot, (...argumentsList) => spawnSync(
+    'git',
+    argumentsList,
+    { cwd: projectRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  ));
   let occurrences = 0;
-  for (const relativePath of tracked.stdout.split('\0').filter(Boolean)) {
-    if (relativePath === 'scripts/release-version-sites.json') continue;
-    const bytes = readFileSync(path.join(projectRoot, relativePath));
-    if (bytes.includes(0)) continue;
-    const text = bytes.toString('utf8');
-    files.set(relativePath, text);
-    occurrences += text.split(manifest.version).length - 1;
-  }
+  for (const text of files.values()) occurrences += text.split(manifest.version).length - 1;
+  assert.ok(occurrences > 0, 'the tree must name its own version somewhere');
 
   // Assembled, not written literally: this file is one of the files scanned.
   const next = ['0.0.0', 'manifest', 'inventory'].join('-');
