@@ -23,7 +23,7 @@
     "stdout": {
       "ok": false,
       "command": "transition",
-      "contract_version": 3,
+      "contract_version": 4,
       "state": "committed",
       "error": {
         "code": "git-commit-failed",

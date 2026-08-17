@@ -50,6 +50,7 @@ import {
   validatePatchRequest,
   validateTransitionRequest,
 } from './mutation.js';
+import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { mintId } from './mint.js';
 import { provisionNamespace, readNamespace } from './namespace.js';
 import { normalizeJsonValue, parseJsonRequest, sortIssues } from './request.js';
@@ -57,7 +58,7 @@ import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
-const MUTATION_CONTRACT_VERSION = 3;
+const MUTATION_CONTRACT_VERSION = 4;
 const AUTO_COMMIT_COMMANDS = new Set(['create', 'transition', 'patch', 'publish-claimed']);
 
 const MAX_PUBLICATION_REQUEST_BYTES = 11 * 1024 * 1024;
@@ -680,6 +681,7 @@ async function capabilities(ledger) {
         power_loss_guarantee: 'none',
       },
       limits: {
+        max_item_source_bytes: MAX_ITEM_SOURCE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,

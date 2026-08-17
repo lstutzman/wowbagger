@@ -16,6 +16,7 @@ const REQUIRED_WRITE_PATHS = {
   legacy_create_v1: 'reject-claimed-id',
   legacy_transition_v1: 'reject-active-claim',
 };
+const MAX_ITEM_SOURCE_BYTES = 8388608;
 const MAX_EPOCH = 18446744073709551615n;
 const UTC_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})Z$/;
 const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
@@ -198,7 +199,7 @@ function capabilities(backend) {
         operations: {
           work_claim: {
             supported: true,
-            api_version: 1,
+            api_version: 2,
             mode: safe ? 'fenced' : 'advisory',
             claim_protected_publication: safe,
             fencing_enforced_at: safe ? 'ledger-publication-commit-boundary' : 'none',
@@ -436,7 +437,7 @@ function publicationPreflight(state, action) {
   if (source.toString('base64') !== request.candidate_source_base64) {
     return canonicalBase64Error(request);
   }
-  if (source.length > 8388608) return invalidPublicationSchema(request, 'candidate_source_base64');
+  if (source.length > MAX_ITEM_SOURCE_BYTES) return itemSourceTooLarge(request, source.length);
   const digest = `sha256:${createHash('sha256').update(source).digest('hex')}`;
   if (digest !== request.candidate_sha256) {
     return candidateDigestMismatch(request);
@@ -652,10 +653,11 @@ function publicationRequestGuard(state, request) {
   let source;
   try {
     source = Buffer.from(request.candidate_source_base64, 'base64');
-    if (source.length > 8388608 || source.toString('base64') !== request.candidate_source_base64) return canonicalBase64Error(request);
+    if (source.toString('base64') !== request.candidate_source_base64) return canonicalBase64Error(request);
   } catch {
     return canonicalBase64Error(request);
   }
+  if (source.length > MAX_ITEM_SOURCE_BYTES) return itemSourceTooLarge(request, source.length);
   const digest = `sha256:${createHash('sha256').update(source).digest('hex')}`;
   if (digest !== request.candidate_sha256) return candidateDigestMismatch(request);
   return validateCandidateLedger(request, source);
@@ -842,6 +844,29 @@ function invalidPublicationSchema(request, field) {
       ok: false, namespace: 'ledger-publication', command: 'publish-claimed', contract_version: 1,
       state: 'unchanged', ...(request?.operation_id ? { operation_id: request.operation_id } : {}),
       error: { code: 'invalid-request', message: 'The request does not match publish-claimed version 1.', details: field ? { field } : {} },
+    },
+  };
+}
+
+function itemSourceTooLarge(request, sizeBytes) {
+  return {
+    exit: 2,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-publication',
+      command: 'publish-claimed',
+      contract_version: 1,
+      state: 'unchanged',
+      operation_id: request.operation_id,
+      error: {
+        code: 'item-source-too-large',
+        message: 'The proposed item source exceeds the supported byte limit.',
+        details: {
+          item_id: request.item_id,
+          size_bytes: sizeBytes,
+          limit_bytes: MAX_ITEM_SOURCE_BYTES,
+        },
+      },
     },
   };
 }

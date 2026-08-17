@@ -7,8 +7,11 @@ import assert from 'node:assert/strict';
 import { rm } from 'node:fs/promises';
 import test from 'node:test';
 import { createFixtureLedger } from '../bench/ledger-fixture.js';
+import {
+  acquireClaim, provisionExistingLedger, publicationRequest, publish,
+} from './claimed-publication-harness.js';
 import { loadLedger } from '../src/ledger.js';
-import { createItem, inspectItem, publishClaimedCandidate } from '../src/mutation.js';
+import { createItem, inspectItem } from '../src/mutation.js';
 import { validateLedger } from '../src/validate.js';
 
 const ITEMS = 1500;
@@ -66,27 +69,30 @@ test('create refuses a candidate whose dependency does not resolve on a large le
   });
 });
 
+// The publication runs through `publishClaimed`, never through the candidate
+// function underneath it. That function enters the namespace-lock-held
+// strategy, which takes no item locks, so it is reachable only with a proven
+// namespace-lock hold; calling it directly from a test would be a lock-free
+// public write path.
 test('publication refuses a candidate that duplicates an item number on a large ledger', async () => {
   await withLargeLedger(async (fixture) => {
+    const context = await provisionExistingLedger(fixture.root, fixture.ledger);
     const target = fixture.items.at(-1);
     const other = fixture.items[0];
+    context.id = target.id;
+    context.claim = await acquireClaim(fixture.ledger, fixture.root, context.namespace, target.id);
     const inspected = await inspectItem(fixture.ledger, target.id);
-    const candidate = Buffer.from(Buffer.from(inspected.item.source_base64, 'base64')
-      .toString('utf8')
-      .replace(`number: ${target.number}`, `number: ${other.number}`), 'utf8');
+    const request = publicationRequest(context, inspected, 'pub_large_0001', 'Duplicated number',
+      (source) => source.replace(`number: ${target.number}`, `number: ${other.number}`));
 
-    const outcome = await publishClaimedCandidate(fixture.ledger, {
-      item_id: target.id,
-      expected_revision: inspected.item.revision,
-      candidate_source_base64: candidate.toString('base64'),
-    });
+    const outcome = await publish(context, request);
 
-    assert.equal(outcome.ok, false);
-    assert.equal(outcome.state, 'unchanged');
-    assert.equal(outcome.error.code, 'candidate-invalid');
+    assert.equal(outcome.stdout.ok, false, JSON.stringify(outcome.stdout));
+    assert.equal(outcome.stdout.state, 'unchanged');
+    assert.equal(outcome.stdout.error.code, 'ledger-invalid');
     assert.ok(
-      outcome.error.details.validation_errors.some((error) => error.code === 'duplicate-number'),
-      JSON.stringify(outcome.error.details.validation_errors),
+      outcome.stdout.error.details.some((error) => error.code === 'duplicate-number'),
+      JSON.stringify(outcome.stdout.error.details),
     );
     const after = await inspectItem(fixture.ledger, target.id);
     assert.equal(after.item.revision, inspected.item.revision);

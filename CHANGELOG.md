@@ -7,7 +7,71 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Changed
+
+- **The item source is bounded at every candidate door, and the core contract
+  moves to 4.** The published version 3 core accepted a 50-MiB `create` with
+  exit `0` and state `committed` in 0.70 s: `create`, `transition`, and `patch`
+  had no bound
+  anywhere, and `publish-claimed` alone bounded candidates but reported an
+  oversized, perfectly canonical candidate as `The candidate source is not
+  canonical base64.` One shared `MAX_ITEM_SOURCE_BYTES` of 8,388,608 now bounds
+  the complete serialized successor at all four doors, and every one of them
+  answers the same named refusal: `item-source-too-large`, exit 2, state
+  `unchanged`, details exactly `{id, size_bytes, limit_bytes}` in the core
+  domain and `{item_id, size_bytes, limit_bytes}` in the ledger-publication
+  domain. The measurement is serialized UTF-8 bytes, so frontmatter, decisions,
+  extensions, and body all draw on the same budget; `transition` is bounded
+  because its decision block can push a legal stored item past it. Core
+  capabilities advertises the value at `result.limits.max_item_source_bytes`.
+  This narrows accepted input against a published version, so the core contract
+  moves to 4 and version 3 consumers fail closed at negotiation. A ledger
+  committed before the bound does not brick: an oversized item still validates,
+  still inspects, and a patch that shrinks it under the bound is accepted.
+
+- **The work-claim API moves to 2.** The oversized-candidate response replaces
+  the error `publish-claimed` version 1 pinned for that input, so
+  `result.operations.work_claim.api_version` is now `2` and version 1 consumers
+  fail closed. Malformed base64 keeps its version 1 `invalid-request`: without
+  canonical base64 there is no item source to measure. The base64-character
+  precheck is gone — the 11,534,336-byte serialized-request bound already caps
+  what a candidate can decode to, and the precheck was the remaining path that
+  answered a genuine size refusal with a false base64 message. That transport
+  bound is unchanged and still measures a different object.
+- **A claimed publication no longer takes one cooperative lock per ledger
+  item.** `publish-claimed` computed its lock closure from every item in the
+  loaded ledger, so publishing one item on a 1,500-item ledger created, wrote,
+  fsynced, and unlinked 1,503 lock files. It runs from journal replay through
+  its terminal record inside the namespace write lock, and every other
+  cooperative writer of a provisioned ledger enters that same lock before it
+  writes, so the per-item closure excluded nobody the namespace lock did not
+  already exclude. Publication now takes no per-item locks. Newly instrumented
+  phase counters measured the cost this removes: on 1,500 items the lock phase
+  was 11.2 s of the 12.6 s the publication took, against 0.2 s for reading Git
+  HEAD. Everything else is unchanged and proved byte-for-byte identical against
+  the previous implementation across all six publication outcome classes —
+  success, fence refusal, revision conflict, validation refusal, idempotent
+  replay, and indeterminate publication — in envelope, claim journal, and item
+  bytes. Every cooperative writer of one ledger must be upgraded together: a
+  writer that honors only per-ID locks can race one that honors only the
+  namespace lock.
+- **The README installs with `@next` and says why.** The registry mandates a
+  `latest` dist-tag, so `latest` mirrors `next`; `@next` stays the documented
+  spelling and the explicit prerelease consent.
+- **Cuts happen on the release branch, not in a session worktree.** Merge
+  session work first, then cut; the cut command refuses to run anywhere but the
+  branch tip. The previous two-phase topology is why the last two release tags
+  name merge commits rather than their cut commits.
+  `docs/adapter-release-path.md` records the ritual.
+
 ### Fixed
+
+- **A live publication is no longer reported as a broken lock.** Publication
+  lock files recorded `"operation": "publish-claimed"`, but the lock reader
+  accepts only `create`, `transition`, and `patch`, so a concurrent writer that
+  hit a live publication lock classified it `invalid-shape` — a diagnostic that
+  says the lock is corrupt. Publication writes no lock files at all now, so
+  there is nothing to misclassify.
 
 - **A committed `patch` is forwarded instead of reported as an unknown
   outcome.** The shipped adapter engine still named the pre-widening patchable
@@ -245,17 +309,6 @@ consolidation. The first tagged release inherits this file.
   unstaging. Recovery tolerates exactly that residue and refuses anything else
   staged; until it runs, the next `--auto-commit` invocation refuses on
   `staged-paths-present`, which is the intended signal.
-
-### Changed
-
-- **The README installs with `@next` and says why.** The registry mandates a
-  `latest` dist-tag, so `latest` mirrors `next`; `@next` stays the documented
-  spelling and the explicit prerelease consent.
-- **Cuts happen on the release branch, not in a session worktree.** Merge
-  session work first, then cut; the cut command refuses to run anywhere but the
-  branch tip. The previous two-phase topology is why the last two release tags
-  name merge commits rather than their cut commits.
-  `docs/adapter-release-path.md` records the ritual.
 
 ## 0.1.0-alpha.6 - 2026-08-17
 

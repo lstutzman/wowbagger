@@ -1,7 +1,7 @@
 {
   "ok": false,
   "command": "patch",
-  "contract_version": 3,
+  "contract_version": 4,
   "state": "unchanged",
   "error": {
     "code": "patch-precondition-failed",

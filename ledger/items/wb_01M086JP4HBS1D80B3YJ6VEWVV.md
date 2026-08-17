@@ -5,9 +5,10 @@ number: 122
 title: "Run the provisioned-performance program"
 kind: task
 priority: 20
-status: backlog
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T15:48:54Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Ideation survivor: the only program attacking the two measured provisioned-scale costs; instrument-first per the Sol enrichment; v4 bundled with #126."
+  - action: complete
+    date: 2026-08-17
+    summary: "Stage 0 + lock coarsening shipped; filename stage dropped on the measurement; no cache."
+    rationale: "Stage 0 counters attributed the cost: item-lock acquisition was 89.4% of a 1,500-item publication, 53x the whole HEAD read. Coarsening shipped: publication takes zero item locks under the already-held namespace lock; 12.6s to 2.2s (27.8 to 7.5 load-equivalents); byte parity proven against a pre-change recording; four kill-point crash tests; the lockSource/validLockOwner mismatch erased and pinned. Filename-contract stage DROPPED per measurement: post-coarsening ceiling 8.2% best case and ~0 at C=N against a v4 migration - wrong trade. Read cache: recommended never; the two remaining loads are the CAS guarantee. Quiesced all-writer upgrade is now load-bearing - named for the release notes."
 ---
 
 Ideation survivor 1 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-perf.md - the enrichment is the authoritative scope; this body is its summary.

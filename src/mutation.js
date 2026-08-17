@@ -1,17 +1,20 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { withLegacyMutationFence } from './claim-coordinator.js';
+import { namespaceLockHeld } from './claim-store.js';
 import { link, lstat, mkdir, open, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, visit } from 'yaml';
 import { isDependencySatisfied } from './dependencies.js';
+import { recordCount, timePhase } from './instrumentation.js';
 import {
   EXTENSION_DECLARATION_PATH,
   extensionValueMatches,
   loadExtensionDeclaration,
 } from './extensions.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
+import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
 import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
 
@@ -324,6 +327,9 @@ async function createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnap
       } catch {
         return await finishUncommitted(operationFailed(id, 'serialize-candidate', 'serialization-failed'));
       }
+      if (bytes.length > MAX_ITEM_SOURCE_BYTES) {
+        return await finishUncommitted(itemSourceTooLarge(id, bytes.length));
+      }
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         null,
@@ -496,17 +502,34 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
   ));
 }
 
+// The namespace-lock-held mutation strategy. A claimed publication runs inside
+// the namespace process lock for its whole length — journal replay, intent
+// fsync, this mutation, terminal append — and every other provisioned writer
+// enters that same lock before it writes. So the publication already has the
+// exclusion a per-item lock closure would buy, and it takes no item locks at
+// all. Everything else the engine does is unchanged: the fresh complete
+// working-tree reload under the hold, the exact-byte revision compare-and-swap,
+// candidate complete-ledger validation, and the atomic same-path publication.
+//
+// `namespaceLock` is the proof, not a request: only code running inside
+// `withClaimLock` for this namespace's store can produce one. Without it there
+// is no exclusion to rely on and the strategy must not be entered, so this
+// throws rather than quietly falling back to a lock-free write.
+//
 // `ledgerSnapshot`, when supplied, stands in for the first pre-lock read: the
 // caller holds the claim lock and has already read the same directory.
-export async function publishClaimedCandidate(ledgerDirectory, request, scenario, ledgerSnapshot) {
+export async function publishClaimedCandidate({
+  ledgerDirectory, request, scenario, ledgerSnapshot, namespaceLock, storePath,
+}) {
+  if (!namespaceLockHeld(namespaceLock, storePath)) {
+    throw new Error('publish-claimed requires the namespace process lock to be held.');
+  }
   return mutateExistingItem(ledgerDirectory, {
     ...request,
     id: request.item_id,
   }, scenario, {
     name: 'publish-claimed',
-    lockIds: (_target, ledger) => ledger.items
-      .map((item) => item.data.id)
-      .sort(compareText),
+    lockIds: () => [],
     build: (_target, _ledger, publicationRequest) => {
       const bytes = Buffer.from(publicationRequest.candidate_source_base64, 'base64');
       const parsed = parseLedgerItemSource(bytes.toString('utf8'));
@@ -604,6 +627,9 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
         return await finishUncommitted(built.outcome);
       }
       const { successor, bytes } = built;
+      if (bytes.length > MAX_ITEM_SOURCE_BYTES) {
+        return await finishUncommitted(itemSourceTooLarge(id, bytes.length));
+      }
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         id,
@@ -1634,7 +1660,11 @@ function lockIdsForCreate(request, ledger) {
   return [request.id, ...references, ...numberLock].sort(compareText);
 }
 
-async function acquireLocks(root, ids, operation, scenario) {
+function acquireLocks(root, ids, operation, scenario) {
+  return timePhase('item_lock_acquire_ms', () => acquireLocksTimed(root, ids, operation, scenario));
+}
+
+async function acquireLocksTimed(root, ids, operation, scenario) {
   const lockDirectory = path.join(root, '.wowbagger-locks');
   await mkdir(lockDirectory, { recursive: true });
   const locks = [];
@@ -1650,6 +1680,7 @@ async function acquireLocks(root, ids, operation, scenario) {
         }
         throw error;
       }
+      recordCount('item_lock_acquisitions');
       const lock = {
         id,
         file,
@@ -1674,6 +1705,7 @@ async function acquireLocks(root, ids, operation, scenario) {
           throw new Error('fixture lock metadata sync failure');
         }
         await handle.sync();
+        recordCount('item_lock_fsyncs');
         lock.metadataComplete = true;
       } catch (error) {
         failure = error;
@@ -1705,7 +1737,11 @@ async function acquireLocks(root, ids, operation, scenario) {
   }
 }
 
-async function releaseLocks(locks, scenario) {
+function releaseLocks(locks, scenario) {
+  return timePhase('item_lock_release_ms', () => releaseLocksTimed(locks, scenario));
+}
+
+async function releaseLocksTimed(locks, scenario) {
   const failed = [];
   await Promise.all(locks.map(async (lock) => {
     if (lock.released) {
@@ -1722,6 +1758,7 @@ async function releaseLocks(locks, scenario) {
         return;
       }
       await unlink(lock.file);
+      recordCount('item_lock_releases');
       lock.released = true;
     } catch (error) {
       if (error?.code === 'ENOENT') {
@@ -1853,6 +1890,19 @@ function mutationError(code, message, state, exit, details) {
     state,
     error: { code, message, details },
   };
+}
+
+// One named refusal at every candidate door: the successor is measured as
+// serialized UTF-8 bytes, so frontmatter, decisions, extensions, and body all
+// draw on the same budget.
+function itemSourceTooLarge(id, sizeBytes) {
+  return mutationError(
+    'item-source-too-large',
+    'The proposed item source exceeds the supported byte limit.',
+    'unchanged',
+    2,
+    { id, size_bytes: sizeBytes, limit_bytes: MAX_ITEM_SOURCE_BYTES },
+  );
 }
 
 function ledgerInvalid(validation) {

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCli, withLedger } from './support.js';
+import { linkDirectory, runCli, withLedger } from './support.js';
 
 const validLedger = fileURLToPath(
   new URL('../spec/fixtures/ready-selection/ledger', import.meta.url),
@@ -42,7 +42,7 @@ test('JSON commands reject a symbolic-link ledger root without following it', as
 
   try {
     await mkdir(target);
-    await symlink(target, linkedRoot);
+    await linkDirectory(target, linkedRoot);
 
     for (const argumentsList of rootFailureCommands(linkedRoot)) {
       const result = runCli(...argumentsList);

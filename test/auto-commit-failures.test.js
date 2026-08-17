@@ -56,9 +56,14 @@ test('missing Git identity refuses before the mutation', async () => {
   const head = git(fixture.root, 'rev-parse', 'HEAD');
   const request = await requestFile(fixture, 'transition.json', transitionRequest(fixture));
 
+  // An empty file rather than /dev/null: the point is that Git finds no
+  // identity outside the repository, and only POSIX has that device node.
+  const emptyConfig = path.join(fixture.base, 'empty-git-config');
+  await writeFile(emptyConfig, '');
+
   const result = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit', {
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_CONFIG_GLOBAL: emptyConfig,
+    GIT_CONFIG_SYSTEM: emptyConfig,
   });
 
   assert.equal(result.exit, 4, result.stdout);

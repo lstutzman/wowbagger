@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { linkDirectory } from './support.js';
 import { readBootstrapRequest } from '../src/adapter/bootstrap.js';
 import { launchCoreProcess } from '../src/adapter/entrypoint-main.js';
 import { describeAdapter as referenceDescribeAdapter } from '../spec/adapter-reference.js';
@@ -657,7 +658,7 @@ const STRUCTURALLY_INVALID_MANIFEST = JSON.stringify({
   adapter_version: '0.1.0',
   adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 3,
+  required_core_contract_version: 4,
   entrypoints: {
     describe: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['invoke'] },
@@ -698,7 +699,7 @@ async function withTemporaryManifest(manifestContent, { operation = 'describe', 
     await cp(path.join(projectRoot, 'adapters', 'claude-code', 'entrypoint.js'), path.join(claudeCodeDirectory, 'entrypoint.js'), {
       recursive: true,
     });
-    await symlink(path.join(projectRoot, 'src'), path.join(temporaryDirectory, 'src'));
+    await linkDirectory(path.join(projectRoot, 'src'), path.join(temporaryDirectory, 'src'));
     if (manifestContent !== undefined) {
       await writeFile(path.join(claudeCodeDirectory, 'wowbagger-adapter.json'), manifestContent);
     }

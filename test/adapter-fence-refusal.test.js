@@ -236,7 +236,7 @@ test('refuses a fence refusal whose command does not name the launched command',
 
 test('refuses a fence refusal carrying the core contract version', () => {
   const result = bothEngines(createInvocation(
-    { ...claimedItemWriteRefused(), contract_version: 3 },
+    { ...claimedItemWriteRefused(), contract_version: 4 },
   ));
 
   assert.equal(result.error.code, 'mutation-outcome-unknown');

@@ -75,7 +75,7 @@ In Claude Code, add the plugin:
 The plugin drives the installed core rather than bundling one, so a mismatch is
 detectable instead of silent. Its skill reads `wowbagger --version` and
 `capabilities`; it requires the same distribution version as the plugin and core
-`contract_version: 3`. It refuses an absent or incompatible core. It will not
+`contract_version: 4`. It refuses an absent or incompatible core. It will not
 fall back to editing ledger files by hand, because that would bypass validation
 and atomic publication.
 
@@ -342,13 +342,13 @@ wowbagger capabilities --json
 ```
 
 The plugin requires its exact core distribution version and top-level core
-`contract_version: 3`. Direct API consumers must check the contract version
+`contract_version: 4`. Direct API consumers must check the contract version
 they support; installed plugin users must also keep the plugin and core
 distribution versions equal.
 
 The shipped adapter selects only adapter contract version 2 and requires core
-contract version 3. The adapter contract and the core contract are separate
-version domains: the adapter stays at 2 while the core moves to 3. A v1-only
+contract version 4. The adapter contract and the core contract are separate
+version domains: the adapter stays at 2 while the core moves to 4. A v1-only
 consumer receives `unsupported-adapter-contract-version`; it does not receive v2
 behavior. The schema-2 transport is available. Ledger migration remains a
 separate quiesced maintenance operation. The
@@ -1011,7 +1011,7 @@ It is the durable work ledger beneath those systems.
   **Shipped: the policy-input contract and the report's mapped fields keep
   consumer vocabulary out of the schema.**
 - Stabilize the machine-readable command contract and compatibility evidence.
-  **In progress at core contract version 3; the version is not frozen.**
+  **In progress at core contract version 4; the version is not frozen.**
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
   packages share the version 2 engine; the Claude Code manifest declares Darwin
   `supported` after passing all 210 native assertions. Other adapter targets and

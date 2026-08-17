@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { access } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -12,6 +12,7 @@ import {
 import { advanceClockFloor, readBack } from './claim-operations.js';
 import { claimStorePath, withClaimLock, writeClaimState } from './claim-store.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
+import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { readGitHeadLedger } from './git-reconciliation.js';
 import { publishClaimedCandidate, revisionFor } from './mutation.js';
 import { validateLedger } from './validate.js';
@@ -21,9 +22,6 @@ const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
 const OPERATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const REVISION = /^sha256:[a-f0-9]{64}$/;
 const EPOCH = /^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|18446744[0-6][0-9]{11}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{4}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5])$/;
-const MAX_CANDIDATE_BYTES = 8388608;
-const MAX_CANDIDATE_BASE64_CHARS = Math.ceil(MAX_CANDIDATE_BYTES / 3) * 4;
-
 const PUBLICATION_MEMBERS = [
   'candidate_sha256',
   'candidate_source_base64',
@@ -60,18 +58,21 @@ export function validatePublicationRequest(request) {
     || typeof request.candidate_source_base64 !== 'string') {
     return publicationError(request, 'invalid-request', 'The request does not match publish-claimed version 1.', {}, 2);
   }
-  if (request.candidate_source_base64.length > MAX_CANDIDATE_BASE64_CHARS) {
-    return canonicalBase64Error(request);
-  }
   let candidate;
   try {
     candidate = Buffer.from(request.candidate_source_base64, 'base64');
   } catch {
     return canonicalBase64Error(request);
   }
-  if (candidate.length > MAX_CANDIDATE_BYTES
-    || candidate.toString('base64') !== request.candidate_source_base64) {
+  // Spelling first: without canonical base64 there is no item source to
+  // measure. The serialized-request bound already caps what this decodes, so no
+  // separate character precheck is needed, and keeping one would answer a
+  // genuine size refusal with a false base64 message.
+  if (candidate.toString('base64') !== request.candidate_source_base64) {
     return canonicalBase64Error(request);
+  }
+  if (candidate.length > MAX_ITEM_SOURCE_BYTES) {
+    return itemSourceTooLarge(request, candidate.length);
   }
   if (revisionFor(candidate) !== request.candidate_sha256) {
     return publicationError(
@@ -153,7 +154,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
-    return await withClaimLock(storePath, async () => {
+    return await withClaimLock(storePath, async (namespaceLock) => {
       let replayed = await replayClaimJournal(journalPath, namespace);
       const digest = operationDigest(request);
       const prior = replayed.entries.find((entry) => (
@@ -233,6 +234,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           }, 4);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
       }
+      await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
       const intent = await appendClaimEntry(journalPath, {
         type: 'publish-intent',
         operation_id: request.operation_id,
@@ -245,14 +247,19 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         state: 'pending',
       });
       entries.push(intent);
-      const mutation = await publishClaimedCandidate(ledgerDirectory, request, scenario, ledgerSnapshot);
+      await publicationTestCheckpoint(scenario, 'after-publish-intent', ledgerDirectory);
+      const mutation = await publishClaimedCandidate({
+        ledgerDirectory, request, scenario, ledgerSnapshot, namespaceLock, storePath,
+      });
       if (!mutation.ok) {
         const outcome = mutationFailure(request, mutation);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
       }
-      await publicationTestCheckpoint(scenario, 'after-ledger-commit');
+      await publicationTestCheckpoint(scenario, 'after-ledger-commit', ledgerDirectory);
       const outcome = publicationSuccess(request, record, observedAt);
-      return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
+      const terminal = await persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
+      await publicationTestCheckpoint(scenario, 'after-terminal-record', ledgerDirectory);
+      return terminal;
     });
   } catch (error) {
     if (error?.code === 'CLAIM_LOCK_HELD') {
@@ -1054,6 +1061,9 @@ function mutationFailure(request, mutation) {
         actual_revision: mutation.error.details.actual_revision,
       }, 4);
   }
+  if (mutation.error?.code === 'item-source-too-large') {
+    return itemSourceTooLarge(request, mutation.error.details.size_bytes);
+  }
   if (mutation.error?.code === 'candidate-invalid') {
     return publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', mutation.error.details.validation_errors, 3);
   }
@@ -1088,6 +1098,19 @@ function publicationUnknown(request) {
       ledger_namespace: request.ledger_namespace,
       item_id: request.item_id,
     }, 6, 'unknown');
+}
+
+// The ledger-publication spelling of the one named item-source refusal: the
+// same code, message, and limit as the core domain, with this domain's item_id
+// detail and its top-level operation_id.
+function itemSourceTooLarge(request, sizeBytes) {
+  return publicationError(
+    request,
+    'item-source-too-large',
+    'The proposed item source exceeds the supported byte limit.',
+    { item_id: request.item_id, size_bytes: sizeBytes, limit_bytes: MAX_ITEM_SOURCE_BYTES },
+    2,
+  );
 }
 
 function canonicalBase64Error(request) {
@@ -1165,9 +1188,22 @@ function isExactObject(value, keys) {
 }
 
 
-async function publicationTestCheckpoint(scenario, point) {
-  if (scenario !== `fail:${point}`) return;
-  const error = new Error(`test checkpoint failed: ${point}`);
-  error.code = 'TEST_CHECKPOINT';
-  throw error;
+// Fault and kill points for the publication barriers. `fail:<point>` raises at
+// the barrier; `hang:<point>` announces that the barrier was reached and then
+// stops, so a test can kill this process there and let a successor recover the
+// namespace lock and the journal. The scenario is a module argument that no
+// CLI path can supply, and the hang is bounded so a test that forgets to kill
+// the process fails instead of running forever.
+const KILL_POINT_DEADLINE_MS = 30_000;
+
+async function publicationTestCheckpoint(scenario, point, ledgerDirectory) {
+  if (scenario === `fail:${point}`) {
+    const error = new Error(`test checkpoint failed: ${point}`);
+    error.code = 'TEST_CHECKPOINT';
+    throw error;
+  }
+  if (scenario !== `hang:${point}`) return;
+  await writeFile(path.join(path.resolve(ledgerDirectory), `.wowbagger-test-reached-${point}`), 'reached\n');
+  await new Promise((resolve) => setTimeout(resolve, KILL_POINT_DEADLINE_MS));
+  throw new Error(`kill point ${point} was never killed`);
 }

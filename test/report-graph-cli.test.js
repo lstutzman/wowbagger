@@ -50,7 +50,7 @@ test('the ordinary report carries the dependency graph in its single file', asyn
     assert.deepEqual(JSON.parse(result.stdout), {
       ok: true,
       command: 'report',
-      contract_version: 3,
+      contract_version: 4,
       result: {
         report_version: 1,
         as_of: '2030-01-15',

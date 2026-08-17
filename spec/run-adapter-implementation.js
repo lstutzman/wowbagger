@@ -728,7 +728,15 @@ async function evaluateInvocationPathAssertion(directory, assertion, target, run
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-path-vector-'));
     try {
       await mkdir(path.join(temporary, 'ledger'));
-      await symlink('ledger', path.join(temporary, invocation.core_request.ledger));
+      // `junction` with an absolute target: win32 defaults a symlink to
+      // `file`, which does not resolve as a directory, and resolves a
+      // junction's relative target against the current directory rather than
+      // against the link. Both are ignored on POSIX.
+      await symlink(
+        path.join(temporary, 'ledger'),
+        path.join(temporary, invocation.core_request.ledger),
+        'junction',
+      );
       const invoked = await callShippedEntrypoint(invocation, target, {
         workspaces: { [invocation.workspace.workspace_id]: temporary },
         runtimeConfig,

@@ -7,8 +7,8 @@
     "core_exit_code": 2,
     "stdout": {
       "encoding": "base64",
-      "data": "eyJvayI6ZmFsc2UsImNvbW1hbmQiOiJpbnNwZWN0IiwiY29udHJhY3RfdmVyc2lvbiI6MywiZXJyb3IiOnsiY29kZSI6Iml0ZW0tbm90LWZvdW5kIiwibWVzc2FnZSI6IlRoZSByZXF1ZXN0ZWQgaXRlbSB3YXMgbm90IGZvdW5kLiIsImRldGFpbHMiOnsiaWQiOiJ3Yl8wMVE0QVpYTkcwMjA2Q1NLNkNTSzZDU0s2QyJ9fX0K",
-      "sha256": "sha256:4bfc65a169a761e9a3a5301ef2e11148297f4b1e3e11aadee40f03be81be40f1",
+      "data": "eyJvayI6ZmFsc2UsImNvbW1hbmQiOiJpbnNwZWN0IiwiY29udHJhY3RfdmVyc2lvbiI6NCwiZXJyb3IiOnsiY29kZSI6Iml0ZW0tbm90LWZvdW5kIiwibWVzc2FnZSI6IlRoZSByZXF1ZXN0ZWQgaXRlbSB3YXMgbm90IGZvdW5kLiIsImRldGFpbHMiOnsiaWQiOiJ3Yl8wMVE0QVpYTkcwMjA2Q1NLNkNTSzZDU0s2QyJ9fX0K",
+      "sha256": "sha256:b99e79d8b7fa7681e43b1737339edcbe40e381aa2350e1956f476b04f48c9585",
       "byte_length": 183
     },
     "stderr": {

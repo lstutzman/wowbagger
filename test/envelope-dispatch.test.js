@@ -55,6 +55,8 @@ async function requestFile(root, name, value) {
   return file;
 }
 
+// Written as a literal, never imported from src.
+const MAX_ITEM_SOURCE_BYTES = 8388608;
 const ITEM_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
 const ITEM = `---
 schema_version: 2
@@ -266,6 +268,51 @@ async function walkEveryResponseClass() {
       },
     }), '--json'));
 
+    const tooLarge = Buffer.from(`${ITEM}${'x'.repeat(MAX_ITEM_SOURCE_BYTES)}`);
+    see('publish-claimed.item-source-too-large', run(root, 'publish-claimed', '--ledger', ledger, '--input', await requestFile(root, 'publish-oversized.json', {
+      operation_id: 'pub_agent-a_0002',
+      ledger_namespace: namespace,
+      item_id: ITEM_ID,
+      expected_revision: ITEM_REVISION,
+      candidate_source_base64: tooLarge.toString('base64'),
+      candidate_sha256: `sha256:${createHash('sha256').update(tooLarge).digest('hex')}`,
+      claim_fence: {
+        ledger_namespace: namespace,
+        item_id: ITEM_ID,
+        owner_id: 'agent-a',
+        epoch: acquired.envelope.result.claim.epoch,
+      },
+    }), '--json'));
+  }
+
+  {
+    // The bounded item source, in the domain each door answers in. The seeded
+    // item is itself over the bound, so patch and transition refuse without a
+    // multi-megabyte request, and create refuses on its own oversized body.
+    const root = await temporaryRoot('wb-envelopes-oversized-');
+    const ledger = path.join(root, 'ledger');
+    await mkdir(ledger);
+    const oversized = `${ITEM}${'x'.repeat(MAX_ITEM_SOURCE_BYTES)}`;
+    await writeFile(path.join(ledger, 'item.md'), oversized);
+    const oversizedRevision = `sha256:${createHash('sha256').update(oversized).digest('hex')}`;
+
+    see('create.item-source-too-large', run(root, 'create', '--ledger', ledger, '--input', await requestFile(root, 'create-oversized.json', {
+      id: 'wb_01KZBMBEZKPE7D15HKW9Q3GSZW',
+      item: itemRequest('Oversized'),
+      body: 'x'.repeat(MAX_ITEM_SOURCE_BYTES),
+    }), '--json'));
+    see('patch.item-source-too-large', run(root, 'patch', '--ledger', ledger, '--input', await requestFile(root, 'patch-oversized.json', {
+      id: ITEM_ID,
+      expected_revision: oversizedRevision,
+      date: '2026-08-16',
+      set: { priority: 3 },
+    }), '--json'));
+    see('transition.item-source-too-large', run(root, 'transition', '--ledger', ledger, '--input', await requestFile(root, 'transition-oversized.json', {
+      id: ITEM_ID,
+      expected_revision: oversizedRevision,
+      to_status: 'in-progress',
+      date: '2026-08-16',
+    }), '--json'));
   }
 
   {
