@@ -4,7 +4,7 @@ id: wb_01M086JQBQ12VQ3QER25QVJEEZ
 number: 124
 title: "Repair the release channels and make the cut a command"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-17T15:48:55Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Ideation survivor: latest serves dead alpha.1 to every bare install today; the cut command kills a proven drift class."
 ---
 
 Ideation survivor 3 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-release.md - the enrichment is the authoritative scope; this body is its summary.
