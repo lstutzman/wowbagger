@@ -5,9 +5,10 @@ number: 38
 title: "Earn a supported platform claim on linux and win32"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-09
-updated: 2026-08-17
+updated: 2026-08-18
+completed: 2026-08-18
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-09T13:31:00.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-10
     summary: "Accept into backlog: earn the supported platform claim on linux and win32 with native evidence."
     rationale: "Every platform still reads unverified and a supported claim requires native common-vector evidence; consumers on linux or Windows need it."
+  - action: complete
+    date: 2026-08-18
+    summary: "Linux and win32 supported, earned on native common-vector evidence."
+    rationale: "A three-platform CI matrix (.gitattributes byte protection, per-OS temp roots, evidence-platform-checked vector reports) runs the full gate natively; 246 initial win32 failures were driven to zero across seven CI rounds. Root causes fixed in the product, not the tests: the claim journal's directory fsync now tolerates platforms without the primitive (mutation-engine convention); O_NOFOLLOW gained an lstat fallback throwing ELOOP at the two primary-protection sites; snapshot identities are lossless decimal strings because NTFS file IDs exceed 2^53; runner ledger argv is posix-joined to match the adapter; tar extraction is cwd-relative. POSIX-only constructs (mode bits, EPIPE-on-closed-reader) are declared, not assumed. Native evidence: pass 16 cases 210 assertions on darwin, linux, and win32, with supported declarations driving real invocation expectations."
 ---
 
 Item 13 requires the conformance run to be reported on one real native platform.
