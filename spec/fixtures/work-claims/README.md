@@ -32,7 +32,17 @@ legacy writer bypasses; same-item/different-ledger isolation; contention;
 expiry, takeover, renew, release, restart, and ABA; wrong ledger, item, owner,
 and epoch fences; the epoch-N preflight/epoch-N+1 takeover race; clock-floor
 persistence on rejection; backward clock after restart; clock storage failure;
-and an atomically committed publication whose response is lost.
+an atomically committed publication whose response is lost; and operator
+adoption of a committed out-of-protocol revision, including its claim-fence,
+stale-witness, uncommitted-bytes, and unbound-namespace refusals.
+
+A durable ledger record carries up to three revisions. `revision` is what the
+writer's own surface holds. `committed_revision` is what every cooperating
+checkout can see, which is Git `HEAD` in the shipped merge-coordinated profile.
+`authorized_revision` is what the coordinator has ruled legitimate. The last two
+are optional and default to `revision`, the only state a backend whose ledger
+lives inside the coordinator can reach. Adoption is the operation that moves
+`authorized_revision`, and it moves nothing else.
 
 A reference-model pass only proves agreement with the normative state machine.
 A future backend is conformant only after a backend adapter runs the same

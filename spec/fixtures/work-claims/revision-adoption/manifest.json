@@ -1,0 +1,409 @@
+{
+  "case": "revision-adoption",
+  "fixture_version": 2,
+  "status": "normative-reference-model",
+  "description": "An operator rules a committed out-of-protocol revision legitimate. Adoption refuses while a claim holds the item, refuses a stale revision witness, refuses bytes that no cooperating checkout can see, succeeds once, and refuses its own replay.",
+  "coverage": [
+    "adoption-claim-fence",
+    "adoption-uncommitted",
+    "adoption-witness",
+    "namespace-fence",
+    "release",
+    "revision-adoption"
+  ],
+  "clock": {
+    "authority": "backend-effective-utc",
+    "client_timestamps_trusted": false,
+    "durable_floor_scope": "ledger-namespace"
+  },
+  "source_files": [
+    {
+      "path": "ledger/before.md",
+      "sha256": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBpbi1wcm9ncmVzcwpjcmVhdGVkOiAyMDMwLTAxLTExCnVwZGF0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYmVmb3JlIGEgY2xhaW0tcHJvdGVjdGVkIHB1YmxpY2F0aW9uLgo="
+    },
+    {
+      "path": "ledger/after.md",
+      "sha256": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg=="
+    }
+  ],
+  "initial": {
+    "backend": {
+      "name": "reference-backend",
+      "coordination_scope": "shared-transactional-coordinator",
+      "durability": "durable-coordinator",
+      "ledger_binding": {
+        "mode": "explicit-allowlist",
+        "namespaces": [
+          "wbns_11111111111111111111111111111111",
+          "wbns_22222222222222222222222222222222"
+        ]
+      },
+      "write_paths": {
+        "alternate": "none",
+        "claimed_publication_v1": "atomic-fence",
+        "legacy_create_v1": "reject-claimed-id",
+        "legacy_transition_v1": "reject-active-claim"
+      }
+    },
+    "faults": {},
+    "durable": {
+      "clock_floors": [
+        {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "observed_at": "2030-01-11T09:00:00.000Z"
+        }
+      ],
+      "claims": [
+        {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "last_epoch": "4",
+          "active": {
+            "owner_id": "agent-a-run-1",
+            "epoch": "4",
+            "issued_at": "2030-01-11T09:00:00.000Z",
+            "expires_at": "2030-01-11T09:05:00.000Z"
+          }
+        },
+        {
+          "ledger_namespace": "wbns_22222222222222222222222222222222",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "last_epoch": "0",
+          "active": null
+        }
+      ],
+      "ledgers": [
+        {
+          "ledger_namespace": "wbns_11111111111111111111111111111111",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+          "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+          "authorized_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+          "committed_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8"
+        },
+        {
+          "ledger_namespace": "wbns_22222222222222222222222222222222",
+          "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+          "revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+          "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+          "authorized_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+          "committed_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5"
+        }
+      ],
+      "publication_outcomes": []
+    },
+    "process": {
+      "preflights": []
+    }
+  },
+  "actions": [
+    {
+      "operation": "work-claim.claim-adopt",
+      "physical_now": "2030-01-11T09:00:01.000Z",
+      "request": {
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "adopted_by": "operator-a"
+      }
+    },
+    {
+      "operation": "work-claim.release",
+      "physical_now": "2030-01-11T09:00:02.000Z",
+      "request": {
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "owner_id": "agent-a-run-1",
+        "epoch": "4",
+        "expected_expires_at": "2030-01-11T09:05:00.000Z"
+      }
+    },
+    {
+      "operation": "work-claim.claim-adopt",
+      "physical_now": "2030-01-11T09:00:03.000Z",
+      "request": {
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "from_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "to_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "adopted_by": "operator-a"
+      }
+    },
+    {
+      "operation": "work-claim.claim-adopt",
+      "physical_now": "2030-01-11T09:00:04.000Z",
+      "request": {
+        "ledger_namespace": "wbns_22222222222222222222222222222222",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "adopted_by": "operator-a"
+      }
+    },
+    {
+      "operation": "work-claim.claim-adopt",
+      "physical_now": "2030-01-11T09:00:05.000Z",
+      "request": {
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "adopted_by": "operator-a"
+      }
+    },
+    {
+      "operation": "work-claim.claim-adopt",
+      "physical_now": "2030-01-11T09:00:06.000Z",
+      "request": {
+        "ledger_namespace": "wbns_11111111111111111111111111111111",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "adopted_by": "operator-a"
+      }
+    },
+    {
+      "operation": "work-claim.claim-adopt",
+      "physical_now": "2030-01-11T09:00:07.000Z",
+      "request": {
+        "ledger_namespace": "wbns_33333333333333333333333333333333",
+        "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+        "from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+        "to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+        "adopted_by": "operator-a"
+      }
+    }
+  ],
+  "expected": {
+    "transcript": [
+      {
+        "exit": 4,
+        "stdout": {
+          "ok": false,
+          "namespace": "work-claim",
+          "command": "claim-adopt",
+          "contract_version": 1,
+          "state": "unchanged",
+          "error": {
+            "code": "claim-held",
+            "message": "The item has an unexpired active claim.",
+            "details": {
+              "ledger_namespace": "wbns_11111111111111111111111111111111",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "observed_at": "2030-01-11T09:00:01.000Z",
+              "last_epoch": "4",
+              "active": {
+                "owner_id": "agent-a-run-1",
+                "epoch": "4",
+                "issued_at": "2030-01-11T09:00:00.000Z",
+                "expires_at": "2030-01-11T09:05:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      {
+        "exit": 0,
+        "stdout": {
+          "ok": true,
+          "namespace": "work-claim",
+          "command": "release",
+          "contract_version": 1,
+          "state": "committed",
+          "result": {
+            "released_claim": {
+              "owner_id": "agent-a-run-1",
+              "epoch": "4",
+              "issued_at": "2030-01-11T09:00:00.000Z",
+              "expires_at": "2030-01-11T09:05:00.000Z"
+            },
+            "read_back": {
+              "ledger_namespace": "wbns_11111111111111111111111111111111",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "observed_at": "2030-01-11T09:00:02.000Z",
+              "last_epoch": "4",
+              "active": null
+            }
+          }
+        }
+      },
+      {
+        "exit": 4,
+        "stdout": {
+          "ok": false,
+          "namespace": "work-claim",
+          "command": "claim-adopt",
+          "contract_version": 1,
+          "state": "unchanged",
+          "error": {
+            "code": "adoption-witness-mismatch",
+            "message": "The adoption witness no longer names the authorized revision.",
+            "details": {
+              "ledger_namespace": "wbns_11111111111111111111111111111111",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "authorized_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+              "requested_from_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8"
+            }
+          }
+        }
+      },
+      {
+        "exit": 4,
+        "stdout": {
+          "ok": false,
+          "namespace": "work-claim",
+          "command": "claim-adopt",
+          "contract_version": 1,
+          "state": "unchanged",
+          "error": {
+            "code": "adoption-revision-uncommitted",
+            "message": "The adopted revision is not committed at Git HEAD.",
+            "details": {
+              "ledger_namespace": "wbns_22222222222222222222222222222222",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "requested_to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+              "observed_surface": "git-head",
+              "observed_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5"
+            }
+          }
+        }
+      },
+      {
+        "exit": 0,
+        "stdout": {
+          "ok": true,
+          "namespace": "work-claim",
+          "command": "claim-adopt",
+          "contract_version": 1,
+          "state": "committed",
+          "result": {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+            "to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+            "adopted_by": "operator-a",
+            "adopted_at": "2030-01-11T09:00:05.000Z"
+          }
+        }
+      },
+      {
+        "exit": 4,
+        "stdout": {
+          "ok": false,
+          "namespace": "work-claim",
+          "command": "claim-adopt",
+          "contract_version": 1,
+          "state": "unchanged",
+          "error": {
+            "code": "adoption-witness-mismatch",
+            "message": "The adoption witness no longer names the authorized revision.",
+            "details": {
+              "ledger_namespace": "wbns_11111111111111111111111111111111",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+              "authorized_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+              "requested_from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5"
+            }
+          }
+        }
+      },
+      {
+        "exit": 2,
+        "stdout": {
+          "ok": false,
+          "namespace": "work-claim",
+          "command": "claim-adopt",
+          "contract_version": 1,
+          "state": "unchanged",
+          "error": {
+            "code": "ledger-namespace-unbound",
+            "message": "The ledger namespace is not provisioned for this endpoint.",
+            "details": {
+              "ledger_namespace": "wbns_33333333333333333333333333333333",
+              "item_id": "wb_01Q4837BM01W70T30B184GG1R6"
+            }
+          }
+        }
+      }
+    ],
+    "final": {
+      "backend": {
+        "name": "reference-backend",
+        "coordination_scope": "shared-transactional-coordinator",
+        "durability": "durable-coordinator",
+        "ledger_binding": {
+          "mode": "explicit-allowlist",
+          "namespaces": [
+            "wbns_11111111111111111111111111111111",
+            "wbns_22222222222222222222222222222222"
+          ]
+        },
+        "write_paths": {
+          "alternate": "none",
+          "claimed_publication_v1": "atomic-fence",
+          "legacy_create_v1": "reject-claimed-id",
+          "legacy_transition_v1": "reject-active-claim"
+        }
+      },
+      "faults": {},
+      "durable": {
+        "clock_floors": [
+          {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "observed_at": "2030-01-11T09:00:06.000Z"
+          },
+          {
+            "ledger_namespace": "wbns_22222222222222222222222222222222",
+            "observed_at": "2030-01-11T09:00:04.000Z"
+          }
+        ],
+        "claims": [
+          {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "last_epoch": "4",
+            "active": null
+          },
+          {
+            "ledger_namespace": "wbns_22222222222222222222222222222222",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "last_epoch": "0",
+            "active": null
+          }
+        ],
+        "ledgers": [
+          {
+            "ledger_namespace": "wbns_11111111111111111111111111111111",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+            "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+            "authorized_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+            "committed_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+            "adoptions": [
+              {
+                "from_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+                "to_revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+                "adopted_by": "operator-a",
+                "adopted_at": "2030-01-11T09:00:05.000Z"
+              }
+            ]
+          },
+          {
+            "ledger_namespace": "wbns_22222222222222222222222222222222",
+            "item_id": "wb_01Q4837BM01W70T30B184GG1R6",
+            "revision": "sha256:d8ba5e2458478da0c17d96623d609561bfcf67d607a1b6cd842ae77328691fd8",
+            "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0ODM3Qk0wMVc3MFQzMEIxODRHRzFSNgp0aXRsZTogIlVwZGF0ZSB0aGUgZmljdGlvbmFsIG5hdmlnYXRpb24gY2hhcnQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBkb25lCmNyZWF0ZWQ6IDIwMzAtMDEtMTEKdXBkYXRlZDogMjAzMC0wMS0xMQpjb21wbGV0ZWQ6IDIwMzAtMDEtMTEKcHJvdmVuYW5jZToKICBzb3VyY2U6ICJmaXh0dXJlL3dvcmstY2xhaW1zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0xMVQwODowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCmRlY2lzaW9uczoKICAtIGFjdGlvbjogYWNjZXB0CiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQWNjZXB0IHRoZSBmaWN0aW9uYWwgY2hhcnQgdXBkYXRlLiIKICAgIHJhdGlvbmFsZTogIlRoZSBzeW50aGV0aWMgaXRlbSBpcyByZWFkeSBmb3IgYSBjbGFpbWVkIHB1YmxpY2F0aW9uIHZlY3Rvci4iCiAgLSBhY3Rpb246IGNvbXBsZXRlCiAgICBkYXRlOiAyMDMwLTAxLTExCiAgICBzdW1tYXJ5OiAiQ29tcGxldGUgdGhlIGZpY3Rpb25hbCBjaGFydCB1cGRhdGUuIgogICAgcmF0aW9uYWxlOiAiVGhlIGZlbmNlZCBwdWJsaWNhdGlvbiB2ZWN0b3IgY29tbWl0cyB0aGlzIHZhbGlkIHN1Y2Nlc3Nvci4iCi0tLQoKQSBmaWN0aW9uYWwgbGVkZ2VyIGl0ZW0gYWZ0ZXIgYSBjbGFpbS1wcm90ZWN0ZWQgcHVibGljYXRpb24uCg==",
+            "authorized_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5",
+            "committed_revision": "sha256:7bd247bb82b1e56f5c0fc30feda8bafd82af72962d78deadd75ee0136d3d1be5"
+          }
+        ],
+        "publication_outcomes": []
+      },
+      "process": {
+        "preflights": []
+      }
+    }
+  }
+}
