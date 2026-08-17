@@ -4,9 +4,10 @@ id: wb_01KZYS3100MFHC5ZR6FGP8ZX6N
 number: 81
 title: "Preserve exact PropertyCompass source bytes outside parsed bodies"
 kind: task
+priority: 20
 status: backlog
 created: 2026-08-14
-updated: 2026-08-16
+updated: 2026-08-17
 provenance:
   source: "propertycompass-migration-final-reconciliation"
   recorded_at: "2026-08-14T13:24:17.000Z"
