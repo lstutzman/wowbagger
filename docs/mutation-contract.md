@@ -1026,6 +1026,84 @@ items do not reopen; and transition cannot edit identity, title, relations,
 parent, snooze, body, or extension fields. A schema version 2 done transition
 therefore retains the target's depends_on and related lists unchanged.
 
+The missing epic backlog to in-progress edge is by design, not by omission: an
+epic carries no progress of its own to record, so there is no state for that
+edge to reach. Read [Epic progress is derived from direct
+children](#epic-progress-is-derived-from-direct-children) below for the model
+that replaces it.
+
+### Epic progress is derived from direct children
+
+An epic stores no progress. Its status records disposition only — which of
+triage, backlog, deferred, archived, killed, or done the epic itself sits in —
+and never how much work is under way beneath it. An epic's progress is derived
+from its direct children: every item whose parent is that epic's immutable ID.
+Grandchildren never count, even under a nested epic; each epic derives from its
+own direct children only.
+
+Both derived values below are computed from item bytes alone. No ledger field
+holds either one, and no reader needs anything the items do not already carry.
+
+**Terminal ratio.** Direct children whose status is done or killed, divided by
+all direct children. An epic with no direct children has no ratio at all: 0/0
+is undefined, not zero.
+
+The epic complete rollup uses this same set. The epic backlog to done edge
+refuses unless every direct child is already done or killed, and the generated
+rollup then lists exactly those children in immutable ID order. So a ratio of 1
+is the precondition of the rollup, and the contract, the transition gate, and
+the rollup provably share one definition of terminal.
+
+The report's epic-enablement factor is a different number, and a consumer must
+not read it as this ratio. It counts every child that carries a terminal date,
+which adds archived and deferred children to the numerator; it is therefore an
+upper bound on the terminal ratio, never below it.
+
+**Activity.** Exactly one of three derived states:
+
+- **active** — at least one direct child is in-progress or holds an active work
+  claim. An active claim is an unexpired lease, defined by the [work-claim
+  contract](work-claim-contract.md) section 4; a claim read reports it as a
+  non-null active object.
+- **untouched** — no direct child has left triage or backlog, and no direct
+  child holds an active work claim. An epic with no direct children is
+  untouched.
+- **in progress by derivation** — every other case.
+
+Test active first, then untouched, then in progress by derivation. The order is
+part of the definition: a backlog child under an active claim is active, not
+untouched, and only the fixed order makes two independent implementations agree
+on it.
+
+The terminal ratio, not the activity state, reports completeness. An epic whose
+every direct child is done or killed, with no child claimed, derives a ratio of
+1 and the state in progress by derivation; it is awaiting its own complete
+transition, which is real remaining work.
+
+**Mirroring.** A consumer mirroring a store that does model epic activity
+compares its stored epic status against this derived state, never against the
+ledger's stored status field. The stored field cannot follow an active epic,
+because epics never enter in-progress; an audit that compares stored against
+stored therefore reports a permanent false positive on every epic under work,
+and whitelisting epics to silence it blinds the audit to genuine epic-status
+errors.
+
+Worked example, the shape a dual-run mirror actually hit. Legacy epic #1075 is
+in-progress since 2026-06-16. Its ledger mirror is backlog and cannot be
+anything else. One direct child is in-progress, so the epic derives active.
+Comparing legacy in-progress against the ledger's stored backlog reports drift
+that no mutation can ever clear. Comparing legacy in-progress against the
+derived active state agrees, and the audit keeps its power to fail on a real
+disagreement — a legacy epic marked in-progress whose children are all still in
+triage derives untouched, and that is a genuine finding.
+
+**No machine surface exposes the derived value.** This is a recorded decision,
+not an oversight. A consumer audit already loads every item to compare them, so
+the two definitions above are computable where the audit already stands; the
+report model keeps carrying epic enablement for sequencing, and inspect gains
+no derived member. Adding one is a wire change and needs its own justification
+and its own item.
+
 ### Lossless preservation
 
 Transition preserves body bytes exactly. It preserves every permitted extension

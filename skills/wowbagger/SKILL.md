@@ -236,6 +236,30 @@ treat that hand-edit like any other out-of-protocol write: commit it, then run
 `claim-verify` and reconcile. The full table, and why the extension path is
 still open, is in `docs/mutation-contract.md` section 9.
 
+### An epic's progress lives in its children, not in its status
+
+An epic stores no progress. There is no `epic backlog -> in-progress` edge, and
+asking for one is refused. Read an epic's progress off its direct children —
+the items whose `parent` is that epic's ID — and never off the epic's own
+`status`:
+
+- **How far along:** direct children whose status is `done` or `killed`, over
+  all direct children. That is the same set the epic's own completion needs:
+  `epic backlog -> done` refuses until every direct child is `done` or
+  `killed`, and it generates the rollup from exactly those children.
+- **Whether anyone is on it:** the epic is *active* when at least one direct
+  child is `in-progress` or holds an active work claim; *untouched* when no
+  direct child has left `triage` or `backlog`; otherwise *in progress by
+  derivation*. Test those three in that order.
+
+**Mirroring a tracker that does model epic activity?** Compare its stored epic
+status against the derived state above, never against the ledger's stored
+`status` field. A stored-against-stored comparison reports drift that no
+mutation can clear — legacy epic #1075 sat `in-progress` while its correct
+ledger mirror sat `backlog` with one `in-progress` child, so the two stores
+agreed on the work and disagreed only on where progress is kept. Derive, then
+compare. `docs/mutation-contract.md` section 8 carries the exact definitions.
+
 ### A refused disposition is one relations patch away
 
 Killing or archiving an item that another item still declares in `depends_on`
