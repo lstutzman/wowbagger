@@ -12,8 +12,8 @@ killed: 2026-08-17
 provenance:
   source: "user-request"
   recorded_at: "2026-08-14T14:47:48.000Z"
-depends_on: [ wb_01KZYS3100ZR9M1Y1YJ6W1RX4M ]
-related: [ wb_01KZ77NSW8363H1V6QG1HZRG11 ]
+depends_on: []
+related: [ wb_01KZ77NSW8363H1V6QG1HZRG11, wb_01KZYS3100ZR9M1Y1YJ6W1RX4M ]
 parent: wb_01KZBT435CG4HMTP0H6F3CTTNA
 decisions:
   - action: accept
