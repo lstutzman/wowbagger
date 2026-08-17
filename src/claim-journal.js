@@ -18,6 +18,7 @@ const JOURNAL_ENTRY_TYPES = new Set([
   'publish-final',
   'publish-finalization',
   'publish-intent',
+  'revision-adoption',
 ]);
 // The reconciliation log is a tracked derived artifact. Entry types that every
 // invocation appends, including refusals and read-only verification, stay out
@@ -225,6 +226,18 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.item_id === 'string'
       && typeof entry.observed_revision === 'string'
       && typeof entry.observed_at === 'string';
+  }
+  if (entry.type === 'revision-adoption') {
+    return typeof entry.ledger_namespace === 'string'
+      && (namespace === null || entry.ledger_namespace === namespace)
+      && typeof entry.item_id === 'string'
+      && typeof entry.from_revision === 'string'
+      && typeof entry.to_revision === 'string'
+      && entry.from_revision !== entry.to_revision
+      && typeof entry.adopted_by === 'string'
+      && typeof entry.adopted_at === 'string'
+      && typeof entry.git_commit === 'string'
+      && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string');
   }
   if (entry.type === 'publish-intent') {
     return typeof entry.operation_id === 'string'

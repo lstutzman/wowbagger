@@ -20,6 +20,7 @@ const MAX_EPOCH = 18446744073709551615n;
 const UTC_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})Z$/;
 const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
 const ITEM_ID = /^wb_[0-9A-HJKMNP-TV-Z]{26}$/;
+const REVISION = /^sha256:[0-9a-f]{64}$/;
 
 export function runReferenceVector(vector) {
   const state = structuredClone(vector.initial);
@@ -48,6 +49,9 @@ function execute(state, action) {
   }
   if (action.operation === 'work-claim.release') {
     return release(state, action);
+  }
+  if (action.operation === 'work-claim.claim-adopt') {
+    return claimAdopt(state, action);
   }
   if (action.operation === 'ledger-publication.preflight') {
     return publicationPreflight(state, action);
@@ -87,6 +91,7 @@ function requestSchemaError(action) {
     'work-claim.renew': ['ledger_namespace', 'item_id', 'owner_id', 'epoch', 'expected_expires_at', 'lease_duration_ms'],
     'work-claim.release': ['ledger_namespace', 'item_id', 'owner_id', 'epoch', 'expected_expires_at'],
     'work-claim.read': ['ledger_namespace', 'item_id'],
+    'work-claim.claim-adopt': ['adopted_by', 'from_revision', 'item_id', 'ledger_namespace', 'to_revision'],
   }[action.operation];
   if (exact && (Object.keys(request).sort().join(',') !== exact.slice().sort().join(',') || !NAMESPACE_ID.test(request.ledger_namespace) || !ITEM_ID.test(request.item_id))) return invalidRequestEnvelope(action.operation, 'work-claim');
   if (exact && (typeof request.owner_id !== 'undefined' && typeof request.owner_id !== 'string' || typeof request.epoch !== 'undefined' && typeof request.epoch !== 'string' || typeof request.lease_duration_ms !== 'undefined' && (!Number.isInteger(request.lease_duration_ms) || request.lease_duration_ms < 1 || request.lease_duration_ms > 86400000) || request.expected && (typeof request.expected !== 'object' || Array.isArray(request.expected)))) return invalidRequestEnvelope(action.operation, 'work-claim');
@@ -106,6 +111,13 @@ function requestSchemaError(action) {
         || !isStrictUtcInstant(active.issued_at)
         || !isStrictUtcInstant(active.expires_at)));
     if (malformed) return invalidRequestEnvelope(action.operation, 'work-claim');
+  }
+  if (action.operation === 'work-claim.claim-adopt'
+    && (!REVISION.test(request.from_revision ?? '') || !REVISION.test(request.to_revision ?? '')
+      || request.from_revision === request.to_revision
+      || typeof request.adopted_by !== 'string'
+      || !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(request.adopted_by))) {
+    return invalidRequestEnvelope(action.operation, 'work-claim');
   }
   if (['work-claim.renew', 'work-claim.release'].includes(action.operation)
     && (typeof request.expected_expires_at !== 'string' || !isStrictUtcInstant(request.expected_expires_at))) {
@@ -946,6 +958,130 @@ function legacyWrite(state, action, command) {
       },
     },
   };
+}
+
+// Adoption re-baselines the authorized revision onto bytes the coordinator
+// never wrote. It changes no item byte, so a ledger record carries three
+// revisions: `revision` is what the writer's own surface holds,
+// `committed_revision` is what every cooperating checkout can see (Git HEAD in
+// the shipped profile), and `authorized_revision` is what the coordinator has
+// ruled legitimate. The two optional members default to `revision`, which is
+// the only state a backend without an out-of-coordinator ledger can reach.
+function claimAdopt(state, action) {
+  const request = action.request;
+  if (!namespaceIsBound(state.backend, request.ledger_namespace)) {
+    return namespaceClaimError('claim-adopt', request);
+  }
+  const record = findOrCreateClaim(state, request.ledger_namespace, request.item_id);
+  const observedAt = persistClockFloor(state, request.ledger_namespace, action.physical_now);
+  if (observedAt === null) return clockFloorError('work-claim', 'claim-adopt', request);
+  const ledger = state.durable.ledgers.find((entry) => (
+    entry.ledger_namespace === request.ledger_namespace && entry.item_id === request.item_id
+  )) ?? null;
+  const authorized = ledger === null ? null : (ledger.authorized_revision ?? ledger.revision);
+  if (authorized !== request.from_revision) {
+    return adoptionError(request, 'adoption-witness-mismatch',
+      'The adoption witness no longer names the authorized revision.', {
+        ledger_namespace: request.ledger_namespace,
+        item_id: request.item_id,
+        authorized_revision: authorized,
+        requested_from_revision: request.from_revision,
+      });
+  }
+  if (record.active !== null && observedAt < record.active.expires_at) {
+    return claimError('claim-adopt', 'claim-held', 'The item has an unexpired active claim.',
+      request, observedAt, record);
+  }
+  const committed = ledger.committed_revision ?? ledger.revision;
+  for (const [surface, observed] of [['git-head', committed], ['working-tree', ledger.revision]]) {
+    if (observed === request.to_revision) continue;
+    return adoptionError(request, 'adoption-revision-uncommitted',
+      'The adopted revision is not committed at Git HEAD.', {
+        ledger_namespace: request.ledger_namespace,
+        item_id: request.item_id,
+        requested_to_revision: request.to_revision,
+        observed_surface: surface,
+        observed_revision: observed,
+      });
+  }
+  const invalid = adoptedLedgerErrors(ledger);
+  if (invalid !== null) {
+    return {
+      exit: 3,
+      stdout: {
+        ok: false,
+        namespace: 'work-claim',
+        command: 'claim-adopt',
+        contract_version: 1,
+        state: 'unchanged',
+        error: {
+          code: 'adoption-ledger-invalid',
+          message: 'The complete ledger is invalid with the adopted revision.',
+          details: {
+            ledger_namespace: request.ledger_namespace,
+            item_id: request.item_id,
+            errors: invalid,
+          },
+        },
+      },
+    };
+  }
+  ledger.authorized_revision = request.to_revision;
+  ledger.adoptions = [...(ledger.adoptions ?? []), {
+    from_revision: request.from_revision,
+    to_revision: request.to_revision,
+    adopted_by: request.adopted_by,
+    adopted_at: observedAt,
+  }];
+  return {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'work-claim',
+      command: 'claim-adopt',
+      contract_version: 1,
+      state: 'committed',
+      result: {
+        ledger_namespace: request.ledger_namespace,
+        item_id: request.item_id,
+        from_revision: request.from_revision,
+        to_revision: request.to_revision,
+        adopted_by: request.adopted_by,
+        adopted_at: observedAt,
+      },
+    },
+  };
+}
+
+function adoptionError(request, code, message, details) {
+  return {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'work-claim',
+      command: 'claim-adopt',
+      contract_version: 1,
+      state: 'unchanged',
+      error: { code, message, details },
+    },
+  };
+}
+
+function adoptedLedgerErrors(ledger) {
+  const bytes = Buffer.from(ledger.source_base64, 'base64');
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return [{ code: 'invalid-utf8' }];
+  }
+  const parsed = parseLedgerItemSource(text);
+  if (parsed.error) return [parsed.error];
+  const validation = validateLedger({
+    errors: [],
+    items: [{ data: parsed.data, source: text, body: parsed.body, bytes }],
+  });
+  return validation.valid ? null : validation.errors;
 }
 
 function claimError(command, code, message, request, observedAt, record) {

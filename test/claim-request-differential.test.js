@@ -155,3 +155,33 @@ assertBothReject('release', 'malformed ledger_namespace', { ...validRelease, led
 assertBothReject('release', 'malformed item_id', { ...validRelease, item_id: 'wb_bad' });
 assertBothReject('release', 'non-canonical epoch', { ...validRelease, epoch: '01' });
 assertBothReject('release', 'malformed instant', { ...validRelease, expected_expires_at: 'not-an-instant' });
+
+// adopt: ledger_namespace, item_id, from_revision, to_revision, adopted_by.
+// Adoption re-baselines the authorized revision without writing an item byte,
+// so its witness is a revision pair, never a claim tuple.
+const validAdopt = {
+  ledger_namespace: NS,
+  item_id: ITEM,
+  from_revision: `sha256:${'1'.repeat(64)}`,
+  to_revision: `sha256:${'2'.repeat(64)}`,
+  adopted_by: 'operator-lee',
+};
+
+assertBothAccept('claim-adopt', 'well-formed request', validAdopt);
+
+assertBothReject('claim-adopt', 'non-object body', 'not an object');
+assertBothReject('claim-adopt', 'extra unknown member', { ...validAdopt, unexpected: 'x' });
+assertBothReject('claim-adopt', 'missing required member', (() => {
+  const { to_revision, ...rest } = validAdopt;
+  return rest;
+})());
+assertBothReject('claim-adopt', 'malformed ledger_namespace', { ...validAdopt, ledger_namespace: 'wbns_bad' });
+assertBothReject('claim-adopt', 'malformed item_id', { ...validAdopt, item_id: 'wb_bad' });
+assertBothReject('claim-adopt', 'malformed from_revision', { ...validAdopt, from_revision: 'sha256:short' });
+assertBothReject('claim-adopt', 'malformed to_revision', { ...validAdopt, to_revision: `SHA256:${'2'.repeat(64)}` });
+assertBothReject('claim-adopt', 'uppercase revision digest', { ...validAdopt, to_revision: `sha256:${'A'.repeat(64)}` });
+assertBothReject('claim-adopt', 'malformed adopted_by', { ...validAdopt, adopted_by: '-leading-dash' });
+assertBothReject('claim-adopt', 'from_revision equal to to_revision', {
+  ...validAdopt,
+  to_revision: validAdopt.from_revision,
+});

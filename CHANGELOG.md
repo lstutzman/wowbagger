@@ -7,6 +7,46 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- **`claim-adopt` gives `unauthorized-revision` a non-destructive remedy.** A
+  consumer's staging checkout was blocked exit 6 on three items whose bodies
+  were hand-edited in a design session and merged. The refusal was correct, but
+  the only documented remedy — restore the authorized revision, then
+  `claim-verify` — discards reviewed, merged work. `claim-adopt` records that an
+  operator ruled the committed bytes legitimate and moves the coordinator's
+  authorized revision to them. It writes no item byte, so `updated` and the body
+  survive exactly. It is a standalone verb in the work-claim domain, a sibling
+  of `claim-verify`, and it is per item and per revision explicit: the request
+  names the item, the revision it believes is authorized, the revision being
+  adopted, and who is ruling. There is no adopt-all. It refuses
+  `adoption-witness-mismatch` on a stale witness (including a replay of a
+  successful adoption), `claim-held` while an unexpired claim holds the item,
+  `adoption-revision-uncommitted` unless the adopted revision is at Git `HEAD`
+  and in the caller's own working tree, and `adoption-ledger-invalid` when the
+  complete ledger would not validate. Success appends one `revision-adoption`
+  journal entry naming who, when, and both revisions, so the audit trail records
+  the ruling instead of losing it. Adoption is not a fence hole: the next
+  out-of-protocol edit is `unauthorized-revision` again, measured against the
+  adopted revision. Additive at contract version 1 — one new command, one new
+  journal entry type, three new error codes, no existing shape changed.
+  Documented in work-claim contract section 3.3 and pinned by
+  `spec/fixtures/work-claims/revision-adoption/`.
+
+### Changed
+
+- **Every `unauthorized-revision` remediation string now names both remedies.**
+  It was one sentence naming only the restore path, which reads as an
+  instruction to throw the edit away; the field report above did exactly that.
+  It is now two sentences, and each says what happens to the edit: `Restore the
+  authorized revision at <path>, then run claim-verify; that discards the edit.
+  Or adopt the committed revision of <path> with claim-adopt, then run
+  claim-verify; that keeps the edit.` The finding's `code`, `reason`,
+  `observed_surface`, `expected_path`, and revisions are unchanged; only the
+  human-readable `remediation` prose changed. `revision-regression` keeps its
+  restore-only string on purpose: it only fires while an active claim holds the
+  item, which is a state adoption refuses.
+
 ### Documentation
 
 - **The contract documents the selector an `inspect` `item-not-found` refusal
