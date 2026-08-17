@@ -95,6 +95,11 @@ jobs:
             echo 'TMPDIR=/tmp' >> "$GITHUB_ENV"
           fi
 
+      - name: win32 claim diagnostic (TEMPORARY)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: node .github/win32-claim-diagnose.mjs
+
       - name: install
         run: npm ci
 
