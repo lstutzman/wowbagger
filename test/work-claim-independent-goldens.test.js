@@ -567,4 +567,13 @@ test('hand-authored revision-adoption envelopes are literal and tamper checked',
   const swapped = structuredClone(replayed);
   swapped.stdout.error.details.authorized_revision = beforeRevision;
   assert.notDeepEqual(actual.transcript[1], swapped);
+
+  // A client clock behind the persisted floor never authorizes the instant the
+  // adoption records: the durable floor does.
+  const backward = runReferenceVector({
+    initial,
+    actions: [{ operation: 'work-claim.claim-adopt', physical_now: '2030-01-11T08:59:00.000Z', request }],
+  });
+  assert.equal(backward.transcript[0].exit, 0);
+  assert.equal(backward.transcript[0].stdout.result.adopted_at, '2030-01-11T09:00:00.000Z');
 });
