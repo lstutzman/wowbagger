@@ -4,6 +4,7 @@ id: wb_01M07J8X15VJR34F9DF92NF1YE
 number: 114
 title: "Widen patch to title and draw the frontmatter ownership boundary"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
