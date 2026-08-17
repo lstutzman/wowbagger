@@ -5,9 +5,10 @@ number: 115
 title: "Document epic progress as derived from children"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T10:40:49Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Dual-run drift audits report a permanent false positive on active epics; the consumer prefers the derivation model stated over the edge opened."
+  - action: complete
+    date: 2026-08-17
+    summary: "Epic progress is documented as derived from children; the edge stays closed."
+    rationale: "Terminal ratio (done or killed over direct children, 0/0 undefined) shares its definition with the epic complete rollup - verified in source; the report's epic-enablement factor does NOT share it (counts archived and deferred) and the contract states that divergence plainly rather than papering it (follow-up #119). Activity is a fixed-order three-state derivation; the mirror rule with the worked #1075 example ships in contract and skill; the edge-table prohibition now cross-references the model. No wire change."
 ---
 
 Field design conflict from PropertyCompass2's dual-run drift audit on alpha.5 (their worktree 260816-191701; 1,572 legacy vs 1,574 ledger items): exactly one status disagreement, and it is structural, not drift. Legacy epic #1075 is in-progress since 2026-06-16; the ledger mirror (wb_01KTSZN100WNMQHWN8EEECR29X) is backlog and cannot follow - "Epics never enter in-progress" is a deliberate contract rule (allowed-edges table has task backlog->in-progress and no epic equivalent). Consequence: an epic under active work is UNREPRESENTABLE, so any drift audit against a store that models epic activity reports a permanent false positive, and whitelisting epics blinds the audit to genuine epic-status errors.
