@@ -154,13 +154,22 @@ async function finalize({
   if (state !== 'committed') return outcome;
   await autoCommitCheckpoint(root, scenario, 'before-stage');
 
-  let published;
-  try {
-    published = await publishedItem(ledgerDirectory, shape.publishedIdentity(outcome));
-  } catch {
+  // The published revision comes from the mutation outcome, never from disk.
+  // Reading it from disk would make the byte comparison below compare the file
+  // with itself.
+  const identity = shape.publishedIdentity(outcome);
+  let published = null;
+  if (identity.revision !== null) {
+    try {
+      published = await locateItem(ledgerDirectory, identity.id);
+    } catch {
+      published = null;
+    }
+  }
+  if (published === null) {
     return shape.commitFailed({
-      ...shape.identityDetails(shape.publishedIdentity(outcome), namespace),
-      published_revision: shape.publishedIdentity(outcome).revision,
+      ...shape.identityDetails(identity, namespace),
+      published_revision: identity.revision,
       commit_set: [],
       pre_commit_head: head,
       failure_stage: 'prepare-commit-set',
@@ -168,6 +177,7 @@ async function finalize({
       recovery_token: null,
     });
   }
+  published.revision = identity.revision;
 
   const commitSet = [published.path, ...(journalOwned ? [logPath] : [])].sort(compareText);
   const subject = commitSubject(command, published.number, published.id);
@@ -175,7 +185,7 @@ async function finalize({
   const context = {
     command,
     head,
-    identity: shape.identityDetails(shape.publishedIdentity(outcome), namespace),
+    identity: shape.identityDetails(identity, namespace),
     itemId: published.id,
     itemPath: published.path,
     namespace,
@@ -202,7 +212,7 @@ async function finalize({
 
   const gitPaths = commitSet.map((entry) => `${prefix}${entry}`);
   const staged = await git(root, ['add', '--pathspec-from-file=-', '--pathspec-file-nul'], {
-    stdin: `${gitPaths.join('\0')}\0`,
+    stdin: `${literalPathspecs(gitPaths).join('\0')}\0`,
   });
   // `git add` exit status alone is not the answer. It exits nonzero when a
   // pathspec matches an ignore rule even though the path is tracked and was
@@ -300,7 +310,7 @@ async function prepareCommitSet({
 // Stage-then-commit with an explicit pathspec. Never a pathless commit, never a
 // broad add, never --no-verify, and never a blind retry.
 async function commitExactSet(root, subject, gitPaths, head, digests, prefix) {
-  const committed = await git(root, ['commit', '-m', subject, '--', ...gitPaths]);
+  const committed = await git(root, ['commit', '-m', subject, '--', ...literalPathspecs(gitPaths)]);
   const observed = await headOid(root);
   if (committed.code !== 0) {
     if (observed === head) return { outcome: 'failed', reason: 'commit-command-failed' };
@@ -459,15 +469,18 @@ export function carriesTerminal(logSource, witness) {
   return false;
 }
 
-async function publishedItem(ledgerDirectory, identity) {
+// Where the item lives and what its human handle is. It deliberately does not
+// answer what revision was published: only the mutation outcome or a recovery
+// token knows that.
+async function locateItem(ledgerDirectory, itemId) {
   const ledger = await loadLedger(path.resolve(ledgerDirectory));
-  const item = ledger.items.find((entry) => entry.data.id === identity.id);
+  const item = ledger.items.find((entry) => entry.data.id === itemId);
   if (!item) throw new Error('the published item is not readable');
   return {
-    id: identity.id,
+    id: itemId,
     number: typeof item.data.number === 'number' ? item.data.number : null,
     path: ledgerRelative(ledgerDirectory, item.file),
-    revision: identity.revision ?? revisionFor(item.bytes),
+    revision: null,
   };
 }
 
@@ -689,6 +702,15 @@ export function ledgerRelative(ledgerDirectory, file) {
   return path.relative(path.resolve(ledgerDirectory), file).split(path.sep).join('/');
 }
 
+// Every commit-set path is passed as an exact `:(literal)` pathspec, never as a
+// glob. Today the ledger's own validator makes magic unreachable — an
+// items_directory component matches [A-Za-z0-9._-]+, a namespace is
+// wbns_[a-f0-9]{32}, and an item file is a ULID — so this is defence against a
+// later relaxation, not a live hole. It is cheap and the design requires it.
+function literalPathspecs(gitPaths) {
+  return gitPaths.map((gitPath) => `:(literal)${gitPath}`);
+}
+
 function prefixed(gitPath, prefix) {
   return prefix === '' || gitPath.startsWith(prefix);
 }
@@ -769,7 +791,7 @@ async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, 
   // token only has to agree with what the ledger says; it never selects a path.
   let derived;
   try {
-    derived = await publishedItem(ledgerDirectory, { id: payload.item_id, revision: null });
+    derived = await locateItem(ledgerDirectory, payload.item_id);
   } catch {
     return finalizeRefused('item-not-readable', {});
   }
@@ -809,7 +831,7 @@ async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, 
   if (refusal) return finalizeRefused(refusal.reason, refusal.details);
 
   const staged = await git(root, ['add', '--pathspec-from-file=-', '--pathspec-file-nul'], {
-    stdin: `${gitPaths.join('\0')}\0`,
+    stdin: `${literalPathspecs(gitPaths).join('\0')}\0`,
   });
   const cached = await git(root, ['diff', '--cached', '--name-only', '-z']);
   if (cached.code !== 0 || !sameSet(splitNul(cached.stdout.toString('utf8')), gitPaths)) {
