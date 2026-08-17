@@ -5,7 +5,7 @@ number: 114
 title: "Widen patch to title and draw the frontmatter ownership boundary"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
