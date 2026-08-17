@@ -5,7 +5,7 @@ number: 122
 title: "Run the provisioned-performance program"
 kind: task
 priority: 20
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
