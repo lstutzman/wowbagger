@@ -5,9 +5,10 @@ number: 120
 title: "Plumb host approvals through the shipped adapter entrypoints"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T15:48:53Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Verified in source: the shipped entrypoints advertise approval support they do not plumb - mutations through every shipped adapter dead-end. Found by the ideation enrichment."
+  - action: complete
+    date: 2026-08-17
+    summary: "Host approvals plumbed; describe is honest."
+    rationale: "runAdapterEntrypoint accepts a code-level host runtime (approval resolver, clock, nonces, core identity); trusted_approval reflects the runtime, so bare entrypoints refuse capability-unavailable; a wired host drove the first approved end-to-end create through the spawned entrypoint to the real core. Additive on the #97 precedent, no version moved. A second verified defect (create-result correlation pinning schema 1) fixed in-band."
 ---
 
 Verified defect, found during the 2026-08-17 ideation enrichment (docs/ideation/enrichments/2026-08-17-vectors.md section 2): the shipped adapter entrypoint advertises trusted approval but plumbs none, so a mutation through any shipped entrypoint can never succeed.
