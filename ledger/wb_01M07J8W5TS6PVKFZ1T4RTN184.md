@@ -4,6 +4,7 @@ id: wb_01M07J8W5TS6PVKFZ1T4RTN184
 number: 113
 title: "Give unauthorized-revision a non-destructive adoption remedy"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
