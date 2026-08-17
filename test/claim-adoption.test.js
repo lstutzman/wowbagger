@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -520,4 +520,32 @@ test('the work-claim contract documents the adoption operation it implements', a
   // diagnosis table and in the reason list.
   assert.match(contract, /restore the authorized revision and discard the edit, then `claim-verify`; or adopt the committed revision and keep the edit/);
   assert.match(contract, /restore the named authorized path, which discards the edit, or adopt the committed revision with `claim-adopt` \(section 3\.3\), which keeps it/);
+});
+
+test('adoption fails closed while the claim store lock is contended', async () => {
+  const fixture = await blockedByUnauthorizedRevision();
+  const lockPath = path.join(
+    fixture.root, '.git', 'wowbagger', `claims-${fixture.namespace}.json.lock`,
+  );
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, '');
+  try {
+    const refused = run(
+      fixture.root,
+      'claim-adopt', '--ledger', fixture.ledger, '--input', await adoptRequest(fixture), '--json',
+    );
+
+    assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+    assert.equal(refused.envelope.command, 'claim-adopt');
+    assert.equal(refused.envelope.state, 'unchanged');
+    assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+    assert.equal(refused.envelope.error.details.reason, 'claim-store-locked');
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+  const replayed = await replayClaimJournal(
+    claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace),
+    fixture.namespace,
+  );
+  assert.deepEqual(replayed.entries.filter((entry) => entry.type === 'revision-adoption'), []);
 });
