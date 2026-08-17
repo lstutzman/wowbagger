@@ -187,7 +187,16 @@ async function finalize({
 
   const digests = new Map([[published.path, published.revision]]);
   const failure = await prepareCommitSet({
-    context, commitSet, digests, journalOwned, ledgerDirectory, logPath, prefix, root, witness,
+    context,
+    commitSet,
+    digests,
+    journalOwned,
+    ledgerDirectory,
+    logPath,
+    ownArtifacts: shape.recoveryArtifactPaths(outcome),
+    prefix,
+    root,
+    witness,
   });
   if (failure) return shape.commitFailed(failureDetails(context, commitSet, digests, failure));
 
@@ -245,7 +254,7 @@ async function finalize({
 // Every check that must hold between publication and staging. Returning a
 // reason here means the item is published and no Git write has happened yet.
 async function prepareCommitSet({
-  context, commitSet, digests, journalOwned, ledgerDirectory, logPath, prefix, root, witness,
+  context, commitSet, digests, journalOwned, ledgerDirectory, logPath, ownArtifacts, prefix, root, witness,
 }) {
   let itemBytes;
   try {
@@ -261,7 +270,13 @@ async function prepareCommitSet({
   }
   const after = await inspectWorktree(root, prefix);
   if (after.staged.length > 0) return { stage: 'prepare-commit-set', reason: 'index-unavailable' };
-  const stray = after.dirtyLedger.filter((entry) => !commitSet.includes(entry));
+  // A transient lock or temporary file this very invocation could not remove is
+  // not foreign work. The outcome already reports it as a bounded recovery
+  // artifact, it is never staged, and refusing on it would make an
+  // already-published item impossible to commit.
+  const stray = after.dirtyLedger.filter((entry) => (
+    !commitSet.includes(entry) && !ownArtifacts.includes(entry)
+  ));
   if (stray.length > 0) return { stage: 'prepare-commit-set', reason: 'tree-changed' };
 
   if (!journalOwned) return null;
@@ -584,6 +599,9 @@ function coreShape(command) {
     publishedIdentity: (outcome) => (outcome.ok === true
       ? { id: outcome.item.id, revision: outcome.item.revision }
       : { id: outcome.error.details.id, revision: outcome.error.details.revision ?? null }),
+    recoveryArtifactPaths: (outcome) => (outcome.ok === true
+      ? []
+      : (outcome.error.details.recovery_artifacts ?? []).map((artifact) => artifact.path)),
     commitFailed: (details) => coreError('git-commit-failed',
       'The item was published, but its Git commit was not established.', 'committed', 6, details),
     outcomeUnknown: (details) => coreError('git-commit-outcome-unknown',
@@ -646,6 +664,9 @@ function publicationShape(operationId) {
       id: outcome.stdout.result?.item_id ?? outcome.stdout.error?.details?.item_id,
       revision: outcome.stdout.result?.committed_revision ?? null,
     }),
+    // A claimed publication reports no recovery artifacts of its own; the
+    // mutation engine's are folded into its publication-outcome envelope.
+    recoveryArtifactPaths: () => [],
     commitFailed: (details) => error('git-commit-failed',
       'The item was published, but its Git commit was not established.', 'committed', 6, details),
     outcomeUnknown: (details) => error('git-commit-outcome-unknown',

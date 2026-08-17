@@ -2063,8 +2063,12 @@ not fall back to manual mode.
 2. `state: "unknown"` returns unchanged and performs no Git action. A caller
    must inspect; auto mode must not guess which bytes to commit.
 3. `state: "committed"` continues even when `ok` is `false`, because that state
-   already proves the published item bytes. The original error and exit are
-   preserved and the Git evidence is added inside `error.details`.
+   already proves the published item bytes. The original error, exit, and
+   `recovery_artifacts` are preserved and the Git evidence is added inside
+   `error.details`. A transient lock or temporary file this invocation could not
+   remove is reported there, is never staged, and never counts as foreign ledger
+   dirt: refusing on it would make an already-published item impossible to
+   commit.
 
 On success the response keeps its original domain and adds three members to
 `result`: `git_commit`, `commit_paths`, and `claim_verified: true`. A successful
