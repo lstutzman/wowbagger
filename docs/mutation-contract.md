@@ -1233,6 +1233,22 @@ rules: the empty string and an LF-leading string are distinct and both valid,
 and the bytes are written exactly as the UTF-8 encoding of the string. A
 non-string body is an invalid-type issue at `/set/body`.
 
+`set.body` replaces the whole body and never merges. Nothing in the item's
+current body survives a body patch that does not carry it: the core reads
+`set.body` as the complete successor body and splices those bytes in. The
+compare-and-swap fence does not soften this. `expected_revision` is a byte-level
+lost-update guard and carries no semantic safety at all: a request built from
+the item's current revision is accepted, committed, and reported `ok: true`
+however much meaning it destroys.
+
+A consumer whose items mirror an external source — a card, an issue, an
+upstream document — MUST read-modify-write from the current item body, and MUST
+never regenerate from the source alone. Regeneration passes every check the core
+can make and discards every ledger-only byte the caller just read: the
+annotations, decisions, and local notes that exist in the ledger because they
+exist nowhere upstream. The merge is the consumer's, and it belongs on the body
+returned by the `inspect` whose revision the request fences with.
+
 null removes the field, for every patchable **frontmatter** field alike.
 `related` is optional, so removing it succeeds and the item reads back with an
 empty related list. `depends_on` is a required item field, so removing it makes

@@ -172,6 +172,12 @@ wowbagger patch      --ledger <dir> --input request.json --json
   external card updates bodies through `patch`, never by hand-editing the
   Markdown: the hand-edit skips the lock, the revision check, and validation.
   Removing a body is `""`; `null` is refused.
+- **`set.body` replaces the whole body and never merges.** When you mirror an
+  external source, read-modify-write from the current item body — `inspect`,
+  edit the body you got back, send that — and never regenerate from the source
+  alone. Regeneration passes every check (`expected_revision` is a byte guard,
+  not a meaning guard) and silently deletes every ledger-only byte the item
+  carried: the annotations and local notes that live nowhere upstream.
 - See `docs/mutation-contract.md` in the wowbagger repository for the request
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
