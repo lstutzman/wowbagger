@@ -5,9 +5,10 @@ number: 123
 title: "Fold the commit ceremony into the mutation with auto-commit"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T15:48:55Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Ideation survivor: the consumer's most frequent daily ceremony, with an honest commit-failed contract per the enrichment."
+  - action: complete
+    date: 2026-08-17
+    summary: "auto-commit shipped with the honest failure contract."
+    rationale: "Opt-in flag on the four mutating commands folds the commit-per-mutation ceremony into one invocation: strict preflight, exact commit set under fixed subjects, post-commit verification, internal claim-verify both sides, git-commit-failed with recovery token, and idempotent mutation-finalize. Additive: core 3 and work-claim api 1 hold. 57 new tests, mutation-guarded; two unfixturable guards flagged and kept."
 ---
 
 Ideation survivor 2 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-autocommit.md - the enrichment is the authoritative scope; this body is its summary.
