@@ -140,7 +140,7 @@ test('answers describe with exactly one JSON object and exits zero', async () =>
     response.optional_features.claims,
     JSON.parse(baseline.stdout).result.operations.work_claim.supported,
   );
-  assert.deepEqual(response.platforms, { darwin: 'supported', linux: 'supported', win32: 'unverified' });
+  assert.deepEqual(response.platforms, { darwin: 'supported', linux: 'supported', win32: 'supported' });
 });
 
 test('all adapter entrypoints return the contracted malformed describe refusal bytes', async () => {
