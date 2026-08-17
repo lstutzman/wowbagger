@@ -5,9 +5,10 @@ number: 114
 title: "Widen patch to title and draw the frontmatter ownership boundary"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T09:54:02Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Protocol contradiction on published alpha.5: the fence refuses the edit the protocol forces; title is the most-corrected field."
+  - action: complete
+    date: 2026-08-17
+    summary: "Title is patchable; the frontmatter ownership boundary is drawn."
+    rationale: "title joins the patch set through the plain frontmatter machinery; null follows the required-field convention (candidate-invalid, use a value); kind stays refused with the structural reason recorded. The consumer's exact trap is dead end-to-end on a provisioned fixture: hand-edit blocks, patch does not. Extension members stay out - the item's premise that candidate validation already constrains them was verified FALSE, and the contract now records the four real obstacles and what a sanctioned path needs (split to item #118). The three-class ownership table ships in the contract and the skill, docs-guarded."
 ---
 
 Field issue from PropertyCompass2 on published alpha.5 (docs/wowbagger-feedback.md on their side), and it is a protocol contradiction: correcting an item's title REQUIRES an out-of-protocol edit, which then makes the item unauthorized-revision and blocks every later mutation. No verb carries title: create sets it once, patch refuses it as unknown-member, transition does not carry it. Their concrete case: a title wording correction on a mirrored item. The same trap holds for every consumer-owned frontmatter member (their examples: kind, tags, tier). The ownership boundary is currently discoverable only by trying a patch and reading the refusal.
