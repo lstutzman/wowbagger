@@ -32,3 +32,8 @@ The provisioned-performance program, staged with measurement gates:
 Open maintainer decisions (from the enrichment): mixed-version writer policy (quiesced all-writer upgrade vs compatibility fence) - coarse locking is only safe after one of them; the SLO that gates stage 3; whether consumer migration is an upgrade prerequisite.
 
 Acceptance: the enrichment's stage-by-stage criteria verbatim (docs/ideation/enrichments/2026-08-17-perf.md section 5), including the counter-based guards (one namespace acquisition, zero item-lock creates on publish; requested-ID blob counts; C=1 vs C=N benchmarks) and byte-parity of every journal/envelope surface.
+
+
+## Orchestrator resolution (2026-08-17, Lee)
+
+Mixed-version-writer policy: quiesced all-writer upgrade, option (a). This repository and PropertyCompass2 are the only writers and both are ours, so a minutes-long stop-everything window is cheap and the compatibility fence is machinery for a fleet that does not exist. The lock-coarsening stage ships behind a coordinated upgrade of both writers, not behind a fence.
