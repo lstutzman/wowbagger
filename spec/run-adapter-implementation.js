@@ -186,7 +186,7 @@ async function spawnAdapterEntrypoint(entrypoint, operation, request, env, runti
 async function callShippedEntrypoint(
   request,
   target,
-  { operation = 'invoke', workspaces = {}, runtimeConfig } = {},
+  { operation = 'invoke', workspaces = {}, runtimeConfig, hostApproval } = {},
 ) {
   const entrypoint = path.join(projectRoot, 'adapters', target, 'entrypoint.js');
   const shippedManifestPath = path.join(projectRoot, 'adapters', target, 'wowbagger-adapter.json');
@@ -208,7 +208,15 @@ async function callShippedEntrypoint(
     const childProcessAuditPath = path.join(temporary, 'child-process-audit.txt');
     await writeFile(candidateManifestPath, JSON.stringify(candidateManifest));
     await writeFile(workspacesPath, JSON.stringify(workspaces));
-    if (runtimeConfig) await writeFile(runtimeConfigPath, JSON.stringify(runtimeConfig));
+    // The written copy carries the per-assertion host-approval mode; the
+    // caller's object is left alone so `callShippedEntrypoint` can still
+    // record a forbidden launch on it below.
+    if (runtimeConfig) {
+      await writeFile(runtimeConfigPath, JSON.stringify({
+        ...runtimeConfig,
+        ...(hostApproval ? { host_approval: hostApproval } : {}),
+      }));
+    }
     if (runtimeConfig?.forbid_core_launch) await writeFile(childProcessAuditPath, '');
     const response = await spawnAdapterEntrypoint(entrypoint, operation, request, {
       WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
@@ -821,16 +829,27 @@ async function evaluateApprovalSchemaAssertion(directory, assertion) {
   };
 }
 
+// The two refusals a mutation can meet before the core is ever launched are
+// distinct facts about the runtime, so each is exercised against the runtime
+// that produces it: `consumer-approval-required` needs a host that CAN approve
+// and declined this invocation, while `trusted-approval-unavailable` is the
+// bare entrypoint, which advertises no approval source at all (item 120).
 async function evaluateApprovalGateAssertion(directory, assertion, target, runtimeConfig) {
-  if (assertion.expect === 'consumer-approval-required') {
+  const refusalArtifact = assertion.expect === 'consumer-approval-required'
+    ? 'expected-refusal.json'
+    : assertion.expect === 'trusted-approval-unavailable'
+      ? 'expected-unwired-refusal.json'
+      : null;
+  if (refusalArtifact) {
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
-    const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
+    const expected = await readStrictJson(path.join(directory, refusalArtifact));
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-approval-vector-'));
     try {
       await mkdir(path.join(temporary, 'ledger'));
       const invoked = await callShippedEntrypoint(invocation, target, {
         workspaces: { [invocation.workspace.workspace_id]: temporary },
         runtimeConfig,
+        ...(assertion.expect === 'consumer-approval-required' ? { hostApproval: 'decline' } : {}),
       });
       return {
         ok: sameJson(invoked.response, expected),

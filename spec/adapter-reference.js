@@ -812,6 +812,21 @@ export function validateInvokeContext({
   return { ok: true, total_bytes: totalBytes, instructions, handoff };
 }
 
+// Section 5.1 lets a host deliver either the approval event itself or a
+// resolver the adapter asks once the binding exists. Nothing before this point
+// can build that binding, so a consumer prompted for an approval must be
+// prompted from here. Absent source, failed source, and a source that answers
+// with nothing are one outcome: no approval.
+async function hostApproval(source, invocation) {
+  if (typeof source !== 'function') return source ?? null;
+  try {
+    const answered = await source(invocation);
+    return answered ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function invokeAdapter(requestBytes, runtime) {
   const adapterContractVersion = ADAPTER_CONTRACT_VERSION;
   const maximumRequestBytes = runtime?.max_request_bytes;
@@ -950,13 +965,14 @@ export async function invokeAdapter(requestBytes, runtime) {
   if (mutation) {
     const mutationParsed = parseJsonRequest(coreInput);
     mutationRequest = mutationParsed.value;
+    const binding = invocationBinding({
+      request, described, resolvedWorkspace, argv, coreInput, context, runtime,
+    });
     const authority = verifyMutationAuthority({
       command,
-      approval: runtime.approval ?? null,
+      approval: await hostApproval(runtime.approval, { command, binding }),
       approvalOptions: runtime.approval ? {
-        binding: invocationBinding({
-          request, described, resolvedWorkspace, argv, coreInput, context, runtime,
-        }),
+        binding,
         now: runtime.now,
         redeemedNonces: runtime.redeemed_nonces,
         trustedSources: new Set(['consumer']),
@@ -2153,10 +2169,18 @@ function validMutationResultCorrelation(item, command, mutationRequest) {
   return validTransitionResultCorrelation(item, mutationRequest);
 }
 
+// A create result reports two members the caller could not have known: the
+// ledger's schema version and, when that version is 2, the number the core
+// assigned. The reference model reads both from the answer and re-derives the
+// whole candidate from the request bytes, so every other member is still
+// pinned by an exact byte comparison. Fixing the version at 1 rejected every
+// real schema 2 create.
 function validCreateResultCorrelation(item, request) {
+  const reportedSchemaVersion = item.core.schema_version;
+  const reportedNumber = Object.hasOwn(item.core, 'number') ? item.core.number : null;
   if (!plainObject(request) || !plainObject(request.item)
     || item.id !== request.id || item.path !== `${request.id}.md` || item.body !== request.body
-    || item.core.schema_version !== 1 || item.core.status !== 'triage'
+    || item.core.status !== 'triage'
     || item.core.title !== request.item.title || item.core.kind !== request.item.kind
     || !sameJson(item.core.provenance, {
       source: request.item.provenance?.source,
@@ -2173,7 +2197,8 @@ function validCreateResultCorrelation(item, request) {
   }
   const source = decodeCanonicalBase64(item.source_base64);
   try {
-    return source !== null && source.equals(createCandidateSource(request));
+    return source !== null
+      && source.equals(createCandidateSource(request, reportedSchemaVersion, reportedNumber));
   } catch {
     return false;
   }
