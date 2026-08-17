@@ -4,9 +4,10 @@ id: wb_01KZYS3100Z120XXBRAJCV150T
 number: 74
 title: "Project incompatible PropertyCompass lifecycle relationships losslessly"
 kind: task
+priority: 20
 status: backlog
 created: 2026-08-14
-updated: 2026-08-16
+updated: 2026-08-17
 provenance:
   source: "propertycompass-migration-inventory"
   recorded_at: "2026-08-14T13:24:17.000Z"
