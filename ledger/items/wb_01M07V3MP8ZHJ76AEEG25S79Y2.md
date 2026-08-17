@@ -5,7 +5,7 @@ number: 119
 title: "Settle the epic-enablement definition and the missing deferred edges"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
