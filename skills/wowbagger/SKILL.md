@@ -345,8 +345,8 @@ wowbagger transition --ledger <dir> --input next.json --json
 The claim store validates every recorded mutation against Git `HEAD`, never
 against working-tree bytes — that is what makes a mutation durable rather than
 a local edit. So an uncommitted mutation blocks the next one. Skip the commit
-and the next `create`, `transition`, or `patch` returns exit 6
-`claim-store-unavailable` with
+and the next `create`, `transition`, `patch`, or `publish-claimed` returns
+exit 6 `claim-store-unavailable` with
 `details.reason: "publication-reconciliation-required"`. `state` is
 `unchanged`, so nothing was written.
 

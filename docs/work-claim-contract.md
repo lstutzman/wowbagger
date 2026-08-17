@@ -673,6 +673,7 @@ version 1 ledger item and require its canonical `id` to equal the request's
 | 3 | 2 `ledger-namespace-unbound` | `The ledger namespace is not provisioned for this endpoint.` |
 | 4 | 4 `idempotency-conflict` | `The operation identity is already bound to a different request.` |
 | 5 | 3 `ledger-invalid` | `The candidate ledger is invalid.` |
+| 6, reconcile | 6 `claim-store-unavailable` | `The durable claim store is unavailable.` |
 | 6 | 6 `clock-floor-persistence-failed` | `The authoritative clock floor could not be persisted.` |
 | 6 | 6 `publication-outcome-unknown` | `The publication outcome could not be determined.` |
 | 7 | 4 `claim-fence-rejected` | `The supplied claim fence is not the active owner generation.` |
@@ -719,13 +720,45 @@ and `claim_read_back`. Publication does not renew or release the claim.
 
 For a merge-coordinated backend, the same public request and decision
 precedence apply, but Git commit is outside the journal lock. Under the lock,
-the backend reconciles prior intents, persists the clock floor, checks
-idempotency, fence, and revision, then fsyncs a `publish-intent` before writing
-the candidate item bytes. Before the first journal append, it fsyncs each new
-journal-directory entry and the empty journal file. It then appends a terminal
-`publish-final` outcome.
-The caller commits or merges the resulting item change and runs
+the backend returns a stored terminal outcome for a known operation identity,
+reconciles the journal, persists the clock floor, rechecks idempotency against
+what reconciliation resolved, validates the candidate ledger, checks fence and
+revision, then fsyncs a `publish-intent` before writing the candidate item
+bytes. Before the first journal append, it fsyncs each new journal-directory
+entry and the empty journal file. It then appends a terminal `publish-final`
+outcome. The caller commits or merges the resulting item change and runs
 `claim-verify`.
+
+That reconciliation is unconditional. It is not conditioned on an unresolved
+`publish-intent`, because the commit-per-mutation invariant (section 1) binds
+`publish-claimed` exactly as it binds `create`, `transition`, and `patch`, and
+an uncommitted legacy mutation leaves no publish-intent behind. When
+reconciliation produces any blocking finding, `publish-claimed` MUST refuse
+with exit 6 `claim-store-unavailable`,
+`details.reason: "publication-reconciliation-required"`, and
+`details.findings` set to those findings. `state` MUST be `unchanged`: the
+refused publication wrote no item byte. Reconciliation itself still writes —
+a clock entry, the terminals it resolved, and the finalizations it observed —
+because those record what was already true, never a new item revision. This is
+the identical refusal section 7 defines for a legacy write, so one uncommitted
+mutation blocks every mutating command alike, and one `claim-verify` clears
+them all.
+
+That refusal also outranks step 5. The numbered precedence orders a backend
+that judges a candidate against an authoritative ledger; a merge-coordinated
+backend has no authoritative ledger until reconciliation says so, and reporting
+`ledger-invalid` from an unreconciled snapshot would send the caller after a
+validation error that Git `HEAD` need not carry. So on this profile an
+unreconciled journal outranks an invalid candidate: exit 6
+`claim-store-unavailable` wins over exit 3 `ledger-invalid`. Step 4 still
+outranks both — a completed operation's recorded terminal outcome never depends
+on later ledger state — and every other pair keeps the listed order.
+
+That refusal is never `publication-outcome-unknown`. That code answers for a
+publication whose own commit boundary is indeterminate. A publication refused
+before it appends its intent has no commit boundary to be uncertain about, and
+`unchanged` is the honest state even when the blocking finding is another
+operation's unknown outcome.
 
 The namespace lock records its process owner before publication. A later
 process MAY recover the lock only when the operating system reports that owner
@@ -865,7 +898,8 @@ terminal when the expected revision remains. Any third revision produces
 authorized expected revision. A later unrecorded revision remains a stale
 write.
 
-A merge-coordinated backend MUST reconcile before it authorizes a legacy write.
+A merge-coordinated backend MUST reconcile before it authorizes a legacy write,
+and section 6 states the same requirement for `publish-claimed`.
 When reconciliation produces any blocking finding, the legacy command MUST
 refuse with exit 6 `claim-store-unavailable`,
 `details.reason: "publication-reconciliation-required"`, and

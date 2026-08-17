@@ -7,6 +7,38 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- **`publish-claimed` now reconciles the journal unconditionally, like every
+  other mutating command.** The work-claim contract has always said an
+  uncommitted prior mutation refuses the next `create`, `transition`, `patch`,
+  **or `publish-claimed`**. The code only reconciled when it happened to
+  observe an unresolved `publish-intent`, and an uncommitted legacy mutation
+  leaves none behind. A fixture pinned the gap: with a legacy create and
+  transition sitting uncommitted, `claim-verify` returned exit 6 and a legacy
+  `create` refused with `publication-reconciliation-required`, while
+  `publish-claimed` on a claimed item published straight over the unreconciled
+  ledger. It now reconciles before the fence decision on every publication and
+  refuses with exit 6 `claim-store-unavailable`,
+  `details.reason: "publication-reconciliation-required"`, and
+  `details.findings` — the same envelope the legacy fence emits, so one
+  `claim-verify` clears every blocked path. **A publication behind an
+  unresolvable prior intent now returns that refusal instead of exit 6
+  `publication-outcome-unknown`.** The old code named the refused publication's
+  own outcome uncertain when it had not run at all; `state: "unchanged"` is the
+  honest answer, and the blocking finding still travels in `details.findings`.
+  The cost is honest about which read is new. Reconciliation adds no
+  complete-ledger read: it produces the snapshot the candidate validation and
+  the mutation engine's pre-lock read already share, so a claimed publication
+  still reads the working-tree ledger exactly twice. It does add the Git `HEAD`
+  read — `rev-parse`, one `ls-tree`, and a batched `cat-file` over every item
+  blob at `HEAD` — to every publication that previously had no unresolved
+  intent. That is the same read `create`, `transition`, `patch`, and every
+  claim lifecycle command already perform, so `publish-claimed` now pays the
+  toll its peers pay rather than a new one. Each publication persists one clock
+  floor, as it did before; a publication behind a pending intent, which used to
+  persist two, now persists one as well.
+
 ## 0.1.0-alpha.6 - 2026-08-17
 
 ### Added
