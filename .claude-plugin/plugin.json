@@ -1,7 +1,7 @@
 {
   "name": "wowbagger",
   "description": "Coordinate work across agents through a plain-Markdown, Git-native ledger. Read-only by default; every mutation is an explicit, reviewable file change.",
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "author": {
     "name": "Lee Stutzman"
   },
