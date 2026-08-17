@@ -741,8 +741,9 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
 // The exact patchable field set (mutation contract section 9), in the order a
 // patch applies them. `number` is the immutable item identity, assigned once at
 // create, so it is not patchable; everything else stays a reviewable hand-edit
-// or a transition concern.
-const PATCHABLE_FIELDS = ['priority', 'depends_on', 'related', 'body'];
+// or a transition concern. `title` is a required field, so it never needs a
+// PATCH_FIELD_ANCHORS entry: every valid item already carries the node.
+const PATCHABLE_FIELDS = ['title', 'priority', 'depends_on', 'related', 'body'];
 // The patchable fields that live in the frontmatter. `body` is the one patchable
 // value outside it, so it takes its own validation and serialization path.
 const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => field !== 'body');
@@ -783,6 +784,13 @@ export function validatePatchRequest(request, parseIssues = []) {
     }
     if (hasOwn(request.set, 'number') && request.set.number !== null && !isPatchableInteger(request.set.number, 1)) {
       issues.push(issue('/set/number', 'invalid-value', 'Set member number must be a positive integer or null.'));
+    }
+    // The same rule create validates title under, at the patch pointer. null is
+    // left to the frontmatter removal convention below: title is required, so
+    // removing it makes the candidate invalid rather than the request.
+    if (hasOwn(request.set, 'title') && request.set.title !== null
+      && (typeof request.set.title !== 'string' || request.set.title.trim().length === 0)) {
+      issues.push(issue('/set/title', 'invalid-type', 'Set member title must be a non-empty string.'));
     }
     if (hasOwn(request.set, 'priority') && request.set.priority !== null && !isPatchableInteger(request.set.priority, 0)) {
       issues.push(issue('/set/priority', 'invalid-value', 'Set member priority must be a non-negative integer or null.'));
