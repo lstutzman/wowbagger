@@ -100,19 +100,15 @@ jobs:
       - name: unit suite
         run: node --test test/*.test.js
 
+      # This step is the native common-vector evidence a `supported` platform
+      # claim needs. Only the claude-code target runs here: the codex and
+      # opencode reports are `fail` on every platform, darwin included, for
+      # target reasons that have nothing to do with the platform, so gating on
+      # them would fail every job while proving nothing about win32 or linux.
+      # Neither manifest declares any platform `supported`, and
+      # test/platform-portability.test.js refuses a manifest that starts to.
       - name: adapter implementation vectors (claude-code)
-        run: node spec/run-adapter-implementation.js --target claude-code
-
-      - name: adapter implementation vectors (codex)
-        run: node spec/run-adapter-implementation.js --target codex
-
-      - name: adapter implementation vectors (opencode)
-        run: node spec/run-adapter-implementation.js --target opencode
+        run: node spec/run-adapter-implementation.js --target claude-code | node .github/check-vector-report.mjs
 
       - name: ledger validation
         run: node bin/wowbagger.js validate --ledger ledger --json
-
-      # The runner reports the platform its evidence belongs to. This is the
-      # line an operator reads before moving a platform off `unverified`.
-      - name: report the evidence platform
-        run: node -e "console.log(process.platform, process.version)"

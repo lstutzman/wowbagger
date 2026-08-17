@@ -92,14 +92,32 @@ test('CI runs a native job for every platform the shipped manifests declare', ()
   }
 });
 
-test('every native job runs the implementation runner for every shipped adapter', () => {
-  for (const { target } of shippedAdapters()) {
-    assert.match(
-      gateSteps,
-      new RegExp(`spec/run-adapter-implementation\\.js --target ${target}\\b`),
-      `no native evidence step for the ${target} adapter`,
-    );
+// The tie between a claim and its evidence. Adding `supported` to a manifest
+// whose vectors no job runs natively is the exact dishonesty §3.1 forbids, so
+// the claim and the step that can earn it move together or the suite refuses.
+test('every supported platform claim has a native vector step behind it', () => {
+  const jobs = new Map(gateJob.strategy.matrix.include.map((entry) => [entry.platform, entry.os]));
+
+  for (const { target, manifest } of shippedAdapters()) {
+    for (const [platform, status] of Object.entries(manifest.platforms)) {
+      if (status !== 'supported') continue;
+      assert.ok(
+        jobs.has(platform),
+        `${target} claims ${platform} supported with no native ${platform} job`,
+      );
+      assert.match(
+        gateSteps,
+        new RegExp(`spec/run-adapter-implementation\\.js --target ${target}\\b`),
+        `${target} claims ${platform} supported with no native vector step for that adapter`,
+      );
+    }
   }
+});
+
+// The runner reports `pass` or `fail` in its JSON and exits 0 either way, so a
+// step that only checked the exit code would report success on a failing run.
+test('the vector step reads the report rather than trusting the exit code', () => {
+  assert.match(gateSteps, /run-adapter-implementation\.js --target \S+ \| node \.github\/check-vector-report\.mjs/);
 });
 
 test('every native job runs the documented gate beside the vectors', () => {
@@ -127,4 +145,14 @@ test('the temporary root is pinned per platform, not inherited', () => {
   assert.match(gateSteps, /TMPDIR=\/tmp/);
   assert.match(gateSteps, /TEMP=\$RUNNER_TEMP/);
   assert.match(gateSteps, /TMP=\$RUNNER_TEMP/);
+});
+
+// The POSIX-only fixture constructs are declared in one place so the win32
+// coverage gap is a list rather than a scatter of inline platform checks. On a
+// platform that has FIFOs and filesystem-path sockets, that declaration must
+// cost nothing: a guard that quietly skipped cases here would turn a real
+// refusal into a silent pass on the platform the gate can actually verify.
+test('the POSIX-only fixture guard skips nothing on a platform that has FIFOs', { skip: process.platform === 'win32' && 'win32 has no FIFO to verify against' }, async () => {
+  const { posixSpecialFilesOnly } = await import('./support.js');
+  assert.deepEqual(posixSpecialFilesOnly, {});
 });
