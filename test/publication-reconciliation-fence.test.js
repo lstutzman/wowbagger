@@ -179,6 +179,30 @@ test('committing the prior mutation and running claim-verify clears the publish-
   assert.deepEqual(await readFile(fixture.itemPath), fixture.candidate);
 });
 
+// An unreconciled journal outranks an invalid candidate. Judging a candidate
+// against an unreconciled snapshot would report a validation error Git HEAD
+// need not carry, so the caller is told to reconcile first.
+test('publish-claimed reports the reconciliation refusal ahead of an invalid candidate', async () => {
+  const fixture = await unreconciledLedger();
+  const candidate = Buffer.from(fixture.before.toString('utf8').replace(/^kind: .*$/m, 'kind: nonsense'));
+  const invalidPath = path.join(fixture.root, 'publish-invalid-candidate.json');
+  const request = JSON.parse(await readFile(fixture.publishPath, 'utf8'));
+  await writeFile(invalidPath, JSON.stringify({
+    ...request,
+    operation_id: 'pub_agent-a_invalid',
+    candidate_source_base64: candidate.toString('base64'),
+    candidate_sha256: sha256(candidate),
+  }));
+
+  const refused = run(fixture.root, 'publish-claimed', '--ledger', fixture.ledger,
+    '--input', invalidPath, '--json');
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'publication-reconciliation-required');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
 // Reconciliation behind an unresolved intent already refused this publication.
 // It refused as `publication-outcome-unknown`, which named the state of a
 // publication that never ran. One reconciliation refusal now answers for both
