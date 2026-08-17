@@ -32,10 +32,14 @@ const expectedCases = [
   'publication-outcome-unknown',
   'publication-response-loss',
   'renew-release-restart-aba',
+  'revision-adoption',
 ];
 const requiredCoverage = [
   'aba',
   'acquire',
+  'adoption-claim-fence',
+  'adoption-uncommitted',
+  'adoption-witness',
   'advisory',
   'advisory-publication-rejection',
   'alternate-bypass',
@@ -76,6 +80,7 @@ const requiredCoverage = [
   'renew',
   'response-loss',
   'restart',
+  'revision-adoption',
   'safe-exclusive-dispatch',
   'same-item-id',
   'stale-fence',
@@ -134,7 +139,7 @@ test('normative work-claim manifests execute to their exact envelopes and durabl
   }
 
   assert.deepEqual([...coverage].sort(), requiredCoverage);
-  assert.equal(actionCount, 49);
+  assert.equal(actionCount, 56);
 });
 
 test('work-claim ledger byte alternatives are individually valid', async () => {
@@ -164,8 +169,20 @@ function assertBoundSources(sourceFiles) {
 function assertDigestReferencesAreBound(manifest, sources) {
   for (const ledger of manifest.initial.durable.ledgers) {
     assert.equal(sources.get(ledger.revision), ledger.source_base64, `${manifest.case} initial ledger`);
+    // The coordinator's authorized revision and the revision every cooperating
+    // checkout can see are separate facts from the writer's own bytes, so each
+    // must name committed fixture bytes too.
+    for (const member of ['authorized_revision', 'committed_revision']) {
+      if (!Object.hasOwn(ledger, member)) continue;
+      assert.ok(sources.has(ledger[member]), `${manifest.case} initial ledger ${member}`);
+    }
   }
   for (const action of manifest.actions) {
+    if (action.operation === 'work-claim.claim-adopt') {
+      assert.ok(sources.has(action.request.from_revision), `${manifest.case} adoption from_revision`);
+      assert.ok(sources.has(action.request.to_revision), `${manifest.case} adoption to_revision`);
+      continue;
+    }
     if (action.operation !== 'ledger-publication.preflight') continue;
     assert.ok(sources.has(action.request.expected_revision), `${manifest.case} expected revision`);
     assert.equal(

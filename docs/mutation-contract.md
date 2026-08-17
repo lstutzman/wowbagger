@@ -76,6 +76,20 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
   `details.validation_errors` cannot observe the difference; a consumer that
   matches `ledger-invalid` details exactly must accept the optional member on
   `inspect`, which is why this is listed as a delta rather than left silent; and
+- **the patchable title.** `title` joins the patchable set as a non-empty
+  schema string that replaces the current title whole (section 9), and section
+  9 gains the frontmatter ownership table that states, member by member, which
+  members are core-owned, which are consumer-editable through `patch`, and
+  which are create-once. The version stays 3 by the same argument the relations
+  and body deltas used: this widens the patch request schema, and adds, removes,
+  and renames no response envelope member. **Version 3 is published, so state
+  the consequence plainly: a consumer probing for title-patch support cannot
+  distinguish `0.1.0-alpha.5` from this build by contract version.** Both emit
+  `contract_version: 3`, and `0.1.0-alpha.5` refuses `set.title` as an unknown
+  member. The next release is the real carrier. A consumer that must know
+  before it sends either reads the release version or sends a title patch on a
+  scratch item and reads the refusal — the version field will not answer, and
+  no member of the capability envelope was widened to make it answer; and
 - **the documented inspect selector detail.** An `inspect` `item-not-found`
   refusal carries the selector the request used — `details.id` for `--id`,
   `details.number` for `--number` (section 5). This entry documents an already
@@ -85,7 +99,22 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
   version 2 consumer can have negotiated the narrower shape, because version 2
   had no `--number` selector to reach it. What was wrong was the prose: section
   5 claimed these details contain only `id` from the day `--number` shipped.
-  The version stays 3.
+  The version stays 3; and
+- **the appendable body.** `body_append` joins the patch request as a JSON
+  string appended after the current body, mutually exclusive with `body` in one
+  request, `null` refused at `/set/body_append` (section 9). The version stays
+  3 by the same argument the `body` delta makes: it widens the patch request
+  schema, adds, removes, and renames no response envelope member, and a
+  consumer that never sends it cannot observe the difference. The honesty this
+  entry owes is the other half. Version 3 is **published** — `0.1.0-alpha.5`
+  released it, and that release has no `body_append` — so a consumer **cannot**
+  probe for append support by reading `contract_version`. The core that lacks
+  it and the core that carries it both report 3. A consumer that needs append
+  either pins the distribution version, where the first release after
+  `0.1.0-alpha.5` carries it, or sends an append and reads the refusal: a core
+  without it answers `invalid-request` with an `unknown-member` issue at
+  `/set/body_append`, exit 2, `unchanged`, so the probe costs nothing and
+  changes no byte.
 
 Two version-2-era changes are deliberately **not** version 3 deltas. The
 section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
@@ -247,6 +276,7 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `provision` | work-claim | work-claim |
 | `claim capabilities/read/acquire/renew/release` | work-claim | work-claim |
 | `claim-verify` | work-claim | work-claim |
+| `claim-adopt` | work-claim | work-claim |
 | `claim verify` | ledger-publication, `command: "read"` | ledger-publication |
 | `publish-claimed` | ledger-publication | ledger-publication |
 
@@ -1011,6 +1041,84 @@ items do not reopen; and transition cannot edit identity, title, relations,
 parent, snooze, body, or extension fields. A schema version 2 done transition
 therefore retains the target's depends_on and related lists unchanged.
 
+The missing epic backlog to in-progress edge is by design, not by omission: an
+epic carries no progress of its own to record, so there is no state for that
+edge to reach. Read [Epic progress is derived from direct
+children](#epic-progress-is-derived-from-direct-children) below for the model
+that replaces it.
+
+### Epic progress is derived from direct children
+
+An epic stores no progress. Its status records disposition only — which of
+triage, backlog, deferred, archived, killed, or done the epic itself sits in —
+and never how much work is under way beneath it. An epic's progress is derived
+from its direct children: every item whose parent is that epic's immutable ID.
+Grandchildren never count, even under a nested epic; each epic derives from its
+own direct children only.
+
+Both derived values below are computed from item bytes alone. No ledger field
+holds either one, and no reader needs anything the items do not already carry.
+
+**Terminal ratio.** Direct children whose status is done or killed, divided by
+all direct children. An epic with no direct children has no ratio at all: 0/0
+is undefined, not zero.
+
+The epic complete rollup uses this same set. The epic backlog to done edge
+refuses unless every direct child is already done or killed, and the generated
+rollup then lists exactly those children in immutable ID order. So a ratio of 1
+is the precondition of the rollup, and the contract, the transition gate, and
+the rollup provably share one definition of terminal.
+
+The report's epic-enablement factor is a different number, and a consumer must
+not read it as this ratio. It counts every child that carries a terminal date,
+which adds archived and deferred children to the numerator; it is therefore an
+upper bound on the terminal ratio, never below it.
+
+**Activity.** Exactly one of three derived states:
+
+- **active** — at least one direct child is in-progress or holds an active work
+  claim. An active claim is an unexpired lease, defined by the [work-claim
+  contract](work-claim-contract.md) section 4; a claim read reports it as a
+  non-null active object.
+- **untouched** — no direct child has left triage or backlog, and no direct
+  child holds an active work claim. An epic with no direct children is
+  untouched.
+- **in progress by derivation** — every other case.
+
+Test active first, then untouched, then in progress by derivation. The order is
+part of the definition: a backlog child under an active claim is active, not
+untouched, and only the fixed order makes two independent implementations agree
+on it.
+
+The terminal ratio, not the activity state, reports completeness. An epic whose
+every direct child is done or killed, with no child claimed, derives a ratio of
+1 and the state in progress by derivation; it is awaiting its own complete
+transition, which is real remaining work.
+
+**Mirroring.** A consumer mirroring a store that does model epic activity
+compares its stored epic status against this derived state, never against the
+ledger's stored status field. The stored field cannot follow an active epic,
+because epics never enter in-progress; an audit that compares stored against
+stored therefore reports a permanent false positive on every epic under work,
+and whitelisting epics to silence it blinds the audit to genuine epic-status
+errors.
+
+Worked example, the shape a dual-run mirror actually hit. Legacy epic #1075 is
+in-progress since 2026-06-16. Its ledger mirror is backlog and cannot be
+anything else. One direct child is in-progress, so the epic derives active.
+Comparing legacy in-progress against the ledger's stored backlog reports drift
+that no mutation can ever clear. Comparing legacy in-progress against the
+derived active state agrees, and the audit keeps its power to fail on a real
+disagreement — a legacy epic marked in-progress whose children are all still in
+triage derives untouched, and that is a genuine finding.
+
+**No machine surface exposes the derived value.** This is a recorded decision,
+not an oversight. A consumer audit already loads every item to compare them, so
+the two definitions above are computable where the audit already stands; the
+report model keeps carrying epic enablement for sequencing, and inspect gains
+no derived member. Adding one is a wire change and needs its own justification
+and its own item.
+
 ### Lossless preservation
 
 Transition preserves body bytes exactly. It preserves every permitted extension
@@ -1177,13 +1285,20 @@ operation without universal crash durability or hostile-writer protection.
 ## 9. Patch
 
 Patch changes the mutable non-lifecycle content of one existing item — its
-priority, its relation lists, and its body — and nothing else. It exists so a
-consumer can re-scope an item in band, without hand-editing frontmatter: the
-dependent of an item you want to kill is re-scoped with patch, then the kill
-proceeds. It is also the sanctioned way to rewrite a body: a consumer whose
-items mirror an external card edits the body through patch, and gets the lock,
-the compare-and-swap, candidate validation, and atomic publication that a
-hand-edit skips.
+title, its priority, its relation lists, and its body — and nothing else. It
+exists so a consumer can re-scope an item in band, without hand-editing
+frontmatter: the dependent of an item you want to kill is re-scoped with patch,
+then the kill proceeds. It is also the sanctioned way to correct a title or
+rewrite a body: a consumer whose items mirror an external card edits both
+through patch, and gets the lock, the compare-and-swap, candidate validation,
+and atomic publication that a hand-edit skips.
+
+That last point is the reason title is patchable at all. On a provisioned
+ledger a hand-edit is not merely unreviewed — it is a stale write. The next
+guarded mutation refuses exit 6 with an `unauthorized-revision` finding, and
+every later mutation stays blocked until an operator reconciles by hand. A
+protocol that forces the edit it then punishes is a contradiction, and the
+field reported it twice in two days.
 It runs under the same per-ID lock, locked re-read,
 exact-byte revision compare-and-swap, candidate complete-ledger validation,
 and atomic same-path publication protocol as transition (section 6), and it
@@ -1200,6 +1315,7 @@ Patch accepts exactly:
   "expected_revision": "sha256:...",
   "date": "2030-01-11",
   "set": {
+    "title": "The corrected title",
     "priority": 3,
     "depends_on": [],
     "related": ["wb_..."],
@@ -1215,12 +1331,19 @@ Patch accepts exactly:
 | date | Yes | ISO calendar date not earlier than existing created or updated. |
 | set | Yes | Mapping naming at least one patchable field. |
 
-The patchable field set is exactly `priority`, `depends_on`, `related`, and
-`body`. A set member outside it is an invalid-request issue at its /set
-pointer — the boundary is stated here, not discovered from the implementation.
-`number` is the immutable item identity, assigned once at create, so it is not
-patchable and a request naming it is refused. Extension members are not
-patchable either: they stay a reviewable hand-edit.
+The patchable field set is exactly `title`, `priority`, `depends_on`,
+`related`, `body`, and `body_append`. A set member outside it is an invalid-request issue at
+its /set pointer — the boundary is stated here, not discovered from the
+implementation. `number` is the immutable item identity, assigned once at
+create, so it is not patchable and a request naming it is refused. `kind`,
+`provenance`, and extension members are refused too. The complete boundary,
+member by member, is the ownership table below; a consumer never has to send a
+patch to learn which side of it a field is on.
+
+`title` takes a non-empty schema string, the same rule create validates it
+under, and replaces the current title whole. A non-string title, the empty
+string, and a whitespace-only string are all one invalid-type issue at
+`/set/title` with the message `Set member title must be a non-empty string.`
 
 `priority` takes a non-negative integer. `depends_on` and `related` each take
 a whole relation list, which replaces the current list; the value must be an
@@ -1233,11 +1356,50 @@ rules: the empty string and an LF-leading string are distinct and both valid,
 and the bytes are written exactly as the UTF-8 encoding of the string. A
 non-string body is an invalid-type issue at `/set/body`.
 
+`set.body` replaces the whole body and never merges. Nothing in the item's
+current body survives a body patch that does not carry it: the core reads
+`set.body` as the complete successor body and splices those bytes in. The
+compare-and-swap fence does not soften this. `expected_revision` is a byte-level
+lost-update guard and carries no semantic safety at all: a request built from
+the item's current revision is accepted, committed, and reported `ok: true`
+however much meaning it destroys.
+
+A consumer whose items mirror an external source — a card, an issue, an
+upstream document — MUST read-modify-write from the current item body, and MUST
+never regenerate from the source alone. Regeneration passes every check the core
+can make and discards every ledger-only byte the caller just read: the
+annotations, decisions, and local notes that exist in the ledger because they
+exist nowhere upstream. The merge is the consumer's, and it belongs on the body
+returned by the `inspect` whose revision the request fences with.
+`set.body_append` covers the append-only case without a merge.
+
+`body_append` takes a JSON string under the same rules `body` takes one: the
+empty string is valid, the bytes are written exactly as the UTF-8 encoding of
+the string, and a non-string value is an invalid-type issue at
+`/set/body_append`. `null` is refused as an invalid-value issue at
+`/set/body_append` — appending nothing is the empty string, not a removal — for
+the same reason `set.body` refuses it. The published body is the item's current
+body bytes followed by the string. The request never names the bytes in front
+of the addition, so every existing byte survives by construction: an annotation
+cannot destroy a ledger-only block by forgetting it.
+
+`body` and `body_append` are mutually exclusive in one request. A replacement
+and an append cannot both describe the successor body, so a `set` naming both
+is an invalid-request issue at `/set` naming the exclusivity, exit 2, and
+unchanged, whatever the two values are. An append is otherwise an ordinary
+patch: it rides the same lock, locked re-read, exact-byte compare-and-swap,
+candidate validation, atomic publication, and claim rules, it sets `updated` to
+request.date, and it rewrites no frontmatter byte — the addition is the same
+byte splice after the closing delimiter that a replacement is.
+
 null removes the field, for every patchable **frontmatter** field alike.
 `related` is optional, so removing it succeeds and the item reads back with an
-empty related list. `depends_on` is a required item field, so removing it makes
-the candidate item invalid: the patch returns candidate-invalid, exit 2, and
-unchanged. Clear a dependency list with `[]`, not null.
+empty related list. `depends_on` and `title` are required item fields, so
+removing either makes the candidate item invalid: the patch returns
+candidate-invalid, exit 2, and unchanged. Clear a dependency list with `[]`,
+not null; correct a title by sending the corrected one, and note that the empty
+string is not the escape hatch it is for `body` — a title must be non-empty, so
+`""` is refused at the request, one step earlier than `null` is.
 
 `body` is the deliberate exception to that convention, and the asymmetry is
 stated here so no consumer has to infer it. The body is a region of the file,
@@ -1267,8 +1429,8 @@ UTC ULID derivation applies: an item created just after midnight UTC refuses
 the operator's local calendar date here too.
 
 Patch appends no decision: the ledger's Git history is the audit trail for a
-consumer-field change. Identity, lifecycle, title, provenance, snooze,
-decisions, and extension members cannot change through patch.
+consumer-field change. Identity, lifecycle, provenance, snooze, decisions, and
+extension members cannot change through patch.
 
 Patch never mutates another item. A candidate ledger that flags any other
 item — for example a duplicate-number collision with an existing handle —
@@ -1277,9 +1439,90 @@ bytes. Re-scoping one item's dependency onto `related` and dispositioning the
 item it depended on is therefore two patch and transition calls, not one
 atomic multi-item mutation.
 
+### Frontmatter ownership
+
+Every frontmatter member belongs to exactly one of three classes, and this
+table is the whole boundary. A consumer reads it instead of sending a patch and
+interpreting the refusal.
+
+| Member | Class | How it changes |
+|---|---|---|
+| `schema_version` | Core-owned | Create selects it; only a whole-ledger schema migration moves it. |
+| `id` | Core-owned | Create publishes it. It is identity and never moves. |
+| `number` | Core-owned | Create assigns it on schema version 2. It is the item handle and never moves. |
+| `status` | Core-owned | `transition` only, along an allowed lifecycle edge. |
+| `created` | Core-owned | Create derives it from the UTC date the ID encodes. |
+| `updated` | Core-owned | Every `transition` and `patch` sets it to `request.date`. |
+| `completed` | Core-owned | `transition` writes it on completion and clears it on any other edge. |
+| `killed` | Core-owned | `transition` writes it on a kill and clears it on any other edge. |
+| `archived` | Core-owned | `transition` writes it on an archive and clears it on any other edge. |
+| `deferred` | Core-owned | `transition` writes it on a defer and clears it on any other edge. |
+| `decisions` | Core-owned | `transition` appends one record on a decision edge. Nothing edits or removes one. |
+| `title` | Consumer-editable through `patch` | `set.title` replaces it whole. Non-empty string. |
+| `priority` | Consumer-editable through `patch` | `set.priority` replaces it; `null` removes it. |
+| `depends_on` | Consumer-editable through `patch` | `set.depends_on` replaces the whole list. |
+| `related` | Consumer-editable through `patch` | `set.related` replaces the whole list; `null` removes it. |
+| `body` (the region after the frontmatter, not a member) | Consumer-editable through `patch` | `set.body` replaces the whole body; `""` empties it. `set.body_append` appends without a merge; the two are mutually exclusive in one request. |
+| `kind` | Create-once | Create fixes it. `patch` refuses it. |
+| `provenance` | Create-once | Create writes it. Every later verb preserves it byte for byte. |
+| `parent` | Create-once | Create writes it. No verb moves an item between epics. |
+| `snoozed_until` | Create-once | Create writes it. No verb changes it. |
+| extension members (`tags`, `tier`, a consumer's own identifier fields) | Consumer-owned, not patchable | Supplied at create, preserved byte for byte by every verb, and otherwise a reviewable hand-edit. |
+
+**Why `kind` is refused.** A task-to-epic flip is not a field edit. Kind
+decides the parent and children rules an item is validated under and the
+allowed lifecycle edges it may take: an epic completes only when every direct
+child is done or killed, a task may enter in-progress and an epic may not, and
+an epic carries a rollup on its completion decision. Flipping the member
+without reconciling those consequences produces an item the ledger cannot
+validate or a lifecycle the contract never sanctioned. If kind is ever to
+change, it needs its own verb with its own preconditions, not a widened patch
+set.
+
+**Why extension members are not patchable yet, and what a path needs.** Two
+field reports in two days asked for one — a consumer's own identifier fields
+ride permitted extension members, and a wrong or missing one has no ledger-side
+repair verb at all. The widening was assessed against title's machinery and is
+not the same machinery. Four differences, each real:
+
+1. **The request shape has no room for an arbitrary key.** A set member outside
+   the patchable set is an invalid-request issue, and that fail-closed rule is
+   what turns a typo (`prioirty`) into a refusal instead of a new frontmatter
+   member. Accepting arbitrary keys in `set` destroys it. A separate container
+   such as `set.extensions` keeps it, but that is a new request shape rather
+   than one more name in an existing list.
+2. **There is no value schema to validate against.** Title is a schema string
+   the validator already enforces; candidate validation constrains no extension
+   value at all. A patchable extension member would write unvalidated
+   caller JSON straight into frontmatter, which no other patchable field does.
+3. **Nested values do not survive a whole-value replace the way a scalar
+   does.** An extension value may be a map or a sequence, may carry an anchor
+   that another node aliases, and is compared by the successor guard through
+   exact node identity. Replacing one means excluding that key from the very
+   guard that proves the other extension nodes were untouched.
+4. **The oracle has no observable surface to correlate against.** Extension
+   members are absent from the lossless core view, so an independent
+   re-implementation cannot check an extension patch result without decoding
+   and parsing the item source — surface growth the oracle deliberately avoids
+   for patch.
+
+An extension-member patch is therefore a separate design, not a line in this
+one. It needs, at minimum: a `set.extensions` container that leaves the
+fail-closed set rule intact, a declared per-ledger extension schema so
+candidate validation has something to enforce, a stated rule for anchored and
+nested values, and an oracle-visible surface to correlate against. Until it
+ships, the honest answer for `tags`, `tier`, and a consumer's own identifier
+fields is the table's: consumer-owned, preserved by every verb, changed only by
+a reviewable hand-edit — and on a provisioned ledger, that hand-edit is the
+stale write described at the top of this section, so it must be reconciled, not
+merely committed.
+
 ### Serialization
 
-An updated field is rewritten in place. A newly added priority serializes
+An updated field is rewritten in place. `title` is always rewritten in place
+and never inserted, because it is a required member every valid item already
+carries; its scalar node is edited, so the quoting style the item was written
+in survives the correction. A newly added priority serializes
 directly after kind; a newly added depends_on directly after provenance, and a
 newly added related directly after depends_on. A relation list this patch adds
 is written as a YAML flow sequence, the style create writes; a relation list
@@ -1300,6 +1543,11 @@ The body bytes are written exactly as the UTF-8 encoding of `set.body`, the
 same rule create serializes under: no newline is invented, trimmed, or removed,
 and no line ending is translated. An empty body leaves no byte after the
 closing delimiter's newline.
+
+An append serializes through the same splice with the item's current body bytes
+in front of the addition, so the same rules hold: nothing is invented between
+the two, no line ending is translated, and an empty `body_append` republishes
+the body byte for byte.
 
 ### Adapter advertisement
 
@@ -1421,8 +1669,8 @@ edges, the schema version 1 dependent-cleanup blocker and the other two
 multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
 unchanged/committed/unknown states; and patch field boundaries, CAS,
-serialization, preconditions, and the body swap with its untouched
-frontmatter.
+serialization, preconditions, the body swap with its untouched
+frontmatter, and the body append with its exclusivity refusal.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.

@@ -5,9 +5,10 @@ number: 113
 title: "Give unauthorized-revision a non-destructive adoption remedy"
 kind: task
 priority: 2
-status: backlog
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T09:54:01Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Field-blocked consumer staging on published alpha.5; the only documented remedy discards reviewed, merged work."
+  - action: complete
+    date: 2026-08-17
+    summary: "claim-adopt: the non-destructive unauthorized-revision remedy."
+    rationale: "New work-claim verb, sibling of claim-verify (a claim subcommand would have needed the reconciliation gate weakened; a flag would have made one command both report and rule). Per-item per-revision adoption with a stale-witness refusal, claim-held guard, both revision surfaces checked, journaled revision-adoption entry with the authoritative instant, and reconciliation treating adoption as authorization. Every unauthorized-revision remediation now names both remedies with the destructive/non-destructive distinction explicit. The consumer's exact blocked state reproduced and cleared by one adoption in a fixture, edited bytes preserved, updated untouched."
 ---
 
 Field issue from PropertyCompass2 on published alpha.5 (their staging, 1,574-item provisioned ledger, docs/wowbagger-feedback.md on their side): `unauthorized-revision` has no non-destructive remedy. Their staging checkout is blocked exit 6 with three findings (observed_surface: working-tree, reason: unauthorized-revision) on items whose bodies were hand-edited in a design session and MERGED (their PRs #2208/#2209). The refusal is correct - the edits bypassed the protocol. The only documented remedy (work-claim contract section 3.1: "restore the authorized revision, then claim-verify") destroys reviewed, merged work. Their runnable workaround is three steps and rewrites updated: restore authorized bytes, claim-verify, re-apply through patch set.body.

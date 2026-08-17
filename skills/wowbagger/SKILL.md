@@ -172,6 +172,18 @@ wowbagger patch      --ledger <dir> --input request.json --json
   external card updates bodies through `patch`, never by hand-editing the
   Markdown: the hand-edit skips the lock, the revision check, and validation.
   Removing a body is `""`; `null` is refused.
+- **`set.body` replaces the whole body and never merges.** When you mirror an
+  external source, read-modify-write from the current item body — `inspect`,
+  edit the body you got back, send that — and never regenerate from the source
+  alone. Regeneration passes every check (`expected_revision` is a byte guard,
+  not a meaning guard) and silently deletes every ledger-only byte the item
+  carried: the annotations and local notes that live nowhere upstream.
+- **To add to a body without merging, use `set.body_append`.** The string it
+  takes is written after the current body, so every existing byte survives
+  without your naming it. It is mutually exclusive with `set.body` in one
+  request, and `null` is refused — appending nothing is `""`. A core that
+  predates it answers `invalid-request` with an `unknown-member` issue at
+  `/set/body_append` and changes nothing, so trying it is a safe probe.
 - See `docs/mutation-contract.md` in the wowbagger repository for the request
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.
@@ -198,18 +210,67 @@ Markdown.
 ### Patch edits fields, never lifecycle
 
 `patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.
-The patchable field set is exactly `priority`, `depends_on`, `related`, and
-`body`. A
+The patchable field set is exactly `title`, `priority`, `depends_on`,
+`related`, `body`, and `body_append`. A
 `set` naming anything else is an `invalid-request` issue at its `/set` pointer,
 and `number` is refused because it is immutable identity.
 
+- `title` is a non-empty string, replaced whole. **Correct a wrong title
+  through `patch`, never by editing the Markdown.** On a provisioned ledger the
+  hand-edit is a stale write: the next mutation refuses exit 6 with an
+  `unauthorized-revision` finding and every later mutation stays blocked.
 - A relation list is replaced whole. There is no add or remove member — send
   the complete list you want the item to carry.
-- `[]` clears a list. `null` removes the field, but `depends_on` is required,
-  so a null one returns `candidate-invalid`, exit 2, `unchanged`. Use `[]`.
+- `[]` clears a list. `null` removes the field, but `depends_on` and `title`
+  are required, so a null one returns `candidate-invalid`, exit 2,
+  `unchanged`. Use `[]` for a list; send the corrected string for a title.
 - `priority` takes a non-negative integer.
 - Patch appends no decision; the Git diff is the audit trail. It never mutates
-  a second item, and it cannot touch status, title, or provenance.
+  a second item, and it cannot touch status or provenance.
+
+**Which fields are yours.** Do not discover this by sending a patch and reading
+the refusal — every frontmatter member is in exactly one of three classes:
+
+- **Core-owned**, never yours: `schema_version`, `id`, `number`, `status`,
+  `created`, `updated`, the terminal dates (`completed`, `killed`, `archived`,
+  `deferred`), and `decisions`. `transition` writes these; nothing else does.
+- **Consumer-editable through `patch`**: `title`, `priority`, `depends_on`,
+  `related`, and the body.
+- **Create-once**: `kind`, `provenance`, `parent`, `snoozed_until`. Set at
+  `create` and fixed after. `kind` is refused deliberately — a task-to-epic
+  flip changes which parent and children rules apply and which lifecycle edges
+  are allowed, so it needs its own verb, not a wider `set`.
+
+Extension members are not patchable — `tags`, `tier`, and a consumer's own
+identifier fields are consumer-owned, preserved byte for byte by every verb,
+and today changed only by a reviewable hand-edit. On a provisioned ledger,
+treat that hand-edit like any other out-of-protocol write: commit it, then run
+`claim-verify` and reconcile. The full table, and why the extension path is
+still open, is in `docs/mutation-contract.md` section 9.
+
+### An epic's progress lives in its children, not in its status
+
+An epic stores no progress. There is no `epic backlog -> in-progress` edge, and
+asking for one is refused. Read an epic's progress off its direct children —
+the items whose `parent` is that epic's ID — and never off the epic's own
+`status`:
+
+- **How far along:** direct children whose status is `done` or `killed`, over
+  all direct children. That is the same set the epic's own completion needs:
+  `epic backlog -> done` refuses until every direct child is `done` or
+  `killed`, and it generates the rollup from exactly those children.
+- **Whether anyone is on it:** the epic is *active* when at least one direct
+  child is `in-progress` or holds an active work claim; *untouched* when no
+  direct child has left `triage` or `backlog`; otherwise *in progress by
+  derivation*. Test those three in that order.
+
+**Mirroring a tracker that does model epic activity?** Compare its stored epic
+status against the derived state above, never against the ledger's stored
+`status` field. A stored-against-stored comparison reports drift that no
+mutation can clear — legacy epic #1075 sat `in-progress` while its correct
+ledger mirror sat `backlog` with one `in-progress` child, so the two stores
+agreed on the work and disagreed only on where progress is kept. Derive, then
+compare. `docs/mutation-contract.md` section 8 carries the exact definitions.
 
 ### A refused disposition is one relations patch away
 
@@ -321,6 +382,35 @@ Read `error.details.findings[0].reason` and say which case it is:
 - `worktree-synchronization-required` — another worktree wrote it. Stop
   writing. Wait for that worktree to commit and push, remove the untracked
   reconcile log, pull or merge, run `claim-verify`, then resume.
+- `unauthorized-revision` — the item was changed outside the protocol. Two
+  remedies, and the choice is the operator's, not yours. **Restore** the
+  authorized revision and `claim-verify`: this discards the edit. **Adopt** the
+  committed revision and `claim-verify`: this keeps the edit and moves the
+  authorized revision to it. Ask before you discard reviewed work.
+
+Adoption is per item and per revision explicit. Name the item and both
+revisions, take them from the finding, and commit the edited bytes first:
+
+```sh
+wowbagger claim-adopt --ledger <dir> --input adopt.json --json
+```
+
+```json
+{
+  "ledger_namespace": "<from claim capabilities>",
+  "item_id": "<finding.item_id>",
+  "from_revision": "<finding.expected_revision>",
+  "to_revision": "<finding.actual_revision>",
+  "adopted_by": "<your owner id>"
+}
+```
+
+It refuses `adoption-revision-uncommitted` until the bytes are at Git `HEAD` and
+in your own working tree, `claim-held` while a claim holds the item,
+`adoption-ledger-invalid` if the ledger would not validate, and
+`adoption-witness-mismatch` if the witness is stale — including a replay of an
+adoption that already succeeded. It writes no item byte, so `updated` and the
+body survive. Run `claim-verify` after it and require exit 0.
 
 Two traps. Do not retry with the `expected_revision` from the refusal: a
 sibling that is still working moves it, and you cannot win that race. Do not

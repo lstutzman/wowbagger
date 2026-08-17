@@ -485,3 +485,95 @@ test('hand-authored ledger-revision-conflict envelope is literal and tamper chec
   wrongCode.stdout.error.code = 'claim-fence-rejected';
   assert.notDeepEqual(actual.transcript[3], wrongCode);
 });
+
+test('hand-authored revision-adoption envelopes are literal and tamper checked', () => {
+  // Authored from docs/work-claim-contract.md section 3.3 alone, not from the
+  // committed transcript: the adoption success result names the item, both
+  // revisions, the operator, and the authoritative instant, and the replay
+  // refuses because the witness no longer names the authorized revision.
+  const source = manifest('revision-adoption');
+  const request = {
+    ledger_namespace: namespace,
+    item_id: itemId,
+    from_revision: beforeRevision,
+    to_revision: afterRevision,
+    adopted_by: 'operator-a',
+  };
+  const committed = {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'work-claim',
+      command: 'claim-adopt',
+      contract_version: 1,
+      state: 'committed',
+      result: {
+        ledger_namespace: namespace,
+        item_id: itemId,
+        from_revision: beforeRevision,
+        to_revision: afterRevision,
+        adopted_by: 'operator-a',
+        adopted_at: '2030-01-11T09:00:05.000Z',
+      },
+    },
+  };
+  const replayed = {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'work-claim',
+      command: 'claim-adopt',
+      contract_version: 1,
+      state: 'unchanged',
+      error: {
+        code: 'adoption-witness-mismatch',
+        message: 'The adoption witness no longer names the authorized revision.',
+        details: {
+          ledger_namespace: namespace,
+          item_id: itemId,
+          authorized_revision: afterRevision,
+          requested_from_revision: beforeRevision,
+        },
+      },
+    },
+  };
+
+  const initial = structuredClone(source.initial);
+  initial.durable.claims[0].active = null;
+  const actual = runReferenceVector({
+    initial,
+    actions: [
+      { operation: 'work-claim.claim-adopt', physical_now: '2030-01-11T09:00:05.000Z', request },
+      { operation: 'work-claim.claim-adopt', physical_now: '2030-01-11T09:00:06.000Z', request },
+    ],
+  });
+
+  assert.deepEqual(actual.transcript[0], committed);
+  assert.deepEqual(actual.transcript[1], replayed);
+  // The adoption re-baselines the authorized revision and leaves the bytes.
+  assert.equal(actual.final.durable.ledgers[0].authorized_revision, afterRevision);
+  assert.equal(actual.final.durable.ledgers[0].revision, afterRevision);
+  assert.deepEqual(actual.final.durable.ledgers[0].adoptions, [{
+    from_revision: beforeRevision,
+    to_revision: afterRevision,
+    adopted_by: 'operator-a',
+    adopted_at: '2030-01-11T09:00:05.000Z',
+  }]);
+
+  const clientClock = structuredClone(committed);
+  clientClock.stdout.result.adopted_at = '2030-01-11T09:00:04.000Z';
+  assert.notDeepEqual(actual.transcript[0], clientClock);
+
+  const swapped = structuredClone(replayed);
+  swapped.stdout.error.details.authorized_revision = beforeRevision;
+  assert.notDeepEqual(actual.transcript[1], swapped);
+
+  // A client clock behind the persisted floor never authorizes the instant the
+  // adoption records: the durable floor does.
+  const backward = runReferenceVector({
+    initial,
+    actions: [{ operation: 'work-claim.claim-adopt', physical_now: '2030-01-11T08:59:00.000Z', request }],
+  });
+  assert.equal(backward.transcript[0].exit, 0);
+  assert.equal(backward.transcript[0].stdout.result.adopted_at, '2030-01-11T09:00:00.000Z');
+});

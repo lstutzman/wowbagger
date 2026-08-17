@@ -202,7 +202,7 @@ test('the same overwrite refuses once the item has a journal-visible transition'
   assert.equal(finding.expected_path, `${FIRST_ID}.md`);
   assert.equal(
     finding.remediation,
-    `Restore the authorized revision at ${FIRST_ID}.md, then run claim-verify.`,
+    `Restore the authorized revision at ${FIRST_ID}.md, then run claim-verify; that discards the edit. Or adopt the committed revision of ${FIRST_ID}.md with claim-adopt, then run claim-verify; that keeps the edit.`,
   );
 });
 

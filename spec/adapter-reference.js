@@ -2175,17 +2175,27 @@ function validPatchRequest(request) {
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactKeys(request.set, [], ['priority', 'depends_on', 'related', 'body'])
+    || !hasExactKeys(request.set, [], ['title', 'priority', 'depends_on', 'related', 'body', 'body_append'])
     || Object.keys(request.set).length === 0) return false;
+  // A replacement and an append cannot both describe the successor body, so one
+  // request naming both is refused whatever the two values are.
+  if (Object.hasOwn(request.set, 'body') && Object.hasOwn(request.set, 'body_append')) return false;
   for (const [field, value] of Object.entries(request.set)) {
-    // body is the one patchable value outside the frontmatter, and the one
-    // that null does not remove: the body region always exists, so removing it
-    // is the empty string and null is refused.
-    if (field === 'body') {
+    // The two body write modes are the patchable values outside the
+    // frontmatter, and the ones null does not remove: the body region always
+    // exists, so removing it is the empty string and null is refused.
+    if (field === 'body' || field === 'body_append') {
       if (typeof value !== 'string') return false;
       continue;
     }
     if (value === null) continue;
+    // title is a non-empty schema string, the same rule create validates it
+    // under. null is a removal, handled above; the candidate refuses it later
+    // because title is required, but the request itself is well formed.
+    if (field === 'title') {
+      if (typeof value !== 'string' || value.trim().length === 0) return false;
+      continue;
+    }
     if (field === 'priority') {
       if (parsedIntegerValue(value, 0) === undefined) return false;
       continue;
@@ -2217,10 +2227,19 @@ function validPatchResultCorrelation(item, request) {
       if (item.body !== requested) return false;
       continue;
     }
-    if (field === 'priority') {
+    // An append names only the addition, so the readable correlation is that
+    // the addition is exactly the tail of the body read back. What came before
+    // it is the item's own bytes, which this response does not restate.
+    if (field === 'body_append') {
+      if (typeof item.body !== 'string' || !item.body.endsWith(requested)) return false;
+      continue;
+    }
+    // A removal correlates with an absent core member; a value correlates with
+    // the requested one, after priority's integer parse.
+    if (field === 'title' || field === 'priority') {
       if (requested === null) {
         if (Object.hasOwn(item.core, field)) return false;
-      } else if (item.core[field] !== parsedIntegerValue(requested, 0)) {
+      } else if (item.core[field] !== (field === 'title' ? requested : parsedIntegerValue(requested, 0))) {
         return false;
       }
       continue;

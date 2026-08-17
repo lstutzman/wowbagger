@@ -442,7 +442,7 @@ test('claim-verify rejects an unrecorded revision after a legacy-only mutation',
   assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
   assert.equal(
     verified.envelope.result.findings[0].remediation,
-    'Restore the authorized revision at item.md, then run claim-verify.',
+    'Restore the authorized revision at item.md, then run claim-verify; that discards the edit. Or adopt the committed revision of item.md with claim-adopt, then run claim-verify; that keeps the edit.',
   );
 });
 
@@ -482,7 +482,7 @@ test('claim-verify prefers the current configured path after an authorized item 
   assert.equal(verified.envelope.result.findings[0].expected_path, 'items/item.md');
   assert.equal(
     verified.envelope.result.findings[0].remediation,
-    'Restore the authorized revision at items/item.md, then run claim-verify.',
+    'Restore the authorized revision at items/item.md, then run claim-verify; that discards the edit. Or adopt the committed revision of items/item.md with claim-adopt, then run claim-verify; that keeps the edit.',
   );
 });
 
@@ -518,7 +518,7 @@ test('claim-verify diagnoses a working-tree deletion as an unauthorized revision
   assert.equal(verified.envelope.result.findings[0].expected_path, 'item.md');
   assert.equal(
     verified.envelope.result.findings[0].remediation,
-    'Restore the authorized revision at item.md, then run claim-verify.',
+    'Restore the authorized revision at item.md, then run claim-verify; that discards the edit. Or adopt the committed revision of item.md with claim-adopt, then run claim-verify; that keeps the edit.',
   );
 });
 

@@ -69,7 +69,7 @@ test('patch refuses a field outside the patchable set', async () => {
       id: ID,
       expected_revision: revision,
       date: '2030-01-11',
-      set: { title: 'Renamed' },
+      set: { kind: 'epic' },
     });
 
     assert.equal(result.status, 2, result.stdout);
@@ -77,7 +77,7 @@ test('patch refuses a field outside the patchable set', async () => {
     assert.equal(envelope.error.code, 'invalid-request');
     assert.equal(envelope.state, 'unchanged');
     const paths = envelope.error.details.issues.map((entry) => entry.path);
-    assert.ok(paths.includes('/set/title'), result.stdout);
+    assert.ok(paths.includes('/set/kind'), result.stdout);
   });
 });
 

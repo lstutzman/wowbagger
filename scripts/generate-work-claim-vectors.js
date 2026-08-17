@@ -286,6 +286,44 @@ const scenarios = [
       ],
     );
   })(),
+  (() => {
+    const active = claim('agent-a-run-1', '4', '2030-01-11T09:00:00.000Z', '2030-01-11T09:05:00.000Z');
+    return scenario(
+      'revision-adoption',
+      'An operator rules a committed out-of-protocol revision legitimate. Adoption refuses while a claim holds the item, refuses a stale revision witness, refuses bytes that no cooperating checkout can see, succeeds once, and refuses its own replay.',
+      ['adoption-claim-fence', 'adoption-uncommitted', 'adoption-witness', 'namespace-fence', 'release', 'revision-adoption'],
+      state({
+        clock_floors: [floor(namespaceA, active.issued_at)],
+        claims: [claimRecord(namespaceA, '4', active), claimRecord(namespaceB, '0', null)],
+        ledgers: [
+          // The operator's own worktree and every cooperating checkout hold the
+          // edited bytes; the coordinator still authorizes the earlier ones.
+          { ...ledger(namespaceA, after), authorized_revision: before.sha256, committed_revision: after.sha256 },
+          // The same edit, committed nowhere: adoption must refuse it.
+          { ...ledger(namespaceB, after), authorized_revision: before.sha256, committed_revision: before.sha256 },
+        ],
+      }),
+      [
+        adoption(namespaceA, before, after, '2030-01-11T09:00:01.000Z'),
+        {
+          operation: 'work-claim.release',
+          physical_now: '2030-01-11T09:00:02.000Z',
+          request: {
+            ledger_namespace: namespaceA,
+            item_id: itemId,
+            owner_id: active.owner_id,
+            epoch: active.epoch,
+            expected_expires_at: active.expires_at,
+          },
+        },
+        adoption(namespaceA, after, before, '2030-01-11T09:00:03.000Z'),
+        adoption(namespaceB, before, after, '2030-01-11T09:00:04.000Z'),
+        adoption(namespaceA, before, after, '2030-01-11T09:00:05.000Z'),
+        adoption(namespaceA, before, after, '2030-01-11T09:00:06.000Z'),
+        adoption('wbns_33333333333333333333333333333333', before, after, '2030-01-11T09:00:07.000Z'),
+      ],
+    );
+  })(),
 ];
 
 for (const entry of scenarios) {
@@ -383,6 +421,20 @@ function claim(ownerId, epoch, issuedAt, expiresAt) {
 
 function claimRecord(ledgerNamespace, lastEpoch, active) {
   return { ledger_namespace: ledgerNamespace, item_id: itemId, last_epoch: lastEpoch, active };
+}
+
+function adoption(ledgerNamespace, fromSource, toSource, physicalNow) {
+  return {
+    operation: 'work-claim.claim-adopt',
+    physical_now: physicalNow,
+    request: {
+      ledger_namespace: ledgerNamespace,
+      item_id: itemId,
+      from_revision: fromSource.sha256,
+      to_revision: toSource.sha256,
+      adopted_by: 'operator-a',
+    },
+  };
 }
 
 function ledger(ledgerNamespace, sourceFile) {

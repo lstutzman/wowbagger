@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "command": "patch",
+  "contract_version": 3,
+  "state": "committed",
+  "result": {
+    "item": {
+      "id": "wb_01Q4ZK3DG020ANANANANANANAM",
+      "path": "wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "revision": "sha256:42ebdb9be7651bf4b49519d886ad25066bcc966b69fa9bef932b6b652c048bbe",
+      "source_encoding": "base64",
+      "source_media_type": "text/markdown; charset=utf-8",
+      "source_base64": "LS0tCnNjaGVtYV92ZXJzaW9uOiAxCmlkOiB3Yl8wMVE0WkszREcwMjBBTkFOQU5BTkFOQU5BTQp0aXRsZTogIk1pcnJvciBvZiBhIGxlZ2FjeSBiYWNrbG9nIGNhcmQiCmtpbmQ6IHRhc2sKc3RhdHVzOiBiYWNrbG9nCmNyZWF0ZWQ6IDIwMzAtMDEtMjAKdXBkYXRlZDogMjAzMC0wMS0yMgpwcm92ZW5hbmNlOgogIHNvdXJjZTogImZpeHR1cmUvbXV0YXRpb25zIgogIHJlY29yZGVkX2F0OiAiMjAzMC0wMS0yMFQxMjowMDowMFoiCmRlcGVuZHNfb246IFtdCnJlbGF0ZWQ6IFtdCiMgdGhlIG1pcnJvciBrZWVwcyBpdHMgb3duIG5vdGVzIGhlcmUKbWlycm9yOiAmbWlycm9yCiAgY2FyZDogIlBDLTE0NzUiCmF1ZGl0OgogIC0gbGFzdDogKm1pcnJvcgotLS0KClRoZSBsZWdhY3kgY2FyZCBzdGlsbCByZWFkcyBiYWNrbG9nLgoKIyMgVGl0bGUgaW50ZW50IChsZWRnZXItb25seSkKClRoZSB1cHN0cmVhbSBjYXJkIHdhcyByZW5hbWVkOyBwYXRjaCByZWZ1c2VzIHRpdGxlLCBzbyB0aGUgbWlycm9yCnJlY29yZHMgdGhlIGRpdmVyZ2VuY2UgaGVyZS4K",
+      "core": {
+        "schema_version": 1,
+        "id": "wb_01Q4ZK3DG020ANANANANANANAM",
+        "title": "Mirror of a legacy backlog card",
+        "kind": "task",
+        "status": "backlog",
+        "created": "2030-01-20",
+        "updated": "2030-01-22",
+        "provenance": {
+          "source": "fixture/mutations",
+          "recorded_at": "2030-01-20T12:00:00Z"
+        },
+        "depends_on": [],
+        "related": []
+      },
+      "body": "\nThe legacy card still reads backlog.\n\n## Title intent (ledger-only)\n\nThe upstream card was renamed; patch refuses title, so the mirror\nrecords the divergence here.\n"
+    }
+  }
+}

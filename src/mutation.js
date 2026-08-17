@@ -742,14 +742,19 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
 // patch applies them. `number` is the immutable item identity, assigned once at
 // create, so it is not patchable; everything else stays a reviewable hand-edit
 // or a transition concern.
-const PATCHABLE_FIELDS = ['priority', 'depends_on', 'related', 'body'];
-// The patchable fields that live in the frontmatter. `body` is the one patchable
-// value outside it, so it takes its own validation and serialization path.
-const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => field !== 'body');
+const PATCHABLE_FIELDS = ['title', 'priority', 'depends_on', 'related', 'body', 'body_append'];
+// The two body write modes. They are mutually exclusive in one request: a
+// replacement and an append cannot both describe the successor body.
+const PATCH_BODY_FIELDS = ['body', 'body_append'];
+// The patchable fields that live in the frontmatter. The body write modes are
+// the patchable values outside it, so they take their own validation and
+// serialization path.
+const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => !PATCH_BODY_FIELDS.includes(field));
 // Patchable fields whose value is a whole relation list rather than a scalar.
 const PATCH_RELATION_FIELDS = new Set(['depends_on', 'related']);
 // Where a newly added field lands in the frontmatter; the anchor is a member
-// every valid item carries, so it always exists.
+// every valid item carries, so it always exists. `title` needs no entry: it is
+// itself a required member, so a patch always rewrites it in place.
 const PATCH_FIELD_ANCHORS = { priority: 'kind', depends_on: 'provenance', related: 'depends_on' };
 
 export function validatePatchRequest(request, parseIssues = []) {
@@ -784,6 +789,13 @@ export function validatePatchRequest(request, parseIssues = []) {
     if (hasOwn(request.set, 'number') && request.set.number !== null && !isPatchableInteger(request.set.number, 1)) {
       issues.push(issue('/set/number', 'invalid-value', 'Set member number must be a positive integer or null.'));
     }
+    // The same rule create validates title under, at the patch pointer. null is
+    // left to the frontmatter removal convention below: title is required, so
+    // removing it makes the candidate invalid rather than the request.
+    if (hasOwn(request.set, 'title') && request.set.title !== null
+      && (typeof request.set.title !== 'string' || request.set.title.trim().length === 0)) {
+      issues.push(issue('/set/title', 'invalid-type', 'Set member title must be a non-empty string.'));
+    }
     if (hasOwn(request.set, 'priority') && request.set.priority !== null && !isPatchableInteger(request.set.priority, 0)) {
       issues.push(issue('/set/priority', 'invalid-value', 'Set member priority must be a non-negative integer or null.'));
     }
@@ -793,6 +805,16 @@ export function validatePatchRequest(request, parseIssues = []) {
       issues.push(issue('/set/body', 'invalid-value', 'Set member body must be a string; use the empty string to remove the body.'));
     } else if (hasOwn(request.set, 'body') && typeof request.set.body !== 'string') {
       issues.push(issue('/set/body', 'invalid-type', 'Set member body must be a string.'));
+    }
+    // body_append writes the same region under the same string rules. null is
+    // refused for the same reason: appending nothing is the empty string.
+    if (hasOwn(request.set, 'body_append') && request.set.body_append === null) {
+      issues.push(issue('/set/body_append', 'invalid-value', 'Set member body_append must be a string; use the empty string to append nothing.'));
+    } else if (hasOwn(request.set, 'body_append') && typeof request.set.body_append !== 'string') {
+      issues.push(issue('/set/body_append', 'invalid-type', 'Set member body_append must be a string.'));
+    }
+    if (PATCH_BODY_FIELDS.every((field) => hasOwn(request.set, field))) {
+      issues.push(issue('/set', 'invalid-value', 'Set members body and body_append are mutually exclusive; name one.'));
     }
     for (const field of PATCH_RELATION_FIELDS) {
       if (!hasOwn(request.set, field) || request.set[field] === null) {
@@ -901,7 +923,22 @@ function serializePatch(source, successor, request) {
       }
     }
   });
-  return hasOwn(request.set, 'body') ? replaceBody(rewritten, request.set.body) : rewritten;
+  if (hasOwn(request.set, 'body')) {
+    return replaceBody(rewritten, request.set.body);
+  }
+  // An append is the same byte splice with the current body bytes in front of
+  // the addition, so every existing byte survives by construction.
+  if (hasOwn(request.set, 'body_append')) {
+    return replaceBody(rewritten, `${bodyRegion(rewritten)}${request.set.body_append}`);
+  }
+  return rewritten;
+}
+
+// The body region of an item's own bytes: everything after the closing
+// delimiter's newline. A delimiter without a newline terminating it has no body.
+function bodyRegion(source) {
+  const closing = nextLine(source, frontmatterBounds(source).end);
+  return closing.next === null ? '' : source.slice(closing.next);
 }
 
 // The body is every byte after the closing delimiter's newline, so replacing it

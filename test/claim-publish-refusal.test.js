@@ -704,6 +704,26 @@ test('legacy patch refuses a body edit on an item with an active fenced claim', 
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
 });
 
+test('legacy patch refuses a title edit on an item with an active fenced claim', async () => {
+  const fixture = await publicationFixture();
+  const patchPath = path.join(fixture.root, 'patch-title.json');
+  await writeFile(patchPath, JSON.stringify({
+    id: fixture.itemId,
+    expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+    date: '2026-08-11',
+    set: { title: 'The corrected mirror title' },
+  }));
+
+  const refused = await capture([
+    'patch', '--ledger', fixture.ledger, '--input', patchPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 4, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'active-claim-write-refused');
+  assert.equal(refused.envelope.command, 'patch-v1');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
 test('legacy patch refuses a relations edit on an item with an active fenced claim', async () => {
   const fixture = await publicationFixture();
   const patchPath = path.join(fixture.root, 'patch-relations.json');

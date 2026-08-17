@@ -7,7 +7,111 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- **`claim-adopt` gives `unauthorized-revision` a non-destructive remedy.** A
+  consumer's staging checkout was blocked exit 6 on three items whose bodies
+  were hand-edited in a design session and merged. The refusal was correct, but
+  the only documented remedy — restore the authorized revision, then
+  `claim-verify` — discards reviewed, merged work. `claim-adopt` records that an
+  operator ruled the committed bytes legitimate and moves the coordinator's
+  authorized revision to them. It writes no item byte, so `updated` and the body
+  survive exactly. It is a standalone verb in the work-claim domain, a sibling
+  of `claim-verify`, and it is per item and per revision explicit: the request
+  names the item, the revision it believes is authorized, the revision being
+  adopted, and who is ruling. There is no adopt-all. It refuses
+  `adoption-witness-mismatch` on a stale witness (including a replay of a
+  successful adoption), `claim-held` while an unexpired claim holds the item,
+  `adoption-revision-uncommitted` unless the adopted revision is at Git `HEAD`
+  and in the caller's own working tree, and `adoption-ledger-invalid` when the
+  complete ledger would not validate. Success appends one `revision-adoption`
+  journal entry naming who, when, and both revisions, so the audit trail records
+  the ruling instead of losing it. Adoption is not a fence hole: the next
+  out-of-protocol edit is `unauthorized-revision` again, measured against the
+  adopted revision. Additive at contract version 1 — one new command, one new
+  journal entry type, three new error codes, no existing shape changed.
+  Documented in work-claim contract section 3.3 and pinned by
+  `spec/fixtures/work-claims/revision-adoption/`.
+
+### Changed
+
+- **Every `unauthorized-revision` remediation string now names both remedies.**
+  It was one sentence naming only the restore path, which reads as an
+  instruction to throw the edit away; the field report above did exactly that.
+  It is now two sentences, and each says what happens to the edit: `Restore the
+  authorized revision at <path>, then run claim-verify; that discards the edit.
+  Or adopt the committed revision of <path> with claim-adopt, then run
+  claim-verify; that keeps the edit.` The finding's `code`, `reason`,
+  `observed_surface`, `expected_path`, and revisions are unchanged; only the
+  human-readable `remediation` prose changed. `revision-regression` keeps its
+  restore-only string on purpose: it only fires while an active claim holds the
+  item, which is a state adoption refuses.
+- **`patch` corrects an item title.** `set.title` takes a non-empty schema
+  string and replaces the title whole, under the same per-ID lock, exact-byte
+  compare-and-swap, candidate complete-ledger validation, and atomic
+  publication as every other patch; an item with an active claim is refused,
+  and `updated` moves to `request.date`. The scalar node is rewritten in place,
+  so the quoting style, the comments, the anchors, and every extension node
+  survive byte for byte. This closes a protocol contradiction reported twice
+  from the field: correcting a title used to require an out-of-protocol edit,
+  and on a provisioned ledger that edit is a stale write, so the next mutation
+  refused exit 6 `unauthorized-revision` and every later mutation stayed
+  blocked. `null` follows the frontmatter removal convention onto
+  `candidate-invalid`, because title is required; `""` is refused one step
+  earlier, at the request.
+- **The mutation contract states the frontmatter ownership boundary.** Section
+  9 gains a `Frontmatter ownership` table: one row per member, sorted into
+  core-owned (`schema_version`, `id`, `number`, `status`, `created`, `updated`,
+  the terminal dates, `decisions`), consumer-editable through `patch` (`title`,
+  `priority`, `depends_on`, `related`, `body`), and create-once (`kind`,
+  `provenance`, `parent`, `snoozed_until`). The boundary was previously
+  discoverable only by sending a patch and reading the refusal. A docs test
+  pins every row and the skill teaches the same three classes.
+
+### Decided
+
+- **`kind` stays unpatchable, and the contract now says why.** A task-to-epic
+  flip changes which parent and children rules the item is validated under and
+  which lifecycle edges it may take. It needs its own verb with its own
+  preconditions, not a wider patch set.
+- **Extension members stay out of `patch`, and the contract records the
+  reasons.** Two field reports asked for a sanctioned path for consumer-owned
+  identifier fields riding permitted extension members. The widening was
+  assessed against title's machinery and is not the same machinery: the
+  fail-closed `set` rule has no room for an arbitrary key, candidate validation
+  constrains no extension value, nested and anchored values do not survive a
+  whole-value replace the way a scalar does, and the oracle has no observable
+  surface to correlate an extension patch against. Section 9 names what a real
+  path would need — a `set.extensions` container, a declared per-ledger
+  extension schema, a stated rule for anchored and nested values, and an
+  oracle-visible surface — so the deferral is a design boundary rather than a
+  silence. Their status is stated in the ownership table either way.
+- **`patch` gains `set.body_append`.** It takes a JSON string written after the
+  item's current body, under the same string rules `set.body` takes: the empty
+  string is valid, the bytes are the UTF-8 encoding of the string exactly, and
+  `null` is refused at `/set/body_append` because appending nothing is the empty
+  string. It is the same byte splice after the closing delimiter, so no
+  frontmatter byte moves, `updated` becomes request.date, and every existing
+  body byte survives — the request never names them. `body` and `body_append`
+  are mutually exclusive in one request: naming both is an `invalid-request`
+  issue at `/set`, exit 2, unchanged. This covers the annotation shape a mirror
+  consumer needs without making it carry a merge. The core contract stays
+  version 3 — it widens the patch request schema and moves no response envelope
+  member — but version 3 is already published without it, so a consumer
+  **cannot** probe for append support by reading `contract_version`. Send an
+  append and read the refusal instead: a core without it answers `unknown-member`
+  at `/set/body_append`, exit 2, unchanged.
+
 ### Documentation
+
+- **The contract states that `set.body` replaces and never merges.** A consumer
+  mirroring an external source regenerated an item body from its upstream card
+  and destroyed a ledger-only annotation; every check passed, because
+  `expected_revision` is a byte-level lost-update guard with no semantic safety.
+  Mutation contract section 9 and the skill's body bullet now say it plainly:
+  the replacement is total, and a mirroring consumer MUST read-modify-write from
+  the current item body and MUST never regenerate from the source alone. Docs
+  guards pin both sentences.
 
 - **The contract documents the selector an `inspect` `item-not-found` refusal
   echoes.** `inspect --number <n>` on a number no item carries emits
