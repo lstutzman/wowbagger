@@ -4,9 +4,10 @@ id: wb_01KZYS3100MFKB1GNH207DV9NE
 number: 78
 title: "Project malformed PropertyCompass source identities without collision"
 kind: task
+priority: 20
 status: backlog
 created: 2026-08-14
-updated: 2026-08-16
+updated: 2026-08-17
 provenance:
   source: "propertycompass-migration-refreshed-inventory"
   recorded_at: "2026-08-14T13:24:17.000Z"
