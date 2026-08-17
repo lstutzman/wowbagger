@@ -5,7 +5,7 @@ number: 123
 title: "Fold the commit ceremony into the mutation with auto-commit"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
