@@ -55,6 +55,14 @@ consolidation. The first tagged release inherits this file.
   bytes. Every cooperative writer of one ledger must be upgraded together: a
   writer that honors only per-ID locks can race one that honors only the
   namespace lock.
+- **The README installs with `@next` and says why.** The registry mandates a
+  `latest` dist-tag, so `latest` mirrors `next`; `@next` stays the documented
+  spelling and the explicit prerelease consent.
+- **Cuts happen on the release branch, not in a session worktree.** Merge
+  session work first, then cut; the cut command refuses to run anywhere but the
+  branch tip. The previous two-phase topology is why the last two release tags
+  name merge commits rather than their cut commits.
+  `docs/adapter-release-path.md` records the ritual.
 
 ### Fixed
 
@@ -301,17 +309,6 @@ consolidation. The first tagged release inherits this file.
   unstaging. Recovery tolerates exactly that residue and refuses anything else
   staged; until it runs, the next `--auto-commit` invocation refuses on
   `staged-paths-present`, which is the intended signal.
-
-### Changed
-
-- **The README installs with `@next` and says why.** The registry mandates a
-  `latest` dist-tag, so `latest` mirrors `next`; `@next` stays the documented
-  spelling and the explicit prerelease consent.
-- **Cuts happen on the release branch, not in a session worktree.** Merge
-  session work first, then cut; the cut command refuses to run anywhere but the
-  branch tip. The previous two-phase topology is why the last two release tags
-  name merge commits rather than their cut commits.
-  `docs/adapter-release-path.md` records the ritual.
 
 ## 0.1.0-alpha.6 - 2026-08-17
 
