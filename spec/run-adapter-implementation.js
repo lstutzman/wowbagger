@@ -251,7 +251,7 @@ async function callShippedEntrypoint(
     }
     return {
       response,
-      evidence: path.relative(projectRoot, entrypoint),
+      evidence: path.relative(projectRoot, entrypoint).split(path.sep).join('/'),
       observed_launches: observedLaunches,
     };
   } finally {

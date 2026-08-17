@@ -388,7 +388,8 @@ test('no failure envelope leaks hook output, signing output, or an absolute path
 
   assert.equal(result.exit, 6, result.stdout);
   assert.doesNotMatch(result.stdout, /SECRET-HOOK-OUTPUT/u);
-  assert.doesNotMatch(result.stdout, new RegExp(fixture.root.replaceAll('/', '\\/'), 'u'));
+  // The root is a literal, not a pattern: regex-escape it (win32 roots carry backslashes).
+  assert.doesNotMatch(result.stdout, new RegExp(fixture.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'u'));
   const details = result.envelope.error.details;
   assert.deepEqual(Object.keys(details).sort(), [
     'commit_set',
