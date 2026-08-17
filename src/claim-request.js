@@ -9,6 +9,7 @@ const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
 const ITEM_ID = /^wb_[0-9A-HJKMNP-TV-Z]{26}$/;
 const OWNER_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const UTC_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})Z$/;
+const REVISION = /^sha256:[0-9a-f]{64}$/;
 const MAX_EPOCH = 18446744073709551615n;
 const MAX_LEASE_DURATION_MS = 86400000;
 
@@ -17,6 +18,7 @@ const REQUIRED_MEMBERS = {
   acquire: ['ledger_namespace', 'item_id', 'owner_id', 'lease_duration_ms', 'expected'],
   renew: ['ledger_namespace', 'item_id', 'owner_id', 'epoch', 'expected_expires_at', 'lease_duration_ms'],
   release: ['ledger_namespace', 'item_id', 'owner_id', 'epoch', 'expected_expires_at'],
+  'claim-adopt': ['ledger_namespace', 'item_id', 'from_revision', 'to_revision', 'adopted_by'],
 };
 
 // Returns an array of {path, code, message} issues (empty when the request is valid).
@@ -55,6 +57,20 @@ export function validateClaimRequest(operation, request) {
   }
   if (required.includes('expected')) {
     issues.push(...expectedIssues(request.expected));
+  }
+  if (required.includes('adopted_by') && !isOwnerId(request.adopted_by)) {
+    issues.push(problem(['adopted_by'], 'invalid-value', 'Member adopted_by must match [A-Za-z0-9][A-Za-z0-9._:/-]{0,127}.'));
+  }
+  for (const member of ['from_revision', 'to_revision']) {
+    if (required.includes(member) && !isRevision(request[member])) {
+      issues.push(problem([member], 'invalid-value', `Member ${member} must match sha256:[0-9a-f]{64}.`));
+    }
+  }
+  // Adopting the revision already authorized is not a no-op request, it is a
+  // confused one: the operator either read a stale witness or means a different
+  // revision. Refuse instead of journaling an adoption that rules nothing.
+  if (required.includes('from_revision') && request.from_revision === request.to_revision) {
+    issues.push(problem(['to_revision'], 'invalid-value', 'Member to_revision must differ from from_revision.'));
   }
   return issues;
 }
@@ -101,6 +117,10 @@ function expectedIssues(expected) {
 
 function isOwnerId(value) {
   return typeof value === 'string' && OWNER_ID.test(value);
+}
+
+function isRevision(value) {
+  return typeof value === 'string' && REVISION.test(value);
 }
 
 function isCanonicalUint64(value, allowZero) {
