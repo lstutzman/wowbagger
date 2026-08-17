@@ -39,7 +39,7 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > version is **3**. Three adapter packages ship — Claude Code, Codex, and
 > OpenCode — on one shared engine at adapter contract version 2. Only the Claude
 > Code adapter declares a `supported` platform, Darwin, from a native run of all
-> 201 conformance assertions across all 15 cases. Every other adapter and
+> 210 conformance assertions across all 16 cases. Every other adapter and
 > platform declaration is `unverified`; do not infer support because the CLI
 > starts.
 >
@@ -463,8 +463,8 @@ TMPDIR=/tmp node spec/run-adapter-implementation.js --target codex
 TMPDIR=/tmp node spec/run-adapter-implementation.js --target opencode
 ```
 
-The native Darwin Claude Code report passes all 201 assertions across all 15
-cases and reports `"status": "pass"`. Codex and OpenCode execute the same 201
+The native Darwin Claude Code report passes all 210 assertions across all 16
+cases and reports `"status": "pass"`. Codex and OpenCode execute the same 210
 assertions through the same engine, but both target reports remain `"fail"`
 pending target-specific evidence, and every platform declaration on those two
 manifests stays `unverified`. The Kimi and OpenAI-compatible harness adapters
@@ -1014,7 +1014,7 @@ It is the durable work ledger beneath those systems.
   **In progress at core contract version 3; the version is not frozen.**
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
   packages share the version 2 engine; the Claude Code manifest declares Darwin
-  `supported` after passing all 201 native assertions. Other adapter targets and
+  `supported` after passing all 210 native assertions. Other adapter targets and
   platform declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses. **Shipped as the
   adapter contract and the OpenAI-compatible integration guide.**

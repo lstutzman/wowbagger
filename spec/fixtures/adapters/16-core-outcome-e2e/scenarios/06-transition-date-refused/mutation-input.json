@@ -1,0 +1,10 @@
+{
+  "id": "wb_01Q4DJACG0206XVQEXVQEXVQEX",
+  "expected_revision": "sha256:e3e834c8d0652e53b4816c94c8cdc8649607c9b976125c295469714099041a27",
+  "to_status": "backlog",
+  "date": "2030-01-12",
+  "decision": {
+    "summary": "Accept the fictional sundial task.",
+    "rationale": "The date is intentionally stale for this vector."
+  }
+}

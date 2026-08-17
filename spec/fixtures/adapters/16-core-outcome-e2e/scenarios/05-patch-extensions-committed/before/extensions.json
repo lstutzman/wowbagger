@@ -1,0 +1,8 @@
+{
+  "extensions_version": 1,
+  "members": {
+    "external_id": "string",
+    "tier": "string",
+    "mirror": "string"
+  }
+}

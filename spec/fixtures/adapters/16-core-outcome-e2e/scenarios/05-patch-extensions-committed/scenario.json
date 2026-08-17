@@ -1,0 +1,67 @@
+{
+  "scenario": "05-patch-extensions-committed",
+  "core_command": "patch",
+  "approval": "consumer",
+  "workspace": {
+    "kind": "plain"
+  },
+  "mutation_input": "mutation-input.json",
+  "ledger": {
+    "before": [
+      {
+        "path": "ledger/.wowbagger/extensions.json",
+        "source_file": "before/extensions.json",
+        "sha256": "sha256:510299482329bed12dbcb7affa040086599eaa58d8705024d00bb51fe9f4f27e"
+      },
+      {
+        "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "source_file": "before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "sha256": "sha256:457682f33efde88869693cb3d717f5f33ffd167dd2e13f31fc85292f7cd585d3"
+      }
+    ],
+    "after": [
+      {
+        "path": "ledger/.wowbagger/extensions.json",
+        "source_file": "before/extensions.json",
+        "sha256": "sha256:510299482329bed12dbcb7affa040086599eaa58d8705024d00bb51fe9f4f27e"
+      },
+      {
+        "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "source_file": "after/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "sha256": "sha256:e89d603e9b261df25ee67fd7c7d256731a84829ecf816224d346b22b6313bcda"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "mutation-input.json",
+      "source": "spec/fixtures/mutations/patch-extensions/request.json",
+      "sha256": "sha256:b0814e164bad7c2aecfded65affdc8b241d815f0f70a6ff5255a7cf71ea6c2b1",
+      "form": "bytes"
+    },
+    {
+      "path": "before/extensions.json",
+      "source": "spec/fixtures/mutations/patch-extensions/ledger/.wowbagger/extensions.json",
+      "sha256": "sha256:510299482329bed12dbcb7affa040086599eaa58d8705024d00bb51fe9f4f27e",
+      "form": "bytes"
+    },
+    {
+      "path": "before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "source": "spec/fixtures/mutations/patch-extensions/ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:457682f33efde88869693cb3d717f5f33ffd167dd2e13f31fc85292f7cd585d3",
+      "form": "bytes"
+    },
+    {
+      "path": "after/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "source": "spec/fixtures/mutations/patch-extensions/expected-item.md",
+      "sha256": "sha256:e89d603e9b261df25ee67fd7c7d256731a84829ecf816224d346b22b6313bcda",
+      "form": "bytes"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "source": "spec/fixtures/mutations/patch-extensions/expected.json",
+      "sha256": "sha256:6d821e539189d06be892b077908606acd66c0f7d0c7b4eda0584f0895d390370",
+      "form": "compact-json-line"
+    }
+  ]
+}

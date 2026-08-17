@@ -1,0 +1,46 @@
+{
+  "scenario": "07-create-claimed-item-write-refused",
+  "core_command": "create",
+  "approval": "consumer",
+  "workspace": {
+    "kind": "git-provisioned",
+    "namespace": "wbns_0123456789abcdef0123456789abcdef",
+    "journal": "journal.ndjson",
+    "clock_horizon": "2031-01-15T12:01:00.000Z"
+  },
+  "mutation_input": "mutation-input.json",
+  "ledger": {
+    "before": [
+      {
+        "path": "ledger/.wowbagger/namespace",
+        "source_file": "before/namespace",
+        "sha256": "sha256:dcce8d0da259447d14ee17b0aaf39c861b19ae7cd2679e1004c0fb9c59b6d592"
+      },
+      {
+        "path": "ledger/.wowbagger/reconcile-wbns_0123456789abcdef0123456789abcdef.md",
+        "source_file": "before/reconcile.md",
+        "sha256": "sha256:43ca9d60f11213ad636480881dcc64367c7d1dd30d3efb3d520e8edc8d058096"
+      }
+    ],
+    "after": [
+      {
+        "path": "ledger/.wowbagger/namespace",
+        "source_file": "before/namespace",
+        "sha256": "sha256:dcce8d0da259447d14ee17b0aaf39c861b19ae7cd2679e1004c0fb9c59b6d592"
+      },
+      {
+        "path": "ledger/.wowbagger/reconcile-wbns_0123456789abcdef0123456789abcdef.md",
+        "source_file": "before/reconcile.md",
+        "sha256": "sha256:43ca9d60f11213ad636480881dcc64367c7d1dd30d3efb3d520e8edc8d058096"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "mutation-input.json",
+      "source": "spec/fixtures/mutations/create/request.json",
+      "sha256": "sha256:b149f977aeff2ae20b9618cadc22ccf4d45cbab0b3268fa1953565cb02d322df",
+      "form": "bytes"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "adapter_contract_version": 2,
+  "request_id": "core-outcome-patch-active-claim-refused-0001",
+  "result": {
+    "core_command": "patch",
+    "core_exit_code": 4,
+    "stdout": {
+      "encoding": "base64",
+      "data": "eyJvayI6ZmFsc2UsIm5hbWVzcGFjZSI6ImxlZGdlci1tdXRhdGlvbiIsImNvbW1hbmQiOiJwYXRjaC12MSIsImNvbnRyYWN0X3ZlcnNpb24iOjEsInN0YXRlIjoidW5jaGFuZ2VkIiwiZXJyb3IiOnsiY29kZSI6ImFjdGl2ZS1jbGFpbS13cml0ZS1yZWZ1c2VkIiwibWVzc2FnZSI6IkxlZ2FjeSB0cmFuc2l0aW9uIGNhbm5vdCB3cml0ZSBhbiBpdGVtIHdpdGggYW4gYWN0aXZlIGNsYWltLiIsImRldGFpbHMiOnsibGVkZ2VyX25hbWVzcGFjZSI6IndibnNfMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYiLCJpdGVtX2lkIjoid2JfMDFRNFpLM0RHMDIwQU5BTkFOQU5BTkFOQU0iLCJvYnNlcnZlZF9hdCI6IjIwMzEtMDEtMTVUMTI6MDE6MDAuMDAwWiIsImxhc3RfZXBvY2giOiIxIiwiYWN0aXZlIjp7Im93bmVyX2lkIjoiYWdlbnQtY29yZS1vdXRjb21lLXJ1bi0xIiwiZXBvY2giOiIxIiwiaXNzdWVkX2F0IjoiMjAzMS0wMS0xNVQxMjowMDowMC4wMDBaIiwiZXhwaXJlc19hdCI6IjIwMzEtMDEtMTVUMTI6MDU6MDAuMDAwWiJ9fX19Cg==",
+      "sha256": "sha256:e4ae3d888723b435eab1b93c88eefd3de283bcb91acb49c6aa32e54e479dbbee",
+      "byte_length": 535
+    },
+    "stderr": {
+      "encoding": "base64",
+      "data": "",
+      "sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_length": 0
+    }
+  }
+}

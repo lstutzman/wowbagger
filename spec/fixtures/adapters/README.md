@@ -92,6 +92,50 @@ supported types are `core-baseline`, `capability`, `instruction-order`,
 `negotiation`, `context-validation`, and `approval-schema`. A runner must fail
 closed on an unknown assertion type or a vector version other than exactly 1.
 
+## End-to-end core-outcome scenarios
+
+A `core-baseline` assertion may carry a `scenario` member naming a
+subdirectory of the case's `scenarios/`. That is the one extension to the
+assertion shape, made inside `adapter_vector_version` 1 rather than by moving
+the manifest protocol: no existing assertion changes meaning, and a runner that
+does not read `scenario` still fails closed on the artifacts it cannot find.
+
+A scenario directory holds its own `scenario.json`, `core-invocation.json`,
+`invocation.json`, `expected-core-stdout.jsonl`, `expected-adapter-result.json`,
+its mutation input, and the exact ledger bytes for its before and after states.
+Every one of those files is a hashed artifact in the case manifest under its
+`scenarios/<name>/…` path. `scenario.json` declares:
+
+- `workspace.kind` — `plain`, `git-provisioned` (a seeded namespace, a
+  hand-authored claim journal, and a fixed future clock floor), or
+  `git-unverifiable` (a `.git` marker the walker finds and `git rev-parse`
+  cannot confirm).
+- `workspace.clock_horizon` — the seeded clock floor. `observed_at` in a
+  claim-fence read-back is `max(physical_now, floor)`, so the refusal bytes are
+  fixed while wall time is before that instant. **Both runners fail loudly and
+  name the date once it passes.** Re-seed the journal and the committed
+  read-back with a later floor; do not normalize the observed value.
+- `approval` — `consumer` when the invocation is a mutation the conformance host
+  must approve, `none` otherwise.
+- `ledger.before` / `ledger.after` — the complete ledger state, entry by entry,
+  each pinned to a scenario-local source file by digest.
+- `derived_from` — for every byte reused from a normative fixture elsewhere in
+  the repository: the repository-relative source, its SHA-256, and the form
+  (`bytes`, or `compact-json-line` for the one compact-JSON-plus-LF transform
+  the core's stdout takes). A change on either side stops the vector and asks
+  for a reviewed golden change instead of regenerating one.
+
+Each assertion runs the direct core in one isolated temporary workspace and the
+adapter engine in a second workspace materialized from the same before state.
+Sharing one workspace would let the baseline mutation destroy the adapter's
+precondition, so the two never touch.
+
+Goldens here are hand-authored from `docs/adapter-contract.md`,
+`docs/work-claim-contract.md`, and the normative `spec/fixtures/mutations/**`
+bytes. Only base64, SHA-256, and byte length are derived, and only from an
+already hand-authored byte string. Do not regenerate an expectation from a
+passing run, add an auto-refresh path, or mask a field that moved.
+
 The test at `test/adapter-vectors.test.js` validates strict JSON, exact hashes,
 safe artifact paths, coverage completeness, and applicable target sets. Run
 `node spec/run-adapter-vectors.js` for the semantic reference model. It runs

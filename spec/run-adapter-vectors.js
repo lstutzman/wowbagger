@@ -8,9 +8,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyCapabilityInvariantScenario, mutateObject } from './scenario-shaping.js';
+import {
+  assertClockHorizonUnreached,
+  assertJournalAppendShape,
+  declaredLedgerSnapshot,
+  materializeWorkspace,
+  scenarioDirectory,
+  snapshotLedger,
+  verifyDerivedFrom,
+  withAbsoluteLedger,
+} from './core-outcome-scenario.js';
 
 import {
   buildResumePlan,
+  canonicalInvocationDigest,
   describeAdapter,
   invokeAdapter,
   mapProcessOutcome,
@@ -116,6 +127,10 @@ function evaluateMode(manifest) {
 async function evaluateAssertion(directory, caseName, assertion) {
   switch (assertion.type) {
     case 'core-baseline':
+      if (Object.hasOwn(assertion, 'scenario')) {
+        await evaluateCoreOutcomeScenario(directory, assertion);
+        return 'invokeAdapter+real-core-outcome-scenario';
+      }
       await evaluateCoreBaseline(directory, assertion);
       return 'invokeAdapter+real-core-baseline';
     case 'capability':
@@ -512,6 +527,98 @@ async function evaluateCoreBaseline(directory, assertion) {
   } finally {
     if (temporary) await rm(temporary, { recursive: true, force: true });
   }
+}
+
+// The end-to-end core-outcome scenarios (case 16). The reference model runs
+// the same nine vectors the implementation runner runs: the direct core in one
+// isolated workspace, and the reference engine over a second workspace
+// materialized from the same before state, launching the same real core.
+async function evaluateCoreOutcomeScenario(directory, assertion) {
+  const scenario = `scenarios/${assertion.scenario}`;
+  const declaration = await json(directory, `${scenario}/scenario.json`);
+  assertClockHorizonUnreached(declaration);
+  const scenarioPath = scenarioDirectory(directory, assertion.scenario);
+  await verifyDerivedFrom(projectRoot, scenarioPath, declaration);
+  // Every byte the scenario materializes is a hashed artifact, and the manifest
+  // is only honest if the run actually consumed it.
+  for (const name of new Set([
+    ...declaration.ledger.before.map((entry) => entry.source_file),
+    ...declaration.ledger.after.map((entry) => entry.source_file),
+    declaration.mutation_input,
+    declaration.workspace.journal,
+    declaration.workspace.marker,
+  ].filter(Boolean))) {
+    await artifactBytes(directory, `${scenario}/${name}`);
+  }
+
+  const coreInvocation = await json(directory, `${scenario}/core-invocation.json`);
+  const adapterInvocation = await json(directory, `${scenario}/invocation.json`);
+  const expectedAdapter = await json(directory, `${scenario}/expected-adapter-result.json`);
+  const expectedStdout = await artifactBytes(directory, assertion.stdout_artifact);
+
+  const baseline = await materializeWorkspace(
+    scenarioPath, declaration, 'wowbagger-reference-core-outcome-baseline-',
+  );
+  const adapter = await materializeWorkspace(
+    scenarioPath, declaration, 'wowbagger-reference-core-outcome-adapter-',
+  );
+  try {
+    const argv = withAbsoluteLedger(coreInvocation.argv, baseline.ledger);
+    const direct = spawnSync(process.execPath, [path.join(projectRoot, 'bin/wowbagger.js'), ...argv], {
+      cwd: baseline.root,
+      input: Buffer.from(coreInvocation.stdin_base64, 'base64'),
+      encoding: null,
+    });
+    assert.equal(direct.status, assertion.exit_code, `${assertion.scenario}: direct core exit`);
+    assert.equal(direct.stderr.length, assertion.stderr_bytes, `${assertion.scenario}: direct core stderr`);
+    assert.deepEqual(direct.stdout, expectedStdout, `${assertion.scenario}: direct core stdout`);
+    const declaredAfter = declaredLedgerSnapshot(declaration.ledger.after);
+    assert.deepEqual(
+      await snapshotLedger(baseline.root), declaredAfter, `${assertion.scenario}: direct core ledger`,
+    );
+
+    const result = await invokeAdapter(
+      Buffer.from(`${JSON.stringify(adapterInvocation)}\n`),
+      referenceRuntime({
+        workspaces: runtimeWorkspace(adapterInvocation, adapter.root),
+        launch: async (launch) => spawnCoreObservation(launch),
+        ...(declaration.approval === 'consumer' ? { approval: referenceApproval } : {}),
+      }),
+    );
+    assert.deepEqual(result, expectedAdapter, `${assertion.scenario}: reference adapter result`);
+    assert.deepEqual(
+      Buffer.from(result.result.stdout.data, 'base64'),
+      expectedStdout,
+      `${assertion.scenario}: reference adapter stdout bytes`,
+    );
+    assert.deepEqual(
+      await snapshotLedger(adapter.root), declaredAfter, `${assertion.scenario}: reference adapter ledger`,
+    );
+    if (declaration.workspace.kind === 'git-provisioned') {
+      await assertJournalAppendShape(adapter.root, scenarioPath, declaration);
+    }
+    return result;
+  } finally {
+    await rm(baseline.root, { recursive: true, force: true });
+    await rm(adapter.root, { recursive: true, force: true });
+  }
+}
+
+// The reference model's own consumer approval. It is minted from the binding
+// the engine resolved, so it covers the absolute temp paths and the exact argv
+// of this invocation and nothing else. `referenceRuntime` pins `now`, so the
+// window is fixed rather than read from the wall clock.
+let referenceApprovalCount = 0;
+function referenceApproval({ binding }) {
+  referenceApprovalCount += 1;
+  return {
+    approval_version: 1,
+    source: 'consumer',
+    nonce: `reference-core-outcome-${String(referenceApprovalCount).padStart(4, '0')}`,
+    issued_at: '2030-01-15T12:00:00Z',
+    expires_at: '2030-01-15T12:05:00Z',
+    invocation_digest: canonicalInvocationDigest(binding).digest,
+  };
 }
 
 async function evaluateCapability(directory, assertion) {

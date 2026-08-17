@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -52,26 +54,83 @@ export async function runAdapterEntrypoint(options) {
   await runProductionEntrypoint({
     ...options,
     dynamicResult,
-    coreProbe: runtimeConfig.core_probe,
+    // Passing `coreProbe: undefined` would override the production default and
+    // silence the live probe. A scenario that declares no probe result gets the
+    // production behaviour: launch the real core and read its capabilities.
+    ...(Object.hasOwn(runtimeConfig, 'core_probe') ? { coreProbe: runtimeConfig.core_probe } : {}),
     launch,
     hostRuntime: conformanceHostRuntime(runtimeConfig),
   });
 }
 
-// A conformance host that wires the code-level approval provider. Only the
-// declining provider exists: it is what separates "this host cannot approve at
-// all" from "this host can approve and did not approve this invocation", the
-// two refusals case 07 pins. An unknown mode is a fixture defect, refused
-// rather than silently downgraded to no provider at all.
+// A conformance host that wires the code-level approval provider. Two modes
+// exist. `decline` is a host that CAN approve and did not approve this
+// invocation — what separates `consumer-approval-required` from the bare
+// entrypoint's `capability-unavailable`, the two refusals case 07 pins.
+// `grant` is a host that really approves, and it exists only so the
+// end-to-end core-outcome vectors can carry a mutation through the production
+// engine into the real core (case 16). An unknown mode is a fixture defect,
+// refused rather than silently downgraded to no provider at all.
+//
+// This is a conformance host, not a live consumer. Evidence it produces is
+// "the production adapter engine under a conformance host approval provider",
+// never "a live consumer approval mechanism" — adapter contract section 10
+// says so in the same words.
 function conformanceHostRuntime(runtimeConfig) {
   if (!Object.hasOwn(runtimeConfig, 'host_approval')) return undefined;
-  if (runtimeConfig.host_approval !== 'decline') {
+  if (runtimeConfig.host_approval === 'decline') {
+    return {
+      approval: () => null,
+      now: () => '2030-01-15T12:01:00Z',
+      redeemedNonces: new Set(),
+      coreExecutableIdentity: `sha256:${'a'.repeat(64)}`,
+    };
+  }
+  if (runtimeConfig.host_approval !== 'grant') {
     throw new Error(`unknown conformance host_approval mode ${runtimeConfig.host_approval}`);
   }
+  return grantingHostRuntime();
+}
+
+// The binding an approval covers — argv, the absolute temp workspace paths,
+// the instruction and handoff digests — does not exist until the adapter has
+// resolved it, so the approval is minted from that binding, here, in this
+// process. Nothing about it is reachable from the bootstrap request.
+//
+// The digest is canonicalized by the independent reference model. A shipped
+// canonicalizer that drifted would then refuse its own approval instead of
+// quietly agreeing with itself.
+function grantingHostRuntime() {
+  const canonicalNow = (offsetSeconds) => new Date(
+    Math.floor(Date.now() / 1000) * 1000 + offsetSeconds * 1000,
+  ).toISOString().replace('.000Z', 'Z');
+  const issuedAt = canonicalNow(0);
+  const expiresAt = canonicalNow(300);
+  const redeemedNonces = new Set();
+  let minted = 0;
   return {
-    approval: () => null,
-    now: () => '2030-01-15T12:01:00Z',
-    redeemedNonces: new Set(),
-    coreExecutableIdentity: `sha256:${'a'.repeat(64)}`,
+    now: () => issuedAt,
+    redeemedNonces,
+    coreExecutableIdentity: coreExecutableDigest(),
+    approval: async ({ binding }) => {
+      const { canonicalInvocationDigest } = await import('./adapter-reference.js');
+      minted += 1;
+      return {
+        approval_version: 1,
+        source: 'consumer',
+        nonce: `conformance-host-approval-${String(minted).padStart(4, '0')}`,
+        issued_at: issuedAt,
+        expires_at: expiresAt,
+        invocation_digest: canonicalInvocationDigest(binding).digest,
+      };
+    },
   };
+}
+
+// The identity the host attests for the executable the adapter is about to
+// launch. `runAdapterEntrypoint` defaults the core executable to the package's
+// own `bin/wowbagger.js`, and no shipped adapter overrides it.
+function coreExecutableDigest() {
+  const executable = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
+  return `sha256:${createHash('sha256').update(readFileSync(executable)).digest('hex')}`;
 }

@@ -1297,7 +1297,7 @@ adapter, so its implementation statuses remain `unverified`.
 `node spec/run-adapter-implementation.js` accepts the same fixture directory,
 evaluates transactions through the shipped Claude Code entrypoint and emits the
 same result shape with an evidence platform. Its current native Darwin run is
-`pass`: 201 of 201 assertions and 15 of 15 cases pass. That native common-vector
+`pass`: 210 of 210 assertions and 16 of 16 cases pass. That native common-vector
 evidence earns the Claude Code manifest's Darwin `supported` declaration.
 Codex, Kimi, and generic adapter implementations remain `unverified`.
 
@@ -1331,15 +1331,36 @@ shipped entrypoint bare — no host approval source — and pins
 under a conformance host that wires a declining approval provider and pins
 `consumer-approval-required`. Both refusals are observed before any core child
 starts; the case's child-process audit fails it if one does. An approved
-mutation reaching a real core is proven separately, at the same process
-boundary, by `test/adapter-host-approval-wire.test.js`: a host process embeds
-the entrypoint, wires a real approval provider, and a `create` crosses the
-spawned entrypoint into the launched core and changes an isolated ledger. That
-approval's binding digest is canonicalized by the independent reference model,
-so a drifted shipped canonicalizer refuses the approval rather than agreeing
-with itself. The conformance runner deliberately holds no granting provider:
-`spec/adapter-conformance-entrypoint-main.js` accepts only the declining mode
-and refuses any other, so no conformance fixture can manufacture authority.
+mutation reaching a real core is proven at the same process boundary by
+`test/adapter-host-approval-wire.test.js` — a host process embeds the
+entrypoint, wires a real approval provider, and a `create` crosses the spawned
+entrypoint into the launched core and changes an isolated ledger — and by the
+`16-core-outcome-e2e` conformance case, which carries eight approved mutations
+across the same boundary.
+
+The conformance host **can** grant. `spec/adapter-conformance-entrypoint-main.js`
+holds two modes: `decline`, which case 07 uses, and `grant`, which case 16 uses.
+An earlier revision of this section claimed no conformance fixture could
+manufacture authority. That is no longer true and the claim is withdrawn rather
+than quietly narrowed. What is true is narrower and is what the reader needs:
+
+- The granting mode is reachable only from a conformance fixture's own runtime
+  configuration, which the implementation runner writes and no shipped adapter
+  package reads. It is not on any wire this contract defines, and section 5.1's
+  rule stands unchanged — an approval a model places on the bootstrap request is
+  an `invalid-invocation` that never reaches the gate.
+- Every granting scenario runs against a throwaway temporary ledger the runner
+  created for that assertion and deletes afterwards. No fixture grants authority
+  over a real ledger.
+- The approval is minted from the binding the engine resolved, so it covers that
+  invocation's exact argv, absolute temp paths, and digests and nothing else,
+  and its digest is canonicalized by the independent reference model. A drifted
+  shipped canonicalizer refuses the approval rather than agreeing with itself.
+
+The evidence label follows from that: case 16 is **the production adapter engine
+under a conformance host approval provider**, not a live consumer approval
+mechanism. A live Claude Code, Codex, or OpenCode consumer approval flow remains
+unproven, and no count of passing conformance assertions changes that.
 
 ## 11. Non-goals
 
