@@ -5,9 +5,10 @@ number: 80
 title: "Run a Wowbagger-active parallel proof period in PropertyCompass"
 kind: task
 priority: 10
-status: backlog
+status: killed
 created: 2026-08-14
 updated: 2026-08-17
+killed: 2026-08-17
 provenance:
   source: "user-decision"
   recorded_at: "2026-08-14T13:24:17.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog at triage review."
     rationale: "The proof-period plan Lee decided on 2026-08-14; the current dual-run (legacy authoritative) is the precursor phase, this item governs the later wowbagger-sole-writer phase."
+  - action: kill
+    date: 2026-08-17
+    summary: "Transferred to the PropertyCompass2 ledger."
+    rationale: "Lee's ownership ruling of 2026-08-17: this item executes in PropertyCompass2's repository against PropertyCompass2's data, by their agents. Their session was notified with the full list and files the equivalent in their own wowbagger ledger. The wowbagger-side prerequisites shipped this week."
 ---
 
 # Decision
