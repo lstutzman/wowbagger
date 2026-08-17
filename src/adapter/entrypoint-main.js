@@ -253,11 +253,15 @@ function logicalComponents(logicalPath) {
 
 async function pathSnapshot(absolutePath) {
   try {
-    const stats = await lstat(absolutePath);
+    // bigint: NTFS file identifiers exceed 2^53, so a plain lstat would emit
+    // members the identity validator rightly refuses. The contract accepts
+    // string identity members on every platform; decimal strings carry the
+    // full 64 bits losslessly.
+    const stats = await lstat(absolutePath, { bigint: true });
     const kind = stats.isDirectory()
       ? 'directory'
       : stats.isSymbolicLink() ? 'symbolic-link' : stats.isFile() ? 'regular-file' : 'special';
-    return { kind, identity: { dev: stats.dev, ino: stats.ino } };
+    return { kind, identity: { dev: stats.dev.toString(), ino: stats.ino.toString() } };
   } catch {
     return { kind: 'missing', identity: 'missing' };
   }
