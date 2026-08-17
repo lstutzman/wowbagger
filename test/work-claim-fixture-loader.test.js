@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { readRegularFixture } from './work-claim-fixture-loader.js';
+import { posixSpecialFilesOnly } from './support.js';
 
 test('fixture loader reads only regular files beneath a real root', (t) => {
   const root = mkdtempSync(join(tmpdir(), 'wowbagger-claim-fixture-'));
@@ -37,8 +38,12 @@ test('fixture loader rejects traversal, symlinks, directories, and special files
   assert.throws(() => readRegularFixture(root, 'case/link.json'), /symlink/);
   assert.throws(() => readRegularFixture(root, 'case'), /regular file/);
 
-  const fifo = join(root, 'case', 'fifo');
-  const madeFifo = spawnSync('mkfifo', [fifo], { encoding: 'utf8' });
-  assert.equal(madeFifo.status, 0, madeFifo.stderr);
-  assert.throws(() => readRegularFixture(root, 'case/fifo'), /regular file/);
+  // The traversal, symlink and directory refusals above are platform-neutral;
+  // only the FIFO is not, so only the FIFO is conditional.
+  if (posixSpecialFilesOnly.skip === undefined) {
+    const fifo = join(root, 'case', 'fifo');
+    const madeFifo = spawnSync('mkfifo', [fifo], { encoding: 'utf8' });
+    assert.equal(madeFifo.status, 0, madeFifo.stderr);
+    assert.throws(() => readRegularFixture(root, 'case/fifo'), /regular file/);
+  }
 });

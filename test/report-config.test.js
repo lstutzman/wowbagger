@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { linkDirectory } from './support.js';
 
 async function withTemporaryLedger(callback) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-report-config-'));
@@ -213,7 +214,7 @@ test('rejects a report output inside the resolved ledger', async () => {
 
 test('rejects an output symlink that resolves inside the ledger', async () => {
   await withTemporaryLedger(async (ledger) => {
-    await symlink(ledger, path.join(path.dirname(ledger), 'back-into-ledger'));
+    await linkDirectory(ledger, path.join(path.dirname(ledger), 'back-into-ledger'));
     await writeConfig(ledger, validConfig({ output: '../../back-into-ledger/report.html' }));
     const { loadReportConfig } = await import('../src/report.js');
 

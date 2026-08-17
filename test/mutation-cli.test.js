@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { readdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runCli, withLedger } from './support.js';
+import { linkDirectory, runCli, withLedger } from './support.js';
 
 const capabilitiesFixture = new URL(
   '../spec/fixtures/mutations/capabilities/expected.json',
@@ -210,7 +210,11 @@ test('a symbolic link occupying the configured items directory stays ledger-inva
   await withLedger({
     '.wowbagger/layout.json': '{"layout_version":1,"items_directory":"items"}\n',
   }, async (ledger) => {
-    await symlink('/tmp', path.join(ledger, 'items'));
+    // Any directory will do — the refusal is on the link, not its target —
+    // so the fixture owns one rather than naming a POSIX-only absolute path.
+    const elsewhere = path.join(path.dirname(ledger), 'elsewhere');
+    await mkdir(elsewhere);
+    await linkDirectory(elsewhere, path.join(ledger, 'items'));
     const requestPath = path.join(path.dirname(ledger), 'request.json');
     await writeFile(requestPath, readFileSync(fileURLToPath(new URL('request.json', fixture))));
 
