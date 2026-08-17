@@ -238,7 +238,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     }
     writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
       createItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
-    )));
+    ), scenario));
     return;
   }
 
@@ -263,7 +263,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     }
     writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
       transitionItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
-    )));
+    ), scenario));
     return;
   }
 
@@ -308,7 +308,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     }
     writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
       patchItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
-    )));
+    ), scenario));
     return;
   }
 
@@ -452,7 +452,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       namespace,
       request,
       scenario,
-    })));
+    }), scenario));
     return;
   }
 
@@ -820,9 +820,9 @@ function parseContractOptions(command, argumentsList) {
 
 // `--auto-commit` is the only bare flag beyond `--json`, and it changes what
 // happens after the mutation, never the mutation itself.
-function autoCommitted(command, options, run) {
+function autoCommitted(command, options, run, scenario) {
   if (!options.autoCommit) return run();
-  return withAutoCommit({ ledgerDirectory: options.ledger, command, run });
+  return withAutoCommit({ ledgerDirectory: options.ledger, command, run, scenario });
 }
 
 function argumentIssue(index, code, message) {

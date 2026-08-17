@@ -6,13 +6,14 @@
 // only; nothing here imports src/.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { spawn, spawnSync } from 'node:child_process';
+import { lstat, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
+const RUNNER = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
 export const ITEM_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
 export const SECOND_ITEM_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GT01';
 
@@ -23,6 +24,47 @@ export function run(cwd, ...argumentsList) {
     exit: result.status,
     stdout: result.stdout,
     stderr: result.stderr,
+  };
+}
+
+// Runs the CLI through the test runner with the auto-commit pause scenario. The
+// returned `published` promise settles once the item is published and the
+// command is waiting; `release()` lets it continue and resolves with the
+// envelope. It is the only way a fixture can act between publication and
+// staging.
+export function pausedRun(fixture, suffix, argumentsList) {
+  const child = spawn(process.execPath, [RUNNER, ...argumentsList], {
+    cwd: fixture.root,
+    env: { ...process.env, WOWBAGGER_TEST_SCENARIO: `pause-before-auto-commit-stage:${suffix}` },
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+  const exited = new Promise((resolve) => {
+    child.on('close', (code) => resolve(code));
+  });
+  const marker = path.join(fixture.root, `.wowbagger-test-${suffix}-published`);
+  const published = (async () => {
+    const deadline = Date.now() + 20_000;
+    for (;;) {
+      try {
+        await lstat(marker);
+        return;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+      if (Date.now() >= deadline) throw new Error('the paused command never published');
+      await new Promise((resolve) => { setTimeout(resolve, 5); });
+    }
+  })();
+  return {
+    published,
+    release: async () => {
+      await writeFile(path.join(fixture.root, `.wowbagger-test-${suffix}-continue`), 'go\n');
+      const exit = await exited;
+      return { envelope: stdout.trim() === '' ? null : JSON.parse(stdout), exit, stdout, stderr };
+    },
   };
 }
 
@@ -118,7 +160,8 @@ export function patchRequest(fixture, id = ITEM_ID, overrides = {}) {
   return {
     id,
     expected_revision: sha256(fixture.sources.get(id)),
-    priority: 40,
+    date: '2026-08-17',
+    set: { priority: 40 },
     ...overrides,
   };
 }

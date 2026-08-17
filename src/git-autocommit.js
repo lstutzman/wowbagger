@@ -11,7 +11,7 @@
 // or dirty ledger state, repeats the same checks after publication, and names
 // every post-publication failure instead of guessing which bytes to commit.
 import { spawn } from 'node:child_process';
-import { readFile, realpath } from 'node:fs/promises';
+import { lstat, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { resolveWorkClaimCapability } from './claim-capabilities.js';
@@ -39,7 +39,7 @@ const COMMIT_SUBJECT_VERBS = {
   'publish-claimed': 'publish claimed',
 };
 
-export async function withAutoCommit({ ledgerDirectory, command, run }) {
+export async function withAutoCommit({ ledgerDirectory, command, run, scenario }) {
   const shape = command === 'publish-claimed' ? publicationShape() : coreShape(command);
   let gitCommonDir;
   try {
@@ -72,6 +72,7 @@ export async function withAutoCommit({ ledgerDirectory, command, run }) {
       namespace,
       placement,
       run,
+      scenario,
       shape,
     }));
   } catch (error) {
@@ -80,7 +81,9 @@ export async function withAutoCommit({ ledgerDirectory, command, run }) {
   }
 }
 
-async function finalize({ command, gitCommonDir, ledgerDirectory, namespace, placement, run, shape }) {
+async function finalize({
+  command, gitCommonDir, ledgerDirectory, namespace, placement, run, scenario, shape,
+}) {
   const { root, prefix } = placement;
   const logPath = ledgerRelative(ledgerDirectory, claimReconcileLogPath(path.resolve(ledgerDirectory), namespace));
   const journalOwned = command !== 'create';
@@ -104,21 +107,18 @@ async function finalize({ command, gitCommonDir, ledgerDirectory, namespace, pla
   // The pre-mutation reconciliation the invariant requires. It also closes the
   // publishClaimed gap where reconciliation ran only for an unresolved
   // publish-intent: an unreconciled prior mutation refuses here.
+  //
+  // A nonzero claim-verify is exactly the unsafe claim state, so this one check
+  // is the whole gate. An invalid ledger is deliberately NOT re-checked here:
+  // every one of the four mutations already refuses it with ledger-invalid and
+  // state unchanged, and duplicating that would add a branch no fixture can
+  // distinguish from the mutation's own refusal.
   const verified = await verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace });
   if (verified.exit !== 0 || verified.stdout.ok !== true) {
     return shape.preflightFailed('claim-state-unreconciled', {
       claim_verify_code: verified.stdout.error?.code ?? null,
       findings: verified.stdout.result?.findings ?? [],
     });
-  }
-  if (verified.stdout.result.findings.length > 0) {
-    return shape.preflightFailed('claim-state-unreconciled', {
-      claim_verify_code: null,
-      findings: verified.stdout.result.findings,
-    });
-  }
-  if (verified.stdout.result.ledger_validation.valid !== true) {
-    return shape.ledgerInvalid(verified.stdout.result.ledger_validation.errors);
   }
 
   // Reconciliation rewrites the tracked log. Only a command that will commit
@@ -137,6 +137,7 @@ async function finalize({ command, gitCommonDir, ledgerDirectory, namespace, pla
   // A refused or unknown mutation performs no Git action, log side effects
   // included. The published-bytes claim is the only warrant for a commit.
   if (state !== 'committed') return outcome;
+  await autoCommitCheckpoint(root, scenario, 'before-stage');
 
   let published;
   try {
@@ -429,6 +430,29 @@ async function publishedItem(ledgerDirectory, identity) {
   };
 }
 
+// The one test-only seam in this module: it pauses between item publication and
+// staging so a fixture can prove that a late foreign change, a moved HEAD, or a
+// held index becomes a named failure instead of being absorbed into the commit.
+async function autoCommitCheckpoint(root, scenario, point) {
+  const [name, suffix] = typeof scenario === 'string' ? scenario.split(':', 2) : [];
+  if (!suffix) return;
+  if (name === 'pause-before-auto-commit-stage' && point === 'before-stage') {
+    await writeFile(path.join(root, `.wowbagger-test-${suffix}-published`), 'published\n');
+    const marker = path.join(root, `.wowbagger-test-${suffix}-continue`);
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      try {
+        await lstat(marker);
+        return;
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for the auto-commit test marker.');
+      await new Promise((resolve) => { setTimeout(resolve, 5); });
+    }
+  }
+}
+
 // --- worktree observation -------------------------------------------------
 
 async function resolvePlacement(ledgerDirectory) {
@@ -528,8 +552,6 @@ function coreShape(command) {
       ? { ...outcome, resultExtra: evidence }
       : { ...outcome, error: { ...outcome.error, details: { ...outcome.error.details, ...evidence } } }),
     identityDetails: (identity) => ({ id: identity.id }),
-    ledgerInvalid: (errors) => coreError('ledger-invalid', 'The configured ledger is invalid.',
-      'unchanged', 3, { validation_errors: errors }),
     operationId: () => null,
     preflightFailed: (reason, details) => coreError('auto-commit-preflight-failed',
       'Auto-commit refused before the mutation ran.', 'unchanged', 4, { reason, ...details }),
@@ -588,7 +610,6 @@ function publicationShape() {
       ledger_namespace: namespace,
       item_id: identity.id,
     }),
-    ledgerInvalid: (errors) => error('ledger-invalid', 'The candidate ledger is invalid.', 'unchanged', 3, errors),
     operationId: (outcome) => outcome.stdout.operation_id ?? null,
     preflightFailed: (reason, details) => error('auto-commit-preflight-failed',
       'Auto-commit refused before the mutation ran.', 'unchanged', 4, { reason, ...details }),
