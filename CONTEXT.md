@@ -26,7 +26,6 @@ One line per term. This is a glossary, not documentation.
 - **Herdr** — the terminal workspace manager that keeps this repository's panes, agents, and sessions persistent and observable.
 - **claim-fence refusal** — a `ledger-mutation` response refusing a `create`/`transition`/`patch` before the core mutation ran; state-unchanged classes are deterministic and forwarded verbatim, never mutation-outcome-unknown.
 - **response domain** — which contract a CLI response answers in (core, work-claim, ledger-publication, ledger-mutation, or bare result); dispatch namespace-first, then the domain's own version field (mutation contract section 2).
-- **commit-per-mutation invariant** — on a provisioned ledger every mutation must be Git-committed before the next mutating command; `claim-verify` is the reconciliation verb.
 - **frontmatter ownership boundary** — the three-way split of every frontmatter member into core-owned, consumer-editable through `patch`, and create-once; stated member by member in the mutation contract's ownership table, never discovered from a refusal.
 - **extension declaration** — the committed `<ledger>/.wowbagger/extensions.json` naming which consumer-owned extension members `patch` may write and one value type each; it authorizes a write and never describes the ledger.
 - **input delivery** — the launch observation's optional report of what reached the core's standard input: `delivered`, `failed` (write errored), or `unread` (core never drained the pipe); an undelivered read is named, never reported as a timeout.
@@ -39,3 +38,7 @@ One line per term. This is a glossary, not documentation.
 - **commit set** — the exact ledger-relative paths one auto-commit invocation may stage: the changed item, plus the one reconciliation log for every command except `create`.
 - **recovery token** — the bounded opaque witness in a `git-commit-failed` envelope; it binds the command, item, published revision, pre-commit `HEAD`, commit set, message, and terminal entry, and never selects a path.
 - **commit-failed contract** — exit 6 `git-commit-failed` with `state: "committed"`: the item is published and its Git commit is not established; an ambiguous Git outcome is `git-commit-outcome-unknown` instead.
+- **host runtime** — the code-level parameter a hosting process passes to `runAdapterEntrypoint` (approval resolver, clock, nonce store, core identity); never reachable from the bootstrap request, and describe advertises `trusted_approval` only when one is wired.
+- **dual-run** — PropertyCompass2's adoption posture: the provisioned wowbagger ledger running alongside its legacy backlog store, reconciled by drift audits until the legacy store retires.
+- **mirror consumer** — a consumer whose ledger items mirror content held in an upstream source of truth, so its writes are regenerations rather than authoring; the class that finds boundary-ownership gaps.
+- **field-report loop** — the adoption mechanism proven this week: consumer files a field report, maintainer triages it into ledger items, fixes ship, the consumer re-measures; the loop is the product.
