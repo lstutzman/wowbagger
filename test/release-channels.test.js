@@ -16,29 +16,29 @@ function healthy() {
   return {
     packageName: PACKAGE,
     version: CURRENT,
-    distTags: { next: CURRENT },
+    distTags: { latest: CURRENT, next: CURRENT },
     deprecated: DEPRECATION_MESSAGE,
   };
 }
 
-test('the prerelease policy is exactly next at the published version with no latest', () => {
+test('the prerelease policy is latest and next both at the published version', () => {
   assert.deepEqual(checkChannels(healthy()), { ok: true, problems: [] });
 });
 
-test('a latest dist-tag on an all-prerelease package fails the check', () => {
+test('a stale latest dist-tag on an all-prerelease package fails the check', () => {
   const result = checkChannels({ ...healthy(), distTags: { latest: '0.1.0-alpha.1', next: CURRENT } });
 
   assert.equal(result.ok, false);
-  assert.deepEqual(result.problems.map(({ code }) => code), ['latest-present']);
+  assert.deepEqual(result.problems.map(({ code }) => code), ['latest-stale']);
 });
 
 test('a missing or stale next dist-tag fails the check', () => {
   assert.deepEqual(
     checkChannels({ ...healthy(), distTags: {} }).problems.map(({ code }) => code),
-    ['next-missing'],
+    ['latest-missing', 'next-missing'],
   );
   assert.deepEqual(
-    checkChannels({ ...healthy(), distTags: { next: '9.9.0-alpha.5' } }).problems.map(({ code }) => code),
+    checkChannels({ ...healthy(), distTags: { latest: CURRENT, next: '9.9.0-alpha.5' } }).problems.map(({ code }) => code),
     ['next-stale'],
   );
 });
@@ -74,7 +74,7 @@ test('repair plans only the writes the live state is missing, and never unpublis
 
   assert.deepEqual(commands.map(({ args }) => args), [
     ['dist-tag', 'add', `${PACKAGE}@${CURRENT}`, 'next'],
-    ['dist-tag', 'rm', PACKAGE, 'latest'],
+    ['dist-tag', 'add', `${PACKAGE}@${CURRENT}`, 'latest'],
     ['deprecate', `${PACKAGE}@${ALPHA_1}`, DEPRECATION_MESSAGE],
   ]);
   assert.equal(commands.every(({ args }) => args[0] !== 'unpublish'), true);
@@ -84,7 +84,7 @@ test('repair is idempotent: a partly repaired registry plans only the remainder'
   const commands = planRepair({
     packageName: PACKAGE,
     version: CURRENT,
-    distTags: { next: CURRENT },
+    distTags: { latest: CURRENT, next: CURRENT },
     deprecated: null,
   });
 
@@ -104,7 +104,7 @@ test('a dry-run repair prints the writes and executes none of them', () => {
   assert.equal(status, 0);
   assert.deepEqual(executed, []);
   assert.match(printed.join('\n'), /npm dist-tag add wowbagger@9\.9\.0-alpha\.6 next/);
-  assert.match(printed.join('\n'), /npm dist-tag rm wowbagger latest/);
+  assert.match(printed.join('\n'), /npm dist-tag add wowbagger@9\.9\.0-alpha\.6 latest/);
   assert.match(printed.join('\n'), /npm deprecate wowbagger@0\.1\.0-alpha\.1/);
   assert.match(printed.join('\n'), /dry run/i);
 });
@@ -119,7 +119,7 @@ test('a failing check exits nonzero and names every violated rule', () => {
   });
 
   assert.equal(status, 1);
-  assert.match(printed.join('\n'), /latest-present/);
+  assert.match(printed.join('\n'), /latest-stale/);
   assert.match(printed.join('\n'), /next-missing/);
   assert.match(printed.join('\n'), /alpha-1-not-deprecated/);
 });
@@ -127,7 +127,7 @@ test('a failing check exits nonzero and names every violated rule', () => {
 test('a passing check exits zero and writes nothing to the registry', () => {
   const status = runChannels({
     argumentsList: ['check', CURRENT],
-    readRegistry: () => ({ packageName: PACKAGE, distTags: { next: CURRENT }, deprecated: DEPRECATION_MESSAGE }),
+    readRegistry: () => ({ packageName: PACKAGE, distTags: { latest: CURRENT, next: CURRENT }, deprecated: DEPRECATION_MESSAGE }),
     execute: () => assert.fail('check must never write to the registry'),
     write: () => {},
   });

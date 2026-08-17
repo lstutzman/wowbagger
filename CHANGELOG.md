@@ -61,11 +61,13 @@ consolidation. The first tagged release inherits this file.
   previous cuts renamed the heading instead, which left later changes landing
   under an already published release.
 - **The prerelease channel policy is stated and checkable.**
-  `npm run release:channels -- check|repair <version>` encodes it: exactly
-  `{ next: <published version> }`, no `latest` while every release is a
-  prerelease, and the first published alpha deprecated. `check` is read-only and
-  is the post-publish verification step; `repair` is idempotent and never
-  unpublishes.
+  `npm run release:channels -- check|repair <version>` encodes it: `latest`
+  mirroring `next` at the published version and the first published alpha
+  deprecated. The first-choice policy — no `latest` at all, so a bare install
+  fails loudly — was refused by the registry itself: npm rejects deleting the
+  `latest` tag with E400 (verified live), so the current prerelease replaces
+  the dead first alpha as the forced default. `check` is read-only and is the
+  post-publish verification step; `repair` is idempotent and never unpublishes.
 
 - **`--auto-commit` folds the commit-per-mutation ceremony into the mutation.**
   The invariant is correct and the ceremony around it was the consumer's most
@@ -128,9 +130,9 @@ consolidation. The first tagged release inherits this file.
 
 ### Changed
 
-- **The README says plainly that a bare `npm install wowbagger` is meant to
-  fail.** There is no `latest` channel until the first stable release, so
-  `@next` is explicit prerelease consent rather than a convenience.
+- **The README installs with `@next` and says why.** The registry mandates a
+  `latest` dist-tag, so `latest` mirrors `next`; `@next` stays the documented
+  spelling and the explicit prerelease consent.
 - **Cuts happen on the release branch, not in a session worktree.** Merge
   session work first, then cut; the cut command refuses to run anywhere but the
   branch tip. The previous two-phase topology is why the last two release tags

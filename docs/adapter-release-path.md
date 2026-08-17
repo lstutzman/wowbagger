@@ -144,12 +144,16 @@ Never report a release as shipped after only the local cut.
 
 ## The prerelease channel policy
 
-While every published release is `0.1.0-alpha.*` the package carries **no
-`latest` dist-tag at all**. A bare `npm install wowbagger` then fails loudly
-instead of resolving to the oldest published bytes, and `wowbagger@next` is
-explicit prerelease consent. The exact target state is `{ next: <published
-version> }` with `0.1.0-alpha.1` deprecated (deprecated, never unpublished — an
-existing installation keeps working and warns on the next install).
+While every published release is `0.1.0-alpha.*` the target state is
+**`latest` mirroring `next`**: both dist-tags name the newest published
+prerelease, with `0.1.0-alpha.1` deprecated (deprecated, never unpublished — an
+existing installation keeps working and warns on the next install). The
+first-choice policy was no `latest` tag at all, so a bare install fails loudly;
+the registry refused it — `npm dist-tag rm wowbagger latest` returns E400
+(verified live 2026-08-17), because npm mandates every package carry a
+`latest`. Given that forced tag, the current prerelease is strictly better than
+the dead first alpha it used to serve. `wowbagger@next` stays the documented
+install.
 
 `scripts/release-channels.js` encodes that policy:
 
@@ -160,7 +164,6 @@ npm run release:channels -- repair <version>           # authenticated writes
 ```
 
 `check` reads the registry and never writes. `repair` is idempotent: it moves
-`next` only when it is wrong, removes `latest` only when present, and applies
-the deprecation only when the approved message is missing. `latest` returns as a
-channel with the first stable release, and the question of whether `next` is
-retained for the following prerelease line is decided then, not now.
+`next` and `latest` only when either is wrong and applies the deprecation only
+when the approved message is missing. Whether `next` is retained for the
+prerelease line after the first stable release is decided then, not now.
