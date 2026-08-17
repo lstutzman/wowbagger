@@ -5,9 +5,10 @@ number: 75
 title: "Derive missing PropertyCompass migration metadata from Git evidence"
 kind: task
 priority: 20
-status: backlog
+status: killed
 created: 2026-08-14
 updated: 2026-08-17
+killed: 2026-08-17
 provenance:
   source: "propertycompass-migration-inventory"
   recorded_at: "2026-08-14T13:24:17.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog at triage review."
     rationale: "Reviewed Git-evidence derivation rule for missing dates; required for any schema-2 projection of the 1,501-card corpus."
+  - action: kill
+    date: 2026-08-17
+    summary: "Transferred to the PropertyCompass2 ledger."
+    rationale: "Lee's ownership ruling of 2026-08-17: this item executes in PropertyCompass2's repository against PropertyCompass2's data, by their agents. Their session was notified with the full list and files the equivalent in their own wowbagger ledger. The wowbagger-side prerequisites shipped this week."
 ---
 
 # Problem
