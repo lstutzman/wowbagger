@@ -4,9 +4,10 @@ id: wb_01KZYS3100YCM93TCEMAS0CMBW
 number: 82
 title: "Retire the PropertyCompass legacy backlog after Wowbagger proof"
 kind: task
+priority: 30
 status: backlog
 created: 2026-08-14
-updated: 2026-08-16
+updated: 2026-08-17
 provenance:
   source: "user-request"
   recorded_at: "2026-08-14T14:47:48.000Z"

@@ -4,9 +4,10 @@ id: wb_01KZYS3100AB4C3ZCQ0DRFDG8Q
 number: 71
 title: "Turn the README into an accurate adoption and collaboration guide"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-14
-updated: 2026-08-16
+updated: 2026-08-17
 provenance:
   source: "user-request"
   recorded_at: "2026-08-14T12:49:26.000Z"
