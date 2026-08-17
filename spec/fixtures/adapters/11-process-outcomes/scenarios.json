@@ -837,6 +837,100 @@
       },
       "expected_code": "mutation-outcome-unknown",
       "expected_mutation_outcome": "unknown"
+    },
+    {
+      "id": "read-input-write-failed",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "read-input-failed",
+        "command": "ready",
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": null,
+          "signal": null,
+          "timed_out": true,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "",
+          "stderr_base64": "",
+          "input_delivery": "failed"
+        }
+      },
+      "expected_code": "core-observation-incomplete",
+      "expected_mutation_outcome": null
+    },
+    {
+      "id": "read-input-never-drained",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "read-input-unread",
+        "command": "ready",
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": null,
+          "signal": null,
+          "timed_out": true,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "",
+          "stderr_base64": "",
+          "input_delivery": "unread"
+        }
+      },
+      "expected_code": "core-observation-incomplete",
+      "expected_mutation_outcome": null
+    },
+    {
+      "id": "read-timeout-after-delivered-input",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "read-timeout-delivered",
+        "command": "ready",
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": null,
+          "signal": null,
+          "timed_out": true,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJhc19vZiI6IjIwMzAtMDEtMTUiLCJ2YWxpZCI6dHJ1ZSwicmVhZHkiOltdfQo=",
+          "stderr_base64": "",
+          "input_delivery": "delivered"
+        }
+      },
+      "expected_code": "core-timeout",
+      "expected_mutation_outcome": null
+    },
+    {
+      "id": "mutation-input-write-failed",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "mutation-input-failed",
+        "command": "transition",
+        "item_id": "wb_01KDWPVNG00000000000000000",
+        "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": null,
+          "signal": null,
+          "timed_out": true,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "",
+          "stderr_base64": "",
+          "input_delivery": "failed"
+        }
+      },
+      "expected_code": "mutation-outcome-unknown",
+      "expected_mutation_outcome": "unknown"
     }
   ]
 }
