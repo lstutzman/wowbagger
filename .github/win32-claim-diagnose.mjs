@@ -78,3 +78,37 @@ try {
   console.log(error?.stack);
   if (error?.cause) console.log('CAUSE:', error.cause?.code, error.cause?.message, error.cause?.stack);
 }
+
+// Deeper: the CLI's claim-verify maps every reconciliation error to
+// claim-store-unreadable. Call the pipeline directly and print the raw stack.
+try {
+  const gitCommonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8' }).trim();
+  const resolved = path.resolve(root, gitCommonDir);
+  const publication = await import(pathToFileURL(path.join(repo, 'src', 'claim-publication.js')));
+  console.log('claim-publication exports:', Object.keys(publication).join(', '));
+  if (publication.reconcileClaimJournal) {
+    const reconciled = await publication.reconcileClaimJournal({
+      ledgerDirectory: ledger,
+      gitCommonDir: resolved,
+      namespace,
+    });
+    console.log('reconcile ok:', JSON.stringify({ unsafe: reconciled.unsafe, findings: reconciled.findings?.length }));
+  }
+  if (publication.verifyClaimJournal) {
+    const verified = await publication.verifyClaimJournal({
+      ledgerDirectory: ledger,
+      gitCommonDir: resolved,
+      namespace,
+    });
+    console.log('verify envelope:', JSON.stringify(verified).slice(0, 300));
+  }
+} catch (error) {
+  console.log('RECONCILE RAW ERROR:', error?.code, error?.message);
+  console.log(error?.stack);
+  let cause = error?.cause;
+  while (cause) {
+    console.log('CAUSE:', cause?.code, cause?.message);
+    console.log(cause?.stack);
+    cause = cause.cause;
+  }
+}
