@@ -719,13 +719,32 @@ and `claim_read_back`. Publication does not renew or release the claim.
 
 For a merge-coordinated backend, the same public request and decision
 precedence apply, but Git commit is outside the journal lock. Under the lock,
-the backend reconciles prior intents, persists the clock floor, checks
-idempotency, fence, and revision, then fsyncs a `publish-intent` before writing
-the candidate item bytes. Before the first journal append, it fsyncs each new
-journal-directory entry and the empty journal file. It then appends a terminal
-`publish-final` outcome.
+the backend returns a stored terminal outcome for a known operation identity,
+reconciles the journal, persists the clock floor, rechecks idempotency against
+what reconciliation resolved, checks fence and revision, then fsyncs a
+`publish-intent` before writing the candidate item bytes. Before the first
+journal append, it fsyncs each new journal-directory entry and the empty
+journal file. It then appends a terminal `publish-final` outcome.
 The caller commits or merges the resulting item change and runs
 `claim-verify`.
+
+That reconciliation is unconditional. It is not conditioned on an unresolved
+`publish-intent`, because the commit-per-mutation invariant (section 1) binds
+`publish-claimed` exactly as it binds `create`, `transition`, and `patch`, and
+an uncommitted legacy mutation leaves no publish-intent behind. When
+reconciliation produces any blocking finding, `publish-claimed` MUST refuse
+with exit 6 `claim-store-unavailable`,
+`details.reason: "publication-reconciliation-required"`, and
+`details.findings` set to those findings. `state` MUST be `unchanged`: the
+refused publication wrote nothing. This is the identical refusal section 7
+defines for a legacy write, so one uncommitted mutation blocks every mutating
+command alike, and one `claim-verify` clears them all.
+
+That refusal is never `publication-outcome-unknown`. That code answers for a
+publication whose own commit boundary is indeterminate. A publication refused
+before it appends its intent has no commit boundary to be uncertain about, and
+`unchanged` is the honest state even when the blocking finding is another
+operation's unknown outcome.
 
 The namespace lock records its process owner before publication. A later
 process MAY recover the lock only when the operating system reports that owner
@@ -865,7 +884,8 @@ terminal when the expected revision remains. Any third revision produces
 authorized expected revision. A later unrecorded revision remains a stale
 write.
 
-A merge-coordinated backend MUST reconcile before it authorizes a legacy write.
+A merge-coordinated backend MUST reconcile before it authorizes a legacy write,
+and section 6 states the same requirement for `publish-claimed`.
 When reconciliation produces any blocking finding, the legacy command MUST
 refuse with exit 6 `claim-store-unavailable`,
 `details.reason: "publication-reconciliation-required"`, and

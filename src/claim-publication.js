@@ -165,59 +165,57 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           ? prior.outcome
           : idempotencyConflict(request.operation_id, prior.operation_digest, digest);
       }
-      const terminalKeys = new Set(replayed.entries
-        .filter((entry) => entry.type === 'publish-final')
-        .map((entry) => `${entry.operation_id}\0${entry.item_id}`));
+      // A claimed publication is a mutation, so it reconciles before it
+      // authorizes one, exactly as the legacy fence does. Reconciling only
+      // behind an unresolved publish-intent let an uncommitted legacy mutation
+      // — which refuses every other mutating command — pass this one.
+      //
       // Every unlocked read this publication performs happens inside one claim
       // lock hold on one directory, and nothing between them writes an item
       // file, so the first of them is the snapshot the rest share. The read
       // under lock, which the mutation engine still performs on its own, is
       // what makes the revision compare-and-swap meaningful.
-      let ledgerSnapshot = null;
-      if (replayed.entries.some((entry) => (
-        entry.type === 'publish-intent'
-          && !terminalKeys.has(`${entry.operation_id}\0${entry.item_id}`)
-      ))) {
-        const reconciled = await reconcileClaimJournal({
+      let reconciled;
+      try {
+        reconciled = await reconcileClaimJournal({
           ledgerDirectory,
           gitCommonDir,
           namespace,
           replayed,
           physicalNow: new Date().toISOString(),
         });
-        if (reconciled.unsafe) return publicationUnknown(request);
-        replayed = { entries: reconciled.entries, state: reconciled.state };
-        ledgerSnapshot = reconciled.ledger;
-        const reconciledPrior = replayed.entries.find((entry) => (
-          entry.type === 'publish-final'
-            && entry.operation_id === request.operation_id
-        ));
-        if (reconciledPrior) {
-          return reconciledPrior.operation_digest === digest
-            ? reconciledPrior.outcome
-            : idempotencyConflict(request.operation_id, reconciledPrior.operation_digest, digest);
-        }
-      }
-      const candidate = await validateCandidateLedger(ledgerDirectory, request, ledgerSnapshot);
-      if (candidate.error) return candidate.error;
-      ledgerSnapshot = candidate.ledger;
-      const physicalNow = new Date().toISOString();
-      const observedAt = advanceClockFloor(replayed.state, physicalNow);
-      let clockEntry;
-      try {
-        clockEntry = await appendClaimEntry(journalPath, {
-          type: 'clock',
-          now: physicalNow,
-          floor: observedAt,
-        });
-      } catch {
+      } catch (error) {
+        if (error?.code !== 'CLOCK_FLOOR_PERSISTENCE_FAILED') throw error;
         return publicationError(request, 'clock-floor-persistence-failed',
           'The authoritative clock floor could not be persisted.', {
             ledger_namespace: request.ledger_namespace,
             item_id: request.item_id,
           }, 6);
       }
-      const entries = [...replayed.entries, clockEntry];
+      if (reconciled.unsafe) {
+        return publicationError(request, 'claim-store-unavailable',
+          'The durable claim store is unavailable.', {
+            reason: 'publication-reconciliation-required',
+            findings: reconciled.findings,
+          }, 6);
+      }
+      replayed = { entries: reconciled.entries, state: reconciled.state };
+      let ledgerSnapshot = reconciled.ledger;
+      const reconciledPrior = replayed.entries.find((entry) => (
+        entry.type === 'publish-final'
+          && entry.operation_id === request.operation_id
+      ));
+      if (reconciledPrior) {
+        return reconciledPrior.operation_digest === digest
+          ? reconciledPrior.outcome
+          : idempotencyConflict(request.operation_id, reconciledPrior.operation_digest, digest);
+      }
+      const candidate = await validateCandidateLedger(ledgerDirectory, request, ledgerSnapshot);
+      if (candidate.error) return candidate.error;
+      ledgerSnapshot = candidate.ledger;
+      // Reconciliation already persisted this hold's clock floor.
+      const observedAt = reconciled.observedAt;
+      const entries = [...replayed.entries];
       const record = replayed.state.claims.find((entry) => entry.item_id === request.item_id)
         ?? { item_id: request.item_id, last_epoch: '0', active: null };
       const rejection = fenceRejectionReason(request, record.active, observedAt);
