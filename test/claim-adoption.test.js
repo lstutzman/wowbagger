@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -547,5 +547,31 @@ test('adoption fails closed while the claim store lock is contended', async () =
     claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace),
     fixture.namespace,
   );
+  assert.deepEqual(replayed.entries.filter((entry) => entry.type === 'revision-adoption'), []);
+});
+
+test('adoption refuses when the authoritative clock floor cannot be persisted', async () => {
+  const fixture = await blockedByUnauthorizedRevision();
+  const journalPath = claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace);
+  await chmod(journalPath, 0o400);
+  try {
+    const refused = run(
+      fixture.root,
+      'claim-adopt', '--ledger', fixture.ledger, '--input', await adoptRequest(fixture), '--json',
+    );
+
+    assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+    assert.equal(refused.envelope.command, 'claim-adopt');
+    assert.equal(refused.envelope.state, 'unchanged');
+    assert.equal(refused.envelope.error.code, 'clock-floor-persistence-failed');
+    assert.equal(
+      refused.envelope.error.message,
+      'The authoritative clock floor could not be persisted.',
+    );
+    assert.deepEqual(refused.envelope.error.details, {});
+  } finally {
+    await chmod(journalPath, 0o600);
+  }
+  const replayed = await replayClaimJournal(journalPath, fixture.namespace);
   assert.deepEqual(replayed.entries.filter((entry) => entry.type === 'revision-adoption'), []);
 });
