@@ -463,8 +463,8 @@ TMPDIR=/tmp node spec/run-adapter-implementation.js --target codex
 TMPDIR=/tmp node spec/run-adapter-implementation.js --target opencode
 ```
 
-The native Darwin and Linux Claude Code reports each pass all 210 assertions
-across all 16 cases and report `"status": "pass"`. Codex and OpenCode execute the same 210
+The native Darwin and Linux Claude Code reports each pass all 210 assertions across all 16
+cases and report `"status": "pass"`. Codex and OpenCode execute the same 210
 assertions through the same engine, but both target reports remain `"fail"`
 pending target-specific evidence, and every platform declaration on those two
 manifests stays `unverified`. The Kimi and OpenAI-compatible harness adapters
