@@ -872,7 +872,9 @@ function writeMutation(command, outcome) {
       command,
       contract_version: MUTATION_CONTRACT_VERSION,
       state: outcome.state,
-      result: { item: outcome.item },
+      // resultExtra carries the additive auto-commit evidence. Without the
+      // flag it is absent and the result member is byte-identical.
+      result: { item: outcome.item, ...(outcome.resultExtra ?? {}) },
     }
     : {
       ok: false,
