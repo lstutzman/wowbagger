@@ -4,6 +4,7 @@ id: wb_01M086JQBQ12VQ3QER25QVJEEZ
 number: 124
 title: "Repair the release channels and make the cut a command"
 kind: task
+priority: 2
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
