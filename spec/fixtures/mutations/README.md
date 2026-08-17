@@ -94,7 +94,7 @@ named source and hash to the declared revision.
 | Area | Cases |
 |---|---|
 | Capabilities | precise local scope and unsupported claims |
-| Inspect | lossless success, not found, invalid ledger |
+| Inspect | lossless success, not found by id, not found by number, invalid ledger |
 | Create transport | equivalent file and stdin requests |
 | Create validation | invalid JSON, duplicate JSON key, unknown request member, unknown flag, missing member |
 | Create identity/body | ID collision, unrelated-item and directory default-path collisions, empty body, LF-leading body |

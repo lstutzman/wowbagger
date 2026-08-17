@@ -1,0 +1,42 @@
+{
+  "case": "inspect-number-selector-not-found",
+  "argv": [
+    "inspect",
+    "--ledger",
+    "ledger",
+    "--number",
+    "2",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4B7NCG020NEXVQEXVQEXVQE.md",
+          "source_file": "ledger/wb_01Q4B7NCG020NEXVQEXVQEXVQE.md",
+          "sha256": "sha256:cd3550e0118c2f4893628b0b99c43ea07a491abc866f4fb05d4cdfbe886c7dab"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4B7NCG020NEXVQEXVQEXVQE.md",
+          "source_file": "ledger/wb_01Q4B7NCG020NEXVQEXVQEXVQE.md",
+          "sha256": "sha256:cd3550e0118c2f4893628b0b99c43ea07a491abc866f4fb05d4cdfbe886c7dab"
+        }
+      ]
+    }
+  }
+}
