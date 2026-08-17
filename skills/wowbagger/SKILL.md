@@ -198,18 +198,43 @@ Markdown.
 ### Patch edits fields, never lifecycle
 
 `patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.
-The patchable field set is exactly `priority`, `depends_on`, `related`, and
-`body`. A
+The patchable field set is exactly `title`, `priority`, `depends_on`,
+`related`, and `body`. A
 `set` naming anything else is an `invalid-request` issue at its `/set` pointer,
 and `number` is refused because it is immutable identity.
 
+- `title` is a non-empty string, replaced whole. **Correct a wrong title
+  through `patch`, never by editing the Markdown.** On a provisioned ledger the
+  hand-edit is a stale write: the next mutation refuses exit 6 with an
+  `unauthorized-revision` finding and every later mutation stays blocked.
 - A relation list is replaced whole. There is no add or remove member — send
   the complete list you want the item to carry.
-- `[]` clears a list. `null` removes the field, but `depends_on` is required,
-  so a null one returns `candidate-invalid`, exit 2, `unchanged`. Use `[]`.
+- `[]` clears a list. `null` removes the field, but `depends_on` and `title`
+  are required, so a null one returns `candidate-invalid`, exit 2,
+  `unchanged`. Use `[]` for a list; send the corrected string for a title.
 - `priority` takes a non-negative integer.
 - Patch appends no decision; the Git diff is the audit trail. It never mutates
-  a second item, and it cannot touch status, title, or provenance.
+  a second item, and it cannot touch status or provenance.
+
+**Which fields are yours.** Do not discover this by sending a patch and reading
+the refusal — every frontmatter member is in exactly one of three classes:
+
+- **Core-owned**, never yours: `schema_version`, `id`, `number`, `status`,
+  `created`, `updated`, the terminal dates (`completed`, `killed`, `archived`,
+  `deferred`), and `decisions`. `transition` writes these; nothing else does.
+- **Consumer-editable through `patch`**: `title`, `priority`, `depends_on`,
+  `related`, and the body.
+- **Create-once**: `kind`, `provenance`, `parent`, `snoozed_until`. Set at
+  `create` and fixed after. `kind` is refused deliberately — a task-to-epic
+  flip changes which parent and children rules apply and which lifecycle edges
+  are allowed, so it needs its own verb, not a wider `set`.
+
+Extension members are not patchable — `tags`, `tier`, and a consumer's own
+identifier fields are consumer-owned, preserved byte for byte by every verb,
+and today changed only by a reviewable hand-edit. On a provisioned ledger,
+treat that hand-edit like any other out-of-protocol write: commit it, then run
+`claim-verify` and reconcile. The full table, and why the extension path is
+still open, is in `docs/mutation-contract.md` section 9.
 
 ### A refused disposition is one relations patch away
 
