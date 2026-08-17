@@ -123,6 +123,9 @@ function runReleaseGate({ cwd, node20, log }) {
   for (const step of releaseGateSteps(cwd, { node20 })) {
     log(`gate: ${step.name}`);
     const result = spawnSync(step.command, step.args, {
+      // win32 resolves `npm` only through a shell (npm.cmd); everywhere else
+      // the direct spawn stays exact.
+      shell: process.platform === 'win32' && step.command === 'npm',
       cwd,
       encoding: 'utf8',
       env: { ...process.env, ...step.env },
@@ -176,7 +179,10 @@ function gitOut(git, ...argumentsList) {
 }
 
 function defaultPublishedVersions(name) {
-  const result = spawnSync('npm', ['view', name, 'versions', '--json'], { encoding: 'utf8' });
+  const result = spawnSync('npm', ['view', name, 'versions', '--json'], {
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
   if (result.status !== 0) {
     if (/E404/.test(result.stderr)) return [];
     throw new Error(`npm view ${name} versions failed: ${result.stderr.trim()}`);

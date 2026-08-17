@@ -41,7 +41,7 @@ import { launchCoreProcess } from '../src/adapter/entrypoint-main.js';
 
 const defaultFixtureRoot = fileURLToPath(new URL('./fixtures/adapters/', import.meta.url));
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
-const conformanceLoader = fileURLToPath(new URL('./adapter-conformance-loader.js', import.meta.url));
+const conformanceLoader = new URL('./adapter-conformance-loader.js', import.meta.url).href;
 const conformanceProcessAudit = fileURLToPath(
   new URL('./adapter-conformance-process-audit.cjs', import.meta.url),
 );

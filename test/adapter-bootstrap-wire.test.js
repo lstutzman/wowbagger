@@ -342,7 +342,15 @@ test('the core launcher survives a core that exits before its input is written',
 // different story. The core exited in the case above, so its exit code is the
 // answer. Here nothing ends the run but the timeout, and reporting only the
 // timeout hides the diagnosable fact that the request never reached the core.
-test('the core launcher reports a failed input write against a living core', async (t) => {
+test('the core launcher reports a failed input write against a living core', {
+  // POSIX-only construct: a write into a pipe whose reading descriptor was
+  // closed fails EPIPE there. win32 pipe writes complete into the buffer, so
+  // the launcher's honest report on win32 is `unread`, covered by the next
+  // test rather than a platform fork of this one.
+  skip: process.platform === 'win32'
+    ? 'win32 pipe writes into a closed descriptor do not fail; the honest observation there is unread'
+    : false,
+}, async (t) => {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-unfed-'));
   t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
   const executable = path.join(temporaryDirectory, 'close-stdin-and-live.js');
