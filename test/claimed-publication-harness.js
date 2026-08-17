@@ -38,6 +38,21 @@ export function createRequest(id, title = 'Publication harness item') {
   };
 }
 
+// Turns an existing ledger directory into a provisioned one: a Git worktree
+// with a committed ledger and a provisioned namespace. Tests that build their
+// own fixture — a large one, or one with a particular shape — provision it
+// this way and then use the same claim and request helpers.
+export async function provisionExistingLedger(root, ledger) {
+  git(root, 'init', '-q');
+  git(root, 'config', 'user.email', 'publication@example.invalid');
+  git(root, 'config', 'user.name', 'Publication Harness');
+  await provisionNamespace(ledger);
+  git(root, 'add', '--all');
+  git(root, 'commit', '-qm', 'provision the ledger');
+  const namespace = await readNamespace(ledger);
+  return { gitCommonDir: await resolveGitCommonDir(ledger), ledger, namespace, root };
+}
+
 // A provisioned ledger with `bystanders` extra items beyond the claimed one.
 // The bystanders are what the publish lock closure currently widens over, so
 // tests that count lock work choose how much of it there is to count.
@@ -45,12 +60,7 @@ export async function withProvisionedLedger(bystanders, callback) {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-publication-'));
   const ledger = path.join(root, 'ledger');
   await mkdir(ledger);
-  git(root, 'init', '-q');
-  git(root, 'config', 'user.email', 'publication@example.invalid');
-  git(root, 'config', 'user.name', 'Publication Harness');
-  await provisionNamespace(ledger);
-  git(root, 'add', '--all');
-  git(root, 'commit', '-qm', 'provision the ledger');
+  const { gitCommonDir, namespace } = await provisionExistingLedger(root, ledger);
   const commit = (message) => {
     git(root, 'add', '--all');
     git(root, 'commit', '-qm', message);
@@ -65,8 +75,6 @@ export async function withProvisionedLedger(bystanders, callback) {
       otherIds.push(otherId);
     }
     commit('create the items');
-    const namespace = await readNamespace(ledger);
-    const gitCommonDir = await resolveGitCommonDir(ledger);
     const claim = await acquireClaim(ledger, root, namespace, id);
     return await callback({
       claim, commit, gitCommonDir, id, ledger, namespace, otherIds, root,

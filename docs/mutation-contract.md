@@ -737,6 +737,20 @@ Cooperative create operations that add parent or dependency edges obey the same
 protocol, so holding the target ID lock prevents a new incoming edge from being
 published during terminalization.
 
+`publish-claimed` is the exception. It runs from journal replay through its
+terminal record inside the namespace write lock of a provisioned ledger, and
+every other cooperative writer of that ledger enters the same lock before it
+writes, so the namespace lock already serializes it against every writer a
+per-ID closure would exclude. It therefore acquires no per-ID locks at all and
+has no closure to widen or retry. Everything after the closure is unchanged: it
+re-reads the complete working tree, compares expected_revision against those
+bytes, validates the complete candidate ledger, and publishes atomically at the
+same path. This exception exists only where the namespace lock is held; a
+backend without it MUST NOT write an item without a lock closure. Because the
+serialization moved, every cooperative writer of one ledger must be upgraded
+together: a writer that honors only per-ID locks can race one that honors only
+the namespace lock.
+
 After the stable lock set is held, the backend re-reads, re-parses, revalidates,
 and re-hashes the target and every relevant referenced or referring item from
 their validated file handles. It then validates the complete current ledger.
@@ -762,7 +776,9 @@ A writer creates the lock file exclusively as valid UTF-8 JSON no larger than
 ~~~
 
 writer_id is an opaque ASCII string of 1 through 128 characters. operation is
-create, transition, or patch. The remaining values must match their schema and
+create, transition, or patch — the three operations that take per-ID locks.
+`publish-claimed` writes no lock file, so no lock file names it and a reader
+never has to classify one. The remaining values must match their schema and
 lock path. Metadata contains no credentials, user name, host name, or command
 arguments.
 

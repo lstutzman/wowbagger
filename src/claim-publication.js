@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { access } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -153,7 +153,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
-    return await withClaimLock(storePath, async () => {
+    return await withClaimLock(storePath, async (namespaceLock) => {
       let replayed = await replayClaimJournal(journalPath, namespace);
       const digest = operationDigest(request);
       const prior = replayed.entries.find((entry) => (
@@ -233,6 +233,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           }, 4);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
       }
+      await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
       const intent = await appendClaimEntry(journalPath, {
         type: 'publish-intent',
         operation_id: request.operation_id,
@@ -245,14 +246,19 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         state: 'pending',
       });
       entries.push(intent);
-      const mutation = await publishClaimedCandidate(ledgerDirectory, request, scenario, ledgerSnapshot);
+      await publicationTestCheckpoint(scenario, 'after-publish-intent', ledgerDirectory);
+      const mutation = await publishClaimedCandidate({
+        ledgerDirectory, request, scenario, ledgerSnapshot, namespaceLock, storePath,
+      });
       if (!mutation.ok) {
         const outcome = mutationFailure(request, mutation);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
       }
-      await publicationTestCheckpoint(scenario, 'after-ledger-commit');
+      await publicationTestCheckpoint(scenario, 'after-ledger-commit', ledgerDirectory);
       const outcome = publicationSuccess(request, record, observedAt);
-      return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
+      const terminal = await persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
+      await publicationTestCheckpoint(scenario, 'after-terminal-record', ledgerDirectory);
+      return terminal;
     });
   } catch (error) {
     if (error?.code === 'CLAIM_LOCK_HELD') {
@@ -1165,9 +1171,22 @@ function isExactObject(value, keys) {
 }
 
 
-async function publicationTestCheckpoint(scenario, point) {
-  if (scenario !== `fail:${point}`) return;
-  const error = new Error(`test checkpoint failed: ${point}`);
-  error.code = 'TEST_CHECKPOINT';
-  throw error;
+// Fault and kill points for the publication barriers. `fail:<point>` raises at
+// the barrier; `hang:<point>` announces that the barrier was reached and then
+// stops, so a test can kill this process there and let a successor recover the
+// namespace lock and the journal. The scenario is a module argument that no
+// CLI path can supply, and the hang is bounded so a test that forgets to kill
+// the process fails instead of running forever.
+const KILL_POINT_DEADLINE_MS = 30_000;
+
+async function publicationTestCheckpoint(scenario, point, ledgerDirectory) {
+  if (scenario === `fail:${point}`) {
+    const error = new Error(`test checkpoint failed: ${point}`);
+    error.code = 'TEST_CHECKPOINT';
+    throw error;
+  }
+  if (scenario !== `hang:${point}`) return;
+  await writeFile(path.join(path.resolve(ledgerDirectory), `.wowbagger-test-reached-${point}`), 'reached\n');
+  await new Promise((resolve) => setTimeout(resolve, KILL_POINT_DEADLINE_MS));
+  throw new Error(`kill point ${point} was never killed`);
 }
