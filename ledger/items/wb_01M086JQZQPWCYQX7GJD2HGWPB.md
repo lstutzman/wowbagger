@@ -5,9 +5,10 @@ number: 125
 title: "Author end-to-end core-outcome vectors for the adapters"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T00:00:00.000Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Ideation survivor: the conformance gap that let two real adapter defects ship; depends on #120's approval plumbing."
+  - action: complete
+    date: 2026-08-17
+    summary: "Nine real-core e2e vectors shipped; third shipped adapter defect fixed."
+    rationale: "Case 16-core-outcome-e2e: nine hand-authored scenarios spawn the real entrypoint against the real core with dual isolated workspaces, derived_from pins, and a granting conformance host; all three enrichment regression shapes proven red. Found and fixed the shipped patch grammar never widening past number+priority - every real consumer patch returned mutation-outcome-unknown on a committed write. Also surfaced that item #120's branch had never merged to main (orchestrator merge-loop error-swallowing); carried in here. 210 conformance assertions, both runtimes 1398/1398."
 ---
 
 Ideation survivor 4 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-vectors.md - the enrichment is the authoritative scope; this body is its summary. DEPENDS on the adapter approval-plumbing defect item: real mutations cannot cross the shipped entrypoint until a host approval provider exists.
