@@ -20,8 +20,8 @@ agent to use those guarantees instead of hand-editing your Markdown.
 
 **Start here:** [install the core and set up a ledger](#start-here).
 
-> **Status: alpha, published, and self-hosted.** `0.1.0-alpha.5` is on npm under
-> the `next` tag and on this repository's `v0.1.0-alpha.5` tag. It is the
+> **Status: alpha, published, and self-hosted.** `0.1.0-alpha.6` is on npm under
+> the `next` tag and on this repository's `v0.1.0-alpha.6` tag. It is the
 > version this repository runs its own backlog on. The API is not frozen and the
 > version will move before a stable release.
 >
@@ -54,8 +54,8 @@ Install the core CLI, then verify it:
 ```sh
 npm install -g wowbagger@next   # public npm registry
 # or, from this release's Git tag:
-# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5
-wowbagger --version         # 0.1.0-alpha.5
+# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.6
+wowbagger --version         # 0.1.0-alpha.6
 wowbagger capabilities --json
 ```
 
@@ -245,7 +245,7 @@ two supported install routes:
 - **npm registry** — `npm install -g wowbagger@next` installs the current
   prerelease.
 - **git tag** —
-  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5` installs this
+  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.6` installs this
   release. Installing at a ref installs the core and every adapter that ref
   carries.
 
@@ -317,7 +317,7 @@ Upgrade the pieces you installed:
 
 ```sh
 npm install -g wowbagger@next                  # public npm registry
-npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.5  # immutable Git release
+npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.6  # immutable Git release
 git pull && npm ci                            # or: a direct checkout
 ```
 
