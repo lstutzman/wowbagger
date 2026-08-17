@@ -739,17 +739,51 @@ function validTransitionResultCorrelation(item, request) {
         })));
 }
 
+// The patchable field set is exactly what mutation contract section 9 names:
+// `title`, `priority`, `depends_on`, `related`, `body`, `body_append`, and
+// `extensions`. This engine still named the pre-widening pair, so every patch a
+// consumer actually sends — a body rewrite, a title correction, a declared
+// extension member — read as a non-canonical request and came back
+// `mutation-outcome-unknown` on a write that had provably committed. `number`
+// is the immutable item identity and was never patchable.
 function validPatchRequest(request) {
   if (!hasExactMembers(request, ['id', 'expected_revision', 'date', 'set'])
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactMembers(request.set, [], ['number', 'priority'])
+    || !hasExactMembers(request.set, [], [
+      'title', 'priority', 'depends_on', 'related', 'body', 'body_append', 'extensions',
+    ])
     || Object.keys(request.set).length === 0) return false;
+  // The extensions container's own shape is all a request can be judged on.
+  // Which members it may name, and what each value must be, is the committed
+  // per-ledger declaration's answer, so it is a precondition rather than a
+  // request-shape rule.
+  if (Object.hasOwn(request.set, 'extensions')
+    && (!plainObject(request.set.extensions)
+      || Object.keys(request.set.extensions).length === 0)) return false;
+  // A replacement and an append cannot both describe the successor body, so one
+  // request naming both is refused whatever the two values are.
+  if (Object.hasOwn(request.set, 'body') && Object.hasOwn(request.set, 'body_append')) return false;
   for (const [field, value] of Object.entries(request.set)) {
-    if (value === null) continue;
-    const minimum = field === 'number' ? 1 : 0;
-    if (parsedIntegerValue(value, minimum) === undefined) return false;
+    // The two body write modes are the patchable values outside the
+    // frontmatter, and the ones null does not remove: the body region always
+    // exists, so removing it is the empty string and null is refused.
+    if (field === 'body' || field === 'body_append') {
+      if (typeof value !== 'string') return false;
+      continue;
+    }
+    if (field === 'extensions' || value === null) continue;
+    if (field === 'title') {
+      if (typeof value !== 'string' || value.trim().length === 0) return false;
+      continue;
+    }
+    if (field === 'priority') {
+      if (parsedIntegerValue(value, 0) === undefined) return false;
+      continue;
+    }
+    if (!Array.isArray(value)
+      || !value.every((entry) => typeof entry === 'string' && WOWBAGGER_ID.test(entry))) return false;
   }
   return true;
 }
@@ -766,14 +800,69 @@ function parsedIntegerValue(value, minimum) {
 }
 
 function validPatchResultCorrelation(item, request) {
-  return validPatchRequest(request)
-    && item.id === request.id
-    && item.revision !== request.expected_revision
-    && item.core.updated === request.date
-    && Object.entries(request.set).every(([field, requested]) => {
-      if (requested === null) return !Object.hasOwn(item.core, field);
-      return item.core[field] === parsedIntegerValue(requested, field === 'number' ? 1 : 0);
-    });
+  if (!validPatchRequest(request)
+    || item.id !== request.id
+    || item.revision === request.expected_revision
+    || item.core.updated !== request.date) return false;
+  for (const [field, requested] of Object.entries(request.set)) {
+    if (field === 'body') {
+      if (item.body !== requested) return false;
+      continue;
+    }
+    // An append names only the addition, so the readable correlation is that
+    // the addition is exactly the tail of the body read back. What came before
+    // it is the item's own bytes, which this response does not restate.
+    if (field === 'body_append') {
+      if (typeof item.body !== 'string' || !item.body.endsWith(requested)) return false;
+      continue;
+    }
+    // An extension member is absent from the lossless core view, so the only
+    // surface it is observable on is the item source the response already
+    // carries. Decoding and parsing it is the correlation; the alternative was
+    // no correlation at all.
+    if (field === 'extensions') {
+      const source = decodeCanonicalBase64(item.source_base64);
+      if (source === null) return false;
+      const parsed = parseLedgerItemSource(source.toString('utf8'));
+      if (parsed.error) return false;
+      for (const [member, value] of Object.entries(requested)) {
+        if (value === null) {
+          if (Object.hasOwn(parsed.data, member)) return false;
+          continue;
+        }
+        if (!Object.hasOwn(parsed.data, member)
+          || !sameJson(parsed.data[member], extensionRequestValue(value))) return false;
+      }
+      continue;
+    }
+    // A removal correlates with an absent core member; a value correlates with
+    // the requested one, after priority's integer parse.
+    if (field === 'title' || field === 'priority') {
+      if (requested === null) {
+        if (Object.hasOwn(item.core, field)) return false;
+      } else if (item.core[field] !== (field === 'title' ? requested : parsedIntegerValue(requested, 0))) {
+        return false;
+      }
+      continue;
+    }
+    // A relation list is replaced wholesale. Removing the field leaves the
+    // lossless core view reporting an empty list, so null and [] correlate
+    // with the same observed value.
+    if (!sameJson(item.core[field] ?? [], requested ?? [])) return false;
+  }
+  return true;
+}
+
+// A JSON number reaches the request wrapped so its exact source survives; the
+// published YAML carries the value, so the comparison unwraps it first. A
+// value that is not a wrapped integer is compared as it arrived.
+function extensionRequestValue(value) {
+  if (value === null || typeof value !== 'object'
+    || Object.getPrototypeOf(value)?.constructor?.name !== 'JsonNumber'
+    || !hasExactMembers(value, ['source'])
+    || typeof value.source !== 'string'
+    || !/^-?(0|[1-9][0-9]*)$/.test(value.source)) return value;
+  return Number(value.source);
 }
 
 // A claim-fence refusal is the work-claim contract answering for a mutating
