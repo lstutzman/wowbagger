@@ -4,7 +4,7 @@ id: wb_01M086JRS7GMHXARPB0Z229HSD
 number: 126
 title: "Bound the item source at every candidate door"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-17T15:48:57Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Ideation survivor: alpha.6 accepts a 50MiB item with a false message on the one bounded path; first contract narrowing, v4 bundled with #122."
 ---
 
 Ideation survivor 5 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-bodybound.md - the enrichment is the authoritative scope; this body is its summary. RELATED to the provisioned-performance program: both require core contract v4 - bundle into one version bump and one release.
