@@ -469,24 +469,14 @@ export async function reconcileClaimJournal({
     .filter((entry) => (
       entry.type === 'publish-finalization'
         || entry.type === 'legacy-mutation'
+        || entry.type === 'revision-adoption'
     ))
     .map((entry) => entry.item_id));
   for (const itemId of coordinatedItems) {
-    const authorized = entries.filter((entry) => (
-      (entry.type === 'publish-final'
-        && entry.item_id === itemId
-        && entry.outcome?.stdout?.state === 'committed')
-        || (entry.type === 'legacy-mutation' && entry.item_id === itemId)
-    ));
+    const authorized = authorizingEntries(entries, itemId);
     const latestAuthorized = authorized.at(-1);
-    const expectedRevision = latestAuthorized?.type === 'legacy-mutation'
-      ? latestAuthorized.committed_revision
-      : latestAuthorized?.outcome.stdout.result.committed_revision;
-    const authorizedRevisions = new Set(authorized.map((entry) => (
-      entry.type === 'legacy-mutation'
-        ? entry.committed_revision
-        : entry.outcome.stdout.result.committed_revision
-    )));
+    const expectedRevision = authorizedRevisionOf(latestAuthorized);
+    const authorizedRevisions = new Set(authorized.map(authorizedRevisionOf));
     for (const intent of entries) {
       if (intent.type === 'legacy-mutation-intent' && intent.item_id === itemId) {
         authorizedRevisions.add(intent.expected_revision);
@@ -626,6 +616,25 @@ export async function reconcileClaimJournal({
     state: replayed.state,
     unsafe: findings.some((finding) => finding.code !== 'pending-intent-resolved'),
   };
+}
+
+// An item's authorized revision is whatever the journal last ruled legitimate:
+// a committed claimed publication, a legacy mutation, or an operator adoption.
+// Adoption is the only one of the three that changes no item byte.
+function authorizingEntries(entries, itemId) {
+  return entries.filter((entry) => (
+    entry.item_id === itemId
+      && (entry.type === 'legacy-mutation'
+        || entry.type === 'revision-adoption'
+        || (entry.type === 'publish-final' && entry.outcome?.stdout?.state === 'committed'))
+  ));
+}
+
+function authorizedRevisionOf(entry) {
+  if (!entry) return undefined;
+  if (entry.type === 'legacy-mutation') return entry.committed_revision;
+  if (entry.type === 'revision-adoption') return entry.to_revision;
+  return entry.outcome.stdout.result.committed_revision;
 }
 
 function itemPathRelativeToLedger(ledgerDirectory, file) {
