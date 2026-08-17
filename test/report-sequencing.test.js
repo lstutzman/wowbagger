@@ -86,6 +86,35 @@ test('names the parent epic and its terminal-children ratio', () => {
   assert.equal(sequencingById(model, 'wb_01KZFFFFFFFFFFFFFFFFFFFFFF')?.epic, null);
 });
 
+// The mutation contract's terminal ratio counts done or killed children only,
+// and the epic complete rollup gates on that same set. An archived child can be
+// restored and a deferred child undefers, so neither is progress; counting a
+// terminal date instead of a terminal status would overstate every epic that
+// parked a child.
+test('counts only done or killed children as terminal, not archived or deferred', () => {
+  const epicId = 'wb_01KZEEEEEEEEEEEEEEEEEEEEEE';
+  const openChild = 'wb_01KZAAAAAAAAAAAAAAAAAAAAAA';
+  const items = [
+    item(epicId, { number: 21, kind: 'epic', title: 'Migration epic' }),
+    item(openChild, { number: 38, parent: epicId }),
+    item('wb_01KZBBBBBBBBBBBBBBBBBBBBBB', { number: 39, parent: epicId, status: 'done', completed: '2026-08-05' }),
+    item('wb_01KZCCCCCCCCCCCCCCCCCCCCCC', { number: 40, parent: epicId, status: 'archived', archived: '2026-08-06' }),
+    item('wb_01KZDDDDDDDDDDDDDDDDDDDDDD', { number: 41, parent: epicId, status: 'deferred', deferred: '2026-08-07' }),
+  ];
+
+  const model = buildReportModel(items, config(), '2026-08-14');
+
+  assert.deepEqual(sequencingById(model, openChild)?.epic, {
+    id: epicId,
+    number: 21,
+    title: 'Migration epic',
+    kind: 'epic',
+    terminalChildren: 1,
+    totalChildren: 4,
+    ratio: 0.25,
+  });
+});
+
 test('projects class of service, due proximity, age, and size from mapped fields', () => {
   const items = [
     item('wb_expedite', { number: 1, class: 'expedite', complexity: 'small' }),
@@ -192,6 +221,36 @@ test('orders by epic enablement ahead of priority and names the parent epic', ()
   assert.deepEqual(
     model.workNext[0].reasons.find((reason) => reason.code === 'epic'),
     { code: 'epic', label: 'advances epic #21 (75% done)' },
+  );
+});
+
+// An epic that parked most of its children is not nearly done. Ranking reads
+// the same done-or-killed ratio as the model, so a parked-heavy epic must not
+// outrank a genuinely advanced one, and the reason line must quote the ratio it
+// ranked on.
+test('does not let parked children lift an epic above a genuinely advanced one', () => {
+  const parked = 'wb_epic_parked';
+  const advanced = 'wb_epic_advanced';
+  const items = [
+    item(parked, { number: 21, kind: 'epic', title: 'Parked epic' }),
+    item(advanced, { number: 22, kind: 'epic', title: 'Advanced epic' }),
+    item('wb_aaa_child', { number: 38, priority: 5, parent: parked }),
+    item('wb_zzz_child', { number: 39, priority: 5, parent: advanced }),
+    item('wb_p1', { number: 41, parent: parked, status: 'done', completed: '2026-08-02' }),
+    item('wb_p2', { number: 42, parent: parked, status: 'archived', archived: '2026-08-03' }),
+    item('wb_p3', { number: 43, parent: parked, status: 'archived', archived: '2026-08-04' }),
+    item('wb_p4', { number: 44, parent: parked, status: 'deferred', deferred: '2026-08-05' }),
+    item('wb_a1', { number: 45, parent: advanced, status: 'done', completed: '2026-08-02' }),
+    item('wb_a2', { number: 46, parent: advanced, status: 'done', completed: '2026-08-03' }),
+    item('wb_a3', { number: 47, parent: advanced, status: 'killed', killed: '2026-08-04' }),
+  ];
+
+  const model = buildReportModel(items, config(), '2026-08-14');
+
+  assert.deepEqual(model.workNext.map(({ number }) => number), [39, 38]);
+  assert.deepEqual(
+    model.workNext[1].reasons.find((reason) => reason.code === 'epic'),
+    { code: 'epic', label: 'advances epic #21 (20% done)' },
   );
 });
 
