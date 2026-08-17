@@ -79,16 +79,26 @@ test('the contract ties the terminal ratio to the epic complete rollup', () => {
   );
 });
 
-test('the contract separates the report epic-enablement factor from the terminal ratio', () => {
+test('the contract ties the report epic-enablement factor to the same set', () => {
   assert.match(
     derivation,
-    phrase('epic-enablement factor is a different number'),
-    'the report factor counts a wider terminal set, so the contract must not claim they agree',
+    phrase("The report's epic-enablement factor reads this same set"),
+    'the report factor, the terminal ratio, and the rollup must share one definition',
   );
   assert.match(
     derivation,
-    phrase('adds archived and deferred children to the numerator'),
-    'the derivation section must name exactly how the report factor differs',
+    phrase('the contract the epic complete rollup and the report all derive the same number'),
+    'the derivation section must name the three surfaces the one definition serves',
+  );
+  assert.match(
+    derivation,
+    phrase('A terminal date is not the test'),
+    'the derivation section must rule out the wider terminal-date set by name',
+  );
+  assert.match(
+    derivation,
+    phrase('archived restores and deferred undefers'),
+    'the derivation section must say why a parked child is not progress',
   );
 });
 
@@ -149,6 +159,30 @@ test('the contract records the no-wire-change decision', () => {
     phrase('inspect gains no derived member'),
     'the decision must name the surface it declines to change',
   );
+});
+
+// One row per shipped edge. src/mutation.js allows task and epic defer and
+// undefer and requires a decision on both, so a table that omits either row
+// under-reports the lifecycle a consumer may drive.
+function edgeRow(from, to) {
+  return edges.split('\n').find((line) => {
+    const cells = line.split('|').map((cell) => cell.trim());
+    return cells[2] === from && cells[3] === to;
+  });
+}
+
+test('the allowed-edges table carries the defer and undefer edges', () => {
+  const defer = edgeRow('backlog', 'deferred');
+  assert.ok(defer, 'the table must carry the backlog to deferred row');
+  assert.match(defer, /task or epic/, 'defer must be offered for both kinds, as source allows');
+  assert.match(defer, /set deferred/, 'the row must name the terminal date the edge writes');
+  assert.match(defer, /append defer decision/, 'the row must name the decision the edge requires');
+
+  const undefer = edgeRow('deferred', 'backlog');
+  assert.ok(undefer, 'the table must carry the deferred to backlog row');
+  assert.match(undefer, /task or epic/, 'undefer must be offered for both kinds, as source allows');
+  assert.match(undefer, /clear deferred/, 'the row must name the terminal date the edge clears');
+  assert.match(undefer, /append undefer decision/, 'the row must name the decision the edge requires');
 });
 
 test('the allowed-edges table cross-references the derivation model', () => {

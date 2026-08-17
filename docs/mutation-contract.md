@@ -1016,6 +1016,7 @@ choosing a transition date; the refusal carries both (next section).
 |---|---|---|---|
 | task or epic | triage | backlog | append accept decision |
 | task or epic | triage | killed | set killed; append kill decision |
+| task or epic | backlog | deferred | set deferred; append defer decision |
 | task | backlog | in-progress | none |
 | task | backlog | archived | set archived; append archive decision |
 | task | backlog | killed | set killed; append kill decision |
@@ -1025,6 +1026,7 @@ choosing a transition date; the refusal carries both (next section).
 | epic | backlog | done | set completed; append complete decision with generated rollup |
 | epic | backlog | archived | set archived; append archive decision |
 | epic | backlog | killed | set killed; append kill decision |
+| task or epic | deferred | backlog | clear deferred; append undefer decision |
 | task or epic | archived | backlog | clear archived; append restore decision |
 
 Every transition sets updated to request.date. request.date must be greater than
@@ -1069,10 +1071,13 @@ rollup then lists exactly those children in immutable ID order. So a ratio of 1
 is the precondition of the rollup, and the contract, the transition gate, and
 the rollup provably share one definition of terminal.
 
-The report's epic-enablement factor is a different number, and a consumer must
-not read it as this ratio. It counts every child that carries a terminal date,
-which adds archived and deferred children to the numerator; it is therefore an
-upper bound on the terminal ratio, never below it.
+The report's epic-enablement factor reads this same set: done or killed direct
+children over all direct children, as defined here, so the contract, the epic
+complete rollup, and the report all derive the same number from the same items.
+A terminal date is not the test. An archived or a deferred child carries one,
+but archived restores and deferred undefers — both edges are in the table above
+— so a parked child is work postponed, not work retired, and counting it would
+report progress that one transition takes back.
 
 **Activity.** Exactly one of three derived states:
 
