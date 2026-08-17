@@ -13,10 +13,13 @@ import { normalizeJsonValue, parseJsonRequest } from '../request.js';
 
 // The launch discipline every current adapter package shares: argv-array
 // core launch without a shell, guarded-relative workspace selection,
-// host-provided instructions, consumer-only trusted approval. Each adapter
-// still owns its declaration — it calls this factory and may override any
-// member before returning, so a harness whose guarantees genuinely differ
-// diverges deliberately instead of by missed edit.
+// host-provided instructions. Trusted approval is the one member that is not
+// a property of the harness at all — it is a property of THIS invocation's
+// runtime, so `standardDynamicResult` declares it only when a host runtime
+// actually wired an approval source (item 120). Each adapter still owns its
+// declaration — it calls this factory and may override any member before
+// returning, so a harness whose guarantees genuinely differ diverges
+// deliberately instead of by missed edit.
 const STANDARD_LIMITS = Object.freeze({
   max_request_bytes: 65536,
   max_context_bytes: 65536,
@@ -38,7 +41,7 @@ function invalidDescribeResponse(details) {
   };
 }
 
-export function standardDynamicResult(manifest, coreProbe) {
+export function standardDynamicResult(manifest, coreProbe, host) {
   return {
     ok: true,
     bootstrap_wire_version: 1,
@@ -70,7 +73,13 @@ export function standardDynamicResult(manifest, coreProbe) {
       model_transport: { available: true, protocol: 'openai-compatible' },
       instruction_input: { mode: 'host-provided', max_sources: 8, max_bytes: 65536 },
       handoff: { supported: true, persistence: 'explicit-only' },
-      trusted_approval: { supported: true, sources: ['consumer'] },
+      // Absent means mutations are unavailable (§3.2). A bare entrypoint run
+      // has no approval source, so declaring `supported: true` would advertise
+      // a capability this invocation cannot exercise: every mutation would
+      // reach the approval gate and die there.
+      ...(host?.trusted_approval === true
+        ? { trusted_approval: { supported: true, sources: ['consumer'] } }
+        : {}),
       integration_mechanisms: { hooks: false, slash_commands: false, mcp: false, daemon: false },
     },
     optional_features: { claims: coreProbe?.result?.operations?.work_claim?.supported === true, policy: false },
@@ -278,10 +287,28 @@ async function invocationWorkspaces(request, workspaceRoots) {
   };
 }
 
+// The host approval seam (item 120). A process that embeds this entrypoint
+// may pass `hostRuntime` in code — never through the bootstrap request, which
+// the model controls and which §5.1 forbids as an approval channel. Absent, or
+// carrying no approval source, the run is exactly as fail-closed as a bare
+// shipped adapter: describe declares no trusted approval and every mutation
+// refuses `capability-unavailable` before any approval is validated.
+function hasApprovalSource(hostRuntime) {
+  const approval = hostRuntime?.approval;
+  return approval !== undefined && approval !== null;
+}
+
+// A `now` that is missing or not callable yields `undefined`, which the
+// approval gate refuses as `invalid-approval-time`. Throwing here instead
+// would kill the entrypoint before it could emit its one §3.3 JSON object.
+function hostClock(hostRuntime) {
+  return typeof hostRuntime?.now === 'function' ? hostRuntime.now() : undefined;
+}
+
 // The shared §3.3 entrypoint flow every adapter package runs: load and
 // validate its own manifest, read one bootstrap request, answer describe or
 // refuse. Each adapter supplies only its manifest location and its honest
-// host declaration through `dynamicResult(manifest)`.
+// host declaration through `dynamicResult(manifest, coreProbe, host)`.
 export async function runAdapterEntrypoint({
   manifestUrl,
   dynamicResult,
@@ -290,6 +317,7 @@ export async function runAdapterEntrypoint({
   workspaceConfigUrl,
   coreProbe: suppliedCoreProbe = PROBE_LIVE_CORE,
   launch: suppliedLaunch,
+  hostRuntime,
   argv = process.argv,
 }) {
   const [operation] = argv.slice(2);
@@ -305,7 +333,9 @@ export async function runAdapterEntrypoint({
   const coreProbe = suppliedCoreProbe === PROBE_LIVE_CORE
     ? await probeCore(coreExecutable, packageRoot)
     : suppliedCoreProbe;
-  const dynamic = dynamicResult(manifest, coreProbe);
+  const dynamic = dynamicResult(manifest, coreProbe, {
+    trusted_approval: hasApprovalSource(hostRuntime),
+  });
 
   // §3.3 (item 39): an unknown operation is refused without reading stdin.
   // Reading would otherwise wait on a host that never closes stdin, and a
@@ -368,6 +398,10 @@ export async function runAdapterEntrypoint({
       platform: process.platform,
       package_root: packageRoot,
       workspaces,
+      approval: hostRuntime?.approval,
+      now: hostClock(hostRuntime),
+      redeemed_nonces: hostRuntime?.redeemedNonces,
+      core_executable_identity: hostRuntime?.coreExecutableIdentity,
       launch: suppliedLaunch
         ?? ((request) => launchCoreProcess({ executable: coreExecutable, ...request })),
     });

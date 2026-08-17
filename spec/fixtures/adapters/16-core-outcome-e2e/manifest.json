@@ -1,0 +1,381 @@
+{
+  "adapter_vector_version": 1,
+  "case": "core-outcome-e2e",
+  "coverage": [
+    "authority",
+    "core-forwarding"
+  ],
+  "targets": [
+    "claude-code",
+    "codex",
+    "direct-core",
+    "kimi",
+    "openai-compatible-harness",
+    "opencode"
+  ],
+  "mode": "equivalence",
+  "assertions": [
+    {
+      "id": "core-outcome-01-inspect-item-not-found",
+      "type": "core-baseline",
+      "scenario": "01-inspect-item-not-found",
+      "stdout_artifact": "scenarios/01-inspect-item-not-found/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 2
+    },
+    {
+      "id": "core-outcome-02-create-committed",
+      "type": "core-baseline",
+      "scenario": "02-create-committed",
+      "stdout_artifact": "scenarios/02-create-committed/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 0
+    },
+    {
+      "id": "core-outcome-03-transition-committed",
+      "type": "core-baseline",
+      "scenario": "03-transition-committed",
+      "stdout_artifact": "scenarios/03-transition-committed/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 0
+    },
+    {
+      "id": "core-outcome-04-patch-body-committed",
+      "type": "core-baseline",
+      "scenario": "04-patch-body-committed",
+      "stdout_artifact": "scenarios/04-patch-body-committed/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 0
+    },
+    {
+      "id": "core-outcome-05-patch-extensions-committed",
+      "type": "core-baseline",
+      "scenario": "05-patch-extensions-committed",
+      "stdout_artifact": "scenarios/05-patch-extensions-committed/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 0
+    },
+    {
+      "id": "core-outcome-06-transition-date-refused",
+      "type": "core-baseline",
+      "scenario": "06-transition-date-refused",
+      "stdout_artifact": "scenarios/06-transition-date-refused/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 2
+    },
+    {
+      "id": "core-outcome-07-create-claimed-item-write-refused",
+      "type": "core-baseline",
+      "scenario": "07-create-claimed-item-write-refused",
+      "stdout_artifact": "scenarios/07-create-claimed-item-write-refused/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 4
+    },
+    {
+      "id": "core-outcome-08-patch-active-claim-write-refused",
+      "type": "core-baseline",
+      "scenario": "08-patch-active-claim-write-refused",
+      "stdout_artifact": "scenarios/08-patch-active-claim-write-refused/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 4
+    },
+    {
+      "id": "core-outcome-09-transition-claim-store-unavailable",
+      "type": "core-baseline",
+      "scenario": "09-transition-claim-store-unavailable",
+      "stdout_artifact": "scenarios/09-transition-claim-store-unavailable/expected-core-stdout.jsonl",
+      "stderr_bytes": 0,
+      "exit_code": 6
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "scenarios/01-inspect-item-not-found/before/wb_01Q4837BM01W70T30B184GG1R6.md",
+      "sha256": "sha256:d1f401557d6a897c1b38dcb4ad356a0af6d8128f9ef9bc5273da869aa9d7f6c9"
+    },
+    {
+      "path": "scenarios/01-inspect-item-not-found/core-invocation.json",
+      "sha256": "sha256:9385fb0b16a026763a19cdc3c3e0758712eb7088af9a2e12896536afa8ebd27c"
+    },
+    {
+      "path": "scenarios/01-inspect-item-not-found/expected-adapter-result.json",
+      "sha256": "sha256:f1ac7766746951c0d1ef3a9892ac726eb33fd089e560688add2959da1c333fd6"
+    },
+    {
+      "path": "scenarios/01-inspect-item-not-found/expected-core-stdout.jsonl",
+      "sha256": "sha256:4bfc65a169a761e9a3a5301ef2e11148297f4b1e3e11aadee40f03be81be40f1"
+    },
+    {
+      "path": "scenarios/01-inspect-item-not-found/invocation.json",
+      "sha256": "sha256:46e7037e330f2183f65177bbef8d809e92ee7bc826ec438eb72d09a2718ce252"
+    },
+    {
+      "path": "scenarios/01-inspect-item-not-found/scenario.json",
+      "sha256": "sha256:eee0ecf41efbab6e91a4c11bd60dfd8a63b4e516432127b34f2f7bae0d2b44e7"
+    },
+    {
+      "path": "scenarios/02-create-committed/after/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+      "sha256": "sha256:19250ac7cc1edcc5fa9a32d67498612ee3d58ab2c877714e95906c4f1cd09679"
+    },
+    {
+      "path": "scenarios/02-create-committed/core-invocation.json",
+      "sha256": "sha256:c7cbcdd23ff510906c4d54e17147aa9a011508facae84c4b467ac1866517340c"
+    },
+    {
+      "path": "scenarios/02-create-committed/expected-adapter-result.json",
+      "sha256": "sha256:3b4a325e98466abbf3b2157506f433a79bd7a297c628ce0856e6ece1697db090"
+    },
+    {
+      "path": "scenarios/02-create-committed/expected-core-stdout.jsonl",
+      "sha256": "sha256:83556892fd17fa8c7f525887370c26564185e7858c272ada8880102da74faf21"
+    },
+    {
+      "path": "scenarios/02-create-committed/invocation.json",
+      "sha256": "sha256:d28d8f8a3c942288e833daa791e5a7fc7effe3351fcbc969e6daf5e13924a80f"
+    },
+    {
+      "path": "scenarios/02-create-committed/mutation-input.json",
+      "sha256": "sha256:b149f977aeff2ae20b9618cadc22ccf4d45cbab0b3268fa1953565cb02d322df"
+    },
+    {
+      "path": "scenarios/02-create-committed/scenario.json",
+      "sha256": "sha256:a7e6ae462a04f7ca98166002077a9f928cea53c91dd96e66d55c50a2af242860"
+    },
+    {
+      "path": "scenarios/03-transition-committed/after/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "sha256": "sha256:7eb112f684c13add0e6db1d816213cf39be7524fa6aea41c0939d1808d89bb8b"
+    },
+    {
+      "path": "scenarios/03-transition-committed/before/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "sha256": "sha256:17ac31f4fc0cf9f20fcab06a9af082708acc671c17c24c4ab8475e0eaa236888"
+    },
+    {
+      "path": "scenarios/03-transition-committed/core-invocation.json",
+      "sha256": "sha256:063a83be84623c199d478930e3fad203f554fb6b709fbd53242bbfbbc8ac2183"
+    },
+    {
+      "path": "scenarios/03-transition-committed/expected-adapter-result.json",
+      "sha256": "sha256:361314e03bef8053801a8001aeb90fcf5a3e15ded2c8434ba24d2fbc34094501"
+    },
+    {
+      "path": "scenarios/03-transition-committed/expected-core-stdout.jsonl",
+      "sha256": "sha256:64f535a3375c06a119c4e8bd51c2bbbb1e74b4838fc4ab2892ec0ac2eb97c197"
+    },
+    {
+      "path": "scenarios/03-transition-committed/invocation.json",
+      "sha256": "sha256:1228f2e71f5fdd53c61f87591072c7bc6e012bca31022034ed5c4d5ad85aa1c1"
+    },
+    {
+      "path": "scenarios/03-transition-committed/mutation-input.json",
+      "sha256": "sha256:880478e9f2d6ec131e2a96b36059a8d45f149a4f947360d596f2a825d9b7c3ac"
+    },
+    {
+      "path": "scenarios/03-transition-committed/scenario.json",
+      "sha256": "sha256:e16921c7cd962dcbf501ec5f6c512bd1370c4283939cdfd7f204e2dfdd490a07"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/after/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:d9fdfffe605a6e7feeb4c6e20aa60838670a420881d267217ed87a42134c5592"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/core-invocation.json",
+      "sha256": "sha256:2ab5ad184141af1c34edf291f148c7a01c990d57a9846cbceadfb3edd4c8d33b"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/expected-adapter-result.json",
+      "sha256": "sha256:dbc27e299ec40de4c743db1853eec53956bd190d2b9d2ae060158ebad3a94add"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/expected-core-stdout.jsonl",
+      "sha256": "sha256:cc447ac432fe3fd01b56de98a1abde5923aa5f498ef429e542ab7f9180aad964"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/invocation.json",
+      "sha256": "sha256:430bdf5aa815bbe625786333576ac0631fcee1b7d111536546da245ce40c0878"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/mutation-input.json",
+      "sha256": "sha256:19208b8bcdcc8f4f18fc022d4f303eda815cddce0904c323162122433f637f81"
+    },
+    {
+      "path": "scenarios/04-patch-body-committed/scenario.json",
+      "sha256": "sha256:98b2c4dc2f1f3aeced4511d08119f983a8823e8e1c9e0befe6eacf9e745d193d"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/after/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:e89d603e9b261df25ee67fd7c7d256731a84829ecf816224d346b22b6313bcda"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/before/extensions.json",
+      "sha256": "sha256:510299482329bed12dbcb7affa040086599eaa58d8705024d00bb51fe9f4f27e"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:457682f33efde88869693cb3d717f5f33ffd167dd2e13f31fc85292f7cd585d3"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/core-invocation.json",
+      "sha256": "sha256:a5fd0ab8f230384dac5103546bea5418e95e522f80a9e2c32475ae14e1ad41f4"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/expected-adapter-result.json",
+      "sha256": "sha256:ae6388c36905ae6b5669de6c57458d357a8f933e99ad9e2ab999a455aed53633"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/expected-core-stdout.jsonl",
+      "sha256": "sha256:506524f6f728e94cbc7387c14c97160786ec96c97531670bde271c9747e5abbd"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/invocation.json",
+      "sha256": "sha256:377726459c318c1dc06017479561a01d5722c90f89701547a933ff36a6b08377"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/mutation-input.json",
+      "sha256": "sha256:b0814e164bad7c2aecfded65affdc8b241d815f0f70a6ff5255a7cf71ea6c2b1"
+    },
+    {
+      "path": "scenarios/05-patch-extensions-committed/scenario.json",
+      "sha256": "sha256:3f7f5768a10cd19484357c50a1638fa482293fda119ecfe99553754c18df08cf"
+    },
+    {
+      "path": "scenarios/06-transition-date-refused/before/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+      "sha256": "sha256:e3e834c8d0652e53b4816c94c8cdc8649607c9b976125c295469714099041a27"
+    },
+    {
+      "path": "scenarios/06-transition-date-refused/core-invocation.json",
+      "sha256": "sha256:7f99d928219e839c4705994993d139ea7746ebd6a22db0ab9c16f321e299dd7c"
+    },
+    {
+      "path": "scenarios/06-transition-date-refused/expected-adapter-result.json",
+      "sha256": "sha256:043f4b30ce622287c30ddbaf729095b3ca728537b336ff2dd765c273d7b51876"
+    },
+    {
+      "path": "scenarios/06-transition-date-refused/expected-core-stdout.jsonl",
+      "sha256": "sha256:2b5127cec1ba846f8b1f087b7ecd6773fb3d6641563dbacc5b066fb24fea4c44"
+    },
+    {
+      "path": "scenarios/06-transition-date-refused/invocation.json",
+      "sha256": "sha256:cc3319e929f0f3db17dcef590fa813db989b0416cbd5967144f79165c1afd3cf"
+    },
+    {
+      "path": "scenarios/06-transition-date-refused/mutation-input.json",
+      "sha256": "sha256:9aec8096e3f66a23e20d01f722c3633330c8b160921c7bead6b538b826a8bb82"
+    },
+    {
+      "path": "scenarios/06-transition-date-refused/scenario.json",
+      "sha256": "sha256:9ac5357c2410afcbe4f036c77103c3652057a98563f6ea4b0a0c557e671b59cb"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/before/namespace",
+      "sha256": "sha256:dcce8d0da259447d14ee17b0aaf39c861b19ae7cd2679e1004c0fb9c59b6d592"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/before/reconcile.md",
+      "sha256": "sha256:43ca9d60f11213ad636480881dcc64367c7d1dd30d3efb3d520e8edc8d058096"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/core-invocation.json",
+      "sha256": "sha256:c7cbcdd23ff510906c4d54e17147aa9a011508facae84c4b467ac1866517340c"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/expected-adapter-result.json",
+      "sha256": "sha256:06a41911ae923ff8d223a472bac39b5db0e5e8d7582ee5820008b4f3bec50d7a"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/expected-core-stdout.jsonl",
+      "sha256": "sha256:e40b3109bc6c1a01dcda93cdb428c1cc19ae22ce1ca716e0f90f55fd1a3d612e"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/invocation.json",
+      "sha256": "sha256:5eca6f9c266dc077728df6de54d1d7c3fdb3942b98d987a43f636f648652ec71"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/journal.ndjson",
+      "sha256": "sha256:9a289e0a1268c7b13e22bdd59783a22a18271195e9501554fbd9d0b6d7c9981e"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/mutation-input.json",
+      "sha256": "sha256:b149f977aeff2ae20b9618cadc22ccf4d45cbab0b3268fa1953565cb02d322df"
+    },
+    {
+      "path": "scenarios/07-create-claimed-item-write-refused/scenario.json",
+      "sha256": "sha256:9cfa890c758574d161040832c45ed850d09d147371d358c39c9aa93c45aaa2c3"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/before/namespace",
+      "sha256": "sha256:dcce8d0da259447d14ee17b0aaf39c861b19ae7cd2679e1004c0fb9c59b6d592"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/before/reconcile.md",
+      "sha256": "sha256:ed3dfa6d4f361f213245de9f8211ec0bbc16ce958439f53da82c8323a51f5463"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/core-invocation.json",
+      "sha256": "sha256:2ab5ad184141af1c34edf291f148c7a01c990d57a9846cbceadfb3edd4c8d33b"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/expected-adapter-result.json",
+      "sha256": "sha256:2498e64122935ef1fede70cf111c4ae31049213f2feb41b48905b492c6083ccc"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/expected-core-stdout.jsonl",
+      "sha256": "sha256:e4ae3d888723b435eab1b93c88eefd3de283bcb91acb49c6aa32e54e479dbbee"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/invocation.json",
+      "sha256": "sha256:5f7b4d7e646bc605eac6457054a81b4833bd5d382fa9efc5bae1fb19d34caebe"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/journal.ndjson",
+      "sha256": "sha256:29229c4b57ae9346eb724556ccfac7997052faac680838d5658fae59c1c88b6d"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/mutation-input.json",
+      "sha256": "sha256:19208b8bcdcc8f4f18fc022d4f303eda815cddce0904c323162122433f637f81"
+    },
+    {
+      "path": "scenarios/08-patch-active-claim-write-refused/scenario.json",
+      "sha256": "sha256:1d1ffad377f051af528849add8e078ea63d92f599a1ff5de3cf3e665f7ad7671"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/before/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "sha256": "sha256:17ac31f4fc0cf9f20fcab06a9af082708acc671c17c24c4ab8475e0eaa236888"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/core-invocation.json",
+      "sha256": "sha256:063a83be84623c199d478930e3fad203f554fb6b709fbd53242bbfbbc8ac2183"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/expected-adapter-result.json",
+      "sha256": "sha256:c373540d6d3a51f75b288c2f4d5509949eaec87f61ad1bd5999c7d5e0993ef6c"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/expected-core-stdout.jsonl",
+      "sha256": "sha256:14c3ab8230022e87b97cdf9905eb824d17e535fc601519f717d12fccc819267c"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/git-marker",
+      "sha256": "sha256:db2036bf035eabf27cc4a7a0389d29008b060b24aa5b27c3533671736c1caeba"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/invocation.json",
+      "sha256": "sha256:7b7ff1e4c4df735d1bbce70a331f86da715edfedb3e89b80642e1e712e26c81c"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/mutation-input.json",
+      "sha256": "sha256:880478e9f2d6ec131e2a96b36059a8d45f149a4f947360d596f2a825d9b7c3ac"
+    },
+    {
+      "path": "scenarios/09-transition-claim-store-unavailable/scenario.json",
+      "sha256": "sha256:19f9f8094cd03f7d57ffd5c1f592b2efbf3fda6dc8bbf639bcfe35e9c974572b"
+    }
+  ]
+}

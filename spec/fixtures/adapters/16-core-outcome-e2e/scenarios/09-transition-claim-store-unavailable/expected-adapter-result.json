@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "adapter_contract_version": 2,
+  "request_id": "core-outcome-transition-store-unavailable-0001",
+  "result": {
+    "core_command": "transition",
+    "core_exit_code": 6,
+    "stdout": {
+      "encoding": "base64",
+      "data": "eyJvayI6ZmFsc2UsIm5hbWVzcGFjZSI6ImxlZGdlci1tdXRhdGlvbiIsImNvbW1hbmQiOiJ0cmFuc2l0aW9uLXYxIiwiY29udHJhY3RfdmVyc2lvbiI6MSwic3RhdGUiOiJ1bmNoYW5nZWQiLCJlcnJvciI6eyJjb2RlIjoiY2xhaW0tc3RvcmUtdW5hdmFpbGFibGUiLCJtZXNzYWdlIjoiVGhlIGR1cmFibGUgY2xhaW0gc3RvcmUgaXMgdW5hdmFpbGFibGUuIiwiZGV0YWlscyI6eyJyZWFzb24iOiJnaXQtdmVyaWZpY2F0aW9uLWZhaWxlZCJ9fX0K",
+      "sha256": "sha256:14c3ab8230022e87b97cdf9905eb824d17e535fc601519f717d12fccc819267c",
+      "byte_length": 252
+    },
+    "stderr": {
+      "encoding": "base64",
+      "data": "",
+      "sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_length": 0
+    }
+  }
+}

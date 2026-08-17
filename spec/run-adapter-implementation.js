@@ -11,6 +11,20 @@ import { JsonNumber, normalizeJsonValue, parseJsonRequest } from '../src/request
 // implementation runner that asked the oracle whether the oracle passes its
 // own vectors would report nothing.
 import { applyCapabilityInvariantScenario, mutateObject } from './scenario-shaping.js';
+// Sandbox shaping for the end-to-end core-outcome scenarios. It supplies temp
+// paths, copied workspaces, Git plumbing and byte digests, and never an
+// expectation.
+import {
+  assertClockHorizonUnreached,
+  assertJournalAppendShape,
+  declaredLedgerSnapshot,
+  digestOf,
+  materializeWorkspace,
+  scenarioDirectory,
+  snapshotLedger,
+  verifyDerivedFrom,
+  withAbsoluteLedger,
+} from './core-outcome-scenario.js';
 import { describeAdapter } from '../src/adapter/describe.js';
 import { resolveEntrypointPath } from '../src/adapter/entrypoint-path.js';
 import { validateAdapterManifest } from '../src/adapter/manifest.js';
@@ -186,7 +200,7 @@ async function spawnAdapterEntrypoint(entrypoint, operation, request, env, runti
 async function callShippedEntrypoint(
   request,
   target,
-  { operation = 'invoke', workspaces = {}, runtimeConfig } = {},
+  { operation = 'invoke', workspaces = {}, runtimeConfig, hostApproval, auditChildProcesses } = {},
 ) {
   const entrypoint = path.join(projectRoot, 'adapters', target, 'entrypoint.js');
   const shippedManifestPath = path.join(projectRoot, 'adapters', target, 'wowbagger-adapter.json');
@@ -208,23 +222,37 @@ async function callShippedEntrypoint(
     const childProcessAuditPath = path.join(temporary, 'child-process-audit.txt');
     await writeFile(candidateManifestPath, JSON.stringify(candidateManifest));
     await writeFile(workspacesPath, JSON.stringify(workspaces));
-    if (runtimeConfig) await writeFile(runtimeConfigPath, JSON.stringify(runtimeConfig));
-    if (runtimeConfig?.forbid_core_launch) await writeFile(childProcessAuditPath, '');
+    // The written copy carries the per-assertion host-approval mode; the
+    // caller's object is left alone so `callShippedEntrypoint` can still
+    // record a forbidden launch on it below.
+    if (runtimeConfig) {
+      await writeFile(runtimeConfigPath, JSON.stringify({
+        ...runtimeConfig,
+        ...(hostApproval ? { host_approval: hostApproval } : {}),
+      }));
+    }
+    // The same audit answers both directions. A negative-capability case
+    // proves the entrypoint launched nothing; an equivalence core-outcome
+    // scenario proves it really launched the core twice — its live probe and
+    // the invoked command — rather than reading an injected observation.
+    const audits = runtimeConfig?.forbid_core_launch === true || auditChildProcesses === true;
+    if (audits) await writeFile(childProcessAuditPath, '');
     const response = await spawnAdapterEntrypoint(entrypoint, operation, request, {
       WOWBAGGER_ADAPTER_MANIFEST_PATH: candidateManifestPath,
       WOWBAGGER_ADAPTER_WORKSPACES_PATH: workspacesPath,
       ...(runtimeConfig ? { WOWBAGGER_ADAPTER_RUNTIME_CONFIG_PATH: runtimeConfigPath } : {}),
-      ...(runtimeConfig?.forbid_core_launch
-        ? { WOWBAGGER_ADAPTER_CHILD_PROCESS_AUDIT_PATH: childProcessAuditPath }
-        : {}),
+      ...(audits ? { WOWBAGGER_ADAPTER_CHILD_PROCESS_AUDIT_PATH: childProcessAuditPath } : {}),
     }, runtimeConfig !== undefined);
-    if (runtimeConfig?.forbid_core_launch
-      && (await readFile(childProcessAuditPath)).length > 0) {
+    const observedLaunches = audits
+      ? (await readFile(childProcessAuditPath, 'utf8')).split('\n').filter(Boolean).length
+      : null;
+    if (runtimeConfig?.forbid_core_launch && observedLaunches > 0) {
       runtimeConfig[FORBIDDEN_LAUNCH_OBSERVED] = true;
     }
     return {
       response,
       evidence: path.relative(projectRoot, entrypoint),
+      observed_launches: observedLaunches,
     };
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -422,7 +450,118 @@ async function evaluateCapabilityAssertion(directory, assertion, target, runtime
   };
 }
 
+// The stream envelope a result carries is the base64, digest and length of
+// the bytes the core wrote. Deriving those three from an already hand-authored
+// byte string is permitted; authoring them is not. Checking the committed
+// expectation against the committed stdout artifact is what keeps them one
+// fact rather than two that can drift apart.
+function streamEnvelopeMatchesArtifact(envelope, bytes) {
+  return envelope?.encoding === 'base64'
+    && envelope.data === bytes.toString('base64')
+    && envelope.sha256 === digestOf(bytes)
+    && envelope.byte_length === bytes.length;
+}
+
+// The end-to-end core-outcome scenarios (case 16). Each one runs the direct
+// core in one isolated workspace and, separately, the spawned shipped
+// entrypoint over the bootstrap wire in a second workspace materialized from
+// the same before state. Both are compared against committed bytes, and both
+// resulting ledgers against the committed after state.
+async function evaluateCoreOutcomeScenario(directory, assertion, target, runtimeConfig) {
+  if (runtimeConfig !== undefined) return { ok: false, evidence: 'manifest.json:mode' };
+  const scenarioPath = scenarioDirectory(directory, assertion.scenario);
+  const declaration = await readStrictJson(path.join(scenarioPath, 'scenario.json'));
+  assertClockHorizonUnreached(declaration);
+  await verifyDerivedFrom(projectRoot, scenarioPath, declaration);
+
+  const coreInvocation = await readStrictJson(path.join(scenarioPath, 'core-invocation.json'));
+  const invocation = await readStrictJson(path.join(scenarioPath, 'invocation.json'));
+  const expected = await readStrictJson(path.join(scenarioPath, 'expected-adapter-result.json'));
+  if (!isSafeArtifactPath(assertion.stdout_artifact)) {
+    throw new Error(`unsafe core baseline stdout artifact ${assertion.stdout_artifact}`);
+  }
+  const declaredStdout = await readFile(path.join(directory, assertion.stdout_artifact));
+  if (!streamEnvelopeMatchesArtifact(expected.result?.stdout, declaredStdout)
+    || !streamEnvelopeMatchesArtifact(expected.result?.stderr, Buffer.alloc(0))) {
+    throw new Error(`${assertion.scenario}: the committed adapter result does not carry the committed core streams`);
+  }
+
+  const baseline = await materializeWorkspace(
+    scenarioPath, declaration, 'wowbagger-core-outcome-baseline-',
+  );
+  const adapter = await materializeWorkspace(
+    scenarioPath, declaration, 'wowbagger-core-outcome-adapter-',
+  );
+  try {
+    const argv = withAbsoluteLedger(coreInvocation.argv, baseline.ledger);
+    const direct = spawnSync(process.execPath, [path.join(projectRoot, 'bin/wowbagger.js'), ...argv], {
+      cwd: baseline.root,
+      input: Buffer.from(coreInvocation.stdin_base64, 'base64'),
+      encoding: null,
+    });
+    const declaredExitCode = normalizeJsonValue(assertion.exit_code);
+    if (direct.status !== declaredExitCode) {
+      throw new Error(
+        `${assertion.scenario}: direct core exit code ${direct.status}, expected ${declaredExitCode}`,
+      );
+    }
+    if ((direct.stderr?.length ?? 0) !== normalizeJsonValue(assertion.stderr_bytes)) {
+      throw new Error(`${assertion.scenario}: direct core stderr bytes differ`);
+    }
+    if (!direct.stdout?.equals(declaredStdout)) {
+      throw new Error(`${assertion.scenario}: direct core stdout differs from ${assertion.stdout_artifact}`);
+    }
+    const declaredAfter = declaredLedgerSnapshot(declaration.ledger.after);
+    if (!sameJson(await snapshotLedger(baseline.root), declaredAfter)) {
+      throw new Error(`${assertion.scenario}: the direct core left a different ledger`);
+    }
+
+    // No runtime override but the granting host: no injected process
+    // observation, no synthetic describe result, no substituted core probe,
+    // and no forbidden launch. The production probe and launcher run.
+    const approving = declaration.approval === 'consumer';
+    const scenarioRuntimeConfig = {};
+    const invoked = await callShippedEntrypoint(invocation, target, {
+      workspaces: { [invocation.workspace.workspace_id]: adapter.root },
+      runtimeConfig: scenarioRuntimeConfig,
+      ...(approving ? { hostApproval: 'grant' } : {}),
+      auditChildProcesses: true,
+    });
+    const adapterStdout = invoked.response.ok
+      ? Buffer.from(invoked.response.result.stdout.data, 'base64')
+      : Buffer.alloc(0);
+    if (declaration.workspace.kind === 'git-provisioned') {
+      await assertJournalAppendShape(adapter.root, scenarioPath, declaration);
+    }
+    // A failing case that names only its ID sends a reader to a debugger. Each
+    // facet is reported by name so the report says which one moved.
+    const mismatches = [];
+    if (!sameJson(invoked.response, expected)) mismatches.push('adapter-result');
+    if (!adapterStdout.equals(declaredStdout)) mismatches.push('adapter-stdout-bytes');
+    // The live core probe and the invoked command, and nothing else.
+    if (invoked.observed_launches !== 2) {
+      mismatches.push(`core-launches=${invoked.observed_launches}`);
+    }
+    if (!sameJson(await snapshotLedger(adapter.root), declaredAfter)) {
+      mismatches.push('adapter-ledger');
+    }
+    return {
+      ok: mismatches.length === 0,
+      evidence: mismatches.length === 0
+        ? `${invoked.evidence} + bin/wowbagger.js`
+        : `${invoked.evidence}: ${assertion.scenario} differs in ${mismatches.join(', ')}`,
+      error_code: invoked.response.error?.code,
+    };
+  } finally {
+    await rm(baseline.root, { recursive: true, force: true });
+    await rm(adapter.root, { recursive: true, force: true });
+  }
+}
+
 async function evaluateCoreBaselineAssertion(directory, assertion, target, runtimeConfig) {
+  if (Object.hasOwn(assertion, 'scenario')) {
+    return evaluateCoreOutcomeScenario(directory, assertion, target, runtimeConfig);
+  }
   if (runtimeConfig !== undefined) {
     return {
       ok: false,
@@ -821,16 +960,27 @@ async function evaluateApprovalSchemaAssertion(directory, assertion) {
   };
 }
 
+// The two refusals a mutation can meet before the core is ever launched are
+// distinct facts about the runtime, so each is exercised against the runtime
+// that produces it: `consumer-approval-required` needs a host that CAN approve
+// and declined this invocation, while `trusted-approval-unavailable` is the
+// bare entrypoint, which advertises no approval source at all (item 120).
 async function evaluateApprovalGateAssertion(directory, assertion, target, runtimeConfig) {
-  if (assertion.expect === 'consumer-approval-required') {
+  const refusalArtifact = assertion.expect === 'consumer-approval-required'
+    ? 'expected-refusal.json'
+    : assertion.expect === 'trusted-approval-unavailable'
+      ? 'expected-unwired-refusal.json'
+      : null;
+  if (refusalArtifact) {
     const invocation = await readStrictJson(path.join(directory, 'invocation.json'));
-    const expected = await readStrictJson(path.join(directory, 'expected-refusal.json'));
+    const expected = await readStrictJson(path.join(directory, refusalArtifact));
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-approval-vector-'));
     try {
       await mkdir(path.join(temporary, 'ledger'));
       const invoked = await callShippedEntrypoint(invocation, target, {
         workspaces: { [invocation.workspace.workspace_id]: temporary },
         runtimeConfig,
+        ...(assertion.expect === 'consumer-approval-required' ? { hostApproval: 'decline' } : {}),
       });
       return {
         ok: sameJson(invoked.response, expected),

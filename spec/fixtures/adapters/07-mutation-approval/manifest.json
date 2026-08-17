@@ -22,6 +22,11 @@
       "id": "do-not-grant-git-authority",
       "type": "approval-gate",
       "expect": "no-commit-or-push"
+    },
+    {
+      "id": "do-not-advertise-approval-without-a-host-provider",
+      "type": "approval-gate",
+      "expect": "trusted-approval-unavailable"
     }
   ],
   "artifacts": [
@@ -36,6 +41,10 @@
     {
       "path": "expected-refusal.json",
       "sha256": "sha256:0fff2ab69ff66357fbcff83a64e67f877b4df537bd749d894246cdb15e26cf55"
+    },
+    {
+      "path": "expected-unwired-refusal.json",
+      "sha256": "sha256:f0bcedb33b22c8652f35b94334bbaf268d5d7589ceefaa689d5da63d0b2acde9"
     },
     {
       "path": "invocation.json",

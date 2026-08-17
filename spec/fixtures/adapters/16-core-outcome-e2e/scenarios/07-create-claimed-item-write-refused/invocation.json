@@ -1,0 +1,25 @@
+{
+  "adapter_contract_version": 2,
+  "request_id": "core-outcome-create-claimed-refused-0001",
+  "workspace": {
+    "workspace_id": "core-outcome-workspace",
+    "cwd": "."
+  },
+  "core_request": {
+    "command": "create",
+    "ledger": "ledger",
+    "input_base64": "ewogICJpZCI6ICJ3Yl8wMVE0NVg0NzROMjhUNUNZNEdORjZZWTRITSIsCiAgIml0ZW0iOiB7CiAgICAidGl0bGUiOiAiTWFwIGEgZmljdGlvbmFsIG1vb24gcm91dGUiLAogICAgImtpbmQiOiAidGFzayIsCiAgICAicHJvdmVuYW5jZSI6IHsKICAgICAgInNvdXJjZSI6ICJmaXh0dXJlL211dGF0aW9ucyIsCiAgICAgICJyZWNvcmRlZF9hdCI6ICIyMDMwLTAxLTEwVDEyOjM0OjU2Ljc4OVoiCiAgICB9LAogICAgImRlcGVuZHNfb24iOiBbXSwKICAgICJyZWxhdGVkIjogW10sCiAgICAiZmljdGlvbmFsX2xhYmVsIjogIm5lYnVsYS03IgogIH0sCiAgImJvZHkiOiAiXG5QbG90IGEgZmljdGlvbmFsIHJvdXRlIGZyb20gQnJpbmRsZSBTdGF0aW9uIHRvIEx1bWVuIFJlZWYuXG4iCn0K"
+  },
+  "instruction_input": {
+    "instruction_input_version": 1,
+    "required": false,
+    "sources": []
+  },
+  "handoff_carrier": null,
+  "limits": {
+    "context_bytes": 0,
+    "stdout_bytes": 65536,
+    "stderr_bytes": 4096,
+    "timeout_ms": 30000
+  }
+}

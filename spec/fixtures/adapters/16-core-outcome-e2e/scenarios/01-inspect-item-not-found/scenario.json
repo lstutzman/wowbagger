@@ -1,0 +1,38 @@
+{
+  "scenario": "01-inspect-item-not-found",
+  "core_command": "inspect",
+  "approval": "none",
+  "workspace": {
+    "kind": "plain"
+  },
+  "ledger": {
+    "before": [
+      {
+        "path": "ledger/wb_01Q4837BM01W70T30B184GG1R6.md",
+        "source_file": "before/wb_01Q4837BM01W70T30B184GG1R6.md",
+        "sha256": "sha256:d1f401557d6a897c1b38dcb4ad356a0af6d8128f9ef9bc5273da869aa9d7f6c9"
+      }
+    ],
+    "after": [
+      {
+        "path": "ledger/wb_01Q4837BM01W70T30B184GG1R6.md",
+        "source_file": "before/wb_01Q4837BM01W70T30B184GG1R6.md",
+        "sha256": "sha256:d1f401557d6a897c1b38dcb4ad356a0af6d8128f9ef9bc5273da869aa9d7f6c9"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "before/wb_01Q4837BM01W70T30B184GG1R6.md",
+      "source": "spec/fixtures/mutations/inspect/ledger/wb_01Q4837BM01W70T30B184GG1R6.md",
+      "sha256": "sha256:d1f401557d6a897c1b38dcb4ad356a0af6d8128f9ef9bc5273da869aa9d7f6c9",
+      "form": "bytes"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "source": "spec/fixtures/mutations/inspect/expected-not-found.json",
+      "sha256": "sha256:9c273d0d366b8627f7e9c818273068df4399eac92686c35fad99733a37cd8f28",
+      "form": "compact-json-line"
+    }
+  ]
+}

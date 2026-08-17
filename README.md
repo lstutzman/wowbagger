@@ -39,7 +39,7 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > version is **3**. Three adapter packages ship — Claude Code, Codex, and
 > OpenCode — on one shared engine at adapter contract version 2. Only the Claude
 > Code adapter declares a `supported` platform, Darwin, from a native run of all
-> 200 conformance assertions across all 15 cases. Every other adapter and
+> 210 conformance assertions across all 16 cases. Every other adapter and
 > platform declaration is `unverified`; do not infer support because the CLI
 > starts.
 >
@@ -463,12 +463,23 @@ TMPDIR=/tmp node spec/run-adapter-implementation.js --target codex
 TMPDIR=/tmp node spec/run-adapter-implementation.js --target opencode
 ```
 
-The native Darwin Claude Code report passes all 200 assertions across all 15
-cases and reports `"status": "pass"`. Codex and OpenCode execute the same 200
+The native Darwin Claude Code report passes all 210 assertions across all 16
+cases and reports `"status": "pass"`. Codex and OpenCode execute the same 210
 assertions through the same engine, but both target reports remain `"fail"`
 pending target-specific evidence, and every platform declaration on those two
 manifests stays `unverified`. The Kimi and OpenAI-compatible harness adapters
 are not written.
+
+**All three shipped packages are read-only as they stand, and say so.** None
+wires a consumer approval source, so each declares no trusted approval and
+refuses `create`, `transition`, and `patch` with `capability-unavailable`
+naming the missing capability, before any core process starts. Mutation
+authority is a runtime dependency a host supplies in code: a process that
+embeds `runAdapterEntrypoint` passes `hostRuntime` — the approval source, the
+clock, the redeemed-nonce store, and the core executable identity it attests —
+and its describe result then advertises trusted approval truthfully. The
+approval never rides the bootstrap request, which the model controls;
+`docs/adapter-contract.md` section 5.1 states the mechanism and its rules.
 
 ## Core commands
 
@@ -1003,7 +1014,7 @@ It is the durable work ledger beneath those systems.
   **In progress at core contract version 3; the version is not frozen.**
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
   packages share the version 2 engine; the Claude Code manifest declares Darwin
-  `supported` after passing all 200 native assertions. Other adapter targets and
+  `supported` after passing all 210 native assertions. Other adapter targets and
   platform declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses. **Shipped as the
   adapter contract and the OpenAI-compatible integration guide.**

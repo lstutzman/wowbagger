@@ -1,0 +1,39 @@
+{
+  "scenario": "02-create-committed",
+  "core_command": "create",
+  "approval": "consumer",
+  "workspace": {
+    "kind": "plain"
+  },
+  "mutation_input": "mutation-input.json",
+  "ledger": {
+    "before": [],
+    "after": [
+      {
+        "path": "ledger/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+        "source_file": "after/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+        "sha256": "sha256:19250ac7cc1edcc5fa9a32d67498612ee3d58ab2c877714e95906c4f1cd09679"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "mutation-input.json",
+      "source": "spec/fixtures/mutations/create/request.json",
+      "sha256": "sha256:b149f977aeff2ae20b9618cadc22ccf4d45cbab0b3268fa1953565cb02d322df",
+      "form": "bytes"
+    },
+    {
+      "path": "after/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
+      "source": "spec/fixtures/mutations/create/expected-item.md",
+      "sha256": "sha256:19250ac7cc1edcc5fa9a32d67498612ee3d58ab2c877714e95906c4f1cd09679",
+      "form": "bytes"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "source": "spec/fixtures/mutations/create/expected.json",
+      "sha256": "sha256:c654aef57afaaf2d27348c2e2159573df09e01e07c5a5b007b9d0224c550c358",
+      "form": "compact-json-line"
+    }
+  ]
+}
