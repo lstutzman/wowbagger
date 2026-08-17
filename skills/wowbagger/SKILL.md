@@ -211,7 +211,7 @@ Markdown.
 
 `patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.
 The patchable field set is exactly `title`, `priority`, `depends_on`,
-`related`, `body`, and `body_append`. A
+`related`, `body`, `body_append`, and `extensions`. A
 `set` naming anything else is an `invalid-request` issue at its `/set` pointer,
 and `number` is refused because it is immutable identity.
 
@@ -235,18 +235,38 @@ the refusal — every frontmatter member is in exactly one of three classes:
   `created`, `updated`, the terminal dates (`completed`, `killed`, `archived`,
   `deferred`), and `decisions`. `transition` writes these; nothing else does.
 - **Consumer-editable through `patch`**: `title`, `priority`, `depends_on`,
-  `related`, and the body.
+  `related`, the body, and every extension member the ledger declares.
 - **Create-once**: `kind`, `provenance`, `parent`, `snoozed_until`. Set at
   `create` and fixed after. `kind` is refused deliberately — a task-to-epic
   flip changes which parent and children rules apply and which lifecycle edges
   are allowed, so it needs its own verb, not a wider `set`.
 
-Extension members are not patchable — `tags`, `tier`, and a consumer's own
-identifier fields are consumer-owned, preserved byte for byte by every verb,
-and today changed only by a reviewable hand-edit. On a provisioned ledger,
-treat that hand-edit like any other out-of-protocol write: commit it, then run
-`claim-verify` and reconcile. The full table, and why the extension path is
-still open, is in `docs/mutation-contract.md` section 9.
+**Extension members are patchable only where the ledger declares them.**
+`tags`, `tier`, and a consumer's own identifier fields are consumer-owned. Send
+them through the `set.extensions` container, one member per name, each value
+replacing that member whole:
+
+~~~json
+{"set": {"extensions": {"external_id": "PC-1475", "tier": null}}}
+~~~
+
+- The ledger's committed `<ledger>/.wowbagger/extensions.json` decides which
+  members that container may name and what type each value takes — `string`,
+  `integer`, `boolean`, or `string-list`. **A ledger without that file has no
+  patchable extension member at all.**
+- `null` removes a member. A member the item lacks is added, after the item's
+  last frontmatter member.
+- Members you do not name are untouched, byte for byte.
+- Four things stay a hand-edit: an undeclared member, every member on a ledger
+  with no declaration, a member whose value is a map or a nested list, and a
+  member the item writes with a YAML anchor or alias — that last one is refused
+  `extension-anchored` rather than replaced, because replacing it would change
+  every node bound to the anchor.
+
+On a provisioned ledger, treat a hand-edit like any other out-of-protocol
+write: commit it, then run `claim-verify` and reconcile. The full table, the
+declaration's shape, and the five extension refusal codes are in
+`docs/mutation-contract.md` section 9.
 
 ### An epic's progress lives in its children, not in its status
 

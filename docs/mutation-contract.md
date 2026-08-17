@@ -116,6 +116,35 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
   `/set/body_append`, exit 2, `unchanged`, so the probe costs nothing and
   changes no byte.
 
+- **the patchable extension member.** `set.extensions` joins the patch request
+  as a container whose members name consumer-owned extension members and whose
+  values replace each named member whole (section 9). The fixed `set` allowlist
+  is unchanged: `extensions` is one more name on it, not an opening for
+  arbitrary keys, so a typo outside the allowlist is still an
+  `unknown-member` issue. Which members the container may name comes from the
+  committed `<ledger>/.wowbagger/extensions.json`, so a ledger without that
+  file has no patchable extension member at all. Five
+  `patch-precondition-failed` issue codes join the contract:
+  `extension-declaration-missing`, `extension-declaration-invalid`,
+  `extension-not-declared`, `extension-value-invalid`, and
+  `extension-anchored`. The issue **shape** does not move — all five carry
+  exactly `code`, `field`, `message`, and `related_ids`, the four-member shape
+  every non-date code keeps — so this is not the class of change that forced
+  the version 2 to 3 bump. A version 3 consumer that enumerates patch issue
+  codes exactly must accept the five; one that branches on `error.code` alone
+  cannot observe them. The version stays 3 by the argument the relations, body,
+  title, and append deltas made: it widens the patch request schema, adds,
+  removes, and renames no response envelope member, and a consumer that never
+  sends `set.extensions` cannot observe the difference. The honesty this entry
+  owes is the published half. Version 3 is **published** — `0.1.0-alpha.5`
+  released it and has no `set.extensions` — so `contract_version` cannot
+  answer whether a core carries this path. A consumer that must know either
+  pins the distribution version, where the first release after
+  `0.1.0-alpha.5` carries it, or sends an extension patch on a scratch item and
+  reads the refusal: a core without it answers `invalid-request` with an
+  `unknown-member` issue at `/set/extensions`, exit 2, `unchanged`, so the
+  probe costs nothing and changes no byte.
+
 Two version-2-era changes are deliberately **not** version 3 deltas. The
 section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
 it adds no member, removes none, and renames none, so it is not a version
@@ -1332,11 +1361,13 @@ Patch accepts exactly:
 | set | Yes | Mapping naming at least one patchable field. |
 
 The patchable field set is exactly `title`, `priority`, `depends_on`,
-`related`, `body`, and `body_append`. A set member outside it is an invalid-request issue at
+`related`, `body`, `body_append`, and `extensions`. A set member outside it is an invalid-request issue at
 its /set pointer — the boundary is stated here, not discovered from the
 implementation. `number` is the immutable item identity, assigned once at
-create, so it is not patchable and a request naming it is refused. `kind`,
-`provenance`, and extension members are refused too. The complete boundary,
+create, so it is not patchable and a request naming it is refused. `kind` and
+`provenance` are refused too. A consumer-owned extension member is written
+through the `extensions` container and only when the ledger declares it; it is
+never one more name in this list. The complete boundary,
 member by member, is the ownership table below; a consumer never has to send a
 patch to learn which side of it a field is on.
 
@@ -1408,6 +1439,20 @@ not a frontmatter member: every item has one, and there is nothing to remove.
 as an invalid-value issue at `/set/body`, exit 2, unchanged — it is not read as
 a removal and it is not read as the empty string.
 
+`extensions` takes a mapping whose keys name consumer-owned extension members
+and whose values replace each named member whole. It is one member of the
+fixed `set` allowlist, not a hole in it: a typo at the top level
+(`prioirty`) is still an `unknown-member` issue at `/set/prioirty`, and only
+what is inside this container is read as an extension member name. A
+non-object value is an invalid-type issue at `/set/extensions`; a container
+naming no member is an invalid-value issue at the same pointer.
+
+Request-shape validation of the container stops there. Which members it may
+name, and what each value must be, is the **ledger's** answer, not the
+request's, so both are deterministic patch preconditions rather than
+invalid-request issues, and each of them costs the lock the request already
+takes.
+
 Request-shape validation stops at the rules above. Referential integrity,
 dependency cycles, the schema-2 done-dependency rule, self-reference, repeated
 references, and depends_on/related overlap are candidate complete-ledger
@@ -1429,8 +1474,9 @@ UTC ULID derivation applies: an item created just after midnight UTC refuses
 the operator's local calendar date here too.
 
 Patch appends no decision: the ledger's Git history is the audit trail for a
-consumer-field change. Identity, lifecycle, provenance, snooze, decisions, and
-extension members cannot change through patch.
+consumer-field change. Identity, lifecycle, provenance, snooze, and decisions
+cannot change through patch, and neither can an extension member the ledger
+does not declare.
 
 Patch never mutates another item. A candidate ledger that flags any other
 item — for example a duplicate-number collision with an existing handle —
@@ -1438,6 +1484,104 @@ returns candidate-invalid, exit 2, and unchanged, and both items keep their
 bytes. Re-scoping one item's dependency onto `related` and dispositioning the
 item it depended on is therefore two patch and transition calls, not one
 atomic multi-item mutation.
+
+### The extension declaration
+
+`<ledger>/.wowbagger/extensions.json` is the committed declaration of which
+extension members are patchable on that ledger and what value each one takes.
+It sits beside `layout.json` and is the same class of artifact: core-owned
+ledger structure, read from the ledger the caller named, never discovered by a
+walk. It is version 1:
+
+~~~json
+{
+  "extensions_version": 1,
+  "members": {
+    "external_id": "string",
+    "tier": "string",
+    "sequence": "integer",
+    "verified": "boolean",
+    "tags": "string-list"
+  }
+}
+~~~
+
+Its members are exactly `extensions_version`, which is `1`, and `members`, a
+non-empty mapping from a member name to one declared value type. A member name
+matches `[A-Za-z][A-Za-z0-9_-]*` and is never one of the frontmatter members
+the ownership table above governs: a declaration cannot smuggle `title` or
+`status` past that table by naming it. The declared value types are exactly
+`string`, `integer`, `boolean`, and `string-list`, a flat list of strings.
+
+This is deliberately not a schema engine. A whole-value replace can serialize a
+scalar or a flat list of scalars into an item without inventing structure the
+item never carried; a map, a nested list, or a value with its own internal
+shape cannot be described by one declared type and is not offered. A consumer
+whose extension member is a map keeps it exactly as before — consumer-owned,
+preserved by every verb, changed by a reviewable hand-edit — and the boundary
+is stated here rather than discovered from a refusal. If nested extension
+values ever need a patch path, they need their own declaration shape, and this
+one does not pretend to be it.
+
+**A declaration authorizes a write; it does not describe the ledger.** It is
+checked against the request's values and against the item's node shapes, and
+never against the values other items already carry. Enforcing it over stored
+items would make the repair it exists for impossible: one item with the wrong
+type would make the whole ledger invalid, and `patch` refuses `ledger-invalid`
+before it can correct anything. `validate` is therefore unchanged by this file,
+and an item whose extension member disagrees with the declaration is still a
+valid item — it is simply an item a patch can correct.
+
+Absence is fail-closed and total. A ledger with no `extensions.json` has **no**
+patchable extension member, and a `set.extensions` request against it is
+refused `patch-precondition-failed`, exit 2, `unchanged`, with one
+`extension-declaration-missing` issue whose field is `extensions` and whose
+message names the missing file. A declaration that is present but unreadable —
+malformed JSON, a wrong shape, a member name or value type outside the rules
+above, a symlink, a directory, non-UTF-8 bytes — is refused the same way with
+`extension-declaration-invalid`, which names the file rather than blaming the
+request.
+
+### Extension preconditions
+
+Every extension refusal is a `patch-precondition-failed` issue in the shape
+transition and patch issues already share — `code`, `field`, `message`, and
+`related_ids`, and nothing else. The member at fault is named in `field`,
+because that is where the item's frontmatter member at fault is named
+everywhere else; the issue shape does not grow a member to carry it.
+
+| Code | field | Meaning |
+|---|---|---|
+| extension-declaration-missing | `extensions` | The ledger has no `.wowbagger/extensions.json`, so nothing is patchable. |
+| extension-declaration-invalid | `extensions` | The declaration exists and is not a valid version 1 declaration. |
+| extension-not-declared | the member | The container names a member the declaration does not declare. |
+| extension-value-invalid | the member | The value does not match the type the declaration gives that member. |
+| extension-anchored | the member | The item writes that member with a YAML anchor or alias. |
+
+`null` removes the named member, the same convention every patchable
+frontmatter field shares, and it is accepted whatever type the declaration
+gives the member. Removing an extension member never makes the candidate
+invalid, because no extension member is required.
+
+**The anchored rule.** An extension value may carry a YAML anchor another node
+aliases, and the successor guard compares extension nodes by exact node
+identity. A whole-value replace of such a node would change every node bound
+to it, silently, and a replace of a subtree that carries an anchor inside it
+would leave an alias elsewhere with nothing to resolve. So it is refused, not
+attempted: if the item writes the named member as an alias, or with an anchor
+anywhere in its value, the patch returns `extension-anchored`, exit 2,
+`unchanged`. The refusal is per named member, so an anchored `mirror` does not
+stop a patch of `external_id` on the same item. Removing the anchor is a
+reviewable hand-edit, exactly as it was before this path existed.
+
+**What the guard still proves.** Every extension member the request does *not*
+name keeps its exact `extensionNodeIdentity` guarantee: its key, value,
+anchor, alias, comment, tag, quoting style, flow or block style, and position
+must all survive the patch, or the candidate is refused. Only the named
+members leave that guard, and they are checked a second way instead — the
+serialized candidate is parsed back and each named member must read as exactly
+the value the request asked for. A value the YAML writer emitted in a style
+that parses as something else is caught before publication, not after.
 
 ### Frontmatter ownership
 
@@ -1467,7 +1611,8 @@ interpreting the refusal.
 | `provenance` | Create-once | Create writes it. Every later verb preserves it byte for byte. |
 | `parent` | Create-once | Create writes it. No verb moves an item between epics. |
 | `snoozed_until` | Create-once | Create writes it. No verb changes it. |
-| extension members (`tags`, `tier`, a consumer's own identifier fields) | Consumer-owned, not patchable | Supplied at create, preserved byte for byte by every verb, and otherwise a reviewable hand-edit. |
+| declared extension members (`tags`, `tier`, a consumer's own identifier fields) | Consumer-owned, patchable through `set.extensions` | `set.extensions.<member>` replaces the member whole; `null` removes it. Patchable only where `<ledger>/.wowbagger/extensions.json` declares the member and its value type, and only where the item does not write it with a YAML anchor or alias. |
+| undeclared extension members | Consumer-owned, not patchable | Supplied at create, preserved byte for byte by every verb, and otherwise a reviewable hand-edit. A ledger with no extension declaration has no patchable extension member at all. |
 
 **Why `kind` is refused.** A task-to-epic flip is not a field edit. Kind
 decides the parent and children rules an item is validated under and the
@@ -1479,40 +1624,50 @@ validate or a lifecycle the contract never sanctioned. If kind is ever to
 change, it needs its own verb with its own preconditions, not a widened patch
 set.
 
-**Why extension members are not patchable yet, and what a path needs.** Two
-field reports in two days asked for one — a consumer's own identifier fields
-ride permitted extension members, and a wrong or missing one has no ledger-side
+**How extension members became patchable, and what stayed out.** Two field
+reports in two days asked for this — a consumer's own identifier fields ride
+permitted extension members, and a wrong or missing one had no ledger-side
 repair verb at all. The widening was assessed against title's machinery and is
-not the same machinery. Four differences, each real:
+not the same machinery. Four differences were real, and each one is answered by
+a specific piece of the shipped path rather than waived:
 
-1. **The request shape has no room for an arbitrary key.** A set member outside
+1. **The request shape had no room for an arbitrary key.** A set member outside
    the patchable set is an invalid-request issue, and that fail-closed rule is
    what turns a typo (`prioirty`) into a refusal instead of a new frontmatter
-   member. Accepting arbitrary keys in `set` destroys it. A separate container
-   such as `set.extensions` keeps it, but that is a new request shape rather
-   than one more name in an existing list.
-2. **There is no value schema to validate against.** Title is a schema string
+   member. Accepting arbitrary keys in `set` would destroy it. Answered by the
+   `set.extensions` container: the fixed allowlist gains exactly one more name,
+   and only what is inside the container is read as a member name.
+2. **There was no value schema to validate against.** Title is a schema string
    the validator already enforces; candidate validation constrains no extension
-   value at all. A patchable extension member would write unvalidated
-   caller JSON straight into frontmatter, which no other patchable field does.
+   value at all. Answered by the committed per-ledger declaration: a member is
+   patchable only where the ledger declares it, with one declared value type,
+   and a value outside that type is refused before the serializer sees it. The
+   declaration authorizes a write and never describes the ledger — see "The
+   extension declaration" above for why enforcing it over stored items would
+   make the repair impossible.
 3. **Nested values do not survive a whole-value replace the way a scalar
    does.** An extension value may be a map or a sequence, may carry an anchor
    that another node aliases, and is compared by the successor guard through
-   exact node identity. Replacing one means excluding that key from the very
-   guard that proves the other extension nodes were untouched.
-4. **The oracle has no observable surface to correlate against.** Extension
+   exact node identity. Answered in two parts and no further. Anchored and
+   aliased members are refused outright with `extension-anchored`, so the guard
+   that proves the other extension nodes were untouched is never relaxed for
+   them; and the declared types stop at scalars and flat string lists, so a map
+   or a nested list has no patch path at all and stays a reviewable hand-edit.
+   Only the members a request names leave the node-identity guard, and they are
+   checked by value against the serialized candidate read back instead.
+4. **The oracle had no observable surface to correlate against.** Extension
    members are absent from the lossless core view, so an independent
-   re-implementation cannot check an extension patch result without decoding
-   and parsing the item source — surface growth the oracle deliberately avoids
-   for patch.
+   re-implementation cannot check an extension patch result from `core` alone.
+   Answered by correlating through `source_base64`: the oracle decodes the item
+   source the response already carries, parses its frontmatter, and checks each
+   named member against the request — a removal against the member's absence.
+   This is surface the oracle deliberately avoided for patch, and taking it on
+   was the price of the path; nothing else in patch correlation changed.
 
-An extension-member patch is therefore a separate design, not a line in this
-one. It needs, at minimum: a `set.extensions` container that leaves the
-fail-closed set rule intact, a declared per-ledger extension schema so
-candidate validation has something to enforce, a stated rule for anchored and
-nested values, and an oracle-visible surface to correlate against. Until it
-ships, the honest answer for `tags`, `tier`, and a consumer's own identifier
-fields is the table's: consumer-owned, preserved by every verb, changed only by
+What is still out: an undeclared member on any ledger, every member on a ledger
+with no declaration, a member whose value is a map or a nested list, and a
+member the item writes with an anchor or an alias. For all four, the honest
+answer is the table's: consumer-owned, preserved by every verb, changed only by
 a reviewable hand-edit — and on a provisioned ledger, that hand-edit is the
 stale write described at the top of this section, so it must be reconciled, not
 merely committed.
@@ -1527,9 +1682,18 @@ directly after kind; a newly added depends_on directly after provenance, and a
 newly added related directly after depends_on. A relation list this patch adds
 is written as a YAML flow sequence, the style create writes; a relation list
 already on the item keeps its sequence node, so its style — and any anchor on
-it — survives the replacement. Extension nodes are preserved exactly as in
-transition, and a patch that names no body preserves the body bytes the same
-way.
+it — survives the replacement. Extension nodes the request does not name are
+preserved exactly as in transition, and a patch that names no body preserves
+the body bytes the same way.
+
+A named extension member is rewritten in place when the item already carries
+it, so its quoting style and its position in the item's own member order both
+survive the correction; a declared string list already on the item keeps its
+sequence node and its style. A named member the item does not carry is
+**appended after the item's last frontmatter member**, because an extension
+member has no canonical position the core may claim — there is no core member
+it belongs after. A list this patch adds is written as a YAML flow sequence,
+the style create writes. A named member set to `null` is deleted.
 
 A body patch rewrites no frontmatter byte. The published frontmatter — from the
 opening delimiter through the closing delimiter and its newline — is identical

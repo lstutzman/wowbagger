@@ -49,7 +49,9 @@ const CONTROLLED_ITEM_FIELDS = new Set([
 ]);
 // Everything the core view owns. Extension-node identity preserves only
 // fields outside this set; core-owned values are compared through coreView.
-const CORE_OWNED_FIELDS = new Set([
+// Exported so the extension declaration's reserved-name list can be pinned
+// against it: a name that leaves this set must not silently become declarable.
+export const CORE_OWNED_FIELDS = new Set([
   ...CONTROLLED_ITEM_FIELDS,
   ...CONSUMER_CORE_FIELDS,
 ]);
