@@ -4,6 +4,7 @@ id: wb_01M086JP4HBS1D80B3YJ6VEWVV
 number: 122
 title: "Run the provisioned-performance program"
 kind: task
+priority: 20
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
