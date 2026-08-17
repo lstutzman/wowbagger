@@ -107,6 +107,7 @@ named source and hash to the declared revision.
 | Patch relations | re-scoped dependent, dangling depends_on reference |
 | Patch body | mirror-sync body swap with untouched frontmatter, refused null body |
 | Patch title | mirror-sync title correction with untouched extension nodes, refused empty title |
+| Patch extensions | declared identifier correction with untouched anchored extension nodes, refused undeclared member |
 | Mutation states | unchanged, committed, and unknown |
 
 Claims, adapters, PropertyCompass data, Git transport, and multi-item

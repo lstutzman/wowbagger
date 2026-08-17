@@ -60,6 +60,12 @@ the ledger invalid with `item-outside-layout`. A malformed or unreadable
 configuration makes the ledger invalid; an implementation MUST NOT fall back
 to the ledger root.
 
+The sibling `<ledger>/.wowbagger/extensions.json` is deliberately absent from
+this specification. It declares which consumer-owned extension members `patch`
+may write (mutation contract section 9) and constrains no item: a validator
+MUST NOT read it, and an item whose extension member disagrees with it is
+still valid.
+
 The layout file is the only write-path authority. `create` derives its final
 path from `items_directory` and the caller-supplied item ID. A mutation request
 cannot supply or override a path. Readers still traverse the complete ledger

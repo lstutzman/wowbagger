@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 3,
+  "state": "unchanged",
+  "error": {
+    "code": "patch-precondition-failed",
+    "message": "The requested patch failed its preconditions.",
+    "details": {
+      "id": "wb_01Q4ZK3DG020ANANANANANANAM",
+      "issues": [
+        {
+          "code": "extension-not-declared",
+          "field": "externl_id",
+          "message": "The ledger extension declaration does not declare this member.",
+          "related_ids": []
+        }
+      ]
+    }
+  }
+}

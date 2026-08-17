@@ -9,6 +9,38 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- **`set.extensions` gives consumer-owned extension members a sanctioned patch
+  path.** Two field reports in two days: a consumer's own identifier field
+  rides a permitted extension member, and a wrong or missing one had no
+  ledger-side repair verb at all. On a provisioned ledger the hand-edit that
+  filled the gap is a stale write, so the protocol was forcing the edit it then
+  punished. `patch` now accepts an `extensions` container whose members name
+  extension members and whose values replace each one whole; `null` removes a
+  member. The fixed `set` allowlist is unchanged — `extensions` is one more
+  name on it, not an opening for arbitrary keys — so a top-level typo is still
+  an `unknown-member` refusal. Which members the container may name comes from
+  the committed `<ledger>/.wowbagger/extensions.json`, which declares a member
+  name and one value type each (`string`, `integer`, `boolean`, `string-list`).
+  **A ledger without that file has no patchable extension member at all**, and
+  the refusal names the missing declaration. Five new
+  `patch-precondition-failed` issue codes carry the refusals —
+  `extension-declaration-missing`, `extension-declaration-invalid`,
+  `extension-not-declared`, `extension-value-invalid`, `extension-anchored` —
+  in the existing four-member issue shape, with the member at fault named in
+  `field`. A member the item writes with a YAML anchor or alias is refused
+  rather than replaced, because replacing it would change every node bound to
+  the anchor; every member the request does not name keeps its exact
+  `extensionNodeIdentity` guarantee. The declaration authorizes a write and
+  never describes the ledger: `validate` does not read it, so an item whose
+  extension member disagrees with it stays valid and stays repairable. Nested
+  extension values still have no patch path and stay a reviewable hand-edit.
+  Core contract version stays 3 — the patch request schema widens and no
+  response envelope member is added, removed, or renamed — but version 3 is
+  published, so `contract_version` cannot answer whether a core carries this:
+  probe by sending an extension patch and reading the refusal, or pin the
+  distribution version. Documented in mutation contract section 9 and pinned by
+  `spec/fixtures/mutations/patch-extensions/`.
+
 - **`claim-adopt` gives `unauthorized-revision` a non-destructive remedy.** A
   consumer's staging checkout was blocked exit 6 on three items whose bodies
   were hand-edited in a design session and merged. The refusal was correct, but
@@ -35,6 +67,20 @@ consolidation. The first tagged release inherits this file.
 
 ### Changed
 
+- **The report's epic-enablement factor now counts done or killed children
+  only.** It counted every child carrying a terminal date, which folded
+  archived and deferred children into the numerator: an epic with one done,
+  one archived, one deferred, and one backlog child reported enablement 0.75
+  while the mutation contract's terminal ratio for the same epic was 0.25. Two
+  numbers wore one name. A terminal date is not a terminal disposition —
+  archived restores and deferred undefers, both documented edges — so a parked
+  child is work postponed, not work retired, and counting it reported progress
+  that one transition takes back. The factor now reads the same done-or-killed
+  set as the contract and the epic complete rollup: one definition, three
+  surfaces. This is display-only and recomputed at render time; no ledger byte,
+  no wire shape, and no `ready` ordering changes. What does change is the
+  report: an epic with parked children reports a lower percentage, and its open
+  children rank lower on the epic-enablement step of `work next`.
 - **Every `unauthorized-revision` remediation string now names both remedies.**
   It was one sentence naming only the restore path, which reads as an
   instruction to throw the edit away; the field report above did exactly that.
@@ -103,6 +149,27 @@ consolidation. The first tagged release inherits this file.
   at `/set/body_append`, exit 2, unchanged.
 
 ### Documentation
+
+- **The allowed-edges table carries the defer and undefer edges.** `task` and
+  `epic` `backlog` to `deferred` and `deferred` to `backlog` have shipped in
+  `src/mutation.js` since deferral existed, both requiring a decision, and the
+  ownership table already documented `deferred` as a core-owned field that
+  `transition` writes on a defer. Section 8's edge table listed neither row, so
+  the one place a consumer looks up what it may drive under-reported the
+  lifecycle by two edges. Both rows are added with the evidence the code
+  generates — `set deferred; append defer decision` and `clear deferred; append
+  undefer decision` — and a docs guard pins the kind, the date, and the
+  decision on each. No emitted byte changes and the core contract stays version
+  3: this documents shipped edges, it does not add them.
+
+- **The epic derivation section cites one shared definition instead of a
+  divergence.** It recorded the report's epic-enablement factor as a different,
+  wider number than the terminal ratio. The report factor was narrowed to match
+  (see Changed above), so the paragraph is replaced: the contract, the epic
+  complete rollup, and the report all count done or killed direct children over
+  all direct children, and the section now says outright that a terminal date is
+  not the test. The docs guard is re-pointed at the new truth rather than
+  relaxed.
 
 - **The contract states that `set.body` replaces and never merges.** A consumer
   mirroring an external source regenerated an item body from its upstream card

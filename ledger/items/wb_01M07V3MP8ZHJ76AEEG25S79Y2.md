@@ -5,9 +5,10 @@ number: 119
 title: "Settle the epic-enablement definition and the missing deferred edges"
 kind: task
 priority: 10
-status: backlog
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T12:28:27Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Two numbers wearing one name; the deferred counter-example is real, and the edge table gap is mechanical."
+  - action: complete
+    date: 2026-08-17
+    summary: "One epic-enablement definition; the deferred edges are in the table."
+    rationale: "Report enablement narrowed to done-or-killed direct children - the contract's terminal ratio and the rollup's gate, one definition on three surfaces; a parked child is work postponed, not retired. Narrowed at the enablement computation, not the shared terminalDate partition that feeds six other surfaces. The section 8 table gains both deferred rows read out of the shipped edge map. ready --json proven byte-identical by cmp. Follow-up flagged: the done-or-killed set has five independent spellings across report, mutation, validate, and adapter - a design call on extraction vs deliberate layering."
 ---
 
 Found during item #115's verification: the report's epic-enablement factor and the contract's epic terminal ratio are DIFFERENT numbers, and the contract now states the divergence plainly rather than papering it. src/report-sequencing.js counts a child as terminal when terminalDate is non-null, which includes archived and deferred; the contract's derivation (shared with the epic complete rollup, verified) counts done or killed only. Measured on the real function: an epic with one done, one archived, one deferred, one backlog child reports enablement 3/4 = 0.75 versus derivation 1/4 = 0.25.
