@@ -923,14 +923,14 @@ function adoptionRefusal(reconciled, ledgerDirectory, request) {
     ['working-tree', item ? revisionFor(item.bytes) : null],
   ];
   for (const [surface, observed] of surfaces) {
-    if (observed === request.to_revision && reconciled.gitHead !== null) continue;
+    if (observed === request.to_revision) continue;
     return adoptionError('adoption-revision-uncommitted',
       'The adopted revision is not committed at Git HEAD.', {
         ledger_namespace: reconciled.state.ledger_namespace,
         item_id: request.item_id,
         requested_to_revision: request.to_revision,
         observed_surface: surface,
-        observed_revision: reconciled.gitHead === null ? null : observed,
+        observed_revision: observed,
       });
   }
   const validation = validateLedger(reconciled.ledger);

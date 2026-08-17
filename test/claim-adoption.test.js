@@ -467,3 +467,24 @@ test('claim-adopt refuses a malformed request before touching the journal', asyn
   assert.equal(refused.envelope.command, 'claim-adopt');
   assert.equal(refused.envelope.error.code, 'invalid-request');
 });
+
+test('a lease whose expiry equals the authoritative instant does not block adoption', async () => {
+  const fixture = await blockedByUnauthorizedRevision({ claimBeforeEdit: true });
+  const journalPath = claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace);
+  // A lease is active exactly while `effective_now < expires_at`; equality is
+  // expired. Raising the durable clock floor to the lease's own expiry pins the
+  // authoritative instant on that boundary.
+  await appendClaimEntry(journalPath, {
+    type: 'clock',
+    now: fixture.claim.expires_at,
+    floor: fixture.claim.expires_at,
+  });
+
+  const adopted = run(
+    fixture.root,
+    'claim-adopt', '--ledger', fixture.ledger, '--input', await adoptRequest(fixture), '--json',
+  );
+
+  assert.equal(adopted.exit, 0, JSON.stringify(adopted.envelope));
+  assert.equal(adopted.envelope.result.adopted_at, fixture.claim.expires_at);
+});
