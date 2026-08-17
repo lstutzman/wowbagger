@@ -4,10 +4,9 @@ id: wb_01KZ77NSW8363H1V6QG1HZRG11
 number: 2
 title: "Evaluate PropertyCompass adoption after standalone release"
 kind: task
-status: deferred
+status: backlog
 created: 2026-08-04
-updated: 2026-08-13
-deferred: 2026-08-13
+updated: 2026-08-17
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -36,6 +35,10 @@ decisions:
     date: 2026-08-13
     summary: "Defer full PropertyCompass adoption."
     rationale: "PropertyCompass has not authorized the full migration, and its concurrent-worktree write pattern needs exclusive dispatch that current merge-coordinated claims do not provide."
+  - action: undefer
+    date: 2026-08-17
+    summary: "Undefer."
+    rationale: "The question this item defers is being answered in production: PropertyCompass2 adopted alpha.5 in dual-run. Evaluation is now observation."
 ---
 
 Migrate PropertyCompass's backlog onto wowbagger. This item is the FULL
