@@ -5,9 +5,10 @@ number: 2
 title: "Evaluate PropertyCompass adoption after standalone release"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-04
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-04T20:33:09Z"
@@ -40,6 +41,10 @@ decisions:
     date: 2026-08-17
     summary: "Undefer."
     rationale: "The question this item defers is being answered in production: PropertyCompass2 adopted alpha.5 in dual-run. Evaluation is now observation."
+  - action: complete
+    date: 2026-08-17
+    summary: "Adoption evaluated from live evidence; question closed by observation."
+    rationale: "docs/research/2026-08-17-propertycompass-adoption-evaluation.md answers the five questions with a source per claim: adoption succeeded short of cutover (their own drift audit: one structural divergence in 1,574), the field-report loop is the product mechanism (15 shipped fixes in a week), and the second consumer needs #120/#124/#123/#125 first. The standalone-release gate this item waited on shipped as alpha.5/.6."
 ---
 
 Migrate PropertyCompass's backlog onto wowbagger. This item is the FULL
