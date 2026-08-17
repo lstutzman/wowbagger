@@ -61,9 +61,16 @@ test('missing Git identity refuses before the mutation', async () => {
   const emptyConfig = path.join(fixture.base, 'empty-git-config');
   await writeFile(emptyConfig, '');
 
+  // CI jobs export GIT_AUTHOR_*/GIT_COMMITTER_* for the fixtures that need an
+  // identity; this test needs Git to find none anywhere, so those variables
+  // are removed from the child (spawn omits keys whose value is undefined).
   const result = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit', {
     GIT_CONFIG_GLOBAL: emptyConfig,
     GIT_CONFIG_SYSTEM: emptyConfig,
+    GIT_AUTHOR_NAME: undefined,
+    GIT_AUTHOR_EMAIL: undefined,
+    GIT_COMMITTER_NAME: undefined,
+    GIT_COMMITTER_EMAIL: undefined,
   });
 
   assert.equal(result.exit, 4, result.stdout);
