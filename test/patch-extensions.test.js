@@ -342,3 +342,47 @@ test('a member the item writes with an anchor is refused rather than replaced', 
     assert.equal(await readFile(path.join(ledger, `${ITEM}.md`), 'utf8'), before);
   });
 });
+
+// The anchor need not sit on the member's own node. An anchor anywhere inside
+// its value binds nodes a whole-value replace would strand, so the refusal
+// walks the subtree rather than checking one node.
+for (const [label, lines] of [
+  ['an anchor inside a mapping value', ['tier:', '  grade: &grade gold', '  echo: *grade']],
+  ['an anchor inside a sequence value', ['tier:', '  - &grade gold', '  - *grade']],
+  ['an anchored key inside a mapping value', ['tier:', '  &grade grade: gold']],
+  ['a member that is itself an alias', ['tier: *mirror']],
+]) {
+  test(`a member is refused for ${label}`, async () => {
+    const before = itemSource({ extra: lines });
+    await withLedger({
+      [`${ITEM}.md`]: before,
+      '.wowbagger/extensions.json': DECLARATION,
+    }, async (ledger) => {
+      const result = await runPatch(ledger, { extensions: { tier: 'silver' } });
+
+      assert.equal(result.status, 2, result.stdout);
+      const envelope = JSON.parse(result.stdout);
+      assert.equal(envelope.error.code, 'patch-precondition-failed');
+      assert.deepEqual(envelope.error.details.issues, [{
+        code: 'extension-anchored',
+        field: 'tier',
+        message: 'The item writes this member with a YAML anchor or alias, so it cannot be replaced whole.',
+        related_ids: [],
+      }]);
+      assert.equal(await readFile(path.join(ledger, `${ITEM}.md`), 'utf8'), before);
+    });
+  });
+}
+
+// The refusal is per named member: an anchored neighbour does not make the
+// item unpatchable.
+test('an anchored member does not stop a patch of a member beside it', async () => {
+  const before = itemSource({ extra: ['external_id: "PC-1470"'] });
+  await withLedger({
+    [`${ITEM}.md`]: before,
+    '.wowbagger/extensions.json': DECLARATION,
+  }, async (ledger) => {
+    const result = await runPatch(ledger, { extensions: { external_id: 'PC-1475' } });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  });
+});
