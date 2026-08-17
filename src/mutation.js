@@ -6,6 +6,11 @@ import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, visit } from 'yaml';
 import { isDependencySatisfied } from './dependencies.js';
+import {
+  EXTENSION_DECLARATION_PATH,
+  extensionValueMatches,
+  loadExtensionDeclaration,
+} from './extensions.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
 import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
@@ -44,7 +49,9 @@ const CONTROLLED_ITEM_FIELDS = new Set([
 ]);
 // Everything the core view owns. Extension-node identity preserves only
 // fields outside this set; core-owned values are compared through coreView.
-const CORE_OWNED_FIELDS = new Set([
+// Exported so the extension declaration's reserved-name list can be pinned
+// against it: a name that leaves this set must not silently become declarable.
+export const CORE_OWNED_FIELDS = new Set([
   ...CONTROLLED_ITEM_FIELDS,
   ...CONSUMER_CORE_FIELDS,
 ]);
@@ -592,7 +599,7 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
         }));
       }
 
-      const built = operation.build(lockedTarget, current.ledger, request, scenario);
+      const built = await operation.build(lockedTarget, current.ledger, request, scenario, root);
       if (built.outcome) {
         return await finishUncommitted(built.outcome);
       }
@@ -605,6 +612,7 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
         lockedTarget.file,
         successor,
         lockedTarget.source,
+        Object.keys(request.set?.[PATCH_EXTENSIONS_FIELD] ?? {}),
       );
       if (!candidateValidation.valid) {
         return await finishUncommitted(mutationError('candidate-invalid', 'The proposed item would make the ledger invalid.', 'unchanged', 2, {
@@ -742,14 +750,21 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
 // patch applies them. `number` is the immutable item identity, assigned once at
 // create, so it is not patchable; everything else stays a reviewable hand-edit
 // or a transition concern.
-const PATCHABLE_FIELDS = ['title', 'priority', 'depends_on', 'related', 'body', 'body_append'];
+const PATCHABLE_FIELDS = ['title', 'priority', 'depends_on', 'related', 'body', 'body_append', 'extensions'];
 // The two body write modes. They are mutually exclusive in one request: a
 // replacement and an append cannot both describe the successor body.
 const PATCH_BODY_FIELDS = ['body', 'body_append'];
-// The patchable fields that live in the frontmatter. The body write modes are
-// the patchable values outside it, so they take their own validation and
-// serialization path.
-const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => !PATCH_BODY_FIELDS.includes(field));
+// The container that carries consumer-owned extension members. It is one set
+// member rather than a widened set allowlist, so a typo outside the fixed
+// names is still an unknown member and still fails closed.
+const PATCH_EXTENSIONS_FIELD = 'extensions';
+// The patchable fields that live in the frontmatter under a fixed name. The
+// body write modes are the patchable values outside it, and the extensions
+// container names members the ledger declares rather than ones this list
+// fixes, so all three take their own validation and serialization path.
+const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => (
+  !PATCH_BODY_FIELDS.includes(field) && field !== PATCH_EXTENSIONS_FIELD
+));
 // Patchable fields whose value is a whole relation list rather than a scalar.
 const PATCH_RELATION_FIELDS = new Set(['depends_on', 'related']);
 // Where a newly added field lands in the frontmatter; the anchor is a member
@@ -813,6 +828,16 @@ export function validatePatchRequest(request, parseIssues = []) {
     } else if (hasOwn(request.set, 'body_append') && typeof request.set.body_append !== 'string') {
       issues.push(issue('/set/body_append', 'invalid-type', 'Set member body_append must be a string.'));
     }
+    // The container's own shape is all the request can judge: which member
+    // names are permitted, and what each one's value must be, is the committed
+    // per-ledger declaration's answer, read under the lock.
+    if (hasOwn(request.set, PATCH_EXTENSIONS_FIELD)) {
+      if (!isMapping(request.set.extensions)) {
+        issues.push(issue('/set/extensions', 'invalid-type', 'Set member extensions must be an object.'));
+      } else if (Object.keys(request.set.extensions).length === 0) {
+        issues.push(issue('/set/extensions', 'invalid-value', 'Set member extensions must name at least one extension member.'));
+      }
+    }
     if (PATCH_BODY_FIELDS.every((field) => hasOwn(request.set, field))) {
       issues.push(issue('/set', 'invalid-value', 'Set members body and body_append are mutually exclusive; name one.'));
     }
@@ -848,13 +873,16 @@ export async function patchItem(ledgerDirectory, request, scenario) {
   ));
 }
 
-function buildPatch(lockedTarget, ledger, request, scenario) {
+async function buildPatch(lockedTarget, ledger, request, scenario, root) {
   const issues = [];
   if (request.date < lockedTarget.data.created) {
     issues.push(dateIssue('date-before-created', 'Patch date must not be earlier than the current created date.', lockedTarget.data));
   }
   if (request.date < lockedTarget.data.updated) {
     issues.push(dateIssue('date-before-updated', 'Patch date must not be earlier than the current updated date.', lockedTarget.data));
+  }
+  if (hasOwn(request.set, PATCH_EXTENSIONS_FIELD)) {
+    issues.push(...await extensionIssues(root, lockedTarget, request));
   }
   if (issues.length > 0) {
     return { outcome: mutationError('patch-precondition-failed', 'The requested patch failed its preconditions.', 'unchanged', 2, {
@@ -890,7 +918,98 @@ function patchData(data, request) {
       successor[field] = value instanceof JsonNumber ? Number(value.source) : value;
     }
   }
+  // A named extension member joins the successor for one reason: it is what the
+  // serialized candidate is checked back against. Nothing else reads it — the
+  // core view never carries an extension member.
+  for (const [member, value] of Object.entries(request.set[PATCH_EXTENSIONS_FIELD] ?? {})) {
+    if (value === null) {
+      delete successor[member];
+    } else {
+      successor[member] = unwrappedJsonNumber(value);
+    }
+  }
   return successor;
+}
+
+// The extension refusals, all of which need the ledger's committed
+// declaration, so none of them can be a request-shape issue. A declaration is
+// authorization to write a member, never a claim about what the item already
+// holds: it is checked against the request's values and the item's node
+// shapes, and never against the values every other item carries. Enforcing it
+// over stored items would make the wrong-value repair impossible — the ledger
+// would already be invalid, and patch refuses ledger-invalid before it can
+// correct anything.
+async function extensionIssues(root, lockedTarget, request) {
+  const { declared, declaration } = await loadExtensionDeclaration(root);
+  if (!declaration) {
+    return [transitionIssue(
+      declared ? 'extension-declaration-invalid' : 'extension-declaration-missing',
+      PATCH_EXTENSIONS_FIELD,
+      declared
+        ? `The ledger extension declaration at ${EXTENSION_DECLARATION_PATH} is not a valid version 1 declaration.`
+        : `The ledger declares no patchable extension members; ${EXTENSION_DECLARATION_PATH} is absent.`,
+      [],
+    )];
+  }
+  const issues = [];
+  const anchored = anchoredExtensionMembers(lockedTarget.source);
+  for (const [member, value] of Object.entries(request.set.extensions)) {
+    if (!hasOwn(declaration.members, member)) {
+      issues.push(transitionIssue('extension-not-declared', member, 'The ledger extension declaration does not declare this member.', []));
+      continue;
+    }
+    if (value !== null && !extensionValueMatches(declaration.members[member], unwrappedJsonNumber(value))) {
+      issues.push(transitionIssue('extension-value-invalid', member, 'The value does not match the type the ledger extension declaration gives this member.', []));
+      continue;
+    }
+    // Obstacle 3 of the contract's ownership section, answered by refusal: a
+    // whole-value replace of a node that carries or is an anchor changes every
+    // node bound to it, and a subtree anchor cannot survive the replacement at
+    // all. The guard that proves the other extension nodes were untouched
+    // stays intact because this member never reaches the serializer.
+    if (anchored.has(member)) {
+      issues.push(transitionIssue('extension-anchored', member, 'The item writes this member with a YAML anchor or alias, so it cannot be replaced whole.', []));
+    }
+  }
+  return issues;
+}
+
+// Every root member whose value node is an alias, or whose value subtree
+// carries an anchor anywhere inside it.
+function anchoredExtensionMembers(source) {
+  const bounds = frontmatterBounds(source);
+  const document = parseDocument(source.slice(bounds.start, bounds.end), {
+    prettyErrors: false,
+    schema: 'core',
+    uniqueKeys: true,
+  });
+  const anchored = new Set();
+  if (document.errors.length > 0 || !isMap(document.contents)) return anchored;
+  for (const pair of document.contents.items) {
+    const key = isScalar(pair.key) ? pair.key.value : undefined;
+    if (typeof key === 'string' && bindsAnchor(pair.value)) {
+      anchored.add(key);
+    }
+  }
+  return anchored;
+}
+
+function bindsAnchor(node) {
+  if (isAlias(node)) return true;
+  if (node?.anchor) return true;
+  if (isMap(node) || isSeq(node)) {
+    return node.items.some((item) => (
+      item && Object.hasOwn(item, 'key') && Object.hasOwn(item, 'value')
+        ? bindsAnchor(item.key) || bindsAnchor(item.value)
+        : bindsAnchor(item)
+    ));
+  }
+  return false;
+}
+
+function unwrappedJsonNumber(value) {
+  if (!(value instanceof JsonNumber)) return value;
+  return /^-?(0|[1-9][0-9]*)$/.test(value.source) ? Number(value.source) : Number.NaN;
 }
 
 function failCandidateSerializationForTest(scenario) {
@@ -920,6 +1039,19 @@ function serializePatch(source, successor, request) {
         setRootScalar(document, field, successor[field]);
       } else {
         insertRootAfter(document, PATCH_FIELD_ANCHORS[field], field, successor[field]);
+      }
+    }
+    // An extension member has no canonical position, so a new one is appended
+    // rather than anchored to a core member it has no relationship with. An
+    // existing one is edited in place, so its quoting style — and the item's
+    // own member order — survive the correction.
+    for (const member of Object.keys(request.set[PATCH_EXTENSIONS_FIELD] ?? {})) {
+      if (!Object.hasOwn(successor, member)) {
+        deleteRootFieldPreservingAliases(document, member);
+      } else if (Array.isArray(successor[member])) {
+        setExtensionList(document, member, successor[member]);
+      } else {
+        setRootScalar(document, member, successor[member]);
       }
     }
   });
@@ -970,6 +1102,23 @@ function setRootList(document, key, values) {
   } else {
     insertRootAfter(document, PATCH_FIELD_ANCHORS[key], key, values);
   }
+  const written = document.get(key, true);
+  if (isSeq(written)) {
+    written.flow = true;
+  }
+}
+
+// A declared string list is flat, so it replaces the entries of the sequence
+// the item already carries — keeping that sequence's style — or is appended as
+// a flow sequence, the style create writes. It never reaches an anchored node:
+// those refuse one step earlier.
+function setExtensionList(document, key, values) {
+  const node = document.get(key, true);
+  if (isSeq(node)) {
+    node.items = values.map((value) => document.createNode(value));
+    return;
+  }
+  document.set(key, document.createNode(values));
   const written = document.get(key, true);
   if (isSeq(written)) {
     written.flow = true;
@@ -1353,17 +1502,22 @@ function snapshotReader(root, snapshot) {
   };
 }
 
-function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file, expectedData, expectedSource) {
+function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, file, expectedData, expectedSource, patchedExtensions = []) {
   const source = decodedItemSource(bytes);
   const parsed = parseLedgerItemSource(source);
   const errors = parsed.error ? [{ path: displayPath, ...parsed.error }] : [];
   const coreMatches = parsed.error || !expectedData
     || isDeepStrictEqual(coreView(parsed.data), coreView(expectedData));
+  // A named extension member leaves the node-identity guard — it is the one
+  // this request rewrites — and is checked by value instead. Every member not
+  // named keeps its exact-node guarantee, which is the whole point of carving
+  // by name rather than relaxing the guard.
+  const patched = new Set(patchedExtensions);
   const extensionsMatch = parsed.error || !expectedSource
-    || isDeepStrictEqual(
-      extensionNodeIdentity(source),
-      expectedExtensionNodeIdentity(expectedSource, expectedData),
-    );
+    || (isDeepStrictEqual(
+      extensionNodeIdentity(source, patched),
+      expectedExtensionNodeIdentity(expectedSource, expectedData, patched),
+    ) && patchedExtensionsMatch(parsed.data, expectedData, patched));
   if (!parsed.error && (!coreMatches || !extensionsMatch)) {
     errors.push({
       path: displayPath,
@@ -1386,7 +1540,22 @@ function validateSerializedCandidate(ledger, replacementId, bytes, displayPath, 
   return validateLedger({ items: items.filter(Boolean), errors });
 }
 
-function expectedExtensionNodeIdentity(source, expectedData) {
+// The successor check for the members this patch rewrote. It reads the
+// serialized bytes back, so a value the YAML writer emitted in a style that
+// parses as something else — a string that reads back as a boolean — is
+// caught here rather than published.
+function patchedExtensionsMatch(parsedData, expectedData, patched) {
+  for (const member of patched) {
+    if (!Object.hasOwn(expectedData, member)) {
+      if (Object.hasOwn(parsedData, member)) return false;
+      continue;
+    }
+    if (!isDeepStrictEqual(parsedData[member], expectedData[member])) return false;
+  }
+  return true;
+}
+
+function expectedExtensionNodeIdentity(source, expectedData, patched = new Set()) {
   const bounds = frontmatterBounds(source);
   const document = parseDocument(source.slice(bounds.start, bounds.end), {
     schema: 'core',
@@ -1396,16 +1565,16 @@ function expectedExtensionNodeIdentity(source, expectedData) {
     !Object.hasOwn(expectedData, field)
     && document.get(field, true)?.anchor
   ));
-  if (removedAnchors.length === 0) return extensionNodeIdentity(source);
+  if (removedAnchors.length === 0) return extensionNodeIdentity(source, patched);
   const normalized = rewriteFrontmatter(source, (normalizedDocument) => {
     for (const field of removedAnchors) {
       deleteRootFieldPreservingAliases(normalizedDocument, field);
     }
   });
-  return extensionNodeIdentity(normalized);
+  return extensionNodeIdentity(normalized, patched);
 }
 
-function extensionNodeIdentity(source) {
+function extensionNodeIdentity(source, patched = new Set()) {
   const bounds = frontmatterBounds(source);
   const document = parseDocument(source.slice(bounds.start, bounds.end), {
     keepSourceTokens: true,
@@ -1421,7 +1590,9 @@ function extensionNodeIdentity(source) {
   for (const pair of document.contents.items) {
     const key = isScalar(pair.key) ? pair.key.value : undefined;
     if (!CORE_OWNED_FIELDS.has(key)) {
-      identity.push(['item', sourceNodeIdentity(pair)]);
+      if (!patched.has(key)) {
+        identity.push(['item', sourceNodeIdentity(pair)]);
+      }
       continue;
     }
     if (key !== 'provenance' || !isMap(pair.value)) {

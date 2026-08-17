@@ -43,13 +43,27 @@ per-invocation binding keeps a cloned, hostile, or misconfigured repository
 from redirecting the core silently, and keeps every invocation reproducible
 from its command line alone.
 
-Two repository-local artifacts are deliberately not consumer configuration.
+Three repository-local artifacts are deliberately not consumer configuration.
 `.wowbagger/namespace`, written by `provision` and read by the claim commands,
 is core-owned state with its own contract. `.wowbagger/layout.json` is
 core-owned ledger structure: it binds item placement inside the ledger under
 SPEC.md and the mutation contract, is read from the ledger the caller named
 rather than discovered by a walk, and can express nothing but a validated item
-directory.
+directory. `.wowbagger/extensions.json` is core-owned ledger structure of the
+same kind: it declares which consumer-owned extension members `patch` may
+write on that ledger and what value type each one takes, and can express
+nothing else.
+
+That last one is the first committed artifact that widens what a verb may
+write, so say the containment plainly. It can name only extension members —
+a declaration that names a frontmatter member the ownership table governs is
+refused, so it cannot reach `title`, `status`, or `kind` through a file. It can
+permit only a whole-value replace of one declared scalar or flat string list.
+It changes no item's validity: `validate` does not read it, and an item whose
+extension member disagrees with it stays valid. And its absence is total —
+a ledger without the file has no patchable extension member at all. It is
+read from the ledger the caller named, and it is committed and reviewed like
+every other piece of ledger structure.
 
 ## Absence
 
@@ -63,7 +77,11 @@ upward.
 Anything that would change ledger validity or core selection: the schema
 and its field rules, status vocabulary and lifecycle edges, readiness
 membership, the four-step ready order, identity format, revision and lock
-semantics, and refusal behaviour. These are the contract. A deployment that
+semantics, and refusal behaviour. These are the contract.
+`.wowbagger/extensions.json` is not an exception to this: it changes no
+item's validity and no selection, and the refusal behaviour it moves is only
+whether a member the ownership table already calls consumer-owned may be
+written in band or must be hand-edited. A deployment that
 wants them different wants a different tool, not a configuration value.
 
 ## Reopen trigger

@@ -1,0 +1,52 @@
+{
+  "case": "patch-extensions-undeclared-refused",
+  "argv": [
+    "patch",
+    "--ledger",
+    "ledger",
+    "--input",
+    "undeclared-request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "undeclared-request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 2,
+    "stdout": {
+      "json_file": "undeclared-expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/.wowbagger/extensions.json",
+          "source_file": "ledger/.wowbagger/extensions.json",
+          "sha256": "sha256:510299482329bed12dbcb7affa040086599eaa58d8705024d00bb51fe9f4f27e"
+        },
+        {
+          "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+          "source_file": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+          "sha256": "sha256:457682f33efde88869693cb3d717f5f33ffd167dd2e13f31fc85292f7cd585d3"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/.wowbagger/extensions.json",
+          "source_file": "ledger/.wowbagger/extensions.json",
+          "sha256": "sha256:510299482329bed12dbcb7affa040086599eaa58d8705024d00bb51fe9f4f27e"
+        },
+        {
+          "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+          "source_file": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+          "sha256": "sha256:457682f33efde88869693cb3d717f5f33ffd167dd2e13f31fc85292f7cd585d3"
+        }
+      ]
+    }
+  }
+}

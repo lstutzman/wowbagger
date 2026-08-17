@@ -45,6 +45,9 @@ const CORE_OWNED = [
   'schema_version', 'id', 'number', 'status', 'created', 'updated',
   'completed', 'killed', 'archived', 'deferred', 'decisions',
 ];
+// `extensions` is deliberately absent: it is the set container, not a
+// frontmatter member, so it has no row of its own. The two extension rows
+// below carry it.
 const PATCHABLE = ['title', 'priority', 'depends_on', 'related', 'body'];
 const CREATE_ONCE = ['kind', 'provenance', 'parent', 'snoozed_until'];
 
@@ -73,12 +76,27 @@ test('the ownership table gives every create-once member a row that says so', ()
   }
 });
 
-test('the ownership table gives extension members a named home rather than a silence', () => {
-  const row = ownership.split('\n').find((line) => line.startsWith('| extension members'));
-  assert.ok(row, 'the table must carry a row for extension members');
+// Item #118 split the one extension row in two. Both halves are pinned,
+// because "which side of the boundary is my field on" now has two answers and
+// a consumer must be able to read either without sending a patch.
+test('the ownership table gives declared extension members the shipped mechanism', () => {
+  const row = ownership.split('\n').find((line) => line.startsWith('| declared extension members'));
+  assert.ok(row, 'the table must carry a row for declared extension members');
   assert.match(row, /tags/, 'the row must name the consumer examples');
   assert.match(row, /tier/, 'the row must name the consumer examples');
+  assert.match(row, /Consumer-owned, patchable through `set\.extensions`/, 'the row must state their exact status');
+  assert.match(row, /extensions\.json/, 'the row must name the declaration that permits the write');
+});
+
+test('the ownership table keeps undeclared extension members out, and says so', () => {
+  const row = ownership.split('\n').find((line) => line.startsWith('| undeclared extension members'));
+  assert.ok(row, 'the table must carry a row for undeclared extension members');
   assert.match(row, /Consumer-owned, not patchable/, 'the row must state their exact status');
+  assert.match(
+    row,
+    phrase('no patchable extension member at all'),
+    'the row must state that a ledger without a declaration is fail-closed',
+  );
 });
 
 test('the contract states the structural reason kind is refused', () => {
@@ -95,21 +113,63 @@ test('the contract states the structural reason kind is refused', () => {
   );
 });
 
-test('the contract records why extension members stay out and what a path would need', () => {
+// The four obstacles #114 recorded are still the structure of this prose. Each
+// one must now be answered by a named piece of the shipped path, not waived.
+test('the contract answers each recorded extension obstacle with the shipped mechanism', () => {
   assert.match(
     ownership,
     phrase('candidate validation constrains no extension value'),
-    'the contract must say the premise that extension validation already exists is false',
+    'the contract must keep the premise that extension validation already exists false',
   );
   assert.match(
     ownership,
-    phrase('no observable surface'),
-    'the contract must name the oracle-correlation obstacle',
+    phrase('set.extensions container'),
+    'the contract must name the request shape that keeps the fail-closed set rule',
   );
   assert.match(
     ownership,
-    /extension-member patch/,
-    'the contract must name the widening it is deferring, not gesture at it',
+    phrase('committed per-ledger declaration'),
+    'the contract must name the value schema the path added',
+  );
+  assert.match(
+    ownership,
+    /extension-anchored/,
+    'the contract must name the refusal that keeps the node-identity guard intact',
+  );
+  assert.match(
+    ownership,
+    phrase('correlating through source_base64'),
+    'the contract must name how the oracle correlation obstacle was answered',
+  );
+});
+
+test('the contract states what an extension patch still cannot reach', () => {
+  assert.match(
+    ownership,
+    phrase('What is still out'),
+    'the contract must name the remaining hand-edit cases rather than imply completeness',
+  );
+  for (const excluded of ['undeclared member', 'no declaration', 'nested list', 'anchor or an alias']) {
+    assert.match(ownership, phrase(excluded), `the contract must name the excluded case: ${excluded}`);
+  }
+});
+
+test('the contract states that the declaration authorizes a write and never describes the ledger', () => {
+  const declaration = subsection(contract, '### The extension declaration', 'the mutation contract');
+  assert.match(
+    declaration,
+    phrase('A declaration authorizes a write; it does not describe the ledger.'),
+    'the contract must state the enforcement boundary, not leave it to be inferred',
+  );
+  assert.match(
+    declaration,
+    phrase('validate is therefore unchanged by this file'),
+    'the contract must say the declaration changes no ledger validity',
+  );
+  assert.match(
+    declaration,
+    phrase('has no patchable extension member'),
+    'the contract must state that absence is fail-closed and total',
   );
 });
 
@@ -119,8 +179,18 @@ test('the installed skill teaches the same three-way boundary', () => {
   assert.match(writing, phrase('Create-once'), 'the skill must name the create-once class');
   assert.match(
     writing,
-    phrase('Extension members are not patchable'),
+    phrase('Extension members are patchable only where the ledger declares them.'),
     'the skill must state the extension-member status rather than leave it to a refusal',
+  );
+  assert.match(
+    writing,
+    /set\.extensions/,
+    'the skill must name the container a consumer actually sends',
+  );
+  assert.match(
+    writing,
+    phrase('no patchable extension member at all'),
+    'the skill must state that a ledger without a declaration is fail-closed',
   );
   assert.match(
     writing,
