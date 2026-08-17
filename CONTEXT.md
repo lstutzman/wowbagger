@@ -31,3 +31,7 @@ One line per term. This is a glossary, not documentation.
 - **extension declaration** — the committed `<ledger>/.wowbagger/extensions.json` naming which consumer-owned extension members `patch` may write and one value type each; it authorizes a write and never describes the ledger.
 - **input delivery** — the launch observation's optional report of what reached the core's standard input: `delivered`, `failed` (write errored), or `unread` (core never drained the pipe); an undelivered read is named, never reported as a timeout.
 - **terminal ratio** — the one definition of epic progress: done-or-killed direct children divided by all direct children; the mutation contract, the epic complete rollup, and the report's epic-enablement factor all derive it from the same set, and a terminal date is not the test.
+- **cut** — the one-command act that turns a clean release-branch tip into a `Cut <version>` commit and an annotated `v<version>` tag; push and publish are separate named steps that follow it.
+- **release site** — one literal occurrence of the current distribution version in a tracked text file, classified `mutable` (moves with the cut) or `retained` (history that keeps naming it).
+- **version-site manifest** — the hand-maintained `scripts/release-version-sites.json` that classifies every release site; the cut proves exact-set equality against it and never edits it.
+- **channel policy** — while every release is a prerelease the package carries exactly `{ next: <published version> }` and no `latest`, so a bare install fails rather than resolving.

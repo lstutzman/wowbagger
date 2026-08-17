@@ -6,6 +6,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runCli } from './support.js';
+import { readTrackedTextFiles } from '../scripts/cut-release.js';
+import { planVersionSites, verifyExactSets } from '../scripts/lib/release-sites.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
@@ -258,4 +260,92 @@ test('the package manifest does not admit unpublished or internal directories', 
     assert.ok(!manifest.files.includes(forbidden), `files must not include ${forbidden}`);
   }
   assert.ok(!manifest.private, 'no private flag');
+});
+
+// The release-site manifest is the coverage proof for a cut. It is maintained
+// by hand and the cut command never edits it, so its accuracy against the real
+// tree is a standing packaging assertion rather than something a cut discovers.
+test('the checked-in manifest classifies every occurrence of the current version exactly', () => {
+  const sites = JSON.parse(
+    readFileSync(path.join(projectRoot, 'scripts', 'release-version-sites.json'), 'utf8'),
+  );
+  const files = readTrackedTextFiles(projectRoot, (...argumentsList) => spawnSync(
+    'git',
+    argumentsList,
+    { cwd: projectRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  ));
+  let occurrences = 0;
+  for (const text of files.values()) occurrences += text.split(manifest.version).length - 1;
+  assert.ok(occurrences > 0, 'the tree must name its own version somewhere');
+
+  // Assembled, not written literally: this file is one of the files scanned.
+  const next = ['0.0.0', 'manifest', 'inventory'].join('-');
+  const plan = planVersionSites({
+    manifest: sites,
+    files,
+    oldVersion: manifest.version,
+    newVersion: next,
+  });
+
+  assert.deepEqual(plan.problems, [], 'every occurrence must match exactly one locator');
+  assert.equal(
+    plan.mutableOccurrences + plan.retainedOccurrences,
+    occurrences,
+    'the manifest must account for every literal occurrence in the tree',
+  );
+
+  const planned = new Map(files);
+  for (const [file, text] of plan.updates) planned.set(file, text);
+  const proof = verifyExactSets({
+    files: planned,
+    oldVersion: manifest.version,
+    newVersion: next,
+    expectedOld: plan.retainedOccurrences,
+    expectedNew: plan.mutableOccurrences,
+  });
+
+  assert.deepEqual(proof.problems, [], 'a planned cut must leave no second stale occurrence');
+});
+
+
+test('the cut and channel commands are wired as release scripts', () => {
+  assert.match(manifest.scripts['release:cut'], /scripts\/cut-release\.js/);
+  assert.match(manifest.scripts['release:channels'], /scripts\/release-channels\.js/);
+});
+
+test('the release gate rejects an absent tag and a tag on another commit', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'wb-release-tag-'));
+  mkdirSync(path.join(root, '.claude-plugin'));
+  writeFileSync(path.join(root, 'package.json'), '{"name":"wowbagger","version":"1.2.3"}\n');
+  writeFileSync(path.join(root, '.claude-plugin', 'plugin.json'), '{"name":"wowbagger","version":"1.2.3"}\n');
+  writeFileSync(path.join(root, '.claude-plugin', 'marketplace.json'), JSON.stringify({
+    name: 'wowbagger',
+    metadata: { version: '1.2.3' },
+    plugins: [{
+      name: 'wowbagger',
+      source: { source: 'url', url: 'https://example.com/wowbagger.git', ref: 'v1.2.3' },
+      version: '1.2.3',
+    }],
+  }));
+  for (const argumentsList of [
+    ['init', '-q'],
+    ['config', 'user.email', 'test@example.com'],
+    ['config', 'user.name', 'Wowbagger Test'],
+    ['add', '.'],
+    ['commit', '-qm', 'First'],
+    ['commit', '-q', '--allow-empty', '-m', 'Second'],
+  ]) {
+    const result = spawnSync('git', argumentsList, { cwd: root, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+  }
+  const script = path.join(projectRoot, 'scripts', 'verify-release-tag.js');
+
+  const absent = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
+  assert.equal(absent.status, 1);
+  assert.match(absent.stderr, /Release tag v1\.2\.3 does not exist/);
+
+  spawnSync('git', ['tag', 'v1.2.3', 'HEAD~1'], { cwd: root, encoding: 'utf8' });
+  const misplaced = spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
+  assert.equal(misplaced.status, 1);
+  assert.match(misplaced.stderr, /Release checkout differs from v1\.2\.3/);
 });

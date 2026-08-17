@@ -38,6 +38,45 @@ consolidation. The first tagged release inherits this file.
   toll its peers pay rather than a new one. Each publication persists one clock
   floor, as it did before; a publication behind a pending intent, which used to
   persist two, now persists one as well.
+### Added
+
+- **The cut is one command, and version drift now fails the cut instead of
+  shipping.** `npm run release:cut -- <version> --date YYYY-MM-DD` runs on the
+  tip of the release branch, proves every version site is accounted for, plans
+  the new bytes in memory, runs the full release gate over them, and leaves one
+  `Cut <version>` commit and one annotated `v<version>` tag. It stops there:
+  push, `npm publish --tag next`, and the registry check stay separate named
+  steps, because no local command can undo any of them. Coverage is proved by
+  exact-set equality against a hand-maintained
+  `scripts/release-version-sites.json`, not by a global grep — the changelog and
+  the dated design records must keep naming old versions, so "grep finds
+  nothing" would be the wrong test. A release site added next month is
+  unmanifested and refuses the cut. `--dry-run` runs the same planner and the
+  same gate against a copy of HEAD and then proves the repository unchanged.
+  Reruns converge rather than repair: a cut tag at a clean HEAD reports
+  `already cut`, a complete cut commit without its tag resumes at tagging, and a
+  tag pointing elsewhere refuses.
+- **The changelog can no longer lose its Unreleased section.** A cut opens a
+  fresh empty `## Unreleased` and files the released notes beneath it. The two
+  previous cuts renamed the heading instead, which left later changes landing
+  under an already published release.
+- **The prerelease channel policy is stated and checkable.**
+  `npm run release:channels -- check|repair <version>` encodes it: exactly
+  `{ next: <published version> }`, no `latest` while every release is a
+  prerelease, and the first published alpha deprecated. `check` is read-only and
+  is the post-publish verification step; `repair` is idempotent and never
+  unpublishes.
+
+### Changed
+
+- **The README says plainly that a bare `npm install wowbagger` is meant to
+  fail.** There is no `latest` channel until the first stable release, so
+  `@next` is explicit prerelease consent rather than a convenience.
+- **Cuts happen on the release branch, not in a session worktree.** Merge
+  session work first, then cut; the cut command refuses to run anywhere but the
+  branch tip. The previous two-phase topology is why the last two release tags
+  name merge commits rather than their cut commits.
+  `docs/adapter-release-path.md` records the ritual.
 
 ## 0.1.0-alpha.6 - 2026-08-17
 
