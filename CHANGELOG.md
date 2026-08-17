@@ -35,6 +35,20 @@ consolidation. The first tagged release inherits this file.
 
 ### Changed
 
+- **The report's epic-enablement factor now counts done or killed children
+  only.** It counted every child carrying a terminal date, which folded
+  archived and deferred children into the numerator: an epic with one done,
+  one archived, one deferred, and one backlog child reported enablement 0.75
+  while the mutation contract's terminal ratio for the same epic was 0.25. Two
+  numbers wore one name. A terminal date is not a terminal disposition —
+  archived restores and deferred undefers, both documented edges — so a parked
+  child is work postponed, not work retired, and counting it reported progress
+  that one transition takes back. The factor now reads the same done-or-killed
+  set as the contract and the epic complete rollup: one definition, three
+  surfaces. This is display-only and recomputed at render time; no ledger byte,
+  no wire shape, and no `ready` ordering changes. What does change is the
+  report: an epic with parked children reports a lower percentage, and its open
+  children rank lower on the epic-enablement step of `work next`.
 - **Every `unauthorized-revision` remediation string now names both remedies.**
   It was one sentence naming only the restore path, which reads as an
   instruction to throw the edit away; the field report above did exactly that.
@@ -103,6 +117,27 @@ consolidation. The first tagged release inherits this file.
   at `/set/body_append`, exit 2, unchanged.
 
 ### Documentation
+
+- **The allowed-edges table carries the defer and undefer edges.** `task` and
+  `epic` `backlog` to `deferred` and `deferred` to `backlog` have shipped in
+  `src/mutation.js` since deferral existed, both requiring a decision, and the
+  ownership table already documented `deferred` as a core-owned field that
+  `transition` writes on a defer. Section 8's edge table listed neither row, so
+  the one place a consumer looks up what it may drive under-reported the
+  lifecycle by two edges. Both rows are added with the evidence the code
+  generates — `set deferred; append defer decision` and `clear deferred; append
+  undefer decision` — and a docs guard pins the kind, the date, and the
+  decision on each. No emitted byte changes and the core contract stays version
+  3: this documents shipped edges, it does not add them.
+
+- **The epic derivation section cites one shared definition instead of a
+  divergence.** It recorded the report's epic-enablement factor as a different,
+  wider number than the terminal ratio. The report factor was narrowed to match
+  (see Changed above), so the paragraph is replaced: the contract, the epic
+  complete rollup, and the report all count done or killed direct children over
+  all direct children, and the section now says outright that a terminal date is
+  not the test. The docs guard is re-pointed at the new truth rather than
+  relaxed.
 
 - **The contract states that `set.body` replaces and never merges.** A consumer
   mirroring an external source regenerated an item body from its upstream card
