@@ -2153,10 +2153,18 @@ function validMutationResultCorrelation(item, command, mutationRequest) {
   return validTransitionResultCorrelation(item, mutationRequest);
 }
 
+// A create result reports two members the caller could not have known: the
+// ledger's schema version and, when that version is 2, the number the core
+// assigned. The reference model reads both from the answer and re-derives the
+// whole candidate from the request bytes, so every other member is still
+// pinned by an exact byte comparison. Fixing the version at 1 rejected every
+// real schema 2 create.
 function validCreateResultCorrelation(item, request) {
+  const reportedSchemaVersion = item.core.schema_version;
+  const reportedNumber = Object.hasOwn(item.core, 'number') ? item.core.number : null;
   if (!plainObject(request) || !plainObject(request.item)
     || item.id !== request.id || item.path !== `${request.id}.md` || item.body !== request.body
-    || item.core.schema_version !== 1 || item.core.status !== 'triage'
+    || item.core.status !== 'triage'
     || item.core.title !== request.item.title || item.core.kind !== request.item.kind
     || !sameJson(item.core.provenance, {
       source: request.item.provenance?.source,
@@ -2173,7 +2181,8 @@ function validCreateResultCorrelation(item, request) {
   }
   const source = decodeCanonicalBase64(item.source_base64);
   try {
-    return source !== null && source.equals(createCandidateSource(request));
+    return source !== null
+      && source.equals(createCandidateSource(request, reportedSchemaVersion, reportedNumber));
   } catch {
     return false;
   }

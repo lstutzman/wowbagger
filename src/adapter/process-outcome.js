@@ -683,10 +683,20 @@ function validMutationResultCorrelation(item, command, mutationRequest) {
   return validTransitionResultCorrelation(item, mutationRequest);
 }
 
+// The ledger's schema version and, on schema 2, the assigned item number are
+// the only two members of a create result the adapter cannot predict: the core
+// reads the version off the ledger and assigns the number under its own lock.
+// Every other member stays pinned to the request bytes, and the re-serialized
+// candidate is byte-compared against the source the core returned — which
+// `validCoreItemShape` has already tied to both the revision digest and the
+// `core` view. Demanding schema 1 here made every create against a real
+// schema 2 ledger a `mutation-outcome-unknown` on a provably committed write.
 function validCreateResultCorrelation(item, request) {
+  const schemaVersion = item.core.schema_version;
+  const assignedNumber = Object.hasOwn(item.core, 'number') ? item.core.number : null;
   if (!plainObject(request) || !plainObject(request.item)
     || item.id !== request.id || item.path !== `${request.id}.md` || item.body !== request.body
-    || item.core.schema_version !== 1 || item.core.status !== 'triage'
+    || item.core.status !== 'triage'
     || item.core.title !== request.item.title || item.core.kind !== request.item.kind
     || !sameJson(item.core.provenance, {
       source: request.item.provenance?.source,
@@ -703,7 +713,8 @@ function validCreateResultCorrelation(item, request) {
   }
   const source = decodeCanonicalBase64(item.source_base64);
   try {
-    return source !== null && source.equals(createCandidateSource(request));
+    return source !== null
+      && source.equals(createCandidateSource(request, schemaVersion, assignedNumber));
   } catch {
     return false;
   }
