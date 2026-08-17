@@ -25,11 +25,26 @@ import { readNamespace } from './namespace.js';
 const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024;
 const MAX_REPORTED_PATHS = 16;
 const MAX_RECOVERY_TOKEN_CHARS = 4096;
-// Git subprocesses inherit the caller's environment minus every GIT_ variable,
-// the same rule the reconciliation reader uses: an inherited GIT_DIR or
-// GIT_INDEX_FILE would silently retarget the commit this module verified.
+// The read-only reconciliation reader strips every GIT_ variable. This module
+// commits, so it strips a narrower, named set instead: the variables that would
+// retarget the repository, work tree, index, or object store out from under the
+// commit it verified. Identity, configuration-source, hook, and signing
+// variables stay, because the design requires Git's own author, committer,
+// hook, and signing resolution rather than an invented one.
+const RETARGETING_GIT_VARIABLES = new Set([
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CEILING_DIRECTORIES',
+  'GIT_COMMON_DIR',
+  'GIT_DIR',
+  'GIT_DISCOVERY_ACROSS_FILESYSTEM',
+  'GIT_INDEX_FILE',
+  'GIT_INDEX_VERSION',
+  'GIT_NAMESPACE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_WORK_TREE',
+]);
 const GIT_ENVIRONMENT = Object.fromEntries(
-  Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+  Object.entries(process.env).filter(([name]) => !RETARGETING_GIT_VARIABLES.has(name)),
 );
 
 const COMMIT_SUBJECT_VERBS = {
@@ -180,15 +195,15 @@ async function finalize({
   const staged = await git(root, ['add', '--pathspec-from-file=-', '--pathspec-file-nul'], {
     stdin: `${gitPaths.join('\0')}\0`,
   });
-  if (staged.code !== 0) {
-    return shape.commitFailed(failureDetails(context, commitSet, digests, {
-      stage: 'stage', reason: 'index-unavailable',
-    }));
-  }
+  // `git add` exit status alone is not the answer. It exits nonzero when a
+  // pathspec matches an ignore rule even though the path is tracked and was
+  // staged correctly. The cached path set is the authority; the add status only
+  // chooses which reason a mismatch reports.
   const cached = await git(root, ['diff', '--cached', '--name-only', '-z']);
   if (cached.code !== 0 || !sameSet(splitNul(cached.stdout.toString('utf8')), gitPaths)) {
     return shape.commitFailed(failureDetails(context, commitSet, digests, {
-      stage: 'stage', reason: 'tree-changed',
+      stage: 'stage',
+      reason: staged.code === 0 && cached.code === 0 ? 'tree-changed' : 'index-unavailable',
     }));
   }
 

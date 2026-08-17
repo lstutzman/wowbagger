@@ -17,8 +17,15 @@ const RUNNER = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
 export const ITEM_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
 export const SECOND_ITEM_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GT01';
 
+// A trailing object argument becomes extra environment for the child, which is
+// how a fixture neutralizes the developer's own global Git configuration.
 export function run(cwd, ...argumentsList) {
-  const result = spawnSync(process.execPath, [CLI, ...argumentsList], { cwd, encoding: 'utf8' });
+  const extraEnvironment = typeof argumentsList.at(-1) === 'object' ? argumentsList.pop() : {};
+  const result = spawnSync(process.execPath, [CLI, ...argumentsList], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, ...extraEnvironment },
+  });
   return {
     envelope: result.stdout.trim() === '' ? null : JSON.parse(result.stdout),
     exit: result.status,
