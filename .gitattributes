@@ -1,0 +1,8 @@
+# This repository is byte-exact. The conformance vectors compare exact core
+# bytes, several goldens are pinned by SHA-256, and the release cut proves
+# exact-set equality over tracked text. End-of-line conversion on checkout
+# would change those bytes before any gate ran, so no path may be converted —
+# on any platform, whatever `core.autocrlf` the clone inherited.
+#
+# `test/platform-portability.test.js` proves this holds for every tracked path.
+* -text
