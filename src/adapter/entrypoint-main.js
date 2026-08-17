@@ -105,8 +105,22 @@ export function launchCoreProcess({ executable, argv, cwd, input, limits }) {
     let started = false;
     let spawnError = false;
     let timedOut = false;
+    // Item 109: what the core received is a separate fact from how the run
+    // ended. Until the write settles the request is simply unread — the core
+    // has neither drained the pipe nor closed it.
+    let inputDelivery = 'unread';
+    let inputDeliverySettled = false;
+    const settleInputDelivery = (state) => {
+      if (inputDeliverySettled) return;
+      inputDeliverySettled = true;
+      inputDelivery = state;
+    };
 
     const terminate = () => {
+      // Killing the core closes its read end, so a pending write errors EPIPE
+      // moments later. That error is this adapter's own doing and says nothing
+      // about the core, so the delivery fact is frozen before the kill.
+      inputDeliverySettled = true;
       if (child.exitCode !== null || child.signalCode !== null) return;
       try {
         if (detached && child.pid) process.kill(-child.pid, 'SIGKILL');
@@ -129,8 +143,10 @@ export function launchCoreProcess({ executable, argv, cwd, input, limits }) {
       // stdin error would kill the adapter before it could emit its one §3.3
       // JSON object, leaving the host a bare non-zero exit and empty stdout.
       // The `close` handler below still reports the core's real exit.
-      child.stdin.on('error', () => {});
-      child.stdin.end(input);
+      child.stdin.on('error', () => settleInputDelivery('failed'));
+      child.stdin.end(input, (writeError) => {
+        settleInputDelivery(writeError ? 'failed' : 'delivered');
+      });
     });
     child.once('error', () => { spawnError = true; });
     child.stdout.on('data', (chunk) => {
@@ -143,8 +159,12 @@ export function launchCoreProcess({ executable, argv, cwd, input, limits }) {
       clearTimeout(timer);
       const outputExceeded = stdoutState.exceeded || stderrState.exceeded;
       const deliberatelyTerminated = outputExceeded || timedOut;
+      const launched = started && !spawnError;
       resolve({
-        started: started && !spawnError,
+        started: launched,
+        // A run that never started never attempted a write, so it makes no
+        // delivery claim at all rather than a false 'unread' one.
+        ...(launched ? { input_delivery: inputDelivery } : {}),
         process_tree_contained: true,
         orphaned: false,
         exit_code: deliberatelyTerminated || !Number.isInteger(code) ? null : code,

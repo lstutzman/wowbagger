@@ -201,16 +201,23 @@ function isMutationCommand(command) {
   return command === 'create' || command === 'transition' || command === 'patch';
 }
 
+// The runner's optional report of what reached the core's standard input.
+// `delivered` is the whole request; `failed` is a write the core's closed read
+// end refused; `unread` is a write the core never drained.
+const INPUT_DELIVERY_STATES = new Set(['delivered', 'failed', 'unread']);
+
 function observationIssue(process) {
   if (!hasExactMembers(process, [
     'started', 'process_tree_contained', 'orphaned', 'exit_code', 'signal', 'timed_out',
     'stdout_complete', 'stderr_complete', 'stdout_base64', 'stderr_base64',
-  ])) return 'members';
+  ], ['input_delivery'])) return 'members';
   for (const member of [
     'started', 'process_tree_contained', 'orphaned', 'timed_out', 'stdout_complete', 'stderr_complete',
   ]) {
     if (typeof process[member] !== 'boolean') return member;
   }
+  if (Object.hasOwn(process, 'input_delivery')
+    && !INPUT_DELIVERY_STATES.has(process.input_delivery)) return 'input_delivery';
   if (process.signal !== null && (typeof process.signal !== 'string' || process.signal.length === 0)) return 'signal';
   if (process.exit_code !== null && !isNonNegativeSafeInteger(process.exit_code)) return 'exit_code';
   const stdout = decodeCanonicalBase64(process.stdout_base64);
@@ -219,6 +226,7 @@ function observationIssue(process) {
   if (stderr === null) return 'stderr_base64';
   if (!process.started) {
     if (process.exit_code !== null || process.signal !== null || process.timed_out
+      || Object.hasOwn(process, 'input_delivery')
       || !process.process_tree_contained || process.orphaned
       || !process.stdout_complete || !process.stderr_complete
       || stdout.length > 0 || stderr.length > 0) return 'not-started-state';
@@ -1237,7 +1245,19 @@ export function mapProcessOutcome({
     return mutationUnknown(base, command, itemId, expectedRevision, process, null, responseContext);
   }
   if (process.timed_out) {
-    return { ...base, error: error('core-timeout', {}), process: processSummary(process, command, responseContext) };
+    // A timeout the adapter caused by never delivering the request is not an
+    // unobservable core hang. The core ran; it was simply never asked. Naming
+    // that keeps the 30-second wait from erasing a diagnosable condition.
+    const undelivered = process.input_delivery === 'failed' || process.input_delivery === 'unread';
+    return {
+      ...base,
+      error: undelivered
+        ? error('core-observation-incomplete', {
+            reason: 'core-input-undelivered', input_delivery: process.input_delivery,
+          })
+        : error('core-timeout', {}),
+      process: processSummary(process, command, responseContext),
+    };
   }
   if (process.signal !== null) {
     return { ...base, error: error('core-signaled', { signal: process.signal }), process: processSummary(process, command, responseContext) };

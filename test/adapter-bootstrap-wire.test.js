@@ -301,6 +301,8 @@ test('the core launcher enforces the advertised timeout', async (t) => {
   assert.equal(observation.timed_out, true);
   assert.equal(observation.exit_code, null);
   assert.equal(observation.signal, null);
+  // A slow core that did receive its request is still an ordinary timeout.
+  assert.equal(observation.input_delivery, 'delivered');
 });
 
 // Item 106: the core can be gone before the launcher's input write lands —
@@ -330,6 +332,108 @@ test('the core launcher survives a core that exits before its input is written',
   assert.equal(observation.exit_code, 7);
   assert.equal(observation.signal, null);
   assert.equal(observation.timed_out, false);
+  // The write failed here too, but the core's own exit is the answer. The
+  // delivery fact stays honest without displacing that exit code.
+  assert.equal(observation.input_delivery, 'failed');
+});
+
+// Item 109: the same failed write against a core that is still running has a
+// different story. The core exited in the case above, so its exit code is the
+// answer. Here nothing ends the run but the timeout, and reporting only the
+// timeout hides the diagnosable fact that the request never reached the core.
+test('the core launcher reports a failed input write against a living core', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-unfed-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const executable = path.join(temporaryDirectory, 'close-stdin-and-live.js');
+  // Closing the descriptor itself, not just a Node stream wrapper around it,
+  // is what makes the adapter's pending write fail EPIPE while the core runs.
+  await writeFile(
+    executable,
+    'require("node:fs").closeSync(0);\nsetTimeout(() => process.exit(0), 5000);\n',
+  );
+
+  const observation = await launchCoreProcess({
+    executable,
+    argv: [],
+    cwd: temporaryDirectory,
+    input: Buffer.alloc(1024 * 1024, 0x61),
+    limits: { stdout_bytes: 4096, stderr_bytes: 4096, timeout_ms: 250 },
+  });
+
+  assert.equal(observation.started, true);
+  assert.equal(observation.timed_out, true);
+  assert.equal(observation.input_delivery, 'failed');
+});
+
+// A core that neither reads its stdin nor closes it never fails the write: the
+// pipe buffer fills and the rest of the request sits in the adapter. Nothing
+// errors, so the observation must record the stall rather than call an input
+// the core never saw delivered.
+test('the core launcher reports an input write a living core never drains', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-unread-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const executable = path.join(temporaryDirectory, 'ignore-stdin-and-live.js');
+  await writeFile(executable, 'setTimeout(() => process.exit(0), 5000);\n');
+
+  const observation = await launchCoreProcess({
+    executable,
+    argv: [],
+    cwd: temporaryDirectory,
+    // Larger than the pipe buffer, so the write cannot complete without a
+    // reader on the other end.
+    input: Buffer.alloc(1024 * 1024, 0x61),
+    limits: { stdout_bytes: 4096, stderr_bytes: 4096, timeout_ms: 250 },
+  });
+
+  assert.equal(observation.started, true);
+  assert.equal(observation.timed_out, true);
+  assert.equal(observation.input_delivery, 'unread');
+});
+
+// A launch that never happened wrote nothing, so it must claim no delivery
+// state at all. Claiming one contradicts `started: false`, and the classifier
+// then loses the deterministic `core-launch-failed` this observation proves.
+test('the core launcher claims no delivery state when the core never started', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-nostart-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+
+  const observation = await launchCoreProcess({
+    executable: path.join(temporaryDirectory, 'never-runs.js'),
+    argv: [],
+    cwd: path.join(temporaryDirectory, 'absent-working-directory'),
+    input: Buffer.alloc(1024 * 1024, 0x61),
+    limits: { stdout_bytes: 4096, stderr_bytes: 4096, timeout_ms: 5000 },
+  });
+
+  assert.equal(observation.started, false);
+  assert.equal(Object.hasOwn(observation, 'input_delivery'), false);
+});
+
+// The ordinary case has to be nameable too, or the classifier cannot tell a
+// core that never got its request from one that got it and misbehaved. The
+// core here proves delivery by counting the bytes it read.
+test('the core launcher reports an input write the core drains completely', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-fed-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+  const executable = path.join(temporaryDirectory, 'drain-stdin.js');
+  await writeFile(executable, [
+    'let read = 0;',
+    'process.stdin.on("data", (chunk) => { read += chunk.length; });',
+    'process.stdin.on("end", () => process.exit(read === 1048576 ? 0 : 9));',
+    '',
+  ].join('\n'));
+
+  const observation = await launchCoreProcess({
+    executable,
+    argv: [],
+    cwd: temporaryDirectory,
+    input: Buffer.alloc(1024 * 1024, 0x61),
+    limits: { stdout_bytes: 4096, stderr_bytes: 4096, timeout_ms: 5000 },
+  });
+
+  assert.equal(observation.started, true);
+  assert.equal(observation.exit_code, 0);
+  assert.equal(observation.input_delivery, 'delivered');
 });
 
 test('bounds invoke bytes before parsing the request', async () => {

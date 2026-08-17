@@ -27,3 +27,4 @@ One line per term. This is a glossary, not documentation.
 - **claim-fence refusal** — a `ledger-mutation` response refusing a `create`/`transition`/`patch` before the core mutation ran; state-unchanged classes are deterministic and forwarded verbatim, never mutation-outcome-unknown.
 - **response domain** — which contract a CLI response answers in (core, work-claim, ledger-publication, ledger-mutation, or bare result); dispatch namespace-first, then the domain's own version field (mutation contract section 2).
 - **commit-per-mutation invariant** — on a provisioned ledger every mutation must be Git-committed before the next mutating command; `claim-verify` is the reconciliation verb.
+- **input delivery** — the launch observation's optional report of what reached the core's standard input: `delivered`, `failed` (write errored), or `unread` (core never drained the pipe); an undelivered read is named, never reported as a timeout.
