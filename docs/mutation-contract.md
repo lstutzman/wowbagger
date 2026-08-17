@@ -1332,7 +1332,7 @@ Patch accepts exactly:
 | set | Yes | Mapping naming at least one patchable field. |
 
 The patchable field set is exactly `title`, `priority`, `depends_on`,
-`related`, and `body`. A set member outside it is an invalid-request issue at
+`related`, `body`, and `body_append`. A set member outside it is an invalid-request issue at
 its /set pointer — the boundary is stated here, not discovered from the
 implementation. `number` is the immutable item identity, assigned once at
 create, so it is not patchable and a request naming it is refused. `kind`,
@@ -1462,7 +1462,7 @@ interpreting the refusal.
 | `priority` | Consumer-editable through `patch` | `set.priority` replaces it; `null` removes it. |
 | `depends_on` | Consumer-editable through `patch` | `set.depends_on` replaces the whole list. |
 | `related` | Consumer-editable through `patch` | `set.related` replaces the whole list; `null` removes it. |
-| `body` (the region after the frontmatter, not a member) | Consumer-editable through `patch` | `set.body` replaces the whole body; `""` empties it. |
+| `body` (the region after the frontmatter, not a member) | Consumer-editable through `patch` | `set.body` replaces the whole body; `""` empties it. `set.body_append` appends without a merge; the two are mutually exclusive in one request. |
 | `kind` | Create-once | Create fixes it. `patch` refuses it. |
 | `provenance` | Create-once | Create writes it. Every later verb preserves it byte for byte. |
 | `parent` | Create-once | Create writes it. No verb moves an item between epics. |

@@ -211,7 +211,7 @@ Markdown.
 
 `patch` re-scopes one existing item in band, so nobody hand-edits frontmatter.
 The patchable field set is exactly `title`, `priority`, `depends_on`,
-`related`, and `body`. A
+`related`, `body`, and `body_append`. A
 `set` naming anything else is an `invalid-request` issue at its `/set` pointer,
 and `number` is refused because it is immutable identity.
 
