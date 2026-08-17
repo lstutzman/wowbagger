@@ -4,6 +4,7 @@ id: wb_01M086JRS7GMHXARPB0Z229HSD
 number: 126
 title: "Bound the item source at every candidate door"
 kind: task
+priority: 20
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
