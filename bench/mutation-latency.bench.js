@@ -33,6 +33,9 @@ import { appendClaimEntry, claimJournalPath } from '../src/claim-journal.js';
 import { operationDigest, publishClaimed } from '../src/claim-publication.js';
 import { resolveGitCommonDir } from '../src/claim-store.js';
 import { readGitHeadLedger } from '../src/git-reconciliation.js';
+import {
+  countersSince, phaseCounters, phaseTimings, timingsSince,
+} from '../src/instrumentation.js';
 import { ledgerLoadCount, loadLedger } from '../src/ledger.js';
 import { mintId } from '../src/mint.js';
 import { createItem, inspectItem, transitionItem } from '../src/mutation.js';
@@ -99,11 +102,15 @@ const LOADS_BEFORE_ITEM_107 = { publish: 3, reconciledPublish: 4 };
 async function timed(label, run) {
   const started = performance.now();
   const loadsBefore = ledgerLoadCount();
+  const countersBefore = phaseCounters();
+  const timingsBefore = phaseTimings();
   const value = await run();
   return {
     label,
     milliseconds: performance.now() - started,
     loads: ledgerLoadCount() - loadsBefore,
+    counters: countersSince(countersBefore),
+    timings: timingsSince(timingsBefore),
     value,
   };
 }
@@ -144,10 +151,12 @@ async function measureBaselineCosts(ledger, options) {
     loadSamples,
     validate: validate.milliseconds,
     gitHead: null,
+    gitHeadCounters: null,
   };
   if (options.provisioned) {
     const gitHead = await timed('git-head-ledger', () => readGitHeadLedger(ledger));
     baseline.gitHead = gitHead.milliseconds;
+    baseline.gitHeadCounters = gitHead.counters;
   }
   return baseline;
 }
@@ -166,7 +175,13 @@ async function measureCreate(ledger, date) {
   };
   const created = await timed('create', () => createItem(ledger, request));
   assertOk('create', created.value);
-  return { milliseconds: created.milliseconds, loads: created.loads, id: request.id };
+  return {
+    milliseconds: created.milliseconds,
+    loads: created.loads,
+    counters: created.counters,
+    timings: created.timings,
+    id: request.id,
+  };
 }
 
 async function measureTransition(ledger, id, date) {
@@ -182,7 +197,12 @@ async function measureTransition(ledger, id, date) {
   };
   const transitioned = await timed('transition', () => transitionItem(ledger, request));
   assertOk('transition', transitioned.value);
-  return { milliseconds: transitioned.milliseconds, loads: transitioned.loads };
+  return {
+    milliseconds: transitioned.milliseconds,
+    loads: transitioned.loads,
+    counters: transitioned.counters,
+    timings: transitioned.timings,
+  };
 }
 
 // The full claimed loop the field report runs: provision, acquire the claim,
@@ -292,8 +312,11 @@ async function measurePublishClaimed(fixture, target) {
   return {
     publish: published.milliseconds,
     publishLoads: published.loads,
+    publishCounters: published.counters,
+    publishTimings: published.timings,
     reconciledPublish: reconciled.milliseconds,
     reconciledPublishLoads: reconciled.loads,
+    reconciledPublishCounters: reconciled.counters,
   };
 }
 
@@ -316,6 +339,7 @@ function report(options, samples, baseline, publication) {
     + `  ledger: ${options.provisioned ? 'provisioned git' : 'plain directory'}`);
   console.log(described.loadAverageLine);
   reportLoadCounts(options, samples, publication);
+  reportPhaseCounters(samples, baseline, publication);
   if (described.banner) {
     console.log(described.banner);
   }
@@ -343,6 +367,60 @@ function reportLoadCounts(options, samples, publication) {
       + `  after pending intent ${publication.reconciledPublishLoads}`
       + ` (before item #107: ${LOADS_BEFORE_ITEM_107.reconciledPublish})`);
     console.log(`loads saved per publish-claimed: ${publicationLoadsSaved(publication)}`);
+  }
+}
+
+// Phase attribution, deterministic half (ledger item #122, stage 0). A whole
+// mutation's wall time cannot say whether the item-lock file work or the Git
+// HEAD read paid for it; these counts can, and they say the same number on any
+// machine. `item locks` is one create + one metadata write + one fsync +
+// one unlink per counted acquisition.
+function reportPhaseCounters(samples, baseline, publication) {
+  const distinct = (values) => [...new Set(values)].sort((left, right) => left - right).join('/');
+  const counted = (key, name) => distinct(samples.map((sample) => sample[key][name]));
+
+  console.log(`item locks per mutation: create ${counted('createCounters', 'item_lock_acquisitions')}`
+    + ` (fsyncs ${counted('createCounters', 'item_lock_fsyncs')})`
+    + `  transition ${counted('transitionCounters', 'item_lock_acquisitions')}`
+    + ` (fsyncs ${counted('transitionCounters', 'item_lock_fsyncs')})`);
+  console.log(`namespace locks per mutation: create ${counted('createCounters', 'namespace_lock_acquisitions')}`
+    + `  transition ${counted('transitionCounters', 'namespace_lock_acquisitions')}`);
+  console.log(`HEAD reads per mutation: tree entries ${counted('transitionCounters', 'head_tree_entries')}`
+    + `  blobs ${counted('transitionCounters', 'head_blobs_read')}`
+    + `  bytes ${counted('transitionCounters', 'head_bytes_read')}`);
+  if (baseline.gitHeadCounters) {
+    console.log(`one git HEAD ledger read: tree entries ${baseline.gitHeadCounters.head_tree_entries}`
+      + `  blobs ${baseline.gitHeadCounters.head_blobs_read}`
+      + `  bytes ${baseline.gitHeadCounters.head_bytes_read}`);
+  }
+  if (publication) {
+    const publish = publication.publishCounters;
+    console.log(`item locks per publish-claimed: ${publish.item_lock_acquisitions}`
+      + ` (fsyncs ${publish.item_lock_fsyncs}, releases ${publish.item_lock_releases})`
+      + `  after pending intent ${publication.reconciledPublishCounters.item_lock_acquisitions}`);
+    console.log(`namespace locks per publish-claimed: ${publish.namespace_lock_acquisitions}`);
+    console.log(`HEAD reads per publish-claimed: tree entries ${publish.head_tree_entries}`
+      + `  blobs ${publish.head_blobs_read}  bytes ${publish.head_bytes_read}`);
+  }
+}
+
+// Phase attribution, wall-time half. Each figure is the best of the repeats,
+// for the same reason the load price is: of the samples it is the one least
+// contaminated by whatever else the machine was doing. These carry the run's
+// reliability marker; the counts above do not.
+function reportPhaseTimes(samples, publication, line) {
+  const best = (key, name) => Math.min(...samples.map((sample) => sample[key][name]));
+
+  line(`transition phases: item locks ${format(best('transitionTimings', 'item_lock_acquire_ms'))} acquire`
+    + ` + ${format(best('transitionTimings', 'item_lock_release_ms'))} release`
+    + `  HEAD ${format(best('transitionTimings', 'head_tree_ms'))} tree`
+    + ` + ${format(best('transitionTimings', 'head_blob_ms'))} blobs`);
+  if (publication) {
+    const spent = publication.publishTimings;
+    line(`publish-claimed phases: item locks ${format(spent.item_lock_acquire_ms)} acquire`
+      + ` + ${format(spent.item_lock_release_ms)} release`
+      + `  HEAD ${format(spent.head_tree_ms)} tree`
+      + ` + ${format(spent.head_blob_ms)} blobs`);
   }
 }
 
@@ -379,6 +457,7 @@ function reportWallTimes(options, samples, baseline, publication, verdict, marke
   }
   line(`create    best ${format(creates.best)}  median ${format(creates.median)}  worst ${format(creates.worst)}`);
   line(`transition best ${format(transitions.best)}  median ${format(transitions.median)}  worst ${format(transitions.worst)}`);
+  reportPhaseTimes(samples, publication, line);
   const mutationSaved = mutationLoadsSaved(options, samples);
   line(`loads saved per mutation in wall time: ${mutationSaved}`
     + ` at ${format(baseline.load)} per load = ${format(mutationSaved * baseline.load)}`);
@@ -412,8 +491,12 @@ async function main() {
       samples.push({
         create: created.milliseconds,
         createLoads: created.loads,
+        createCounters: created.counters,
+        createTimings: created.timings,
         transition: accepted.milliseconds,
         transitionLoads: accepted.loads,
+        transitionCounters: accepted.counters,
+        transitionTimings: accepted.timings,
       });
     }
     // publish-claimed exists only on a provisioned ledger: it is refused

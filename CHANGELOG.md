@@ -38,8 +38,32 @@ consolidation. The first tagged release inherits this file.
   what a candidate can decode to, and the precheck was the remaining path that
   answered a genuine size refusal with a false base64 message. That transport
   bound is unchanged and still measures a different object.
+- **A claimed publication no longer takes one cooperative lock per ledger
+  item.** `publish-claimed` computed its lock closure from every item in the
+  loaded ledger, so publishing one item on a 1,500-item ledger created, wrote,
+  fsynced, and unlinked 1,503 lock files. It runs from journal replay through
+  its terminal record inside the namespace write lock, and every other
+  cooperative writer of a provisioned ledger enters that same lock before it
+  writes, so the per-item closure excluded nobody the namespace lock did not
+  already exclude. Publication now takes no per-item locks. Newly instrumented
+  phase counters measured the cost this removes: on 1,500 items the lock phase
+  was 11.2 s of the 12.6 s the publication took, against 0.2 s for reading Git
+  HEAD. Everything else is unchanged and proved byte-for-byte identical against
+  the previous implementation across all six publication outcome classes —
+  success, fence refusal, revision conflict, validation refusal, idempotent
+  replay, and indeterminate publication — in envelope, claim journal, and item
+  bytes. Every cooperative writer of one ledger must be upgraded together: a
+  writer that honors only per-ID locks can race one that honors only the
+  namespace lock.
 
 ### Fixed
+
+- **A live publication is no longer reported as a broken lock.** Publication
+  lock files recorded `"operation": "publish-claimed"`, but the lock reader
+  accepts only `create`, `transition`, and `patch`, so a concurrent writer that
+  hit a live publication lock classified it `invalid-shape` — a diagnostic that
+  says the lock is corrupt. Publication writes no lock files at all now, so
+  there is nothing to misclassify.
 
 - **A committed `patch` is forwarded instead of reported as an unknown
   outcome.** The shipped adapter engine still named the pre-widening patchable

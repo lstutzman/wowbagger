@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { link, lstat, mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { recordCount } from './instrumentation.js';
 
 const execFileAsync = promisify(execFile);
 const GIT_ENVIRONMENT = Object.fromEntries(
@@ -111,6 +112,21 @@ export async function writeClaimState(storePath, state) {
   await rename(temporary, storePath);
 }
 
+// The namespace process lock is the coarse write lock for one ledger
+// namespace: every provisioned writer, legacy or claimed, runs its whole
+// mutation inside it. Work that relies on that exclusion instead of taking its
+// own per-item locks must be able to prove the lock is held, and a caller must
+// not be able to assert it. So the hold is an object stamped with a
+// module-private symbol, handed to the callback and invalidated on release.
+// Only code actually running inside `withClaimLock` can hold one.
+const NAMESPACE_LOCK_HOLD = Symbol('wowbagger namespace lock hold');
+
+export function namespaceLockHeld(hold, storePath) {
+  return hold?.[NAMESPACE_LOCK_HOLD] === true
+    && hold.released === false
+    && hold.storePath === storePath;
+}
+
 export async function withClaimLock(storePath, fn) {
   const directory = path.dirname(storePath);
   await mkdir(directory, { recursive: true });
@@ -128,9 +144,11 @@ export async function withClaimLock(storePath, fn) {
 
   try {
     await acquireClaimLock(candidatePath, lockPath, recoveryPath);
+    const hold = { [NAMESPACE_LOCK_HOLD]: true, storePath, released: false };
     try {
-      return await fn();
+      return await fn(hold);
     } finally {
+      hold.released = true;
       if ((await readLockOwner(lockPath))?.token === owner.token) {
         await rm(lockPath, { force: true });
       }
@@ -150,6 +168,7 @@ async function acquireClaimLock(candidatePath, lockPath, recoveryPath) {
     }
     try {
       await link(candidatePath, lockPath);
+      recordCount('namespace_lock_acquisitions');
       return;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;

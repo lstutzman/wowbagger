@@ -1,0 +1,583 @@
+[
+  {
+    "name": "success",
+    "envelope": {
+      "exit": 0,
+      "stdout": {
+        "ok": true,
+        "namespace": "ledger-publication",
+        "command": "publish-claimed",
+        "contract_version": 1,
+        "state": "committed",
+        "operation_id": "pub_parity_0001",
+        "result": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+          "claim_fence": {
+            "ledger_namespace": "<namespace>",
+            "item_id": "wb_01M06G96000000000000000001",
+            "owner_id": "parity-agent",
+            "epoch": "1"
+          },
+          "claim_read_back": {
+            "ledger_namespace": "<namespace>",
+            "item_id": "wb_01M06G96000000000000000001",
+            "observed_at": "<time>",
+            "last_epoch": "1",
+            "active": {
+              "owner_id": "parity-agent",
+              "epoch": "1",
+              "issued_at": "<time>",
+              "expires_at": "<time>"
+            }
+          }
+        }
+      }
+    },
+    "journal": [
+      {
+        "seq": 1,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 2,
+        "type": "claim",
+        "command": "acquire",
+        "physical_now": "<time>",
+        "request": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "lease_duration_ms": 600000,
+          "expected": {
+            "last_epoch": "0",
+            "active": null
+          }
+        }
+      },
+      {
+        "seq": 3,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 4,
+        "type": "publish-intent",
+        "operation_id": "pub_parity_0001",
+        "operation_digest": "<digest-1>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "expected_revision": "sha256:edf5883a1ecfafc6531de2abd6a38a8eb7c8d97e59e81e4aacaf1188826344ca",
+        "candidate_sha256": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+        "fence": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "epoch": "1"
+        },
+        "floor": "<time>",
+        "state": "pending"
+      },
+      {
+        "seq": 5,
+        "type": "publish-final",
+        "operation_id": "pub_parity_0001",
+        "operation_digest": "<digest-1>",
+        "ledger_namespace": "<namespace>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "outcome": {
+          "exit": 0,
+          "stdout": {
+            "ok": true,
+            "namespace": "ledger-publication",
+            "command": "publish-claimed",
+            "contract_version": 1,
+            "state": "committed",
+            "operation_id": "pub_parity_0001",
+            "result": {
+              "ledger_namespace": "<namespace>",
+              "item_id": "wb_01M06G96000000000000000001",
+              "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+              "claim_fence": {
+                "ledger_namespace": "<namespace>",
+                "item_id": "wb_01M06G96000000000000000001",
+                "owner_id": "parity-agent",
+                "epoch": "1"
+              },
+              "claim_read_back": {
+                "ledger_namespace": "<namespace>",
+                "item_id": "wb_01M06G96000000000000000001",
+                "observed_at": "<time>",
+                "last_epoch": "1",
+                "active": {
+                  "owner_id": "parity-agent",
+                  "epoch": "1",
+                  "issued_at": "<time>",
+                  "expires_at": "<time>"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "item": "---\nschema_version: 2\nid: wb_01M06G96000000000000000001\nnumber: 1\ntitle: \"After\"\nkind: task\npriority: 50\nstatus: backlog\ncreated: 2026-08-17\nupdated: 2026-08-17\nprovenance:\n  source: \"parity\"\n  recorded_at: \"2026-08-17T00:00:00.000Z\"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nFixed bytes for the publication parity vectors.\n"
+  },
+  {
+    "name": "fence-refusal",
+    "envelope": {
+      "exit": 4,
+      "stdout": {
+        "ok": false,
+        "namespace": "ledger-publication",
+        "command": "publish-claimed",
+        "contract_version": 1,
+        "state": "unchanged",
+        "operation_id": "pub_parity_0002",
+        "error": {
+          "code": "claim-fence-rejected",
+          "message": "The supplied claim fence is not the active owner generation.",
+          "details": {
+            "ledger_namespace": "<namespace>",
+            "item_id": "wb_01M06G96000000000000000001",
+            "observed_at": "<time>",
+            "reason": "epoch-mismatch",
+            "supplied_owner_id": "parity-agent",
+            "supplied_epoch": "99",
+            "active_owner_id": "parity-agent",
+            "active_epoch": "1"
+          }
+        }
+      }
+    },
+    "journal": [
+      {
+        "seq": 1,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 2,
+        "type": "claim",
+        "command": "acquire",
+        "physical_now": "<time>",
+        "request": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "lease_duration_ms": 600000,
+          "expected": {
+            "last_epoch": "0",
+            "active": null
+          }
+        }
+      },
+      {
+        "seq": 3,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 4,
+        "type": "publish-final",
+        "operation_id": "pub_parity_0002",
+        "operation_digest": "<digest-1>",
+        "ledger_namespace": "<namespace>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "outcome": {
+          "exit": 4,
+          "stdout": {
+            "ok": false,
+            "namespace": "ledger-publication",
+            "command": "publish-claimed",
+            "contract_version": 1,
+            "state": "unchanged",
+            "operation_id": "pub_parity_0002",
+            "error": {
+              "code": "claim-fence-rejected",
+              "message": "The supplied claim fence is not the active owner generation.",
+              "details": {
+                "ledger_namespace": "<namespace>",
+                "item_id": "wb_01M06G96000000000000000001",
+                "observed_at": "<time>",
+                "reason": "epoch-mismatch",
+                "supplied_owner_id": "parity-agent",
+                "supplied_epoch": "99",
+                "active_owner_id": "parity-agent",
+                "active_epoch": "1"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "item": "---\nschema_version: 2\nid: wb_01M06G96000000000000000001\nnumber: 1\ntitle: \"Before\"\nkind: task\npriority: 50\nstatus: backlog\ncreated: 2026-08-17\nupdated: 2026-08-17\nprovenance:\n  source: \"parity\"\n  recorded_at: \"2026-08-17T00:00:00.000Z\"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nFixed bytes for the publication parity vectors.\n"
+  },
+  {
+    "name": "revision-conflict",
+    "envelope": {
+      "exit": 4,
+      "stdout": {
+        "ok": false,
+        "namespace": "ledger-publication",
+        "command": "publish-claimed",
+        "contract_version": 1,
+        "state": "unchanged",
+        "operation_id": "pub_parity_0003",
+        "error": {
+          "code": "ledger-revision-conflict",
+          "message": "The durable ledger revision no longer matches this publication.",
+          "details": {
+            "ledger_namespace": "<namespace>",
+            "item_id": "wb_01M06G96000000000000000001",
+            "expected_revision": "sha256:a979fcd9e23ce1f1b7df62ca811f23d7e1eefb11d0b50699d1009071b2159c19",
+            "actual_revision": "sha256:edf5883a1ecfafc6531de2abd6a38a8eb7c8d97e59e81e4aacaf1188826344ca"
+          }
+        }
+      }
+    },
+    "journal": [
+      {
+        "seq": 1,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 2,
+        "type": "claim",
+        "command": "acquire",
+        "physical_now": "<time>",
+        "request": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "lease_duration_ms": 600000,
+          "expected": {
+            "last_epoch": "0",
+            "active": null
+          }
+        }
+      },
+      {
+        "seq": 3,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 4,
+        "type": "publish-intent",
+        "operation_id": "pub_parity_0003",
+        "operation_digest": "<digest-1>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "expected_revision": "sha256:a979fcd9e23ce1f1b7df62ca811f23d7e1eefb11d0b50699d1009071b2159c19",
+        "candidate_sha256": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+        "fence": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "epoch": "1"
+        },
+        "floor": "<time>",
+        "state": "pending"
+      },
+      {
+        "seq": 5,
+        "type": "publish-final",
+        "operation_id": "pub_parity_0003",
+        "operation_digest": "<digest-1>",
+        "ledger_namespace": "<namespace>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "outcome": {
+          "exit": 4,
+          "stdout": {
+            "ok": false,
+            "namespace": "ledger-publication",
+            "command": "publish-claimed",
+            "contract_version": 1,
+            "state": "unchanged",
+            "operation_id": "pub_parity_0003",
+            "error": {
+              "code": "ledger-revision-conflict",
+              "message": "The durable ledger revision no longer matches this publication.",
+              "details": {
+                "ledger_namespace": "<namespace>",
+                "item_id": "wb_01M06G96000000000000000001",
+                "expected_revision": "sha256:a979fcd9e23ce1f1b7df62ca811f23d7e1eefb11d0b50699d1009071b2159c19",
+                "actual_revision": "sha256:edf5883a1ecfafc6531de2abd6a38a8eb7c8d97e59e81e4aacaf1188826344ca"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "item": "---\nschema_version: 2\nid: wb_01M06G96000000000000000001\nnumber: 1\ntitle: \"Before\"\nkind: task\npriority: 50\nstatus: backlog\ncreated: 2026-08-17\nupdated: 2026-08-17\nprovenance:\n  source: \"parity\"\n  recorded_at: \"2026-08-17T00:00:00.000Z\"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nFixed bytes for the publication parity vectors.\n"
+  },
+  {
+    "name": "validation-refusal",
+    "envelope": {
+      "exit": 3,
+      "stdout": {
+        "ok": false,
+        "namespace": "ledger-publication",
+        "command": "publish-claimed",
+        "contract_version": 1,
+        "state": "unchanged",
+        "operation_id": "pub_parity_0004",
+        "error": {
+          "code": "ledger-invalid",
+          "message": "The candidate ledger is invalid.",
+          "details": [
+            {
+              "path": "ledger/wb_01M06G96000000000000000001.md",
+              "field": "number",
+              "code": "duplicate-number",
+              "message": "Number 2 is used by more than one ledger item."
+            },
+            {
+              "path": "ledger/wb_01M06G96000000000000000002.md",
+              "field": "number",
+              "code": "duplicate-number",
+              "message": "Number 2 is used by more than one ledger item."
+            }
+          ]
+        }
+      }
+    },
+    "journal": [
+      {
+        "seq": 1,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 2,
+        "type": "claim",
+        "command": "acquire",
+        "physical_now": "<time>",
+        "request": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "lease_duration_ms": 600000,
+          "expected": {
+            "last_epoch": "0",
+            "active": null
+          }
+        }
+      },
+      {
+        "seq": 3,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      }
+    ],
+    "item": "---\nschema_version: 2\nid: wb_01M06G96000000000000000001\nnumber: 1\ntitle: \"Before\"\nkind: task\npriority: 50\nstatus: backlog\ncreated: 2026-08-17\nupdated: 2026-08-17\nprovenance:\n  source: \"parity\"\n  recorded_at: \"2026-08-17T00:00:00.000Z\"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nFixed bytes for the publication parity vectors.\n"
+  },
+  {
+    "name": "idempotent-replay",
+    "envelope": {
+      "exit": 0,
+      "stdout": {
+        "ok": true,
+        "namespace": "ledger-publication",
+        "command": "publish-claimed",
+        "contract_version": 1,
+        "state": "committed",
+        "operation_id": "pub_parity_0005",
+        "result": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+          "claim_fence": {
+            "ledger_namespace": "<namespace>",
+            "item_id": "wb_01M06G96000000000000000001",
+            "owner_id": "parity-agent",
+            "epoch": "1"
+          },
+          "claim_read_back": {
+            "ledger_namespace": "<namespace>",
+            "item_id": "wb_01M06G96000000000000000001",
+            "observed_at": "<time>",
+            "last_epoch": "1",
+            "active": {
+              "owner_id": "parity-agent",
+              "epoch": "1",
+              "issued_at": "<time>",
+              "expires_at": "<time>"
+            }
+          }
+        }
+      }
+    },
+    "journal": [
+      {
+        "seq": 1,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 2,
+        "type": "claim",
+        "command": "acquire",
+        "physical_now": "<time>",
+        "request": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "lease_duration_ms": 600000,
+          "expected": {
+            "last_epoch": "0",
+            "active": null
+          }
+        }
+      },
+      {
+        "seq": 3,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 4,
+        "type": "publish-intent",
+        "operation_id": "pub_parity_0005",
+        "operation_digest": "<digest-1>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "expected_revision": "sha256:edf5883a1ecfafc6531de2abd6a38a8eb7c8d97e59e81e4aacaf1188826344ca",
+        "candidate_sha256": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+        "fence": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "epoch": "1"
+        },
+        "floor": "<time>",
+        "state": "pending"
+      },
+      {
+        "seq": 5,
+        "type": "publish-final",
+        "operation_id": "pub_parity_0005",
+        "operation_digest": "<digest-1>",
+        "ledger_namespace": "<namespace>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "outcome": {
+          "exit": 0,
+          "stdout": {
+            "ok": true,
+            "namespace": "ledger-publication",
+            "command": "publish-claimed",
+            "contract_version": 1,
+            "state": "committed",
+            "operation_id": "pub_parity_0005",
+            "result": {
+              "ledger_namespace": "<namespace>",
+              "item_id": "wb_01M06G96000000000000000001",
+              "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+              "claim_fence": {
+                "ledger_namespace": "<namespace>",
+                "item_id": "wb_01M06G96000000000000000001",
+                "owner_id": "parity-agent",
+                "epoch": "1"
+              },
+              "claim_read_back": {
+                "ledger_namespace": "<namespace>",
+                "item_id": "wb_01M06G96000000000000000001",
+                "observed_at": "<time>",
+                "last_epoch": "1",
+                "active": {
+                  "owner_id": "parity-agent",
+                  "epoch": "1",
+                  "issued_at": "<time>",
+                  "expires_at": "<time>"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "item": "---\nschema_version: 2\nid: wb_01M06G96000000000000000001\nnumber: 1\ntitle: \"After\"\nkind: task\npriority: 50\nstatus: backlog\ncreated: 2026-08-17\nupdated: 2026-08-17\nprovenance:\n  source: \"parity\"\n  recorded_at: \"2026-08-17T00:00:00.000Z\"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nFixed bytes for the publication parity vectors.\n"
+  },
+  {
+    "name": "indeterminate",
+    "envelope": {
+      "exit": 6,
+      "stdout": {
+        "ok": false,
+        "namespace": "ledger-publication",
+        "command": "publish-claimed",
+        "contract_version": 1,
+        "state": "unknown",
+        "operation_id": "pub_parity_0006",
+        "error": {
+          "code": "publication-outcome-unknown",
+          "message": "The publication outcome could not be determined.",
+          "details": {
+            "operation_id": "pub_parity_0006",
+            "ledger_namespace": "<namespace>",
+            "item_id": "wb_01M06G96000000000000000001"
+          }
+        }
+      }
+    },
+    "journal": [
+      {
+        "seq": 1,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 2,
+        "type": "claim",
+        "command": "acquire",
+        "physical_now": "<time>",
+        "request": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "lease_duration_ms": 600000,
+          "expected": {
+            "last_epoch": "0",
+            "active": null
+          }
+        }
+      },
+      {
+        "seq": 3,
+        "type": "clock",
+        "now": "<time>",
+        "floor": "<time>"
+      },
+      {
+        "seq": 4,
+        "type": "publish-intent",
+        "operation_id": "pub_parity_0006",
+        "operation_digest": "<digest-1>",
+        "item_id": "wb_01M06G96000000000000000001",
+        "expected_revision": "sha256:edf5883a1ecfafc6531de2abd6a38a8eb7c8d97e59e81e4aacaf1188826344ca",
+        "candidate_sha256": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+        "fence": {
+          "ledger_namespace": "<namespace>",
+          "item_id": "wb_01M06G96000000000000000001",
+          "owner_id": "parity-agent",
+          "epoch": "1"
+        },
+        "floor": "<time>",
+        "state": "pending"
+      }
+    ],
+    "item": "---\nschema_version: 2\nid: wb_01M06G96000000000000000001\nnumber: 1\ntitle: \"After\"\nkind: task\npriority: 50\nstatus: backlog\ncreated: 2026-08-17\nupdated: 2026-08-17\nprovenance:\n  source: \"parity\"\n  recorded_at: \"2026-08-17T00:00:00.000Z\"\ndepends_on: []\nrelated: []\ndecisions: []\n---\n\nFixed bytes for the publication parity vectors.\n"
+  }
+]

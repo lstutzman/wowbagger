@@ -2,6 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { recordCount, timePhase } from './instrumentation.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024;
@@ -30,9 +31,11 @@ export async function readGitHeadLedger(ledgerDirectory) {
   const gitLedger = toGitPath(relativeLedger);
   const treeArguments = ['ls-tree', '-r', '-l', '-z', 'HEAD'];
   if (gitLedger !== '') treeArguments.push('--', gitLedger);
-  const listing = await gitBuffer(root, treeArguments);
+  const listing = await timePhase('head_tree_ms', () => gitBuffer(root, treeArguments));
   const prefix = gitLedger === '' ? '' : `${gitLedger}/`;
-  const blobs = parseTreeListing(listing).filter((entry) => (
+  const entries = parseTreeListing(listing);
+  recordCount('head_tree_entries', entries.length);
+  const blobs = entries.filter((entry) => (
     entry.type === 'blob'
       && entry.name.startsWith(prefix)
       && !entry.name.slice(prefix.length).startsWith('.wowbagger/')
@@ -44,8 +47,10 @@ export async function readGitHeadLedger(ledgerDirectory) {
   // not parsing or validation, were the whole mutation wall time.
   const items = new Map();
   for (const chunk of chunkBySize(blobs, MAX_GIT_OUTPUT_BYTES)) {
-    const contents = await readBlobBatch(root, chunk);
+    const contents = await timePhase('head_blob_ms', () => readBlobBatch(root, chunk));
     for (let index = 0; index < chunk.length; index += 1) {
+      recordCount('head_blobs_read');
+      recordCount('head_bytes_read', contents[index].length);
       items.set(chunk[index].name.slice(prefix.length), contents[index]);
     }
   }

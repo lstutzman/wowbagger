@@ -782,6 +782,16 @@ entry and the empty journal file. It then appends a terminal `publish-final`
 outcome. The caller commits or merges the resulting item change and runs
 `claim-verify`.
 
+The whole of that sequence runs inside the namespace write lock the backend
+already holds, and every other cooperative writer of the namespace enters the
+same lock before it writes. So merge-coordinated publication relies on that
+lock for write serialization and takes no per-item cooperative locks
+(`docs/mutation-contract.md`, section 6). It acquires the namespace lock
+exactly once per publication. A publication is therefore never refused with
+`lock-held`, and a killed publication leaves no per-item lock behind; the
+namespace lock it does leave is recovered by the rule in this section, which
+recovers an owner only when the OS reports the PID absent.
+
 That reconciliation is unconditional. It is not conditioned on an unresolved
 `publish-intent`, because the commit-per-mutation invariant (section 1) binds
 `publish-claimed` exactly as it binds `create`, `transition`, and `patch`, and
