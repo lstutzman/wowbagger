@@ -134,3 +134,15 @@ try {
 } catch (error) {
   console.log('forced-darwin crashed:', error?.message?.slice(0, 800));
 }
+
+// In-process NATIVE run, mirroring the unit test exactly, with full case dumps.
+try {
+  const { runImplementationVectors } = await import(pathToFileURL(path.join(repo, 'spec', 'run-adapter-implementation.js')));
+  const result = await runImplementationVectors({ platform: process.platform });
+  console.log('in-process native status:', result.status);
+  for (const c of result.cases ?? []) {
+    if (c.status === 'fail') console.log('NATIVE FAILCASE', JSON.stringify(c).slice(0, 4000));
+  }
+} catch (error) {
+  console.log('in-process native crashed:', error?.message?.slice(0, 800));
+}
