@@ -5,9 +5,10 @@ number: 82
 title: "Retire the PropertyCompass legacy backlog after Wowbagger proof"
 kind: task
 priority: 30
-status: backlog
+status: killed
 created: 2026-08-14
 updated: 2026-08-17
+killed: 2026-08-17
 provenance:
   source: "user-request"
   recorded_at: "2026-08-14T14:47:48.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog at triage review."
     rationale: "The final cutover definition, correctly gated on #80 and an explicit Lee decision; queuing it records the intended end state."
+  - action: kill
+    date: 2026-08-17
+    summary: "Transferred to the PropertyCompass2 ledger."
+    rationale: "Lee's ownership ruling of 2026-08-17: this item executes in PropertyCompass2's repository against PropertyCompass2's data, by their agents. Their session was notified with the full list and files the equivalent in their own wowbagger ledger. The wowbagger-side prerequisites (the mutation verbs, extension patching, claim-adopt, the ownership and derivation contracts) shipped this week."
 ---
 
 # Purpose
