@@ -5,9 +5,10 @@ number: 109
 title: "Name an undelivered core input instead of timing out"
 kind: task
 priority: 10
-status: backlog
+status: done
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T21:38:08Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog."
     rationale: "From the #106 EPIPE fix: a diagnosable condition currently reports as timed_out."
+  - action: complete
+    date: 2026-08-17
+    summary: "Undelivered core input is named, not timed out."
+    rationale: "launchCoreProcess records a tri-state input_delivery latched before any deliberate kill; the timeout branch alone splits to core-observation-incomplete with reason core-input-undelivered - no new error code, no registry change, adapter contract stays 2 with the argument recorded in section 12. Mutations honestly stay mutation-outcome-unknown (partial-write reasoning documented). Both non-delivered states pinned by launcher fixtures; two first-pass mutation survivors closed with new guards."
 ---
 
 Follow-up from item #106's EPIPE fix: `launchCoreProcess` now swallows a failed write to the core child's stdin. When the core exits fast that is correct (its real exit code is the story). But when the core is ALIVE and the write genuinely fails, the run reports `timed_out` after 30 seconds instead of "the input never reached the core" - a diagnosable condition reported as an unobservable one.

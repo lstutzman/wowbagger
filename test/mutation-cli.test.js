@@ -67,6 +67,25 @@ test('inspect refuses an absent ID without returning a partial item', () => {
   );
 });
 
+test('inspect refusing an absent number echoes the number the caller asked for', () => {
+  const fixture = new URL('../spec/fixtures/mutations/inspect-number-not-found/', import.meta.url);
+  const result = runCli(
+    'inspect',
+    '--ledger',
+    fileURLToPath(new URL('ledger', fixture)),
+    '--number',
+    '2',
+    '--json',
+  );
+
+  assert.equal(result.status, 2, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.equal(
+    result.stdout,
+    `${JSON.stringify(JSON.parse(readFileSync(fileURLToPath(new URL('expected.json', fixture)), 'utf8')))}\n`,
+  );
+});
+
 test('inspect fails closed when another ledger item is invalid', () => {
   const fixture = new URL('../spec/fixtures/mutations/inspect-invalid-ledger/', import.meta.url);
   const result = runCli(

@@ -168,12 +168,32 @@
       "id": "mutation-fence-unknown-store-outcome-is-unknown",
       "type": "process-outcome",
       "scenario": "mutation-fence-claim-store-outcome-unknown"
+    },
+    {
+      "id": "read-undelivered-input-is-named",
+      "type": "process-outcome",
+      "scenario": "read-input-write-failed"
+    },
+    {
+      "id": "read-undrained-input-is-named",
+      "type": "process-outcome",
+      "scenario": "read-input-never-drained"
+    },
+    {
+      "id": "read-delivered-input-timeout-stays-a-timeout",
+      "type": "process-outcome",
+      "scenario": "read-timeout-after-delivered-input"
+    },
+    {
+      "id": "mutation-undelivered-input-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-input-write-failed"
     }
   ],
   "artifacts": [
     {
       "path": "scenarios.json",
-      "sha256": "sha256:e44e7220af84917642c25142d8482c1e69ba3bf9df95324249b802422fe4fea0"
+      "sha256": "sha256:2a86cd1ac4faa348fdc4b89767f2b794ff697a59fb9e1d845868fe5a2ca7f1fa"
     }
   ]
 }
