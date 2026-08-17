@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { link, lstat, mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { recordCount } from './instrumentation.js';
 
 const execFileAsync = promisify(execFile);
 const GIT_ENVIRONMENT = Object.fromEntries(
@@ -150,6 +151,7 @@ async function acquireClaimLock(candidatePath, lockPath, recoveryPath) {
     }
     try {
       await link(candidatePath, lockPath);
+      recordCount('namespace_lock_acquisitions');
       return;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;

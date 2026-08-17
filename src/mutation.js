@@ -6,6 +6,7 @@ import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, visit } from 'yaml';
 import { isDependencySatisfied } from './dependencies.js';
+import { recordCount, timePhase } from './instrumentation.js';
 import {
   EXTENSION_DECLARATION_PATH,
   extensionValueMatches,
@@ -1634,7 +1635,11 @@ function lockIdsForCreate(request, ledger) {
   return [request.id, ...references, ...numberLock].sort(compareText);
 }
 
-async function acquireLocks(root, ids, operation, scenario) {
+function acquireLocks(root, ids, operation, scenario) {
+  return timePhase('item_lock_acquire_ms', () => acquireLocksTimed(root, ids, operation, scenario));
+}
+
+async function acquireLocksTimed(root, ids, operation, scenario) {
   const lockDirectory = path.join(root, '.wowbagger-locks');
   await mkdir(lockDirectory, { recursive: true });
   const locks = [];
@@ -1650,6 +1655,7 @@ async function acquireLocks(root, ids, operation, scenario) {
         }
         throw error;
       }
+      recordCount('item_lock_acquisitions');
       const lock = {
         id,
         file,
@@ -1674,6 +1680,7 @@ async function acquireLocks(root, ids, operation, scenario) {
           throw new Error('fixture lock metadata sync failure');
         }
         await handle.sync();
+        recordCount('item_lock_fsyncs');
         lock.metadataComplete = true;
       } catch (error) {
         failure = error;
@@ -1705,7 +1712,11 @@ async function acquireLocks(root, ids, operation, scenario) {
   }
 }
 
-async function releaseLocks(locks, scenario) {
+function releaseLocks(locks, scenario) {
+  return timePhase('item_lock_release_ms', () => releaseLocksTimed(locks, scenario));
+}
+
+async function releaseLocksTimed(locks, scenario) {
   const failed = [];
   await Promise.all(locks.map(async (lock) => {
     if (lock.released) {
@@ -1722,6 +1733,7 @@ async function releaseLocks(locks, scenario) {
         return;
       }
       await unlink(lock.file);
+      recordCount('item_lock_releases');
       lock.released = true;
     } catch (error) {
       if (error?.code === 'ENOENT') {
