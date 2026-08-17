@@ -5,7 +5,7 @@ number: 71
 title: "Turn the README into an accurate adoption and collaboration guide"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-14
 updated: 2026-08-17
 provenance:
