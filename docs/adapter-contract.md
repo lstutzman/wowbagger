@@ -968,6 +968,22 @@ after the child tree has ended, both streams ended within bounds, no descendant
 remains, and stdout contains the strict complete core envelope expected for
 that command.
 
+The observation MAY also carry one optional member, `input_delivery`, reporting
+what reached the core's standard input. Its exact domain is `delivered` (the
+whole request arrived and the pipe closed cleanly), `failed` (the write errored
+against a closed read end), and `unread` (the core neither drained the pipe nor
+closed it, so the write never completed). Any other value is an incomplete
+observation. A runner that cannot report delivery omits the member; omission is
+not a delivery claim and keeps every classification below unchanged. An
+observation that proves `started: false` MUST omit it, because a core that
+never ran was never written to; a delivery claim there contradicts the
+observation that is supposed to prove a clean non-start.
+
+A runner that reports the member MUST latch the fact before it deliberately
+terminates the child. Killing the core closes its read end, so a pending write
+errors moments later; that error is the runner's own doing and is not evidence
+about the core.
+
 Launch classification is tri-state for mutations. A normal
 `core-launch-failed` is allowed only for a complete, internally consistent
 observation that proves `started: false`: no exit, signal, timeout, output,
@@ -984,12 +1000,29 @@ An over-limit capture is `output-limit-exceeded` for a read and
 stream complete. Runner completion flags cannot enlarge a byte bound.
 
 For read-only commands precedence is: a proven not-started observation →
-`core-launch-failed`; timeout → `core-timeout`; signal → `core-signaled`;
-containment/orphan doubt or malformed observation →
+`core-launch-failed`; timeout → `core-timeout`, except a timeout whose
+observation reports `input_delivery` as `failed` or `unread` →
+`core-observation-incomplete` with exactly
+`{"reason": "core-input-undelivered", "input_delivery": "<state>"}`; signal →
+`core-signaled`; containment/orphan doubt or malformed observation →
 `core-observation-incomplete`; stream truncation → `output-limit-exceeded`;
 then missing or invalid complete envelope → `core-protocol-error`. Exit code is
 recorded but never overrides an earlier transport failure. No partial core JSON
 is valid.
+
+An undelivered request is only allowed to displace the timeout. A run that
+ended any other way already has a better answer: a core that exited reports its
+own exit code and bytes even though the write failed against its closed read
+end, and a signalled or orphaned core keeps its own diagnosis. The timeout is
+the one outcome the missing request causes and then hides — the core ran, it
+was simply never asked, and a bare `core-timeout` reports that diagnosable
+condition as an unobservable one.
+
+Mutations never gain a deterministic outcome from this member. An undelivered
+request cannot prove a mutation did not run: a partial write may have reached
+the core, and the adapter cannot observe what the core did with it. Every
+undelivered mutation therefore stays `mutation-outcome-unknown` with section 6
+recovery.
 
 Mutation commands are stricter: unless the observation proves that launch did
 not occur, any timeout or signal produces `mutation-outcome-unknown` even when
@@ -1223,7 +1256,7 @@ adapter, so its implementation statuses remain `unverified`.
 `node spec/run-adapter-implementation.js` accepts the same fixture directory,
 evaluates transactions through the shipped Claude Code entrypoint and emits the
 same result shape with an evidence platform. Its current native Darwin run is
-`pass`: 196 of 196 assertions and 15 of 15 cases pass. That native common-vector
+`pass`: 200 of 200 assertions and 15 of 15 cases pass. That native common-vector
 evidence earns the Claude Code manifest's Darwin `supported` declaration.
 Codex, Kimi, and generic adapter implementations remain `unverified`.
 
@@ -1342,6 +1375,23 @@ them loses a documented guarantee. Version 1 and version 2 fail-closed
 negotiation is untouched: a v1-only consumer still receives
 `unsupported-adapter-contract-version`, and an adapter probing a version 1 or 2
 core still refuses `core-contract-version-mismatch`.
+
+The section 6 `input_delivery` observation member is likewise **not** a version
+2 delta, on the same grounds the response-domain rule is not. It adds no
+request or response member, removes none, renames none, and adds no error code
+to the public registry: both outcomes it selects between, `core-timeout` and
+`core-observation-incomplete`, are already version 1 codes, and the reason it
+carries lives inside `error.details`, which section 6 has always defined as
+bounded JSON rather than a fixed per-code schema. The member is optional on the
+runner's side, so a runner that does not report it produces byte-identical
+classifications to the ones this contract had before, and every existing
+process observation keeps its exact meaning. No response moves from accepted to
+refused or from refused to accepted; a read refusal stays a read refusal and a
+mutation keeps its unknown outcome. What changes is that one diagnosable read
+condition is named by the code that fits it instead of by the timeout that
+masked it, so version 2 consumers gain a correct diagnosis where they had an
+unobservable wait and none of them loses a documented guarantee. Fail-closed
+negotiation and the mutation-recovery rules are untouched in both directions.
 
 Bootstrap wire version 1 and the manifest, approval, instruction-input,
 handoff, and adapter-vector format versions remain 1; they are separate
