@@ -812,6 +812,21 @@ export function validateInvokeContext({
   return { ok: true, total_bytes: totalBytes, instructions, handoff };
 }
 
+// Section 5.1 lets a host deliver either the approval event itself or a
+// resolver the adapter asks once the binding exists. Nothing before this point
+// can build that binding, so a consumer prompted for an approval must be
+// prompted from here. Absent source, failed source, and a source that answers
+// with nothing are one outcome: no approval.
+async function hostApproval(source, invocation) {
+  if (typeof source !== 'function') return source ?? null;
+  try {
+    const answered = await source(invocation);
+    return answered ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function invokeAdapter(requestBytes, runtime) {
   const adapterContractVersion = ADAPTER_CONTRACT_VERSION;
   const maximumRequestBytes = runtime?.max_request_bytes;
@@ -950,13 +965,14 @@ export async function invokeAdapter(requestBytes, runtime) {
   if (mutation) {
     const mutationParsed = parseJsonRequest(coreInput);
     mutationRequest = mutationParsed.value;
+    const binding = invocationBinding({
+      request, described, resolvedWorkspace, argv, coreInput, context, runtime,
+    });
     const authority = verifyMutationAuthority({
       command,
-      approval: runtime.approval ?? null,
+      approval: await hostApproval(runtime.approval, { command, binding }),
       approvalOptions: runtime.approval ? {
-        binding: invocationBinding({
-          request, described, resolvedWorkspace, argv, coreInput, context, runtime,
-        }),
+        binding,
         now: runtime.now,
         redeemedNonces: runtime.redeemed_nonces,
         trustedSources: new Set(['consumer']),
