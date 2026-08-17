@@ -1,0 +1,136 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  ALPHA_1,
+  DEPRECATION_MESSAGE,
+  checkChannels,
+  planRepair,
+  runChannels,
+} from '../scripts/release-channels.js';
+
+const PACKAGE = 'wowbagger';
+const CURRENT = '9.9.0-alpha.6';
+
+function healthy() {
+  return {
+    packageName: PACKAGE,
+    version: CURRENT,
+    distTags: { next: CURRENT },
+    deprecated: DEPRECATION_MESSAGE,
+  };
+}
+
+test('the prerelease policy is exactly next at the published version with no latest', () => {
+  assert.deepEqual(checkChannels(healthy()), { ok: true, problems: [] });
+});
+
+test('a latest dist-tag on an all-prerelease package fails the check', () => {
+  const result = checkChannels({ ...healthy(), distTags: { latest: '0.1.0-alpha.1', next: CURRENT } });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.problems.map(({ code }) => code), ['latest-present']);
+});
+
+test('a missing or stale next dist-tag fails the check', () => {
+  assert.deepEqual(
+    checkChannels({ ...healthy(), distTags: {} }).problems.map(({ code }) => code),
+    ['next-missing'],
+  );
+  assert.deepEqual(
+    checkChannels({ ...healthy(), distTags: { next: '9.9.0-alpha.5' } }).problems.map(({ code }) => code),
+    ['next-stale'],
+  );
+});
+
+test('an undeprecated alpha.1 fails the check', () => {
+  assert.deepEqual(
+    checkChannels({ ...healthy(), deprecated: null }).problems.map(({ code }) => code),
+    ['alpha-1-not-deprecated'],
+  );
+  assert.deepEqual(
+    checkChannels({ ...healthy(), deprecated: 'something else' }).problems.map(({ code }) => code),
+    ['alpha-1-not-deprecated'],
+  );
+});
+
+test('the deprecation message names the next channel and the exact core pairing', () => {
+  assert.match(DEPRECATION_MESSAGE, /wowbagger@next/);
+  assert.match(DEPRECATION_MESSAGE, /exact/i);
+  assert.doesNotMatch(DEPRECATION_MESSAGE, /0\.1\.0-alpha\.[2-9]/, 'the message must not name a version that moves');
+});
+
+test('repair of a healthy registry plans nothing', () => {
+  assert.deepEqual(planRepair(healthy()), []);
+});
+
+test('repair plans only the writes the live state is missing, and never unpublishes', () => {
+  const commands = planRepair({
+    packageName: PACKAGE,
+    version: CURRENT,
+    distTags: { latest: '0.1.0-alpha.1', next: '9.9.0-alpha.5' },
+    deprecated: null,
+  });
+
+  assert.deepEqual(commands.map(({ args }) => args), [
+    ['dist-tag', 'add', `${PACKAGE}@${CURRENT}`, 'next'],
+    ['dist-tag', 'rm', PACKAGE, 'latest'],
+    ['deprecate', `${PACKAGE}@${ALPHA_1}`, DEPRECATION_MESSAGE],
+  ]);
+  assert.equal(commands.every(({ args }) => args[0] !== 'unpublish'), true);
+});
+
+test('repair is idempotent: a partly repaired registry plans only the remainder', () => {
+  const commands = planRepair({
+    packageName: PACKAGE,
+    version: CURRENT,
+    distTags: { next: CURRENT },
+    deprecated: null,
+  });
+
+  assert.deepEqual(commands.map(({ args }) => args[0]), ['deprecate']);
+});
+
+test('a dry-run repair prints the writes and executes none of them', () => {
+  const printed = [];
+  const executed = [];
+  const status = runChannels({
+    argumentsList: ['repair', CURRENT, '--dry-run'],
+    readRegistry: () => ({ packageName: PACKAGE, distTags: { latest: '0.1.0-alpha.1' }, deprecated: null }),
+    execute: (command) => { executed.push(command); return { ok: true }; },
+    write: (line) => printed.push(line),
+  });
+
+  assert.equal(status, 0);
+  assert.deepEqual(executed, []);
+  assert.match(printed.join('\n'), /npm dist-tag add wowbagger@9\.9\.0-alpha\.6 next/);
+  assert.match(printed.join('\n'), /npm dist-tag rm wowbagger latest/);
+  assert.match(printed.join('\n'), /npm deprecate wowbagger@0\.1\.0-alpha\.1/);
+  assert.match(printed.join('\n'), /dry run/i);
+});
+
+test('a failing check exits nonzero and names every violated rule', () => {
+  const printed = [];
+  const status = runChannels({
+    argumentsList: ['check', CURRENT],
+    readRegistry: () => ({ packageName: PACKAGE, distTags: { latest: '0.1.0-alpha.1' }, deprecated: null }),
+    execute: () => assert.fail('check must never write to the registry'),
+    write: (line) => printed.push(line),
+  });
+
+  assert.equal(status, 1);
+  assert.match(printed.join('\n'), /latest-present/);
+  assert.match(printed.join('\n'), /next-missing/);
+  assert.match(printed.join('\n'), /alpha-1-not-deprecated/);
+});
+
+test('a passing check exits zero and writes nothing to the registry', () => {
+  const status = runChannels({
+    argumentsList: ['check', CURRENT],
+    readRegistry: () => ({ packageName: PACKAGE, distTags: { next: CURRENT }, deprecated: DEPRECATION_MESSAGE }),
+    execute: () => assert.fail('check must never write to the registry'),
+    write: () => {},
+  });
+
+  assert.equal(status, 0);
+});
