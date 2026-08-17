@@ -101,12 +101,18 @@ test('refuses a scenario that omits its expected error code', async (t) => {
   );
 });
 
+// Every default-fixture run below names the HOST platform, never a literal.
+// These runs spawn real children, so a forced foreign platform makes the
+// expectations claim invocations the host cannot honestly perform: on a
+// platform the manifest declares `unverified`, the honest pass is the
+// mismatch refusal, and flipping that declaration without fixing the real
+// behavioral deltas turns these tests red — which is the earn rule working.
 test('reports the honest claude-code result with every assertion executed', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
 
   assert.equal(result.status, 'pass');
   assert.equal(result.implementations['claude-code'], 'pass');
-  assert.equal(result.evidence_platform, 'darwin');
+  assert.equal(result.evidence_platform, process.platform);
   assert.equal(result.cases.length, 16);
   assert.deepEqual(
     result.cases.filter(({ status }) => status === 'fail').map(({ case: name }) => name),
@@ -118,7 +124,7 @@ test('reports the honest claude-code result with every assertion executed', asyn
 });
 
 test('reports the codex target with every codex-targeted assertion executed', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin', target: 'codex' });
+  const result = await runImplementationVectors({ platform: process.platform, target: 'codex' });
 
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations.codex, 'fail');
@@ -145,7 +151,7 @@ test('a trailing --target with no value fails fast instead of reporting no cases
 });
 
 test('reports the opencode target with every opencode-targeted assertion executed', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin', target: 'opencode' });
+  const result = await runImplementationVectors({ platform: process.platform, target: 'opencode' });
 
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations.opencode, 'fail');
@@ -485,7 +491,7 @@ test('routes every bootstrap transaction through the shipped entrypoint', async 
 });
 
 test('labels each evidenced assertion with the shipped module that produced it', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
   const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
     .find((entry) => entry.id === id).evidence;
@@ -504,7 +510,7 @@ test('labels each evidenced assertion with the shipped module that produced it',
 });
 
 test('evidences every Plan 3 assertion through a shipped module', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
   const byName = new Map(result.cases.map((entry) => [entry.case, entry]));
   const evidenceOf = (caseName, id) => byName.get(caseName).assertion_evidence
     .find((entry) => entry.id === id).evidence;
@@ -533,7 +539,7 @@ test('evidences every Plan 3 assertion through a shipped module', async () => {
 });
 
 test('validates ordered instruction input through the shipped engine', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
   const instructionCase = result.cases.find(({ case: name }) => name === 'instruction-input');
 
   assert.equal(instructionCase.status, 'pass');
@@ -544,7 +550,7 @@ test('validates ordered instruction input through the shipped engine', async () 
 });
 
 test('validates every bounded instruction and handoff context scenario through the shipped engine', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
   const contextCase = result.cases.find(({ case: name }) => name === 'context-validation');
 
   assert.equal(contextCase.status, 'pass');
@@ -558,7 +564,7 @@ test('validates every bounded instruction and handoff context scenario through t
 });
 
 test('builds only the explicit non-authoritative handoff resume plan', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
   const handoffCase = result.cases.find(({ case: name }) => name === 'handoff-resume');
 
   assert.equal(handoffCase.status, 'pass');
@@ -569,7 +575,7 @@ test('builds only the explicit non-authoritative handoff resume plan', async () 
 });
 
 test('validates trusted approval schema binding time and single-use authority', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
   const approvalCase = result.cases.find(({ case: name }) => name === 'approval-schema');
 
   assert.equal(approvalCase.status, 'pass');
@@ -579,7 +585,7 @@ test('validates trusted approval schema binding time and single-use authority', 
 });
 
 test('requires consumer approval without granting Git authority', async () => {
-  const result = await runImplementationVectors({ platform: 'darwin' });
+  const result = await runImplementationVectors({ platform: process.platform });
   const mutationCase = result.cases.find(({ case: name }) => name === 'mutation-approval');
 
   assert.equal(mutationCase.status, 'pass');
