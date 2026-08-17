@@ -52,18 +52,16 @@ export function classifyItem(item, asOf) {
   };
 }
 
+// The mutation contract's terminal ratio, not a non-null terminal date. An
+// archived or a deferred child carries a terminal date but not a terminal
+// disposition — archived restores and deferred undefers — so counting either
+// would overstate progress and would put this factor at odds with the contract
+// and the epic complete rollup, which both gate on this same set.
+const TERMINAL_CHILD_STATUSES = new Set(['done', 'killed']);
+
 // Epic enablement. For every item that names a parent, how far that parent's
 // direct children have already reached a terminal status. Finishing the last
 // child of an almost-done epic releases the whole epic.
-//
-// Terminal here is the mutation contract's terminal ratio, not a non-null
-// terminal date: done or killed only. Archived and deferred children carry a
-// terminal date but not a terminal disposition — archived restores and deferred
-// undefers — so counting them would overstate progress and would put this
-// factor at odds with the contract and the epic complete rollup, which both
-// gate on the same done-or-killed set.
-const TERMINAL_CHILD_STATUSES = new Set(['done', 'killed']);
-
 export function computeEpicEnablement(allItems) {
   const byId = new Map(allItems.map((item) => [item.id, item]));
   const childCounts = new Map();
