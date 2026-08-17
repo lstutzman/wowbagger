@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -123,6 +123,28 @@ for (const [surface, text] of [
     assert.match(trap, /exit\s+code/i);
   });
 }
+
+// The README carried "196 assertions across all 15 cases" for three releases
+// after the vectors grew to 200. Nothing counted, so nothing noticed. The
+// evidence claim is now read from the vectors it claims to describe.
+test('the published README states the conformance evidence the vectors actually carry', () => {
+  const vectorRoot = path.join(projectRoot, 'spec', 'fixtures', 'adapters');
+  const cases = readdirSync(vectorRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => JSON.parse(
+      readFileSync(path.join(vectorRoot, entry.name, 'manifest.json'), 'utf8'),
+    ));
+  const assertions = cases.reduce((total, { assertions: list }) => total + list.length, 0);
+  const claimed = [...readme.matchAll(/(\d+)\s+(?:native\s+)?assertions/g)].map(([, count]) => count);
+
+  assert.match(readme, new RegExp(`all ${assertions} assertions across all ${cases.length}\\s+cases`));
+  assert.ok(claimed.length > 0, 'the README must state the conformance evidence');
+  assert.deepEqual(
+    new Set(claimed),
+    new Set([String(assertions)]),
+    'every assertion count in the README must be the count the vectors carry',
+  );
+});
 
 test('the npm package ships every contract document referenced by the installed skill', () => {
   for (const contract of ['docs/mutation-contract.md', 'docs/work-claim-contract.md']) {
