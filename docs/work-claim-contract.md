@@ -80,6 +80,28 @@ contract](mutation-contract.md) section 12 states the same rule for
 `create`, `transition`, and `patch` callers, together with the
 considered-and-rejected alternative of validating against working-tree bytes.
 
+The optional `--auto-commit` flag performs that whole loop inside one
+invocation on a provisioned ledger: it runs the pre-mutation `claim-verify`,
+runs the mutation unchanged, commits exactly the item and at most one
+reconciliation log, and runs `claim-verify` again before returning. It changes
+no claim rule and no envelope a caller already receives, so the work-claim API
+stays version 1. The invariant is unchanged; only the ceremony moves. When its
+Git commit fails after the item is published, the named recovery command is:
+
+~~~sh
+wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json
+~~~
+
+`mutation-finalize` answers in this domain because it changes Git
+reconciliation state and no item byte. `test/work-claim-reference.js` derives
+the same operation independently: writing no item byte, the only durable change
+it can make is moving a ledger record's committed surface onto bytes the
+writer's own surface already holds. It re-derives every path from the ledger
+and the provisioned namespace, creates the exact commit if it is absent, then
+runs `claim-verify`. Repeating it creates no second commit. [Mutation
+contract](mutation-contract.md) section 13 defines the flag, its strict
+preflight, its commit sets, its failure envelopes, and this command.
+
 ## 2. Ledger namespace and identity
 
 Every claim key is the immutable tuple `(ledger_namespace, item_id)`. No state,

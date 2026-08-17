@@ -1,0 +1,53 @@
+{
+  "case": "git-commit-failed",
+  "fixture_version": 1,
+  "status": "normative-envelope",
+  "description": "A refusing pre-commit hook through core.hooksPath leaves the item published and the commit absent. The core domain is preserved, state stays committed, and the envelope carries the published revision, the ordered commit set with digests, the pre-commit HEAD, failure_stage, reason, and one bounded recovery token.",
+  "coverage": [
+    "auto-commit",
+    "commit-failed-contract",
+    "core-domain",
+    "hooks-are-honoured",
+    "recovery-token"
+  ],
+  "scenario": {
+    "item_id": "wb_01KZBMBEZKPE7D15HKW9Q3GSZV",
+    "steps": [
+      "provision the ledger, run claim-verify, and commit the namespace and log",
+      "configure core.hooksPath with a pre-commit hook that exits 1",
+      "transition the item with --auto-commit"
+    ]
+  },
+  "expected": {
+    "exit": 6,
+    "stdout": {
+      "ok": false,
+      "command": "transition",
+      "contract_version": 3,
+      "state": "committed",
+      "error": {
+        "code": "git-commit-failed",
+        "message": "The item was published, but its Git commit was not established.",
+        "details": {
+          "id": "wb_01KZBMBEZKPE7D15HKW9Q3GSZV",
+          "published_revision": "{{ITEM_REVISION}}",
+          "expected_path": "items/wb_01KZBMBEZKPE7D15HKW9Q3GSZV.md",
+          "commit_set": [
+            {
+              "path": "{{LOG_PATH}}",
+              "sha256": "{{LOG_REVISION}}"
+            },
+            {
+              "path": "items/wb_01KZBMBEZKPE7D15HKW9Q3GSZV.md",
+              "sha256": "{{ITEM_REVISION}}"
+            }
+          ],
+          "pre_commit_head": "{{PRE_COMMIT_HEAD}}",
+          "failure_stage": "commit",
+          "reason": "commit-command-failed",
+          "recovery_token": "{{RECOVERY_TOKEN}}"
+        }
+      }
+    }
+  }
+}

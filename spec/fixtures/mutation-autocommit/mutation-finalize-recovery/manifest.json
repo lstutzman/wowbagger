@@ -1,0 +1,43 @@
+{
+  "case": "mutation-finalize-recovery",
+  "fixture_version": 1,
+  "status": "normative-envelope",
+  "description": "One mutation-finalize invocation completes the commit the hook refused and runs claim-verify. It answers in the work-claim domain, and repeating it returns the same commit without creating a second one.",
+  "coverage": [
+    "mutation-finalize",
+    "work-claim-domain",
+    "idempotent-recovery",
+    "recovery-token"
+  ],
+  "scenario": {
+    "item_id": "wb_01KZBMBEZKPE7D15HKW9Q3GSZV",
+    "steps": [
+      "reach the git-commit-failed case above and keep its recovery token",
+      "remove the refusing hook",
+      "run mutation-finalize with the token",
+      "run mutation-finalize with the same token again"
+    ]
+  },
+  "expected_commit_subject": "wowbagger: transition item #1",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "ok": true,
+      "namespace": "work-claim",
+      "command": "mutation-finalize",
+      "contract_version": 1,
+      "state": "committed",
+      "result": {
+        "ledger_namespace": "{{NAMESPACE}}",
+        "item_id": "wb_01KZBMBEZKPE7D15HKW9Q3GSZV",
+        "published_revision": "{{ITEM_REVISION}}",
+        "git_commit": "{{GIT_COMMIT}}",
+        "commit_paths": [
+          "{{LOG_PATH}}",
+          "items/wb_01KZBMBEZKPE7D15HKW9Q3GSZV.md"
+        ],
+        "claim_verified": true
+      }
+    }
+  }
+}
