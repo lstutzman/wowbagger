@@ -4,6 +4,7 @@ id: wb_01M07V3MP8ZHJ76AEEG25S79Y2
 number: 119
 title: "Settle the epic-enablement definition and the missing deferred edges"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
