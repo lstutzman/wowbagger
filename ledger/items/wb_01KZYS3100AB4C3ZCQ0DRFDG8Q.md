@@ -5,9 +5,10 @@ number: 71
 title: "Turn the README into an accurate adoption and collaboration guide"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-14
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "user-request"
   recorded_at: "2026-08-14T12:49:26.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog at triage review."
     rationale: "Standalone user-requested documentation and adoption work, independent of the migration; README accuracy is a live liability with alpha.4 published."
+  - action: complete
+    date: 2026-08-17
+    summary: "The README is an accurate adoption and collaboration guide."
+    rationale: "Full audit: 23 wrong, understated, or missing claims corrected against HEAD, each verified by a named command or file - including three sites carrying a stale conformance count that no test guarded (a derived guard now pins all three against the vectors). Clean packaged-install walkthrough proven end to end: install, layout and extensions declarations, create, accept, patch title+priority+body_append+extensions, ready, validate, provision. The exit-6 envelope in the README reproduced member for member. Contributor route from ledger item to the four-command gate. Mascot: three original directions evaluated, Patient Comet recommended, NOTHING adopted - human approval outstanding. Found for the maintainer: LICENSE says Apache-2.0 while package.json and plugin.json publish MIT - a licensing decision, deliberately not made here."
 ---
 
 # Problem
