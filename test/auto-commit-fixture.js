@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { lstat, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -201,6 +201,17 @@ export function createRequest(id, overrides = {}) {
 export function committedPaths(fixture, commit) {
   const names = git(fixture.root, 'diff-tree', '--no-commit-id', '--name-only', '-r', commit);
   return names === '' ? [] : names.split('\n').map((name) => name.replace(/^ledger\//u, '')).sort();
+}
+
+// Installs one hook through core.hooksPath. Every auto-commit fixture that
+// needs a hook uses this, so no test writes into the repository's own .git.
+export async function chmodHook(fixture, name, script) {
+  const directory = path.join(fixture.base, 'hooks');
+  await mkdir(directory, { recursive: true });
+  const file = path.join(directory, name);
+  await writeFile(file, script);
+  await chmod(file, 0o755);
+  git(fixture.root, 'config', 'core.hooksPath', directory);
 }
 
 export async function ledgerFile(fixture, relativePath) {
