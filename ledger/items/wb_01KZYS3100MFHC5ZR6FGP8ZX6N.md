@@ -5,9 +5,10 @@ number: 81
 title: "Preserve exact PropertyCompass source bytes outside parsed bodies"
 kind: task
 priority: 20
-status: backlog
+status: killed
 created: 2026-08-14
 updated: 2026-08-17
+killed: 2026-08-17
 provenance:
   source: "propertycompass-migration-final-reconciliation"
   recorded_at: "2026-08-14T13:24:17.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog at triage review."
     rationale: "Byte-exact source preservation rule fixing the demonstrated parser newline defect; prerequisite for trustworthy reconciliation."
+  - action: kill
+    date: 2026-08-17
+    summary: "Transferred to the PropertyCompass2 ledger."
+    rationale: "Lee's ownership ruling of 2026-08-17: this item executes in PropertyCompass2's repository against PropertyCompass2's data, by their agents. Their session was notified with the full list and files the equivalent in their own wowbagger ledger. The wowbagger-side prerequisites (the mutation verbs, extension patching, claim-adopt, the ownership and derivation contracts) shipped this week."
 ---
 
 # Problem

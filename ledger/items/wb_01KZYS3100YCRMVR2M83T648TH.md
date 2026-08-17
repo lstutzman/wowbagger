@@ -5,9 +5,10 @@ number: 77
 title: "Refresh the PropertyCompass migration snapshot after pre-freeze commits"
 kind: task
 priority: 20
-status: backlog
+status: killed
 created: 2026-08-14
 updated: 2026-08-17
+killed: 2026-08-17
 provenance:
   source: "propertycompass-migration-quiescence"
   recorded_at: "2026-08-14T13:24:17.000Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-08-16
     summary: "Accept into the backlog at triage review."
     rationale: "Snapshot-refresh requirement stands; the enumerated pre-freeze commits are a floor and the live dual-run session keeps adding to the source, so the refresh-to-pinned-tip rule is more necessary now, not less."
+  - action: kill
+    date: 2026-08-17
+    summary: "Transferred to the PropertyCompass2 ledger."
+    rationale: "Lee's ownership ruling of 2026-08-17: this item executes in PropertyCompass2's repository against PropertyCompass2's data, by their agents. Their session was notified with the full list and files the equivalent in their own wowbagger ledger. The wowbagger-side prerequisites shipped this week."
 ---
 
 # Problem
