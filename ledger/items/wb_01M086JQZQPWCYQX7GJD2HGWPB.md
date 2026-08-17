@@ -4,14 +4,19 @@ id: wb_01M086JQZQPWCYQX7GJD2HGWPB
 number: 125
 title: "Author end-to-end core-outcome vectors for the adapters"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T00:00:00.000Z"
-depends_on: [wb_01M086JMQNGZM5WFGB9PM3M2P6]
+depends_on: [ wb_01M086JMQNGZM5WFGB9PM3M2P6 ]
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Ideation survivor: the conformance gap that let two real adapter defects ship; depends on #120's approval plumbing."
 ---
 
 Ideation survivor 4 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-vectors.md - the enrichment is the authoritative scope; this body is its summary. DEPENDS on the adapter approval-plumbing defect item: real mutations cannot cross the shipped entrypoint until a host approval provider exists.
