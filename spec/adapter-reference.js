@@ -113,7 +113,25 @@ const TRANSITION_ISSUE_FIELDS = Object.freeze({
 const PATCH_ISSUE_MESSAGES = Object.freeze({
   'date-before-created': 'Patch date must not be earlier than the current created date.',
   'date-before-updated': 'Patch date must not be earlier than the current updated date.',
+  'extension-declaration-missing': 'The ledger declares no patchable extension members; .wowbagger/extensions.json is absent.',
+  'extension-declaration-invalid': 'The ledger extension declaration at .wowbagger/extensions.json is not a valid version 1 declaration.',
+  'extension-not-declared': 'The ledger extension declaration does not declare this member.',
+  'extension-value-invalid': 'The value does not match the type the ledger extension declaration gives this member.',
+  'extension-anchored': 'The item writes this member with a YAML anchor or alias, so it cannot be replaced whole.',
 });
+// The two refusals that fault the ledger's declaration rather than one member
+// carry the container's own name; the other three name the member at fault in
+// `field`, which is how the refusal identifies it without widening the issue
+// shape past its four members.
+const EXTENSION_DECLARATION_ISSUE_CODES = new Set([
+  'extension-declaration-missing',
+  'extension-declaration-invalid',
+]);
+const EXTENSION_MEMBER_ISSUE_CODES = new Set([
+  'extension-not-declared',
+  'extension-value-invalid',
+  'extension-anchored',
+]);
 const DATE_ISSUE_CODES = new Set(['date-before-created', 'date-before-updated']);
 const TRANSITION_BLOCKER_FIELDS = Object.freeze({
   'dependent-cleanup': 'depends_on',
@@ -1994,7 +2012,8 @@ function validCoreErrorDetails(code, details, command, responseContext) {
       && validTransitionIssues(details.issues) && details.issues.length > 0;
     case 'patch-precondition-failed': return hasExactKeys(details, ['id', 'issues'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
-      && validPatchIssues(details.issues) && details.issues.length > 0;
+      && validPatchIssues(details.issues, patchExtensionMembers(responseContext, command))
+      && details.issues.length > 0;
     case 'candidate-invalid': return hasExactKeys(details, ['id', 'validation_errors'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;
@@ -2064,6 +2083,16 @@ function responseMutationInput(responseContext, command) {
   return responseContext.mutation_input instanceof Uint8Array
     ? responseContext.mutation_input
     : null;
+}
+
+// The extension members the patch request named, when there is a request to
+// read. `undefined` means the response carries none to correlate against.
+function patchExtensionMembers(responseContext, command) {
+  if (command !== 'patch') return undefined;
+  const mutationRequest = responseMutationRequest(responseContext, command);
+  if (mutationRequest === undefined) return undefined;
+  const extensions = mutationRequest?.set?.extensions;
+  return plainObject(extensions) ? new Set(Object.keys(extensions)) : new Set();
 }
 
 function responseItemId(responseContext, command) {
@@ -2175,8 +2204,16 @@ function validPatchRequest(request) {
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactKeys(request.set, [], ['title', 'priority', 'depends_on', 'related', 'body', 'body_append'])
+    || !hasExactKeys(request.set, [], ['title', 'priority', 'depends_on', 'related', 'body', 'body_append', 'extensions'])
     || Object.keys(request.set).length === 0) return false;
+  // The extensions container's own shape is all a request can be judged on.
+  // Which members it may name, and what each value must be, is the committed
+  // per-ledger declaration's answer, so it is a precondition and not a
+  // request-shape rule: an unreadable value here still makes a canonical
+  // request that the core refuses with patch-precondition-failed.
+  if (Object.hasOwn(request.set, 'extensions')
+    && (!plainObject(request.set.extensions)
+      || Object.keys(request.set.extensions).length === 0)) return false;
   // A replacement and an append cannot both describe the successor body, so one
   // request naming both is refused whatever the two values are.
   if (Object.hasOwn(request.set, 'body') && Object.hasOwn(request.set, 'body_append')) return false;
@@ -2188,6 +2225,7 @@ function validPatchRequest(request) {
       if (typeof value !== 'string') return false;
       continue;
     }
+    if (field === 'extensions') continue;
     if (value === null) continue;
     // title is a non-empty schema string, the same rule create validates it
     // under. null is a removal, handled above; the candidate refuses it later
@@ -2234,6 +2272,25 @@ function validPatchResultCorrelation(item, request) {
       if (typeof item.body !== 'string' || !item.body.endsWith(requested)) return false;
       continue;
     }
+    // Obstacle 4 of the contract's ownership section: an extension member is
+    // absent from the lossless core view, so the only observable surface is
+    // the item source the response already carries. Decoding and parsing it
+    // is the correlation — the alternative was no correlation at all.
+    if (field === 'extensions') {
+      const source = decodeCanonicalBase64(item.source_base64);
+      if (source === null) return false;
+      const parsed = parseLedgerItemSource(source.toString('utf8'));
+      if (parsed.error) return false;
+      for (const [member, value] of Object.entries(requested)) {
+        if (value === null) {
+          if (Object.hasOwn(parsed.data, member)) return false;
+          continue;
+        }
+        if (!Object.hasOwn(parsed.data, member)
+          || !sameJson(parsed.data[member], extensionRequestValue(value))) return false;
+      }
+      continue;
+    }
     // A removal correlates with an absent core member; a value correlates with
     // the requested one, after priority's integer parse.
     if (field === 'title' || field === 'priority') {
@@ -2250,6 +2307,18 @@ function validPatchResultCorrelation(item, request) {
     if (!sameJson(item.core[field] ?? [], requested ?? [])) return false;
   }
   return true;
+}
+
+// A JSON number reaches the request wrapped so its exact source survives; the
+// published YAML carries the value, so the comparison unwraps it first. A
+// value that is not a wrapped integer is compared as it arrived.
+function extensionRequestValue(value) {
+  if (value === null || typeof value !== 'object'
+    || Object.getPrototypeOf(value)?.constructor?.name !== 'JsonNumber'
+    || !hasExactKeys(value, ['source'])
+    || typeof value.source !== 'string'
+    || !/^-?(0|[1-9][0-9]*)$/.test(value.source)) return value;
+  return Number(value.source);
 }
 
 function validInvalidRequestDetails(value) {
@@ -2293,15 +2362,24 @@ function validTransitionIssues(value) {
     && isOrdered(value, compareTransitionIssues);
 }
 
-function validPatchIssues(value) {
+function validPatchIssues(value, extensionMembers) {
   if (!Array.isArray(value)) return false;
   return value.every((issue) => hasExactKeys(issue, issueKeys(issue?.code))
     && Object.hasOwn(PATCH_ISSUE_MESSAGES, issue.code)
-    && issue.field === 'date'
+    && validPatchIssueField(issue, extensionMembers)
     && issue.message === PATCH_ISSUE_MESSAGES[issue.code]
     && validIssueDates(issue)
     && sameJson(issue.related_ids, []))
     && isOrdered(value, compareTransitionIssues);
+}
+
+function validPatchIssueField(issue, extensionMembers) {
+  if (EXTENSION_DECLARATION_ISSUE_CODES.has(issue.code)) return issue.field === 'extensions';
+  if (!EXTENSION_MEMBER_ISSUE_CODES.has(issue.code)) return issue.field === 'date';
+  // A member refusal must name a member the request actually asked for.
+  // Without a request to judge, the field is only checked for shape.
+  if (extensionMembers === undefined) return nonEmptyControlFreeString(issue.field);
+  return extensionMembers.has(issue.field);
 }
 
 function compareTransitionIssues(left, right) {

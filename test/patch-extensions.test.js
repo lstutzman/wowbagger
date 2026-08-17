@@ -7,7 +7,14 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
+import { parse } from 'yaml';
 import { runCli, withLedger } from './support.js';
+
+// Reads the published frontmatter back independently of the core's own parse,
+// which is the only place an extension member is observable at all.
+function parseFrontmatter(source) {
+  return parse(source.split('\n---\n')[0].replace(/^---\n/, ''), { schema: 'core' });
+}
 
 const ITEM = 'wb_01Q4ZK3DG020ANANANANANANAM';
 const CREATED = '2030-01-20';
@@ -239,6 +246,77 @@ test('a missing consumer identifier field is added after the last frontmatter me
     assert.equal(after, before
       .replace(`updated: ${CREATED}`, 'updated: 2030-01-22')
       .replace('\n---\nThe mirrored card.\n', '\nexternal_id: PC-1475\n---\nThe mirrored card.\n'));
+  });
+});
+
+// null removes the member, the same convention every patchable frontmatter
+// field shares.
+test('null removes a declared extension member', async () => {
+  const before = itemSource({ extra: ['external_id: "PC-1470"'] });
+  await withLedger({
+    [`${ITEM}.md`]: before,
+    '.wowbagger/extensions.json': DECLARATION,
+  }, async (ledger) => {
+    const result = await runPatch(ledger, { extensions: { external_id: null } });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const after = await readFile(path.join(ledger, `${ITEM}.md`), 'utf8');
+    assert.equal(after, before
+      .replace(`updated: ${CREATED}`, 'updated: 2030-01-22')
+      .replace('external_id: "PC-1470"\n', ''));
+  });
+});
+
+// The declared scalar and flat-list types, each written back as the type the
+// declaration names rather than as whatever JSON happened to arrive.
+test('one request writes every declared value type at once', async () => {
+  const before = itemSource({ extra: ['tags: [legacy]'] });
+  await withLedger({
+    [`${ITEM}.md`]: before,
+    '.wowbagger/extensions.json': DECLARATION,
+  }, async (ledger) => {
+    const result = await runPatch(ledger, {
+      extensions: {
+        external_id: 'PC-1475',
+        sequence: 4,
+        verified: true,
+        tags: ['mirror', 'legacy'],
+      },
+    });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const after = await readFile(path.join(ledger, `${ITEM}.md`), 'utf8');
+    const parsed = parseFrontmatter(after);
+    assert.equal(parsed.external_id, 'PC-1475');
+    assert.equal(parsed.sequence, 4);
+    assert.equal(parsed.verified, true);
+    assert.deepEqual(parsed.tags, ['mirror', 'legacy']);
+    // The list the item already carried keeps its own sequence node, so the
+    // block or flow style it was written in survives the replacement.
+    assert.match(after, /^tags: \[ ?mirror, legacy ?\]$/m);
+  });
+});
+
+// The acceptance pin: a request that names one extension member must leave
+// every other extension node identical, anchor, alias, comment and all.
+test('extension nodes not named in the request keep their node identity', async () => {
+  const before = itemSource({ extra: ['external_id: "PC-1470"', 'tier: gold'] });
+  await withLedger({
+    [`${ITEM}.md`]: before,
+    '.wowbagger/extensions.json': DECLARATION,
+  }, async (ledger) => {
+    const result = await runPatch(ledger, { extensions: { external_id: 'PC-1475' } });
+
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    const after = await readFile(path.join(ledger, `${ITEM}.md`), 'utf8');
+    // Every untouched extension line survives byte for byte, in place.
+    for (const line of ['# the mirror keeps its own notes here', 'mirror: &mirror', '  card: "PC-1475"', 'audit:', '  - last: *mirror', 'tier: gold']) {
+      assert.ok(after.includes(`\n${line}\n`), `the patch must not touch: ${line}`);
+    }
+    assert.equal(
+      after.split('\n').filter((line) => !line.startsWith('updated:') && !line.startsWith('external_id:')).join('\n'),
+      before.split('\n').filter((line) => !line.startsWith('updated:') && !line.startsWith('external_id:')).join('\n'),
+    );
   });
 });
 
