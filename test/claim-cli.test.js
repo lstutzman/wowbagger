@@ -298,7 +298,7 @@ test('claim capabilities reports the contract-shaped envelope, distinct from top
       operations: {
         work_claim: {
           supported: true,
-          api_version: 1,
+          api_version: 2,
           mode: 'advisory',
           claim_protected_publication: false,
           fencing_enforced_at: 'none',
@@ -329,7 +329,7 @@ test('a provisioned namespace advertises merge-coordinated claim capabilities', 
   });
   assert.deepEqual(capabilities.envelope.result.operations.work_claim, {
     supported: true,
-    api_version: 1,
+    api_version: 2,
     mode: 'merge-coordinated',
     claim_protected_publication: true,
     fencing_enforced_at: 'git-history-reconciliation',

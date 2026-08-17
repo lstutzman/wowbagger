@@ -11,7 +11,7 @@ test('a provisioned git backend reports merge-coordinated claims without claimin
   });
   assert.deepEqual(capability, {
     supported: true,
-    api_version: 1,
+    api_version: 2,
     mode: 'merge-coordinated',
     claim_protected_publication: true,
     fencing_enforced_at: 'git-history-reconciliation',

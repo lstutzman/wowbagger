@@ -12,6 +12,7 @@ import {
 import { advanceClockFloor, readBack } from './claim-operations.js';
 import { claimStorePath, withClaimLock, writeClaimState } from './claim-store.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
+import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { readGitHeadLedger } from './git-reconciliation.js';
 import { publishClaimedCandidate, revisionFor } from './mutation.js';
 import { validateLedger } from './validate.js';
@@ -21,9 +22,6 @@ const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
 const OPERATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const REVISION = /^sha256:[a-f0-9]{64}$/;
 const EPOCH = /^(?:[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|18446744[0-6][0-9]{11}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{4}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5])$/;
-const MAX_CANDIDATE_BYTES = 8388608;
-const MAX_CANDIDATE_BASE64_CHARS = Math.ceil(MAX_CANDIDATE_BYTES / 3) * 4;
-
 const PUBLICATION_MEMBERS = [
   'candidate_sha256',
   'candidate_source_base64',
@@ -60,18 +58,21 @@ export function validatePublicationRequest(request) {
     || typeof request.candidate_source_base64 !== 'string') {
     return publicationError(request, 'invalid-request', 'The request does not match publish-claimed version 1.', {}, 2);
   }
-  if (request.candidate_source_base64.length > MAX_CANDIDATE_BASE64_CHARS) {
-    return canonicalBase64Error(request);
-  }
   let candidate;
   try {
     candidate = Buffer.from(request.candidate_source_base64, 'base64');
   } catch {
     return canonicalBase64Error(request);
   }
-  if (candidate.length > MAX_CANDIDATE_BYTES
-    || candidate.toString('base64') !== request.candidate_source_base64) {
+  // Spelling first: without canonical base64 there is no item source to
+  // measure. The serialized-request bound already caps what this decodes, so no
+  // separate character precheck is needed, and keeping one would answer a
+  // genuine size refusal with a false base64 message.
+  if (candidate.toString('base64') !== request.candidate_source_base64) {
     return canonicalBase64Error(request);
+  }
+  if (candidate.length > MAX_ITEM_SOURCE_BYTES) {
+    return itemSourceTooLarge(request, candidate.length);
   }
   if (revisionFor(candidate) !== request.candidate_sha256) {
     return publicationError(
@@ -1054,6 +1055,9 @@ function mutationFailure(request, mutation) {
         actual_revision: mutation.error.details.actual_revision,
       }, 4);
   }
+  if (mutation.error?.code === 'item-source-too-large') {
+    return itemSourceTooLarge(request, mutation.error.details.size_bytes);
+  }
   if (mutation.error?.code === 'candidate-invalid') {
     return publicationError(request, 'ledger-invalid', 'The candidate ledger is invalid.', mutation.error.details.validation_errors, 3);
   }
@@ -1088,6 +1092,19 @@ function publicationUnknown(request) {
       ledger_namespace: request.ledger_namespace,
       item_id: request.item_id,
     }, 6, 'unknown');
+}
+
+// The ledger-publication spelling of the one named item-source refusal: the
+// same code, message, and limit as the core domain, with this domain's item_id
+// detail and its top-level operation_id.
+function itemSourceTooLarge(request, sizeBytes) {
+  return publicationError(
+    request,
+    'item-source-too-large',
+    'The proposed item source exceeds the supported byte limit.',
+    { item_id: request.item_id, size_bytes: sizeBytes, limit_bytes: MAX_ITEM_SOURCE_BYTES },
+    2,
+  );
 }
 
 function canonicalBase64Error(request) {

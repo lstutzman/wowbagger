@@ -26,6 +26,7 @@ const CORE_CONTRACT_VERSION = 4;
 // Written independently of `src/limits.js`: the oracle pins the contract value,
 // never the production constant.
 const MAX_ITEM_SOURCE_BYTES = 8388608;
+const WORK_CLAIM_API_VERSION = 2;
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],
@@ -621,7 +622,7 @@ export function referenceCoreCapabilities() {
         },
         work_claim: {
           supported: false,
-          api_version: 1,
+          api_version: WORK_CLAIM_API_VERSION,
           mode: 'advisory',
           claim_protected_publication: false,
           fencing_enforced_at: 'none',
@@ -1405,7 +1406,7 @@ function coreCapabilitiesSchemaIssue(value) {
     'fencing_enforced_at', 'safe_exclusive_dispatch',
   ])
     || typeof workClaim.supported !== 'boolean'
-    || workClaim.api_version !== 1
+    || workClaim.api_version !== WORK_CLAIM_API_VERSION
     || workClaim.mode !== 'advisory'
     || workClaim.claim_protected_publication !== false
     || workClaim.fencing_enforced_at !== 'none'

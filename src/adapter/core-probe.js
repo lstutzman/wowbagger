@@ -8,6 +8,10 @@ export const CORE_COMMAND_ORDER = Object.freeze([
   'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
 export const CORE_CONTRACT_VERSION = 4;
+// The work-claim API lives in its own version domain. It moved to 2 with the
+// item-source refusal that replaced publish-claimed's version 1 error for an
+// oversized candidate.
+export const WORK_CLAIM_API_VERSION = 2;
 
 function refuse(error_code, detail) {
   return { ok: false, error_code, detail };
@@ -75,7 +79,7 @@ function workClaimOperationIssue(workClaim) {
     'fencing_enforced_at', 'safe_exclusive_dispatch',
   ])
     || typeof workClaim.supported !== 'boolean'
-    || workClaim.api_version !== 1
+    || workClaim.api_version !== WORK_CLAIM_API_VERSION
     || workClaim.mode !== 'advisory'
     || workClaim.claim_protected_publication !== false
     || workClaim.fencing_enforced_at !== 'none'
@@ -208,7 +212,7 @@ export function coreCapabilities() {
         patch: { supported: true, write_scope: 'single-item', cas_scope: 'exact-byte-sha256' },
         work_claim: {
           supported: false,
-          api_version: 1,
+          api_version: WORK_CLAIM_API_VERSION,
           mode: 'advisory',
           claim_protected_publication: false,
           fencing_enforced_at: 'none',
