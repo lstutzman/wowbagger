@@ -578,12 +578,12 @@ async function evaluateCoreBaselineAssertion(directory, assertion, target, runti
   if (coreInvocation.command === 'ready') {
     root = path.join(projectRoot, 'spec/fixtures/ready-selection');
     const ledgerIndex = argv.indexOf('--ledger');
-    argv[ledgerIndex + 1] = path.join(root, 'ledger');
+    argv[ledgerIndex + 1] = path.posix.join(root, 'ledger');
   } else if (coreInvocation.command === 'validate') {
     temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-vector-'));
     root = temporary;
     baselineCwd = temporary;
-    const ledger = path.join(root, 'ledger');
+    const ledger = path.posix.join(root, 'ledger');
     await mkdir(ledger);
     await writeFile(path.join(ledger, 'bad.md'), await readFile(path.join(directory, 'ledger-bad.md')));
     const ledgerIndex = argv.indexOf('--ledger');

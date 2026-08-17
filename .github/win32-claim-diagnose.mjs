@@ -102,3 +102,19 @@ try {
     cause = cause.cause;
   }
 }
+
+// Also run the implementation runner and print each failing assertion in full.
+try {
+  const runner = path.join(repo, 'spec', 'run-adapter-implementation.js');
+  const out = execFileSync(process.execPath, [runner], { cwd: repo, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const report = JSON.parse(out);
+  console.log('runner status:', report.status);
+  for (const c of report.cases ?? []) {
+    for (const a of c.executed_assertions ?? []) {
+      if (a.ok === false) console.log('FAILING', c.case ?? c.id, JSON.stringify(a).slice(0, 2000));
+    }
+  }
+} catch (error) {
+  console.log('runner crashed:', error?.message?.slice(0, 500));
+  console.log((error?.stdout ?? '').slice(0, 1000));
+}

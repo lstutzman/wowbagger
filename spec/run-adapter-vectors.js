@@ -492,12 +492,12 @@ async function evaluateCoreBaseline(directory, assertion) {
   let temporary = null;
   if (coreInvocation.command === 'ready') {
     const root = path.join(projectRoot, 'spec/fixtures/ready-selection');
-    const ledger = path.join(root, 'ledger');
+    const ledger = path.posix.join(root, 'ledger');
     argv = replaceLedger(argv, ledger);
     workspaces = runtimeWorkspace(adapterInvocation, root);
   } else if (coreInvocation.command === 'validate') {
     temporary = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-adapter-vector-'));
-    const ledger = path.join(temporary, 'ledger');
+    const ledger = path.posix.join(temporary, 'ledger');
     await import('node:fs/promises').then(({ mkdir }) => mkdir(ledger));
     await writeFile(path.join(ledger, 'bad.md'), await artifactBytes(directory, 'ledger-bad.md'));
     argv = replaceLedger(argv, ledger);

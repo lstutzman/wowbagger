@@ -14,7 +14,11 @@ const fixtures = new URL('../spec/fixtures/mutations/', import.meta.url);
 const CREATE_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
 
 
-test('a mutation temporary file is never wider than the source item', async () => {
+test('a mutation temporary file is never wider than the source item', {
+  skip: process.platform === 'win32'
+    ? 'win32 has no POSIX mode bits; the temporary-width guarantee is empty there'
+    : false,
+}, async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09A';
   await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
     const itemPath = path.join(ledger, `${id}.md`);
