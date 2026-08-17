@@ -139,6 +139,14 @@
       "classification": "retained",
       "occurrences": 1,
       "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/research/2026-08-17-propertycompass-adoption-evaluation.md",
+      "kind": "anchored-text",
+      "anchor": "| 2026-08-17 | {version} published; contract v3 |",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
     }
   ]
 }
