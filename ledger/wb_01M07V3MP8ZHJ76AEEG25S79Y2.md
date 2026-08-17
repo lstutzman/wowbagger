@@ -4,7 +4,7 @@ id: wb_01M07V3MP8ZHJ76AEEG25S79Y2
 number: 119
 title: "Settle the epic-enablement definition and the missing deferred edges"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-17T12:28:27Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Two numbers wearing one name; the deferred counter-example is real, and the edge table gap is mechanical."
 ---
 
 Found during item #115's verification: the report's epic-enablement factor and the contract's epic terminal ratio are DIFFERENT numbers, and the contract now states the divergence plainly rather than papering it. src/report-sequencing.js counts a child as terminal when terminalDate is non-null, which includes archived and deferred; the contract's derivation (shared with the epic complete rollup, verified) counts done or killed only. Measured on the real function: an epic with one done, one archived, one deferred, one backlog child reports enablement 3/4 = 0.75 versus derivation 1/4 = 0.25.
