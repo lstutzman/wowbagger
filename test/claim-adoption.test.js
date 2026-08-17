@@ -94,27 +94,53 @@ async function blockedByUnauthorizedRevision() {
   };
 }
 
-test('the journal rejects a revision-adoption entry that adopts its own from-revision', async () => {
-  const root = await mkdtemp(path.join(tmpdir(), 'wb-adoption-journal-'));
-  const journalPath = claimJournalPath(root, NAMESPACE);
-  await mkdir(path.dirname(journalPath), { recursive: true });
-  const revision = `sha256:${'1'.repeat(64)}`;
-  await writeFile(journalPath, `${JSON.stringify({
+function adoptionEntry(overrides) {
+  return {
     seq: 1,
     type: 'revision-adoption',
     ledger_namespace: NAMESPACE,
     item_id: ITEM_ID,
-    from_revision: revision,
-    to_revision: revision,
+    from_revision: `sha256:${'1'.repeat(64)}`,
+    to_revision: `sha256:${'2'.repeat(64)}`,
     adopted_by: 'operator-lee',
     adopted_at: '2026-08-17T10:00:00.000Z',
     git_commit: '0'.repeat(40),
-  })}\n`);
+    ...overrides,
+  };
+}
 
-  await assert.rejects(replayClaimJournal(journalPath, NAMESPACE), (error) => (
-    error.code === 'CLAIM_JOURNAL_INVALID'
-      && error.reason === 'invalid-entry'
-  ));
+const malformedAdoptions = {
+  'adopts its own from-revision': { to_revision: `sha256:${'1'.repeat(64)}` },
+  'names no operator': { adopted_by: 42 },
+  'names no commit': { git_commit: null },
+  'belongs to another namespace': { ledger_namespace: 'wbns_ffffffffffffffffffffffffffffffff' },
+  'carries non-string item-path evidence': { item_path: 7 },
+};
+
+for (const [label, overrides] of Object.entries(malformedAdoptions)) {
+  test(`the journal rejects a revision-adoption entry that ${label}`, async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'wb-adoption-journal-'));
+    const journalPath = claimJournalPath(root, NAMESPACE);
+    await mkdir(path.dirname(journalPath), { recursive: true });
+    await writeFile(journalPath, `${JSON.stringify(adoptionEntry(overrides))}\n`);
+
+    await assert.rejects(replayClaimJournal(journalPath, NAMESPACE), (error) => (
+      error.code === 'CLAIM_JOURNAL_INVALID'
+        && error.reason === 'invalid-entry'
+    ));
+  });
+}
+
+test('the journal accepts a well-formed revision-adoption entry', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-adoption-journal-ok-'));
+  const journalPath = claimJournalPath(root, NAMESPACE);
+  await mkdir(path.dirname(journalPath), { recursive: true });
+  await writeFile(journalPath, `${JSON.stringify(adoptionEntry({ item_path: 'item.md' }))}\n`);
+
+  const replayed = await replayClaimJournal(journalPath, NAMESPACE);
+
+  assert.equal(replayed.entries.length, 1);
+  assert.equal(replayed.entries[0].type, 'revision-adoption');
 });
 
 test('an adoption recorded in the journal makes the committed bytes authorized', async () => {

@@ -469,7 +469,6 @@ export async function reconcileClaimJournal({
     .filter((entry) => (
       entry.type === 'publish-finalization'
         || entry.type === 'legacy-mutation'
-        || entry.type === 'revision-adoption'
     ))
     .map((entry) => entry.item_id));
   for (const itemId of coordinatedItems) {
