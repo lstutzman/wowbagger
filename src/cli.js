@@ -29,7 +29,7 @@ import {
   withClaimLock,
   writeClaimState,
 } from './claim-store.js';
-import { withAutoCommit } from './git-autocommit.js';
+import { finalizeFromRecoveryToken, withAutoCommit } from './git-autocommit.js';
 import { loadLedger } from './ledger.js';
 import {
   assertReportOutputOutsideLedger,
@@ -80,6 +80,7 @@ const COMMAND_SUMMARIES = {
   'publish-claimed': 'Publish ledger results when its claim profile enables protected publication.',
   'claim-verify': 'Reconcile pending and committed claim-protected publications.',
   'claim-adopt': 'Rule a committed out-of-protocol item revision legitimate.',
+  'mutation-finalize': 'Complete the Git commit an auto-commit mutation could not establish.',
 };
 
 const KNOWN_COMMANDS = new Set([
@@ -97,6 +98,7 @@ const KNOWN_COMMANDS = new Set([
   'publish-claimed',
   'claim-verify',
   'claim-adopt',
+  'mutation-finalize',
 ]);
 
 const CLAIM_SUBCOMMAND_SUMMARIES = {
@@ -331,6 +333,19 @@ export async function runCli(argumentsList, { scenario } = {}) {
       ledgerDirectory,
       gitCommonDir,
       namespace,
+    }));
+    return;
+  }
+
+  if (command === 'mutation-finalize') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeClaimInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    writeClaimEnvelope(await finalizeFromRecoveryToken({
+      ledgerDirectory: parsedOptions.options.ledger,
+      token: parsedOptions.options.recoveryToken,
     }));
     return;
   }
@@ -742,11 +757,13 @@ function parseContractOptions(command, argumentsList) {
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
         || command === 'claim-release' || command === 'claim-adopt'
         ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
-        : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
-          ? new Map([['--ledger', 'ledger']])
-          : command === 'mint-id'
-            ? new Map([['--date', 'date']])
-            : new Map();
+        : command === 'mutation-finalize'
+          ? new Map([['--ledger', 'ledger'], ['--recovery-token', 'recoveryToken']])
+          : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
+            ? new Map([['--ledger', 'ledger']])
+            : command === 'mint-id'
+              ? new Map([['--date', 'date']])
+              : new Map();
   // Bare flags carry no value. `--auto-commit` is accepted only on the four
   // commands whose Git finalization it folds in; every other command reports it
   // as an unknown argument.
@@ -1222,6 +1239,10 @@ function usage(command) {
   }
   if (command === 'claim-verify') {
     return 'Usage: wowbagger claim-verify --ledger <dir> --json';
+  }
+
+  if (command === 'mutation-finalize') {
+    return 'Usage: wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json';
   }
 
   if (command === 'claim') {

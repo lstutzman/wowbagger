@@ -304,7 +304,7 @@ async function commitExactSet(root, subject, gitPaths, head, digests, prefix) {
 // A commit is this invocation's only when its parent, message, changed-path
 // set, and every blob match what was prepared. A hook that rewrote the tree
 // fails here rather than passing as success.
-async function verifyCommit(root, commit, parent, subject, gitPaths, digests, prefix) {
+async function verifyCommit(root, commit, parent, subject, gitPaths, digests, prefix, witness = null) {
   const parents = await git(root, ['rev-list', '--parents', '-1', commit]);
   if (parents.code !== 0) return { ok: false, reason: 'commit-command-failed' };
   const fields = parents.stdout.toString('utf8').trim().split(/\s+/u);
@@ -320,7 +320,18 @@ async function verifyCommit(root, commit, parent, subject, gitPaths, digests, pr
   for (const gitPath of gitPaths) {
     const blob = await git(root, ['show', `${commit}:${gitPath}`], { buffer: true });
     if (blob.code !== 0) return { ok: false, reason: 'commit-scope-mismatch' };
-    if (revisionFor(blob.stdout) !== digests.get(gitPath.slice(prefix.length))) {
+    const expected = digests.get(gitPath.slice(prefix.length)) ?? null;
+    // A path with no observed digest is the reconciliation log during recovery.
+    // The committed blob still has to carry the terminal the token names, which
+    // is what makes recovery idempotent after a later, legitimate claim-verify
+    // rewrote the working-tree log.
+    if (expected === null) {
+      if (!carriesTerminal(blob.stdout.toString('utf8'), witness)) {
+        return { ok: false, reason: 'commit-scope-mismatch' };
+      }
+      continue;
+    }
+    if (revisionFor(blob.stdout) !== expected) {
       return { ok: false, reason: 'commit-scope-mismatch' };
     }
   }
@@ -687,4 +698,255 @@ function bounded(paths) {
 
 function compareText(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+
+// --- mutation-finalize ----------------------------------------------------
+
+// The one idempotent recovery verb. It answers in the work-claim domain because
+// it changes Git reconciliation state, not item bytes: it never writes an item,
+// never resets, amends, or force-updates a ref, and never rewrites history.
+export async function finalizeFromRecoveryToken({ ledgerDirectory, token }) {
+  const payload = parseRecoveryToken(token);
+  if (payload === null) {
+    return workClaimError('invalid-request', 'The mutation-finalize request is invalid.', 'unchanged', 2, {
+      reason: 'recovery-token-invalid',
+    });
+  }
+  let gitCommonDir;
+  try {
+    gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory, { failClosed: true });
+  } catch {
+    return claimStoreUnavailable('git-verification-failed');
+  }
+  const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
+  const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
+  if (capability.mode !== 'merge-coordinated' || !capability.claim_protected_publication) {
+    return claimStoreUnavailable(gitCommonDir ? 'ledger-namespace-unbound' : 'git-directory-not-found');
+  }
+  if (payload.ledger_namespace !== namespace) {
+    return workClaimError('ledger-namespace-unbound',
+      'The ledger namespace is not provisioned for this endpoint.', 'unchanged', 2, {
+        requested_namespace: payload.ledger_namespace,
+        provisioned_namespace: namespace,
+      });
+  }
+  let placement;
+  try {
+    placement = await resolvePlacement(ledgerDirectory);
+  } catch {
+    return finalizeRefused('git-unavailable', {});
+  }
+  const mutexPath = path.join(placement.gitDir, 'wowbagger', 'auto-commit');
+  try {
+    return await withClaimLock(mutexPath, () => runFinalize({
+      gitCommonDir, ledgerDirectory, namespace, payload, placement,
+    }));
+  } catch (error) {
+    if (error?.code === 'CLAIM_LOCK_HELD') return finalizeRefused('mutex-held', {});
+    throw error;
+  }
+}
+
+async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, placement }) {
+  const { root, prefix } = placement;
+  const journalOwned = payload.command !== 'create';
+  const logPath = ledgerRelative(ledgerDirectory, claimReconcileLogPath(path.resolve(ledgerDirectory), namespace));
+  const witness = payload.terminal_witness ?? null;
+
+  // Every path is re-derived from the ledger and the provisioned namespace. The
+  // token only has to agree with what the ledger says; it never selects a path.
+  let derived;
+  try {
+    derived = await publishedItem(ledgerDirectory, { id: payload.item_id, revision: null });
+  } catch {
+    return finalizeRefused('item-not-readable', {});
+  }
+  const commitSet = [derived.path, ...(journalOwned ? [logPath] : [])].sort(compareText);
+  const tokenPaths = payload.commit_set.map((entry) => entry.path);
+  const subject = commitSubject(payload.command, derived.number, derived.id);
+  if (payload.item_path !== derived.path
+    || !sameSet(tokenPaths, commitSet)
+    || payload.message !== subject) {
+    return finalizeRefused('commit-set-mismatch', {
+      expected_path: derived.path,
+      commit_paths: commitSet,
+    });
+  }
+
+  const digests = new Map(payload.commit_set.map((entry) => [entry.path, entry.sha256]));
+  digests.set(derived.path, payload.published_revision);
+  const gitPaths = commitSet.map((entry) => `${prefix}${entry}`);
+  const head = await headOid(root);
+  if (head === null) return finalizeRefused('unborn-head', {});
+
+  // The commit may already exist: a lost response is the same condition as a
+  // failed commit, and both recover through this one command.
+  if (head !== payload.pre_commit_head) {
+    const verification = await verifyCommit(
+      root, head, payload.pre_commit_head, subject, gitPaths, digests, prefix, witness,
+    );
+    if (!verification.ok) return finalizeRefused('head-changed', { pre_commit_head: payload.pre_commit_head });
+    return finalizeVerified({
+      commit: head, commitSet, derived, gitCommonDir, ledgerDirectory, namespace, payload,
+    });
+  }
+
+  const refusal = await finalizePreconditions({
+    commitSet, derived, digests, gitPaths, journalOwned, ledgerDirectory, logPath, payload, prefix, root, witness,
+  });
+  if (refusal) return finalizeRefused(refusal.reason, refusal.details);
+
+  const staged = await git(root, ['add', '--pathspec-from-file=-', '--pathspec-file-nul'], {
+    stdin: `${gitPaths.join('\0')}\0`,
+  });
+  const cached = await git(root, ['diff', '--cached', '--name-only', '-z']);
+  if (cached.code !== 0 || !sameSet(splitNul(cached.stdout.toString('utf8')), gitPaths)) {
+    return commitFailedInWorkClaim(payload, commitSet, digests, {
+      stage: 'stage',
+      reason: staged.code === 0 && cached.code === 0 ? 'tree-changed' : 'index-unavailable',
+    });
+  }
+  let commit;
+  try {
+    commit = await commitExactSet(root, subject, gitPaths, payload.pre_commit_head, digests, prefix);
+  } catch {
+    return commitFailedInWorkClaim(payload, commitSet, digests, {
+      stage: 'commit', reason: 'commit-command-failed',
+    });
+  }
+  if (commit.outcome === 'failed') {
+    return commitFailedInWorkClaim(payload, commitSet, digests, { stage: 'commit', reason: commit.reason });
+  }
+  if (commit.outcome === 'unknown') {
+    return workClaimError('git-commit-outcome-unknown',
+      'The Git commit outcome could not be determined.', 'unknown', 6, {
+        ledger_namespace: payload.ledger_namespace,
+        item_id: payload.item_id,
+        published_revision: payload.published_revision,
+        pre_commit_head: payload.pre_commit_head,
+        failure_stage: commit.stage,
+        reason: commit.reason,
+      });
+  }
+  return finalizeVerified({
+    commit: commit.commit, commitSet, derived, gitCommonDir, ledgerDirectory, namespace, payload,
+  });
+}
+
+async function finalizePreconditions({
+  commitSet, derived, digests, gitPaths, journalOwned, ledgerDirectory, logPath, payload, prefix, root, witness,
+}) {
+  let itemBytes;
+  try {
+    itemBytes = await readFile(path.join(path.resolve(ledgerDirectory), derived.path));
+  } catch {
+    return { reason: 'item-not-readable', details: {} };
+  }
+  if (revisionFor(itemBytes) !== payload.published_revision) {
+    return { reason: 'item-changed', details: { published_revision: payload.published_revision } };
+  }
+  const observed = await inspectWorktree(root, prefix);
+  // The failed attempt staged its own commit set and, by design, never unstaged
+  // it. That residue is expected here; anything else staged is foreign work this
+  // command must not absorb.
+  const stagedOutside = observed.staged.filter((entry) => !gitPaths.includes(entry));
+  if (stagedOutside.length > 0) {
+    return { reason: 'staged-paths-present', details: { staged_paths: bounded(stagedOutside) } };
+  }
+  const stray = observed.dirtyLedger.filter((entry) => !commitSet.includes(entry));
+  if (stray.length > 0) return { reason: 'ledger-not-clean', details: { dirty_paths: bounded(stray) } };
+  if (!journalOwned) return null;
+  let logBytes;
+  try {
+    logBytes = await readFile(path.join(path.resolve(ledgerDirectory), logPath));
+  } catch {
+    return { reason: 'log-unavailable', details: {} };
+  }
+  if (!carriesTerminal(logBytes.toString('utf8'), witness)) {
+    return { reason: 'log-unavailable', details: {} };
+  }
+  const expected = digests.get(logPath) ?? null;
+  if (expected !== null && revisionFor(logBytes) !== expected) {
+    return { reason: 'log-changed', details: {} };
+  }
+  digests.set(logPath, revisionFor(logBytes));
+  return null;
+}
+
+async function finalizeVerified({
+  commit, commitSet, derived, gitCommonDir, ledgerDirectory, namespace, payload,
+}) {
+  const reconciled = await verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace });
+  const operationId = payload.operation_id ?? null;
+  const reconciliation = reconciliationFailureReason(reconciled, commit, operationId, derived.id);
+  if (reconciliation) {
+    return workClaimError('post-commit-reconciliation-failed',
+      'The Git commit is established, but claim reconciliation did not verify.', 'committed', 6, {
+        ledger_namespace: namespace,
+        item_id: derived.id,
+        ...(operationId === null ? {} : { operation_id: operationId }),
+        git_commit: commit,
+        commit_paths: commitSet,
+        reason: reconciliation.reason,
+        findings: reconciliation.findings,
+      });
+  }
+  return {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'work-claim',
+      command: 'mutation-finalize',
+      contract_version: 1,
+      state: 'committed',
+      result: {
+        ledger_namespace: namespace,
+        item_id: derived.id,
+        ...(operationId === null ? {} : { operation_id: operationId }),
+        published_revision: payload.published_revision,
+        git_commit: commit,
+        commit_paths: commitSet,
+        claim_verified: true,
+      },
+    },
+  };
+}
+
+function commitFailedInWorkClaim(payload, commitSet, digests, failure) {
+  return workClaimError('git-commit-failed',
+    'The item is published, but its Git commit was not established.', 'unchanged', 6, {
+      ledger_namespace: payload.ledger_namespace,
+      item_id: payload.item_id,
+      published_revision: payload.published_revision,
+      commit_set: commitSet.map((entry) => ({ path: entry, sha256: digests.get(entry) ?? null })),
+      pre_commit_head: payload.pre_commit_head,
+      failure_stage: failure.stage,
+      reason: failure.reason,
+    });
+}
+
+function finalizeRefused(reason, details) {
+  return workClaimError('mutation-finalize-refused',
+    'Recovery refused before any Git write.', 'unchanged', 4, { reason, ...details });
+}
+
+function claimStoreUnavailable(reason) {
+  return workClaimError('claim-store-unavailable', 'The durable claim store is unavailable.', 'unchanged', 6, {
+    reason,
+  });
+}
+
+function workClaimError(code, message, state, exit, details) {
+  return {
+    exit,
+    stdout: {
+      ok: false,
+      namespace: 'work-claim',
+      command: 'mutation-finalize',
+      contract_version: 1,
+      state,
+      error: { code, message, details },
+    },
+  };
 }
