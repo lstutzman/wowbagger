@@ -5,7 +5,7 @@ number: 124
 title: "Repair the release channels and make the cut a command"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
