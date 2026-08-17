@@ -5,7 +5,7 @@ number: 120
 title: "Plumb host approvals through the shipped adapter entrypoints"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
