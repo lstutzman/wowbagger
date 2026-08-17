@@ -2175,7 +2175,7 @@ function validPatchRequest(request) {
     || !WOWBAGGER_ID.test(request.id)
     || !DIGEST.test(request.expected_revision)
     || !isCalendarDate(request.date)
-    || !hasExactKeys(request.set, [], ['priority', 'depends_on', 'related', 'body'])
+    || !hasExactKeys(request.set, [], ['title', 'priority', 'depends_on', 'related', 'body'])
     || Object.keys(request.set).length === 0) return false;
   for (const [field, value] of Object.entries(request.set)) {
     // body is the one patchable value outside the frontmatter, and the one
@@ -2186,6 +2186,13 @@ function validPatchRequest(request) {
       continue;
     }
     if (value === null) continue;
+    // title is a non-empty schema string, the same rule create validates it
+    // under. null is a removal, handled above; the candidate refuses it later
+    // because title is required, but the request itself is well formed.
+    if (field === 'title') {
+      if (typeof value !== 'string' || value.trim().length === 0) return false;
+      continue;
+    }
     if (field === 'priority') {
       if (parsedIntegerValue(value, 0) === undefined) return false;
       continue;
@@ -2217,10 +2224,11 @@ function validPatchResultCorrelation(item, request) {
       if (item.body !== requested) return false;
       continue;
     }
-    if (field === 'priority') {
+    if (field === 'title' || field === 'priority') {
+      const expected = field === 'title' ? requested : parsedIntegerValue(requested, 0);
       if (requested === null) {
         if (Object.hasOwn(item.core, field)) return false;
-      } else if (item.core[field] !== parsedIntegerValue(requested, 0)) {
+      } else if (item.core[field] !== expected) {
         return false;
       }
       continue;

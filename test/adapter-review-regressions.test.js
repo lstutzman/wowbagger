@@ -1573,6 +1573,54 @@ test('reference oracle correlates a patch success with the requested body', () =
     'mutation-outcome-unknown');
 });
 
+test('reference oracle correlates a patch success with the requested title', () => {
+  const before = consumerCoreItem();
+  const corrected = 'Mirror of PC-1475';
+  const source = Buffer.from(before.source_base64, 'base64').toString('utf8')
+    .replace('updated: 2030-01-10', 'updated: 2030-01-15')
+    .replace(`title: ${before.core.title}`, `title: ${corrected}`);
+  const after = coreItemWithSource(before, source, {
+    ...before.core,
+    title: corrected,
+    updated: '2030-01-15',
+  });
+  const request = {
+    id: before.id,
+    expected_revision: before.revision,
+    date: '2030-01-15',
+    set: { title: corrected },
+  };
+  const outcome = (mutationRequest) => mapProcessOutcome({
+    adapter_contract_version: 2,
+    request_id: 'review-patch-title-0001',
+    command: 'patch',
+    core_request: { command: 'patch', ledger: 'ledger', input_base64: '' },
+    mutation_request: mutationRequest,
+    item_id: before.id,
+    expected_revision: before.revision,
+    process: processObservation({
+      ok: true,
+      command: 'patch',
+      contract_version: 3,
+      state: 'committed',
+      result: { item: after },
+    }),
+  });
+
+  assert.equal(outcome(request), null);
+  // A result whose title is not the requested one is uncorrelated, and so is a
+  // request the oracle refuses on its own reading of the patchable set.
+  assert.equal(outcome({ ...request, set: { title: 'Some other title' } }).error.code,
+    'mutation-outcome-unknown');
+  assert.equal(outcome({ ...request, set: { title: '' } }).error.code,
+    'mutation-outcome-unknown');
+  assert.equal(outcome({ ...request, set: { title: 3 } }).error.code,
+    'mutation-outcome-unknown');
+  // A removal correlates with an absent core member, never with a present one.
+  assert.equal(outcome({ ...request, set: { title: null } }).error.code,
+    'mutation-outcome-unknown');
+});
+
 // The consumer-supplied schema-1 fields (number, priority) belong to the core
 // view; the oracle must accept an engine item that reports them.
 function consumerCoreItem() {
