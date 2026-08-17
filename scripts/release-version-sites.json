@@ -147,6 +147,22 @@
       "classification": "retained",
       "occurrences": 1,
       "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/mutation-contract.md",
+      "kind": "anchored-text",
+      "anchor": "complete difference against published version 3 (`{version}`)",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "docs/work-claim-contract.md",
+      "kind": "anchored-text",
+      "anchor": "against published version 1 (`{version}`)",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.6"
     }
   ]
 }

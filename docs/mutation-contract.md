@@ -28,8 +28,7 @@ explicit deltas:
 
 ### Version 3
 
-Version 3 is the version this document defines and the runtime emits. It
-retains every version 2 request, response, state, exit, locking, CAS,
+Version 3 retains every version 2 request, response, state, exit, locking, CAS,
 publication, and recovery rule except for these explicit deltas, which are the
 complete difference against published version 2 (`0.1.0-alpha.4`):
 
@@ -158,23 +157,59 @@ A version 1 or version 2 consumer fails closed against a version 3 core: it
 reads `contract_version: 3` from `capabilities --json`, does not recognize it,
 and stops. That is the intended outcome, not a regression.
 
-The bootstrap wire, work-claim API, adapter approval, instruction, handoff, and
-fixture-format versions are separate version domains and remain version 1. The
-adapter contract remains version 2; only the core contract moves to 3.
+### Version 4
+
+Version 4 is the version this document defines and the runtime emits. It
+retains every version 3 request, response, state, exit, locking, CAS,
+publication, and recovery rule except for these explicit deltas, which are the
+complete difference against published version 3 (`0.1.0-alpha.6`):
+
+- every core command envelope carries `contract_version: 4`;
+- **the bounded item source.** `MAX_ITEM_SOURCE_BYTES` is 8,388,608 and bounds
+  the complete serialized item source at every candidate door: `create`,
+  `transition`, and `patch` in this contract, and `publish-claimed` in the
+  work-claim contract. A successor over the bound returns the new refusal
+  `item-source-too-large`, exit 2, `unchanged` (section 10). This is the delta
+  that requires the bump: version 3 accepted an item of any size, so this
+  narrows accepted input against a published version and every version 3
+  consumer must fail closed rather than discover the bound at a refusal; and
+- **the advertised bound.** `result.limits.max_item_source_bytes` carries the
+  same value in the capability envelope (section 4). A version 3 consumer that
+  validated `result.limits` by exact members refuses the new member, which is
+  the same fail-closed outcome the version field already produces.
+
+Nothing else moves. The bound is not retrofitted to reads: an item already
+committed above it still validates, still inspects, and can still be repaired
+by a patch whose successor is at or below the bound.
+
+A version 3 consumer fails closed against a version 4 core the same way: it
+reads `contract_version: 4` from `capabilities --json`, does not recognize it,
+and stops.
+
+The bootstrap wire, adapter approval, instruction, handoff, and fixture-format
+versions are separate version domains and remain version 1. The adapter
+contract remains version 2. The work-claim API moves to 2 with this release,
+for its own reason stated in
+[the work-claim contract](work-claim-contract.md), section 6: the item-source
+refusal replaces the version 1 error that an oversized candidate used to
+receive.
 
 Version negotiation uses distinct existing fields. A core consumer MUST read
 the top-level `contract_version` from `capabilities --json`. A work-claim
 consumer MUST read `result.operations.work_claim.api_version` from
 `claim capabilities --ledger <dir> --json`. It MUST NOT compare a claim
 response's top-level `contract_version` with the core version. That claim member
-remains the version 1 envelope marker for exact version 1 consumers.
+remains the legacy envelope marker, which is `1` and does not move with the
+work-claim API version.
 
 This rule is the migration path for generic consumers: dispatch by response
 domain first, then check the version field for that domain. Section 2 states
 the domains, the exact dispatch steps, and the two sanctioned exceptions. No
-root envelope member changes across versions 1, 2, and 3, so a consumer that
+root envelope member changes across versions 1, 2, 3, and 4, so a consumer that
 matches root members exactly still matches; a consumer that matches issue
-members exactly must negotiate version 3 before reading a date refusal.
+members exactly must negotiate version 3 before reading a date refusal, and a
+consumer that must not have its accepted input narrowed underneath it must
+negotiate version 4 before writing an item.
 
 ## 1. Scope
 
@@ -433,7 +468,7 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, items-directory-unavailable |
+| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, item-source-too-large, items-directory-unavailable |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision, auto-commit-preflight-failed, mutation-finalize-refused |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
@@ -561,18 +596,27 @@ members above. This is the one input to `capabilities`, so the response is
 deterministic for a given working directory but not fixed across working
 directories.
 
-### Contract version 3 capability delta
+### Contract version 4 capability delta
 
 The preceding JSON and three-member Git-dependent coupling remain the exact
-version 1 definition. Versions 2 and 3 change only the following capability
+version 1 definition. Versions 2, 3, and 4 change only the following capability
 paths; all omitted paths retain their version 1 values:
 
-| Path | Version 3 value |
+| Path | Version 4 value |
 |---|---|
-| `contract_version` | `3` |
+| `contract_version` | `4` |
 | `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
+| `result.operations.work_claim.api_version` | `2` |
+| `result.limits.max_item_source_bytes` | `8388608` |
 | `result.limits.cross_worktree_coordination` | `false` |
+
+`result.limits.max_item_source_bytes` is the first member of `result.limits`,
+before `multi_item_atomicity`. It is the exact number of bytes the complete
+serialized item source may occupy, and it applies to successor bytes accepted
+by `create`, `transition`, `patch`, and `publish-claimed`. It does not claim a
+raw request limit and it does not claim an `inspect` output limit; the
+serialized `publish-claimed` request keeps its own separate transport bound.
 
 `result.operations.work_claim.supported` remains independently derived from
 Git-common-directory discovery: it is `true` when claims are visible there and
@@ -1312,10 +1356,11 @@ For transition, refusal precedence after locked revalidation is: revision and
 lock conflicts; aggregate all multi-item blockers and ordinary precondition
 issues; atomic-scope-required when blockers exist; otherwise
 transition-precondition-failed when ordinary issues exist; otherwise
-candidate-invalid when the candidate validator reports errors. For create,
-items-directory-unavailable precedes id-collision, id-collision precedes
-path-collision as specified in section 7, and all three precede
-candidate-invalid. No validator issue already represented by the
+item-source-too-large when the serialized successor exceeds the advertised
+bound; otherwise candidate-invalid when the candidate validator reports errors.
+For create, items-directory-unavailable precedes id-collision, id-collision
+precedes path-collision as specified in section 7, and all four precede
+item-source-too-large, which precedes candidate-invalid. No validator issue already represented by the
 selected more-specific response is duplicated in a second envelope. A proposed
 ledger that remains invalid for any reason is never published.
 
@@ -1750,6 +1795,7 @@ patch.
 | transition-precondition-failed | id, issues |
 | patch-precondition-failed | id, issues |
 | candidate-invalid | id, validation_errors |
+| item-source-too-large | id, size_bytes, limit_bytes |
 | revision-conflict | id, expected_revision, actual_revision |
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
@@ -1765,6 +1811,37 @@ ledger-invalid and candidate-invalid validation_errors are exactly the
 deterministic SPEC.md error sequence for the current or proposed ledger,
 respectively. Error messages are stable human summaries; automation branches
 on code, mutation state, and documented details.
+
+### The bounded item source
+
+`create`, `transition`, and `patch` each measure the complete serialized
+successor before validating it as a ledger candidate. A successor larger than
+`result.limits.max_item_source_bytes` returns:
+
+- code `item-source-too-large`;
+- message `The proposed item source exceeds the supported byte limit.`;
+- exit 2 and state `unchanged`;
+- details exactly `{id, size_bytes, limit_bytes}`, where `size_bytes` is the
+  measured successor and `limit_bytes` is the advertised bound.
+
+The measurement is serialized UTF-8 bytes, not string length, base64 length, or
+body length: frontmatter, decisions, extensions, and body all draw on the same
+budget. `transition` is bounded for the same reason the two body-writing verbs
+are, because its decision block can push a legal stored item past the bound.
+
+Precedence is normative. Everything the command decides before it serializes a
+successor still decides first: `ledger-invalid`, `item-not-found`, `lock-held`,
+`id-collision`, `path-collision`, `revision-conflict`,
+`transition-precondition-failed`, `patch-precondition-failed`,
+`atomic-scope-required`, and the section 12 claim-fence refusals.
+`candidate-invalid` is decided from the serialized successor, so it decides
+after: an oversized successor that would also make the ledger invalid returns
+`item-source-too-large`.
+
+The bound is a bound on successors, never on stored bytes. An item committed
+before the bound existed still validates, still inspects, and can be repaired
+by any patch whose successor is at or below the bound. A successor still above
+it refuses, so an oversized legacy item has exactly one way forward: shrink it.
 
 ### Recovery artifact shape
 
