@@ -96,6 +96,7 @@
       "commands": [
         "provision",
         "claim-verify",
+        "claim-adopt",
         "claim capabilities",
         "claim read",
         "claim acquire",
@@ -765,6 +766,38 @@
         "contract_version",
         "state",
         "result"
+      ]
+    },
+    {
+      "class": "claim-adopt.success",
+      "domain": "work-claim",
+      "command": "claim-adopt",
+      "exit": 0,
+      "state": "committed",
+      "error_code": null,
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "result"
+      ]
+    },
+    {
+      "class": "claim-adopt.adoption-witness-mismatch",
+      "domain": "work-claim",
+      "command": "claim-adopt",
+      "exit": 4,
+      "state": "unchanged",
+      "error_code": "adoption-witness-mismatch",
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
       ]
     }
   ]

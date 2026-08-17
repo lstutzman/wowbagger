@@ -13,6 +13,7 @@ import {
 } from './claim-journal.js';
 import { claimAcquire, claimRead, claimRelease, claimRenew } from './claim-operations.js';
 import {
+  adoptItemRevision,
   publishClaimed,
   reconcileClaimJournal,
   readPublicationOutcome,
@@ -76,6 +77,7 @@ const COMMAND_SUMMARIES = {
   claim: 'Work-claim lifecycle operations on the provisioned store.',
   'publish-claimed': 'Publish ledger results when its claim profile enables protected publication.',
   'claim-verify': 'Reconcile pending and committed claim-protected publications.',
+  'claim-adopt': 'Rule a committed out-of-protocol item revision legitimate.',
 };
 
 const KNOWN_COMMANDS = new Set([
@@ -92,6 +94,7 @@ const KNOWN_COMMANDS = new Set([
   'claim',
   'publish-claimed',
   'claim-verify',
+  'claim-adopt',
 ]);
 
 const CLAIM_SUBCOMMAND_SUMMARIES = {
@@ -320,6 +323,66 @@ export async function runCli(argumentsList, { scenario } = {}) {
       ledgerDirectory,
       gitCommonDir,
       namespace,
+    }));
+    return;
+  }
+
+  if (command === 'claim-adopt') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeClaimInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeClaimInvalidRequest(command, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    if (parsedRequest.issues.length > 0) {
+      writeClaimInvalidRequest(command, parsedRequest.issues);
+      return;
+    }
+    const request = normalizeJsonValue(parsedRequest.value);
+    const validationIssues = validateClaimRequest(command, request);
+    if (validationIssues.length > 0) {
+      writeClaimInvalidRequest(command, validationIssues);
+      return;
+    }
+    const ledgerDirectory = parsedOptions.options.ledger;
+    const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory);
+    const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
+    const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
+    if (!capability.claim_protected_publication) {
+      writeClaimEnvelope(claimStoreUnavailable(command,
+        gitCommonDir ? 'ledger-namespace-unbound' : 'git-directory-not-found'));
+      return;
+    }
+    if (request.ledger_namespace !== namespace) {
+      writeClaimEnvelope({
+        exit: 2,
+        stdout: {
+          ok: false,
+          namespace: 'work-claim',
+          command,
+          contract_version: 1,
+          state: 'unchanged',
+          error: {
+            code: 'ledger-namespace-unbound',
+            message: 'The ledger namespace is not provisioned for this endpoint.',
+            details: { requested_namespace: request.ledger_namespace, provisioned_namespace: namespace },
+          },
+        },
+      });
+      return;
+    }
+    writeClaimEnvelope(await adoptItemRevision({
+      ledgerDirectory,
+      gitCommonDir,
+      namespace,
+      request,
     }));
     return;
   }
@@ -669,7 +732,7 @@ function parseContractOptions(command, argumentsList) {
       : command === 'create' || command === 'transition' || command === 'patch'
         || command === 'publish-claimed' || command === 'publication-read'
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
-        || command === 'claim-release'
+        || command === 'claim-release' || command === 'claim-adopt'
         ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
         : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
           ? new Map([['--ledger', 'ledger']])
@@ -1123,6 +1186,9 @@ function usage(command) {
     return 'Usage: wowbagger publish-claimed';
   }
 
+  if (command === 'claim-adopt') {
+    return 'Usage: wowbagger claim-adopt --ledger <dir> --input <request.json> --json';
+  }
   if (command === 'claim-verify') {
     return 'Usage: wowbagger claim-verify --ledger <dir> --json';
   }

@@ -247,6 +247,7 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `provision` | work-claim | work-claim |
 | `claim capabilities/read/acquire/renew/release` | work-claim | work-claim |
 | `claim-verify` | work-claim | work-claim |
+| `claim-adopt` | work-claim | work-claim |
 | `claim verify` | ledger-publication, `command: "read"` | ledger-publication |
 | `publish-claimed` | ledger-publication | ledger-publication |
 

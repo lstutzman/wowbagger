@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -266,6 +266,41 @@ async function walkEveryResponseClass() {
       },
     }), '--json'));
 
+  }
+
+  {
+    // Adoption answers in the work-claim domain: it rewrites the coordinator's
+    // authorized revision and no item byte.
+    const { ledger, root } = await initialisedRepository('wb-envelopes-adopt-');
+    const itemPath = path.join(ledger, 'item.md');
+    await writeFile(itemPath, ITEM);
+    const provisioned = run(root, 'provision', '--ledger', ledger, '--json');
+    const namespace = provisioned.envelope.result.ledger_namespace;
+    git(root, 'add', '.');
+    git(root, 'commit', '-qm', 'Provision the ledger');
+    const patched = run(root, 'patch', '--ledger', ledger, '--input', await requestFile(root, 'authorize.json', {
+      id: ITEM_ID,
+      expected_revision: ITEM_REVISION,
+      date: '2026-08-16',
+      set: { priority: 2 },
+    }), '--json');
+    git(root, 'add', 'ledger/item.md');
+    git(root, 'commit', '-qm', 'Authorized patch');
+    const edited = Buffer.from(
+      (await readFile(itemPath, 'utf8')).replace('title: "Before"', 'title: "Hand edited"'),
+    );
+    await writeFile(itemPath, edited);
+    git(root, 'add', 'ledger/item.md');
+    git(root, 'commit', '-qm', 'Out-of-protocol edit');
+    const adoptRequest = await requestFile(root, 'adopt.json', {
+      ledger_namespace: namespace,
+      item_id: ITEM_ID,
+      from_revision: patched.envelope.result.item.revision,
+      to_revision: `sha256:${createHash('sha256').update(edited).digest('hex')}`,
+      adopted_by: 'operator-a',
+    });
+    see('claim-adopt.success', run(root, 'claim-adopt', '--ledger', ledger, '--input', adoptRequest, '--json'));
+    see('claim-adopt.adoption-witness-mismatch', run(root, 'claim-adopt', '--ledger', ledger, '--input', adoptRequest, '--json'));
   }
 
   {

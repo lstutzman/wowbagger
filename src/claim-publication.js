@@ -604,6 +604,8 @@ export async function reconcileClaimJournal({
   return {
     entries,
     findings,
+    gitHead,
+    headItems,
     // The snapshot reconciliation judged. Reconciliation writes only the
     // journal, the claim state, and the ledger's `.wowbagger` reconcile log,
     // none of which a complete ledger load reads, so these are still the bytes
@@ -780,6 +782,194 @@ export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namesp
       },
     };
   }
+}
+
+// Adoption is the non-destructive half of the unauthorized-revision remedy: it
+// re-baselines the coordinator's authorized revision onto bytes that are
+// already committed, and writes no item byte. It runs while reconciliation is
+// unsafe on purpose — clearing that state is the point — so it never refuses on
+// `publication-reconciliation-required` the way a claim lifecycle operation
+// does. Every precondition is checked under the claim lock against the state
+// reconciliation just observed.
+export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespace, request }) {
+  const storePath = claimStorePath(gitCommonDir, namespace);
+  const journalPath = claimJournalPath(gitCommonDir, namespace);
+  try {
+    return await withClaimLock(storePath, async () => {
+      const reconciled = await reconcileClaimJournal({
+        ledgerDirectory,
+        gitCommonDir,
+        namespace,
+        replayed: await replayClaimJournal(journalPath, namespace),
+        physicalNow: new Date().toISOString(),
+      });
+      const refusal = adoptionRefusal(reconciled, ledgerDirectory, request);
+      if (refusal) return refusal;
+
+      const item = reconciled.ledger.items.find((entry) => entry.data.id === request.item_id);
+      const itemPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
+        ?? reconciled.headItems.get(request.item_id)?.file
+        ?? null;
+      const persisted = await appendClaimEntry(journalPath, {
+        type: 'revision-adoption',
+        ledger_namespace: namespace,
+        item_id: request.item_id,
+        from_revision: request.from_revision,
+        to_revision: request.to_revision,
+        adopted_by: request.adopted_by,
+        adopted_at: reconciled.observedAt,
+        git_commit: reconciled.gitHead.commit,
+        ...(itemPath ? { item_path: itemPath } : {}),
+      });
+      try {
+        await writeReconcileLog(
+          claimReconcileLogPath(path.resolve(ledgerDirectory), namespace),
+          namespace,
+          [...reconciled.entries, persisted],
+        );
+      } catch {
+        // The tracked reconciliation log is derived. The fsync'd journal
+        // already committed the adoption and the next operation rebuilds it.
+      }
+      return {
+        exit: 0,
+        stdout: {
+          ok: true,
+          namespace: 'work-claim',
+          command: 'claim-adopt',
+          contract_version: 1,
+          state: 'committed',
+          result: {
+            ledger_namespace: namespace,
+            item_id: request.item_id,
+            from_revision: request.from_revision,
+            to_revision: request.to_revision,
+            adopted_by: request.adopted_by,
+            adopted_at: reconciled.observedAt,
+          },
+        },
+      };
+    });
+  } catch (error) {
+    return {
+      exit: 6,
+      stdout: {
+        ok: false,
+        namespace: 'work-claim',
+        command: 'claim-adopt',
+        contract_version: 1,
+        state: 'unchanged',
+        error: {
+          code: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+            ? 'clock-floor-persistence-failed'
+            : 'claim-store-unavailable',
+          message: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+            ? 'The authoritative clock floor could not be persisted.'
+            : 'The durable claim store is unavailable.',
+          details: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED' ? {} : {
+            reason: error?.code === 'CLAIM_LOCK_HELD'
+              ? 'claim-store-locked'
+              : 'claim-store-unreadable',
+          },
+        },
+      },
+    };
+  }
+}
+
+function adoptionRefusal(reconciled, ledgerDirectory, request) {
+  const authorized = authorizedRevisionOf(
+    authorizingEntries(reconciled.entries, request.item_id).at(-1),
+  ) ?? null;
+  if (authorized !== request.from_revision) {
+    return adoptionError('adoption-witness-mismatch',
+      'The adoption witness no longer names the authorized revision.', {
+        ledger_namespace: reconciled.state.ledger_namespace,
+        item_id: request.item_id,
+        authorized_revision: authorized,
+        requested_from_revision: request.from_revision,
+      });
+  }
+  const record = reconciled.state.claims.find((entry) => entry.item_id === request.item_id);
+  if (record?.active && reconciled.observedAt < record.active.expires_at) {
+    return {
+      exit: 4,
+      stdout: {
+        ok: false,
+        namespace: 'work-claim',
+        command: 'claim-adopt',
+        contract_version: 1,
+        state: 'unchanged',
+        error: {
+          code: 'claim-held',
+          message: 'The item has an unexpired active claim.',
+          details: readBack(
+            reconciled.state.ledger_namespace,
+            request.item_id,
+            reconciled.observedAt,
+            record,
+          ),
+        },
+      },
+    };
+  }
+  // The adopted revision must be visible to every cooperating checkout, not
+  // only to the operator's working tree. A ledger with no Git HEAD at all
+  // cannot satisfy that, so it refuses on the same code.
+  const item = reconciled.ledger.items.find((entry) => entry.data.id === request.item_id);
+  const headItem = reconciled.headItems.get(request.item_id);
+  const surfaces = [
+    ['git-head', headItem ? revisionFor(headItem.bytes) : null],
+    ['working-tree', item ? revisionFor(item.bytes) : null],
+  ];
+  for (const [surface, observed] of surfaces) {
+    if (observed === request.to_revision && reconciled.gitHead !== null) continue;
+    return adoptionError('adoption-revision-uncommitted',
+      'The adopted revision is not committed at Git HEAD.', {
+        ledger_namespace: reconciled.state.ledger_namespace,
+        item_id: request.item_id,
+        requested_to_revision: request.to_revision,
+        observed_surface: surface,
+        observed_revision: reconciled.gitHead === null ? null : observed,
+      });
+  }
+  const validation = validateLedger(reconciled.ledger);
+  if (!validation.valid) {
+    return {
+      exit: 3,
+      stdout: {
+        ok: false,
+        namespace: 'work-claim',
+        command: 'claim-adopt',
+        contract_version: 1,
+        state: 'unchanged',
+        error: {
+          code: 'adoption-ledger-invalid',
+          message: 'The complete ledger is invalid with the adopted revision.',
+          details: {
+            ledger_namespace: reconciled.state.ledger_namespace,
+            item_id: request.item_id,
+            errors: validation.errors,
+          },
+        },
+      },
+    };
+  }
+  return null;
+}
+
+function adoptionError(code, message, details) {
+  return {
+    exit: 4,
+    stdout: {
+      ok: false,
+      namespace: 'work-claim',
+      command: 'claim-adopt',
+      contract_version: 1,
+      state: 'unchanged',
+      error: { code, message, details },
+    },
+  };
 }
 
 export function operationDigest(request) {
