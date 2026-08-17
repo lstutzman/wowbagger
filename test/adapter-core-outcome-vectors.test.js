@@ -3,7 +3,7 @@
 // nobody has seen fail is a guard nobody has evidence for.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -224,8 +224,7 @@ test('the claim journal append shape refuses a rewritten seed and a non-clock ap
     workspace, '.git', 'wowbagger', declaration.workspace.namespace, 'journal.ndjson',
   );
   const write = async (text) => {
-    await cp(path.dirname(journal), path.dirname(journal), { recursive: true }).catch(() => {});
-    await (await import('node:fs/promises')).mkdir(path.dirname(journal), { recursive: true });
+    await mkdir(path.dirname(journal), { recursive: true });
     await writeFile(journal, text);
   };
 
