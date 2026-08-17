@@ -156,12 +156,22 @@ async function ensureDurableJournal(journalPath) {
   await syncDirectory(journalDirectory);
 }
 
+// Directory fsync is attempted and tolerated as unsupported, exactly like the
+// mutation engine's syncDirectoryIfSupported: platforms without the primitive
+// (win32 cannot open a directory handle) rely on their own metadata
+// durability, and every other failure stays loud.
 async function syncDirectory(directory) {
-  const handle = await open(directory, 'r');
+  let handle;
   try {
+    handle = await open(directory, 'r');
     await handle.sync();
+  } catch (error) {
+    if (['EISDIR', 'EINVAL', 'ENOSYS', 'ENOTSUP', 'EOPNOTSUPP', 'EPERM'].includes(error?.code)) {
+      return;
+    }
+    throw error;
   } finally {
-    await handle.close();
+    await handle?.close();
   }
 }
 
