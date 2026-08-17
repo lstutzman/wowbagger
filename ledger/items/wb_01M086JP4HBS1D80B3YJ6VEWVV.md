@@ -12,7 +12,7 @@ provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T15:48:54Z"
 depends_on: []
-related: []
+related: [ wb_01M086JRS7GMHXARPB0Z229HSD ]
 decisions:
   - action: accept
     date: 2026-08-17
