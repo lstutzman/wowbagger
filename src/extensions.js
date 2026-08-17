@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
 
@@ -85,7 +85,20 @@ export async function loadExtensionDeclaration(ledgerDirectory) {
   const file = path.join(path.resolve(ledgerDirectory), ...EXTENSION_DECLARATION_PATH.split('/'));
   let handle;
   try {
-    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    if (constants.O_NOFOLLOW === undefined) {
+      // win32 has no O_NOFOLLOW; an lstat immediately before the open is the
+      // platform's best no-follow answer, thrown as ELOOP so the handler
+      // below classifies it exactly like the flag would.
+      const info = await lstat(file);
+      if (info.isSymbolicLink()) {
+        const error = new Error(`refusing to follow a symbolic link at ${file}`);
+        error.code = 'ELOOP';
+        throw error;
+      }
+      handle = await open(file, constants.O_RDONLY);
+    } else {
+      handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    }
   } catch (error) {
     // A missing file, a missing `.wowbagger` directory, and a symlink in
     // either position are all "this ledger declares nothing patchable", except

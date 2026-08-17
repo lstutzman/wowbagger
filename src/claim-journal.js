@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { mkdir, open, readFile, stat } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { validateClaimRequest } from './claim-request.js';
 
@@ -92,14 +92,36 @@ export async function writeReconcileLog(logPath, namespace, entries) {
   ].join('\n');
   if (Buffer.byteLength(content) > MAX_RECONCILE_LOG_BYTES) throw journalCapacityExceeded();
   await mkdir(path.dirname(logPath), { recursive: true });
-  const handle = await open(logPath,
-    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW);
+  const handle = await openNoFollow(logPath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC);
   try {
     await handle.writeFile(content, 'utf8');
     await handle.sync();
   } finally {
     await handle.close();
   }
+}
+
+// O_NOFOLLOW is undefined on win32, so the no-follow guarantee falls back to
+// an lstat immediately before the open. The TOCTOU window that leaves is the
+// platform's best available answer; the thrown code stays ELOOP so every
+// existing symlink handler keeps working.
+async function openNoFollow(file, flags) {
+  if (constants.O_NOFOLLOW !== undefined) {
+    return open(file, flags | constants.O_NOFOLLOW);
+  }
+  let info = null;
+  try {
+    info = await lstat(file);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (info?.isSymbolicLink()) {
+    const error = new Error(`refusing to follow a symbolic link at ${file}`);
+    error.code = 'ELOOP';
+    throw error;
+  }
+  return open(file, flags);
 }
 
 async function readJournalEntries(journalPath, namespace = null) {

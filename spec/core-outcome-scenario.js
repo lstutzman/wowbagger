@@ -137,7 +137,9 @@ export async function materializeWorkspace(directory, declaration, prefix) {
     throw new Error(`unknown core-outcome workspace kind ${kind}`);
   }
   await materializeLedger(directory, workspaceRoot, declaration.ledger.before);
-  return { root: workspaceRoot, ledger: path.join(workspaceRoot, 'ledger') };
+  // posix.join mirrors the adapter's own resolution (src/adapter/paths.js), so
+  // the baseline and the adapter name the same ledger string on every platform.
+  return { root: workspaceRoot, ledger: path.posix.join(workspaceRoot, 'ledger') };
 }
 
 async function collectLedger(directory, display, snapshot) {

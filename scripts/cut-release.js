@@ -514,7 +514,9 @@ function planInCopy({ cwd, git, head, updates, allowed, runGate, log, version, t
     const archive = path.join(copy, 'HEAD.tar');
     execFileSync('git', ['archive', '--format=tar', '-o', archive, head], { cwd });
     mkdirSync(path.join(copy, 'repo'));
-    execFileSync('tar', ['-xf', archive, '-C', path.join(copy, 'repo')]);
+    // Relative paths through cwd: win32 tar reads `D:` in an absolute path as
+    // a remote host and refuses.
+    execFileSync('tar', ['-xf', 'HEAD.tar', '-C', 'repo'], { cwd: copy });
     rmSync(archive);
     const workspace = path.join(copy, 'repo');
     const copyGit = makeGit(workspace);

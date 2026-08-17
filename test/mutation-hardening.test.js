@@ -161,7 +161,11 @@ test('patch and transition preserve one leading UTF-8 BOM', async () => {
   });
 });
 
-test('patch and transition preserve restrictive item permissions', async () => {
+test('patch and transition preserve restrictive item permissions', {
+  skip: process.platform === 'win32'
+    ? 'win32 has no POSIX mode bits; the preservation guarantee is empty there'
+    : false,
+}, async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09A';
   await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
     const itemPath = path.join(ledger, `${id}.md`);
@@ -198,7 +202,11 @@ test('patch and transition preserve restrictive item permissions', async () => {
   });
 });
 
-test('patch reapplies source special permission bits after writing', async () => {
+test('patch reapplies source special permission bits after writing', {
+  skip: process.platform === 'win32'
+    ? 'win32 has no POSIX mode bits; the preservation guarantee is empty there'
+    : false,
+}, async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY09B';
   await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
     const itemPath = path.join(ledger, `${id}.md`);
