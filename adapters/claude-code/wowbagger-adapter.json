@@ -19,7 +19,7 @@
   },
   "platforms": {
     "darwin": "supported",
-    "linux": "unverified",
+    "linux": "supported",
     "win32": "unverified"
   }
 }

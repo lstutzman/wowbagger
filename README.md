@@ -279,8 +279,8 @@ version.
 - **Node.js:** 20 and later. The adapter conformance vectors run against Node
   20 and the current runtime before each release.
 - **Platforms:** the core runs wherever Node.js runs. The Claude Code adapter
-  declares Darwin `supported` from native common-vector evidence. Linux,
-  Windows, and every other shipped adapter target remain `unverified`.
+  declares Darwin and Linux `supported` from native common-vector evidence.
+  Windows and every other shipped adapter target remain `unverified`.
 - **Other tooling:** `wowbagger` manages a Git-tracked Markdown ledger. It
   needs an accessible Git checkout for work-claim and namespace operations.
   Before `provision`, run
@@ -463,8 +463,8 @@ TMPDIR=/tmp node spec/run-adapter-implementation.js --target codex
 TMPDIR=/tmp node spec/run-adapter-implementation.js --target opencode
 ```
 
-The native Darwin Claude Code report passes all 210 assertions across all 16
-cases and reports `"status": "pass"`. Codex and OpenCode execute the same 210
+The native Darwin and Linux Claude Code reports each pass all 210 assertions
+across all 16 cases and report `"status": "pass"`. Codex and OpenCode execute the same 210
 assertions through the same engine, but both target reports remain `"fail"`
 pending target-specific evidence, and every platform declaration on those two
 manifests stays `unverified`. The Kimi and OpenAI-compatible harness adapters
