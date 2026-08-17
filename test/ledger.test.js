@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { loadLedger } from '../src/ledger.js';
-import { runCli, withLedger } from './support.js';
+import { linkDirectory, posixSpecialFilesOnly, runCli, withLedger } from './support.js';
 
 test('loader contains a root lstat failure as a ledger error', async () => {
   await withLedger({}, async (ledger) => {
@@ -144,7 +144,7 @@ test('validate fails closed for a symbolic metadata directory', async () => {
     '.config/layout.json': '{"layout_version":1,"items_directory":"items"}\n',
     'items/.keep': '',
   }, async (ledger) => {
-    await symlink('.config', path.join(ledger, '.wowbagger'));
+    await linkDirectory(path.join(ledger, '.config'), path.join(ledger, '.wowbagger'));
 
     const result = runCli('validate', '--ledger', ledger, '--json');
 
@@ -185,7 +185,7 @@ test('validate rejects a symbolic item-layout configuration', async () => {
   });
 });
 
-test('validate rejects a special item-layout configuration without blocking', async () => {
+test('validate rejects a special item-layout configuration without blocking', posixSpecialFilesOnly, async () => {
   await withLedger({
     '.wowbagger/.keep': '',
   }, async (ledger) => {
@@ -241,7 +241,7 @@ test('loader reports an indeterminate entry when fallback lstat fails', async ()
   });
 });
 
-test('validate rejects special filesystem entries with markdown names', async () => {
+test('validate rejects special filesystem entries with markdown names', posixSpecialFilesOnly, async () => {
   await withLedger({}, async (ledger) => {
     execFileSync('mkfifo', [path.join(ledger, 'special.md')]);
 
@@ -261,7 +261,7 @@ test('validate rejects special filesystem entries with markdown names', async ()
   });
 });
 
-test('lock metadata directory follows ordinary fail-closed ledger traversal without blocking', async () => {
+test('lock metadata directory follows ordinary fail-closed ledger traversal without blocking', posixSpecialFilesOnly, async () => {
   await withLedger({
     '.wowbagger-locks/hidden.md': 'not frontmatter\n',
     '.wowbagger-locks/ordinary.lock': '{"writer_id":"ordinary"}\n',

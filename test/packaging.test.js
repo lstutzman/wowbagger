@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -159,6 +159,10 @@ test('the npm tarball ships all public contracts with every adapter executable',
   const packed = spawnSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: projectRoot,
     encoding: 'utf8',
+    // On win32 `npm` is a `.cmd`, and since Node 20.12 a batch file cannot be
+    // spawned without a shell at all. The arguments are fixed literals, so
+    // there is nothing here for a shell to reinterpret.
+    shell: process.platform === 'win32',
   });
   assert.equal(packed.status, 0, packed.stderr);
   const files = new Set(JSON.parse(packed.stdout)[0].files.map(({ path: file }) => file));
@@ -188,10 +192,19 @@ test('the npm package ships the documented schema version 2 migration entrypoint
     manifest.files.includes('scripts/migrate-schema-2.js'),
     'scripts/migrate-schema-2.js must ship',
   );
-  assert.notEqual(
-    statSync(path.join(projectRoot, 'scripts', 'migrate-schema-2.js')).mode & 0o111,
-    0,
-    'scripts/migrate-schema-2.js must be executable',
+  // The executable bit is read from the Git index, not from the checkout.
+  // Windows cannot express the bit in a file mode at all, so a stat there
+  // reports no execute bit for a file the repository does record as executable.
+  // The index is also the fact that travels: it is what a clone restores.
+  const indexed = spawnSync('git', ['ls-files', '-s', '--', 'scripts/migrate-schema-2.js'], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+  });
+  assert.equal(indexed.status, 0, indexed.stderr);
+  assert.match(
+    indexed.stdout,
+    /^100755\s/,
+    'scripts/migrate-schema-2.js must be recorded executable',
   );
 });
 

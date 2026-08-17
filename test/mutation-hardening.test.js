@@ -7,7 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isAlias, isSeq, parseDocument } from 'yaml';
-import { runCli, withLedger } from './support.js';
+import { hasPosixSpecialFiles, runCli, withLedger } from './support.js';
 
 test('create serializes nested and non-plain extension keys without changing their data', async () => {
   await withLedger({}, async (ledger) => {
@@ -752,7 +752,10 @@ test('lock diagnostics distinguish invalid UTF-8 from invalid metadata shape', a
 
 test('non-symlink special lock occupants return invalid-shape without blocking', async () => {
   const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
-  for (const kind of ['directory', 'fifo', 'socket']) {
+  // A directory occupant exists on every platform; a FIFO and a
+  // filesystem-path socket do not, so only those two are conditional.
+  const kinds = hasPosixSpecialFiles ? ['directory', 'fifo', 'socket'] : ['directory'];
+  for (const kind of kinds) {
     await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
       const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
       const revision = JSON.parse(inspected.stdout).result.item.revision;

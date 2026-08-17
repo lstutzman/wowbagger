@@ -1,0 +1,117 @@
+# The gate, run natively on every platform the shipped adapter manifests
+# speak about.
+#
+# A `supported` platform status is an evidence claim (adapter contract §3.1):
+# a manifest may not assert it without native common-vector evidence. This
+# workflow is the only thing that can produce that evidence for linux and
+# win32, so each job is named for the platform whose claim it can earn, and
+# the jobs are independent — one platform's refusal must not cancel another
+# platform's evidence.
+#
+# `test/platform-portability.test.js` holds this file to that shape.
+name: gate
+
+# Not every branch: this repository carries a worktree branch per ledger item,
+# and three jobs each on every push to forty of them buys nothing. A pull
+# request earns the evidence before the merge, `main` re-earns it after, and
+# `workflow_dispatch` reaches any ref on demand.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # The documented gate command globs its test files, and neither cmd.exe nor
+    # PowerShell expands a glob. Node 20's `--test` does not expand one either,
+    # so the shell has to. `bash` is Git Bash on the windows runner.
+    shell: bash
+
+jobs:
+  gate:
+    name: ${{ matrix.platform }} (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    # The suite spawns a child process per case and Windows spawns are slow.
+    # The target is under 10 minutes; this ceiling only stops a hung job.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+            node: '20'
+          - platform: win32
+            os: windows-latest
+            node: '20'
+          - platform: darwin
+            os: macos-latest
+            node: '20'
+    env:
+      # Several fixtures commit to a Git repository they create themselves and
+      # never set an identity, so on a runner with no global identity they
+      # would fail for a reason that has nothing to do with the platform.
+      GIT_AUTHOR_NAME: Wowbagger CI
+      GIT_AUTHOR_EMAIL: ci@wowbagger.invalid
+      GIT_COMMITTER_NAME: Wowbagger CI
+      GIT_COMMITTER_EMAIL: ci@wowbagger.invalid
+      # The fixtures are byte-exact. `.gitattributes` already unsets `text` for
+      # every tracked path; this pins the same answer for the throwaway
+      # repositories the fixtures build, which carry no attributes of their own.
+      GIT_CONFIG_COUNT: '2'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+      GIT_CONFIG_KEY_1: core.safecrlf
+      GIT_CONFIG_VALUE_1: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          # setup-node caches the npm download cache only. `npm ci` still
+          # resolves and installs the whole tree, so a cold-install failure
+          # still fails here rather than being served from a cache.
+          cache: npm
+
+      - name: pin the temporary root
+        # Node reads TMPDIR on POSIX and TEMP/TMP on win32 — nothing in src/
+        # reads TMPDIR itself, so the win32 answer is TEMP and TMP, not TMPDIR.
+        # macOS defaults to a long /var/folders path that overflows a unix
+        # socket path; ubuntu already defaults to /tmp and is pinned for the
+        # same reason rather than by inheritance. RUNNER_TEMP is short and the
+        # runner cleans it between jobs.
+        run: |
+          if [ "$RUNNER_OS" = 'Windows' ]; then
+            echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+            echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          else
+            echo 'TMPDIR=/tmp' >> "$GITHUB_ENV"
+          fi
+
+      - name: install
+        run: npm ci
+
+      # One Node per runner, so the two documented test commands collapse into
+      # this one.
+      - name: unit suite
+        run: node --test test/*.test.js
+
+      # This step is the native common-vector evidence a `supported` platform
+      # claim needs. Only the claude-code target runs here: the codex and
+      # opencode reports are `fail` on every platform, darwin included, for
+      # target reasons that have nothing to do with the platform, so gating on
+      # them would fail every job while proving nothing about win32 or linux.
+      # Neither manifest declares any platform `supported`, and
+      # test/platform-portability.test.js refuses a manifest that starts to.
+      - name: adapter implementation vectors (claude-code)
+        run: node spec/run-adapter-implementation.js --target claude-code | node .github/check-vector-report.mjs
+
+      - name: ledger validation
+        run: node bin/wowbagger.js validate --ledger ledger --json
