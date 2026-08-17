@@ -4,7 +4,7 @@ id: wb_01M07J8X15VJR34F9DF92NF1YE
 number: 114
 title: "Widen patch to title and draw the frontmatter ownership boundary"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-17T09:54:02Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Protocol contradiction on published alpha.5: the fence refuses the edit the protocol forces; title is the most-corrected field."
 ---
 
 Field issue from PropertyCompass2 on published alpha.5 (docs/wowbagger-feedback.md on their side), and it is a protocol contradiction: correcting an item's title REQUIRES an out-of-protocol edit, which then makes the item unauthorized-revision and blocks every later mutation. No verb carries title: create sets it once, patch refuses it as unknown-member, transition does not carry it. Their concrete case: a title wording correction on a mirrored item. The same trap holds for every consumer-owned frontmatter member (their examples: kind, tags, tier). The ownership boundary is currently discoverable only by trying a patch and reading the refusal.
