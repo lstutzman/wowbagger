@@ -1,0 +1,8 @@
+{
+  "id": "wb_01Q4ZK3DG020ANANANANANANAM",
+  "expected_revision": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064",
+  "date": "2030-01-22",
+  "set": {
+    "body_append": "\n## Title intent (ledger-only)\n\nThe upstream card was renamed; patch refuses title, so the mirror\nrecords the divergence here.\n"
+  }
+}

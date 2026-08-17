@@ -178,6 +178,12 @@ wowbagger patch      --ledger <dir> --input request.json --json
   alone. Regeneration passes every check (`expected_revision` is a byte guard,
   not a meaning guard) and silently deletes every ledger-only byte the item
   carried: the annotations and local notes that live nowhere upstream.
+- **To add to a body without merging, use `set.body_append`.** The string it
+  takes is written after the current body, so every existing byte survives
+  without your naming it. It is mutually exclusive with `set.body` in one
+  request, and `null` is refused — appending nothing is `""`. A core that
+  predates it answers `invalid-request` with an `unknown-member` issue at
+  `/set/body_append` and changes nothing, so trying it is a safe probe.
 - See `docs/mutation-contract.md` in the wowbagger repository for the request
   and response shapes.
 - After any write, run `validate` and show the user the resulting diff.

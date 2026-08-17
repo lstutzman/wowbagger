@@ -32,6 +32,7 @@ function section(source, heading, name) {
 }
 
 const patch = section(contract, '## 9. Patch', 'the mutation contract');
+const versions = section(contract, '## Contract versions', 'the mutation contract');
 const writing = section(skill, '## Writing', 'the installed skill');
 
 // The near-miss this guards: a mirror consumer read the item, regenerated the
@@ -80,5 +81,53 @@ test('the installed skill carries the same replace-not-merge rule in agent voice
     writing,
     phrase('never regenerate from the source alone'),
     'the skill must name regeneration as the losing move',
+  );
+});
+
+test('the mutation contract rules the append and its exclusivity with a replacement', () => {
+  assert.match(
+    patch,
+    phrase('body and body_append are mutually exclusive in one request'),
+    'section 9 must state the exclusivity rather than leave it to be discovered',
+  );
+  assert.match(
+    patch,
+    phrase('every existing byte survives by construction'),
+    'section 9 must say why an append cannot lose a ledger-only block',
+  );
+});
+
+// Version 3 shipped in 0.1.0-alpha.5 without body_append, so the version field
+// cannot answer "does this core support append?". Saying so is the whole point
+// of the delta entry; a silent entry would invite a consumer to negotiate on a
+// number that does not move.
+test('the version delta admits that contract_version cannot answer whether append exists', () => {
+  assert.match(
+    versions,
+    phrase('the appendable body'),
+    'the version 3 delta list must carry the append entry',
+  );
+  assert.match(
+    versions,
+    phrase('cannot probe for append support by reading contract_version'),
+    'the delta entry must admit the version field does not distinguish the two cores',
+  );
+  assert.match(
+    versions,
+    phrase('unknown-member issue at /set/body_append'),
+    'the delta entry must name the probe that does work',
+  );
+});
+
+test('the installed skill offers the append as the alternative to a merge', () => {
+  assert.match(
+    writing,
+    phrase('use `set.body_append`'),
+    'the skill must name the append',
+  );
+  assert.match(
+    writing,
+    phrase('mutually exclusive with `set.body`'),
+    'the skill must state the exclusivity',
   );
 });
