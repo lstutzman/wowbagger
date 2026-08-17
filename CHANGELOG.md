@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.7 - 2026-08-18
+
 ### Changed
 
 - **The item source is bounded at every candidate door, and the core contract

@@ -21,9 +21,9 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.6` and core `contract_version: 4`.**
+`0.1.0-alpha.7` and core `contract_version: 4`.**
 
-The distribution pin names the published `0.1.0-alpha.6` release; the cut that
+The distribution pin names the published `0.1.0-alpha.7` release; the cut that
 publishes core `contract_version: 4` moves it. Earlier cores report
 `contract_version: 3` or lower and lack behavior this skill requires, including
 the bounded item source, so the version check refuses them. Do not soften
