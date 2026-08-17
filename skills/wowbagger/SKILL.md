@@ -21,12 +21,13 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.6` and core `contract_version: 3`.**
+`0.1.0-alpha.6` and core `contract_version: 4`.**
 
-Both pins name the published `0.1.0-alpha.6` release. Earlier cores —
-`0.1.0-alpha.4` and before — report `contract_version: 2` and lack behavior
-this skill requires, so the version check refuses them. Do not soften either
-pin to make a check pass.
+The distribution pin names the published `0.1.0-alpha.6` release; the cut that
+publishes core `contract_version: 4` moves it. Earlier cores report
+`contract_version: 3` or lower and lack behavior this skill requires, including
+the bounded item source, so the version check refuses them. Do not soften
+either pin to make a check pass.
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to
@@ -100,7 +101,7 @@ ledger. Do not use an npm script as a machine protocol; invoke `wowbagger`
 directly so standard output contains exactly one compact JSON object.
 
 On success, require exit `0`, `ok: true`, `command: "report"`,
-`contract_version: 3`, `result.report_version: 1`, and the requested
+`contract_version: 4`, `result.report_version: 1`, and the requested
 `result.as_of`. Read the generated file from the absolute `result.output`.
 On failure, require `ok: false` and inspect `error.code`; do not treat an
 existing output as fresh because failed publication preserves the prior report.

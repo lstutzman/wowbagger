@@ -1,7 +1,7 @@
 {
   "ok": true,
   "command": "capabilities",
-  "contract_version": 3,
+  "contract_version": 4,
   "result": {
     "backend": {
       "name": "local-filesystem",
@@ -46,6 +46,7 @@
       "power_loss_guarantee": "none"
     },
     "limits": {
+      "max_item_source_bytes": 8388608,
       "multi_item_atomicity": false,
       "cross_clone_coordination": false,
       "cross_worktree_coordination": false,

@@ -5,7 +5,7 @@
   "adapter_id": "example.api-only",
   "adapter_version": "0.0.0-fixture",
   "core": {
-    "required_core_contract_version": 3,
+    "required_core_contract_version": 4,
     "commands": []
   },
   "host": {

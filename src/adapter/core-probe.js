@@ -1,3 +1,4 @@
+import { MAX_ITEM_SOURCE_BYTES } from '../limits.js';
 import { hasExactMembers } from './schema-helpers.js';
 
 // The version 3 core command list, in the fixed advertising order (contract
@@ -6,7 +7,7 @@ import { hasExactMembers } from './schema-helpers.js';
 export const CORE_COMMAND_ORDER = Object.freeze([
   'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
-export const CORE_CONTRACT_VERSION = 3;
+export const CORE_CONTRACT_VERSION = 4;
 
 function refuse(error_code, detail) {
   return { ok: false, error_code, detail };
@@ -110,9 +111,11 @@ function durabilityIssue(durability) {
 
 function limitsIssue(limits) {
   if (!hasExactMembers(limits, [
+    'max_item_source_bytes',
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection', 'automatic_stale_lock_breaking',
   ])
+    || limits.max_item_source_bytes !== MAX_ITEM_SOURCE_BYTES
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
     || limits.cross_worktree_coordination !== false
@@ -219,6 +222,7 @@ export function coreCapabilities() {
         power_loss_guarantee: 'none',
       },
       limits: {
+        max_item_source_bytes: MAX_ITEM_SOURCE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,

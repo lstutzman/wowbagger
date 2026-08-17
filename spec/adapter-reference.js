@@ -22,7 +22,10 @@ const INPUT_DELIVERY_STATES = ['delivered', 'failed', 'unread'];
 const PLATFORM_KEYS = ['darwin', 'linux', 'win32'];
 const PLATFORM_STATUS = new Set(['supported', 'unsupported', 'unverified']);
 const ADAPTER_CONTRACT_VERSION = 2;
-const CORE_CONTRACT_VERSION = 3;
+const CORE_CONTRACT_VERSION = 4;
+// Written independently of `src/limits.js`: the oracle pins the contract value,
+// never the production constant.
+const MAX_ITEM_SOURCE_BYTES = 8388608;
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],
@@ -632,6 +635,7 @@ export function referenceCoreCapabilities() {
         power_loss_guarantee: 'none',
       },
       limits: {
+        max_item_source_bytes: MAX_ITEM_SOURCE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,
@@ -1418,10 +1422,12 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.durability.power_loss_guarantee !== 'none') return 'result.durability';
   const limits = result.limits;
   if (!hasExactKeys(limits, [
+    'max_item_source_bytes',
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection',
     'automatic_stale_lock_breaking',
   ])
+    || limits.max_item_source_bytes !== MAX_ITEM_SOURCE_BYTES
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
     || limits.cross_worktree_coordination !== false

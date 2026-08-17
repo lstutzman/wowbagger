@@ -20,7 +20,7 @@ test('the opencode adapter answers describe with its own identity on the shared 
   assert.equal(response.adapter_id, 'dev.wowbagger.adapter.opencode');
   assert.equal(response.bootstrap_wire_version, 1);
   assert.equal(response.selected_adapter_contract_version, 2);
-  assert.equal(response.core.required_core_contract_version, 3);
+  assert.equal(response.core.required_core_contract_version, 4);
   assert.equal(response.host.command_execution.shell, false);
   assert.deepEqual(response.platforms, { darwin: 'unverified', linux: 'unverified', win32: 'unverified' });
 });

@@ -89,7 +89,7 @@
     {
       "file": "skills/wowbagger/SKILL.md",
       "kind": "anchored-text",
-      "anchor": "Both pins name the published `{version}` release.",
+      "anchor": "The distribution pin names the published `{version}` release;",
       "classification": "mutable",
       "occurrences": 1
     },

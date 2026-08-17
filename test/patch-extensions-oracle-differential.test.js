@@ -19,7 +19,7 @@ function refusalResponse(issues) {
   return {
     ok: false,
     command: 'patch',
-    contract_version: 3,
+    contract_version: 4,
     state: 'unchanged',
     error: {
       code: 'patch-precondition-failed',
@@ -159,7 +159,7 @@ test('the oracle correlates an extension result through the item source it reads
   const success = (source) => ({
     ok: true,
     command: 'patch',
-    contract_version: 3,
+    contract_version: 4,
     state: 'committed',
     result: {
       item: {

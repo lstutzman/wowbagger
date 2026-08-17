@@ -657,7 +657,7 @@ const STRUCTURALLY_INVALID_MANIFEST = JSON.stringify({
   adapter_version: '0.1.0',
   adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 3,
+  required_core_contract_version: 4,
   entrypoints: {
     describe: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'adapters/claude-code/entrypoint.js', fixed_args: ['invoke'] },

@@ -277,7 +277,7 @@ answer in two domains.
 
 | Domain | Root `namespace` | `contract_version` | Version to negotiate |
 |---|---|---|---|
-| core | absent | 3 | top-level `contract_version` of `capabilities --json` |
+| core | absent | 4 | top-level `contract_version` of `capabilities --json` |
 | work-claim | `work-claim` | 1, the legacy envelope marker | `result.operations.work_claim.api_version` of `claim capabilities --json` |
 | ledger-publication | `ledger-publication` | 1, the legacy envelope marker | the same work-claim `api_version` |
 | ledger-mutation | `ledger-mutation` | 1, the legacy envelope marker | the same work-claim `api_version` |

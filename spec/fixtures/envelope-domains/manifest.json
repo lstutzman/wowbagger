@@ -28,7 +28,7 @@
     "core": {
       "namespace": null,
       "prose_name": "core",
-      "contract_version": 3,
+      "contract_version": 4,
       "version_source": "the top-level contract_version of capabilities --json",
       "commands": [
         "capabilities",
