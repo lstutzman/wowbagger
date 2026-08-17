@@ -25,11 +25,11 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > version this repository runs its own backlog on. The API is not frozen and the
 > version will move before a stable release.
 >
-> **There is no `latest` channel and a bare `npm install wowbagger` is meant to
-> fail.** While every published release is a prerelease, the package carries no
-> default channel at all, so nothing resolves by accident; `@next` is how you
-> say you accept a prerelease. A `latest` channel appears with the first stable
-> release.
+> **Install with `@next`.** Every published release is a prerelease. The
+> registry requires a `latest` dist-tag, so `latest` mirrors `next` — a bare
+> `npm install wowbagger` resolves to the current prerelease rather than an
+> older build — but `@next` is the documented install and the explicit
+> statement that you accept a prerelease.
 >
 > **What is proved.** The core validates a Markdown ledger, selects a
 > deterministic ready queue, renders a self-contained HTML report, and
@@ -249,9 +249,9 @@ Wowbagger ships as an npm package with a single `wowbagger` binary. There are
 two supported install routes:
 
 - **npm registry** — `npm install -g wowbagger@next` installs the current
-  prerelease. The `@next` is required: there is no `latest` channel until the
-  first stable release, so a bare `npm install wowbagger` fails instead of
-  resolving to some older build.
+  prerelease. `@next` is the documented spelling; `latest` mirrors it (the
+  registry requires a `latest` tag), so a bare install resolves to the same
+  bytes.
 - **git tag** —
   `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.6` installs this
   release. Installing at a ref installs the core and every adapter that ref

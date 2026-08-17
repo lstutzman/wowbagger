@@ -2,22 +2,23 @@
 //
 // `npm run release:channels -- check|repair <version> [--dry-run]`
 //
-// While every release is a `0.1.0-alpha.*` prerelease there is no stable
-// distribution to serve, so the package carries no `latest` dist-tag at all: a
-// bare `npm install wowbagger` fails loudly instead of quietly resolving to the
-// oldest published bytes, and `wowbagger@next` is explicit prerelease consent.
-// The policy is exactly `{ next: <published version> }` with `0.1.0-alpha.1`
-// deprecated.
+// While every release is a `0.1.0-alpha.*` prerelease the registry still
+// requires a `latest` dist-tag — npm rejects deleting it with E400, verified
+// live on 2026-08-17 — so the fallback policy is that `latest` mirrors `next`:
+// a bare `npm install wowbagger` resolves to the current prerelease instead of
+// dead first-alpha bytes, and `wowbagger@next` stays the documented install.
+// The policy is exactly `{ latest: <published version>, next: <published
+// version> }` with `0.1.0-alpha.1` deprecated.
 //
 // `check` is read-only and is the post-publish verification step. `repair` is
 // idempotent and performs authenticated registry writes; run it in an
 // interactive terminal, because the account authenticates with a WebAuthn
 // passkey. It never unpublishes anything.
 //
-// Every prerelease publication must use `npm publish --tag next`. A plain
-// `npm publish` recreates `latest` and silently makes the default channel a
-// prerelease again; `prepublishOnly` cannot see that flag, which is why the
-// post-publish check exists.
+// Every prerelease publication must use `npm publish --tag next`, then
+// `repair` (or `npm dist-tag add`) moves `latest` alongside it. A plain
+// `npm publish` would move `latest` without `next`; `prepublishOnly` cannot
+// see that flag, which is why the post-publish check exists.
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -37,11 +38,17 @@ export const DEPRECATION_MESSAGE = 'Unsupported: this build predates the current
  */
 export function checkChannels({ packageName, version, distTags, deprecated }) {
   const problems = [];
-  if (Object.hasOwn(distTags, 'latest')) {
+  if (!Object.hasOwn(distTags, 'latest')) {
     problems.push({
-      code: 'latest-present',
-      detail: `${packageName} carries latest=${distTags.latest}; every release is a prerelease,`
-        + ' so a bare install must fail rather than resolve',
+      code: 'latest-missing',
+      detail: `${packageName} has no latest dist-tag; the registry always keeps one,`
+        + ' so an absent read means the lookup failed',
+    });
+  } else if (distTags.latest !== version) {
+    problems.push({
+      code: 'latest-stale',
+      detail: `latest names ${distTags.latest}, not the published ${version};`
+        + ' the registry refuses to delete latest, so it must mirror next',
     });
   }
   if (!Object.hasOwn(distTags, 'next')) {
@@ -73,10 +80,10 @@ export function planRepair({ packageName, version, distTags, deprecated }) {
       args: ['dist-tag', 'add', `${packageName}@${version}`, 'next'],
     });
   }
-  if (Object.hasOwn(distTags, 'latest')) {
+  if (distTags.latest !== version) {
     commands.push({
-      reason: 'remove the latest dist-tag while every release is a prerelease',
-      args: ['dist-tag', 'rm', packageName, 'latest'],
+      reason: `point latest at ${version}; the registry refuses to delete the latest tag`,
+      args: ['dist-tag', 'add', `${packageName}@${version}`, 'latest'],
     });
   }
   if (deprecated !== DEPRECATION_MESSAGE) {
