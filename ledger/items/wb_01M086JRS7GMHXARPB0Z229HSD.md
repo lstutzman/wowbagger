@@ -35,3 +35,8 @@ Explicitly out of scope unless the maintainer widens it (enrichment section 6): 
 Consumer risk measured: PropertyCompass2's largest item is 80,676 bytes (0.96% of the bound); largest body 33,357 bytes. No migration needed.
 
 Acceptance: the enrichment's criteria verbatim (section 4) - exact boundary and boundary-plus-one fixtures per verb, multi-byte UTF-8 accounting, precedence pins against every earlier refusal class, legacy-oversized fixtures, fail-closed v3 negotiation, both oracles pinning value and shape independently.
+
+
+## Orchestrator resolution (2026-08-17, Lee)
+
+Core contract v4 approved, low ceremony. We are the only consumers, so the bump costs one coordinated upgrade rather than a migration campaign. Bundle with item #122's filename-contract stage: two narrowings, one bump, one release.
