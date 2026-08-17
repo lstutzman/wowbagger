@@ -11,11 +11,14 @@
 # `test/platform-portability.test.js` holds this file to that shape.
 name: gate
 
+# Not every branch: this repository carries a worktree branch per ledger item,
+# and three jobs each on every push to forty of them buys nothing. A pull
+# request earns the evidence before the merge, `main` re-earns it after, and
+# `workflow_dispatch` reaches any ref on demand.
 on:
   push:
     branches:
       - main
-      - staging
   pull_request:
   workflow_dispatch:
 

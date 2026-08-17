@@ -13,9 +13,14 @@ const cli = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 // as the core refusing something it does not refuse. Every case carrying it is
 // coverage win32 does not obtain — the list belongs in one place for that
 // reason, not for convenience.
-export const posixSpecialFilesOnly = process.platform === 'win32'
-  ? { skip: 'win32 has no FIFO or socket at a filesystem path' }
-  : {};
+export const hasPosixSpecialFiles = process.platform !== 'win32';
+
+// The same fact as a `node:test` options object, for a case that is nothing but
+// a special file. A case that is only partly one asks `hasPosixSpecialFiles`
+// directly rather than reading a skip reason back out of this.
+export const posixSpecialFilesOnly = hasPosixSpecialFiles
+  ? {}
+  : { skip: 'win32 has no FIFO or socket at a filesystem path' };
 
 // A symlink to a directory needs an explicit type on win32, where the default
 // is `file` and a file-type link to a directory does not resolve as one. The

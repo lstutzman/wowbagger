@@ -153,6 +153,7 @@ test('the temporary root is pinned per platform, not inherited', () => {
 // cost nothing: a guard that quietly skipped cases here would turn a real
 // refusal into a silent pass on the platform the gate can actually verify.
 test('the POSIX-only fixture guard skips nothing on a platform that has FIFOs', { skip: process.platform === 'win32' && 'win32 has no FIFO to verify against' }, async () => {
-  const { posixSpecialFilesOnly } = await import('./support.js');
+  const { hasPosixSpecialFiles, posixSpecialFilesOnly } = await import('./support.js');
+  assert.equal(hasPosixSpecialFiles, true);
   assert.deepEqual(posixSpecialFilesOnly, {});
 });
