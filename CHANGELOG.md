@@ -9,6 +9,22 @@ consolidation. The first tagged release inherits this file.
 
 ### Fixed
 
+- **A committed `patch` is forwarded instead of reported as an unknown
+  outcome.** The shipped adapter engine still named the pre-widening patchable
+  pair `number` and `priority`, so every patch a consumer actually sends — a
+  body rewrite, a title correction, a relation-list replacement, a declared
+  extension member — read as a non-canonical request, failed result
+  correlation, and came back `mutation-outcome-unknown` with recovery guidance
+  about a write that had provably committed. `number` is the immutable item
+  identity and was never patchable at all. The patchable field set is now what
+  mutation contract section 9 names — `title`, `priority`, `depends_on`,
+  `related`, `body`, `body_append`, and `extensions` — with the two body write
+  modes mutually exclusive and the extensions container judged only on its own
+  shape, and correlation follows each member to the surface it is observable
+  on. The independent reference model already had all of this, so the drift was
+  one-sided and no differential test could see it; the new end-to-end
+  core-outcome vectors found it on their first run.
+
 - **`publish-claimed` now reconciles the journal unconditionally, like every
   other mutating command.** The work-claim contract has always said an
   uncommitted prior mutation refuses the next `create`, `transition`, `patch`,
@@ -54,7 +70,7 @@ consolidation. The first tagged release inherits this file.
   distinguishable, because they are different facts — no approval source at all
   versus a source that produced no approval for this invocation — and conformance
   case `07-mutation-approval` now pins both against the runtimes that produce
-  them, taking the suite to 201 assertions across 15 cases.
+  them, adding one assertion to the conformance suite.
 - **A committed `create` is forwarded instead of reported as an unknown
   outcome.** Both adapter engines required `schema_version: 1` in a create
   result and re-serialized the expected candidate with the schema 1 default, so
@@ -74,6 +90,49 @@ consolidation. The first tagged release inherits this file.
   adapter contract version 2; the prose now says so.
 
 ### Added
+
+- **The conformance suite now measures real core outcomes end to end.** A new
+  equivalence case, `16-core-outcome-e2e`, carries nine hand-authored scenarios
+  that each run the direct real core in one isolated temporary workspace and,
+  separately, spawn the real shipped entrypoint over the bootstrap wire against
+  the real core in a second workspace materialized from the same before state:
+  `inspect` item-not-found, a committed `create`, a committed `transition`, a
+  committed `patch` by body replacement and by declared extension member, the
+  six-member date refusal, and all three `ledger-mutation` claim-fence refusal
+  classes. Success vectors match the exact core exit, stdout bytes, decoded
+  adapter streams with their digests and lengths, and the exact ledger
+  post-state; refusal vectors match the exact nonzero exit and unchanged ledger
+  bytes, and the fence refusals arrive as `ok: true` adapter transport results
+  rather than adapter errors. Before this case, no conformance assertion and no
+  bootstrap-wire test carried a mutation through a spawned entrypoint into a
+  launched core, which is how two real adapter defects shipped. The suite is
+  210 assertions across 16 cases.
+
+  Determinism comes from fixed inputs and never from normalizing output: a
+  caller-supplied ULID, seeded revisions on isolated temporary ledgers, literal
+  dates, and — for the two real claim-fence read-backs — a fixed namespace, a
+  hand-authored claim journal, and a seeded future clock floor, so the emitted
+  `observed_at` is `max(physical_now, floor)` and therefore the floor. That
+  makes the refusal bytes fixed without mocking the core clock, and it expires:
+  both runners fail loudly and name `2031-01-15T12:01:00.000Z` once wall time
+  reaches it. Goldens are authored from the adapter contract, the work-claim
+  contract, and the normative `spec/fixtures/mutations/**` bytes; every byte
+  reused from those fixtures carries a `derived_from` pin, so drift on either
+  side stops the vector and asks for a reviewed golden change instead of
+  regenerating one. Only base64, SHA-256, and byte length are derived, and only
+  from an already hand-authored byte string.
+
+  The conformance host gains a granting approval mode, without which no
+  mutation can cross the spawned entrypoint at all. **Adapter contract section
+  10 previously said no conformance fixture could manufacture authority; that
+  is no longer true, and the claim is withdrawn rather than quietly narrowed.**
+  What replaces it is narrower and checkable: the granting mode is reachable
+  only from a fixture's own runtime configuration, which no shipped adapter
+  package reads and no wire this contract defines carries; every granting
+  scenario runs against a throwaway temporary ledger; the approval is minted
+  from the binding the engine resolved and canonicalized by the independent
+  reference model. The evidence label is the production adapter engine under a
+  conformance host approval provider, not a live consumer approval mechanism.
 
 - **A host process can wire consumer approval into a shipped adapter
   entrypoint.** `runAdapterEntrypoint` now accepts an optional `hostRuntime`
