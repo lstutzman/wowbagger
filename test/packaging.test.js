@@ -311,6 +311,11 @@ test('the checked-in manifest classifies every occurrence of the current version
 });
 
 
+test('the cut and channel commands are wired as release scripts', () => {
+  assert.match(manifest.scripts['release:cut'], /scripts\/cut-release\.js/);
+  assert.match(manifest.scripts['release:channels'], /scripts\/release-channels\.js/);
+});
+
 test('the release gate rejects an absent tag and a tag on another commit', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'wb-release-tag-'));
   mkdirSync(path.join(root, '.claude-plugin'));
