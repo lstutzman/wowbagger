@@ -21,12 +21,13 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.6` and core `contract_version: 3`.**
+`0.1.0-alpha.6` and core `contract_version: 4`.**
 
-Both pins name the published `0.1.0-alpha.6` release. Earlier cores —
-`0.1.0-alpha.4` and before — report `contract_version: 2` and lack behavior
-this skill requires, so the version check refuses them. Do not soften either
-pin to make a check pass.
+The distribution pin names the published `0.1.0-alpha.6` release; the cut that
+publishes core `contract_version: 4` moves it. Earlier cores report
+`contract_version: 3` or lower and lack behavior this skill requires, including
+the bounded item source, so the version check refuses them. Do not soften
+either pin to make a check pass.
 
 - Command not found → the core is not installed. Tell the user, point them at
   <https://github.com/lstutzman/wowbagger>, and stop. Do not fall back to
@@ -36,12 +37,14 @@ pin to make a check pass.
   installed and required versions. An older core can share a contract version
   while still lacking behavior this skill requires. Do not guess from the
   contract version alone.
-- `contract_version` is anything other than `3` → stop and say so plainly. A
+- `contract_version` is anything other than `4` → stop and say so plainly. A
   core reporting `1` predates schema version 2, where `depends_on` records
   declared prerequisites rather than only live blockers. A core reporting `2`
   predates the widened date-refusal issue shape, the `depends_on`/`related`
-  patch field set, and core-assigned item numbers. An older or newer core may
-  have changed the request or response shape. Do not guess.
+  patch field set, and core-assigned item numbers. A core reporting `3` accepts
+  an item source of any size, so it publishes items this skill's bound would
+  refuse. An older or newer core may have changed the request or response
+  shape. Do not guess.
 
 Run both commands once per session before the first ledger command, not before
 every command.
@@ -100,7 +103,7 @@ ledger. Do not use an npm script as a machine protocol; invoke `wowbagger`
 directly so standard output contains exactly one compact JSON object.
 
 On success, require exit `0`, `ok: true`, `command: "report"`,
-`contract_version: 3`, `result.report_version: 1`, and the requested
+`contract_version: 4`, `result.report_version: 1`, and the requested
 `result.as_of`. Read the generated file from the absolute `result.output`.
 On failure, require `ok: false` and inspect `error.code`; do not treat an
 existing output as fresh because failed publication preserves the prior report.
@@ -161,6 +164,15 @@ wowbagger patch      --ledger <dir> --input request.json --json
   that never touch it. The `item-outside-layout` refusal carries
   `expected_path` and a `remediation` naming the move; make it, commit it, then
   run `claim-verify`.
+- **An item source is bounded at 8,388,608 bytes.** `create`, `transition`,
+  `patch`, and `publish-claimed` each measure the complete serialized successor
+  — frontmatter, decisions, extensions, and body together, not the body alone —
+  and refuse a larger one with `item-source-too-large`, exit 2, state
+  `unchanged`, and `error.details.size_bytes`. `transition` is bounded too,
+  because a long decision can push a legal item past it. Read the exact bound
+  from `capabilities --json` at `result.limits.max_item_source_bytes`. An item
+  already committed above the bound still reads and still validates; repair it
+  with a `patch` that brings the successor under the bound.
 - `create` starts an empty ledger on schema version 2 and returns the selected
   version at `result.item.core.schema_version`. A non-empty schema-version-1
   ledger stays on version 1 until its complete ledger is migrated.
@@ -488,7 +500,7 @@ Use the claimed write path as one complete loop:
    not in an accessible Git checkout. Stop before mutation.
 2. Run `provision` once for the ledger. Keep its `ledger_namespace`.
 3. Run `claim capabilities --ledger <dir> --json` again. Require
-   `result.operations.work_claim.api_version: 1`. Do not compare the claim
+   `result.operations.work_claim.api_version: 2`. Do not compare the claim
    response's top-level `contract_version` with the core version; it is the
    legacy claim-envelope marker. Stop if the namespace is absent or the mode is
    not `merge-coordinated`.

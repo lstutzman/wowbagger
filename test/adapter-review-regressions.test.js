@@ -88,7 +88,7 @@ test('forwards a definitive invalid create request response for invalid request 
   const coreResponse = {
     ok: false,
     command: 'create',
-    contract_version: 3,
+    contract_version: 4,
     state: 'unchanged',
     error: {
       code: 'invalid-request',
@@ -132,7 +132,7 @@ test('returns unknown when invalid-request issues are not in canonical order', (
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'invalid-request',
@@ -198,7 +198,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'inspect',
-        contract_version: 3,
+        contract_version: 4,
         result: { item: coreItemWithId(validCoreItem(), alternateId) },
       },
       expected: 'core-protocol-error',
@@ -209,7 +209,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'inspect',
-        contract_version: 3,
+        contract_version: 4,
         error: {
           code: 'item-not-found',
           message: 'The requested item was not found.',
@@ -227,7 +227,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'create',
-        contract_version: 3,
+        contract_version: 4,
         state: 'committed',
         result: { item: coreItemWithId(validCoreItem(), alternateId) },
       },
@@ -244,7 +244,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'create',
-        contract_version: 3,
+        contract_version: 4,
         state: 'committed',
         result: { item: validCoreItem() },
       },
@@ -258,7 +258,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'create',
-        contract_version: 3,
+        contract_version: 4,
         state: 'committed',
         result: { item: { ...validCoreItem(), path: `nested/${CREATE_ID}.md` } },
       },
@@ -272,7 +272,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'create',
-        contract_version: 3,
+        contract_version: 4,
         state: 'unchanged',
         error: {
           code: 'path-collision',
@@ -291,7 +291,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'create',
-        contract_version: 3,
+        contract_version: 4,
         state: 'unchanged',
         error: {
           code: 'invalid-request',
@@ -317,7 +317,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'transition',
-        contract_version: 3,
+        contract_version: 4,
         state: 'unchanged',
         error: {
           code: 'revision-conflict',
@@ -341,7 +341,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: false,
         command: 'transition',
-        contract_version: 3,
+        contract_version: 4,
         state: 'committed',
         error: {
           code: 'post-commit-recovery-required',
@@ -366,7 +366,7 @@ test('requires every forwarded core response to match its exact request', () => 
       stdout: {
         ok: true,
         command: 'transition',
-        contract_version: 3,
+        contract_version: 4,
         state: 'committed',
         result: { item: validCoreItem() },
       },
@@ -414,7 +414,7 @@ test('forwards a create success with the exact canonical candidate source', () =
     process: processObservation({
       ok: true,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'committed',
       result: {
         item: {
@@ -456,7 +456,7 @@ test('returns unknown when committed create recovery reports a different candida
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'committed',
       error: {
         code: 'post-commit-recovery-required',
@@ -500,7 +500,7 @@ test('returns unknown when recovery artifacts are not in canonical order', () =>
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'operation-failed',
@@ -548,7 +548,7 @@ test('returns unknown when recovery artifacts repeat a path under different kind
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'operation-failed',
@@ -589,7 +589,7 @@ test('returns unknown when a revision conflict reports the expected revision as 
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'revision-conflict',
@@ -625,7 +625,7 @@ test('returns unknown when atomic scope required has no blockers', () => {
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'atomic-scope-required',
@@ -661,7 +661,7 @@ test('returns unknown when atomic scope required blockers are not in canonical o
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'atomic-scope-required',
@@ -736,7 +736,7 @@ test('returns unknown when transition blocker or issue fields contradict their c
       process: processObservation({
         ok: false,
         command: 'transition',
-        contract_version: 3,
+        contract_version: 4,
         state: scenario.state,
         error: scenario.error,
       }, { exit_code: scenario.exit_code }),
@@ -765,7 +765,7 @@ test('returns unknown when transition precondition issues are not in canonical o
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'transition-precondition-failed',
@@ -853,7 +853,7 @@ test('rejects source-consistent items that violate ledger semantic invariants', 
       process: processObservation({
         ok: true,
         command: 'inspect',
-        contract_version: 3,
+        contract_version: 4,
         result: { item: invalidItem },
       }),
     });
@@ -877,7 +877,7 @@ test('rejects source-consistent items that violate ledger semantic invariants', 
     process: processObservation({
       ok: true,
       command: 'transition',
-      contract_version: 3,
+      contract_version: 4,
       state: 'committed',
       result: {
         item: coreItemWithSource(item,
@@ -900,7 +900,7 @@ test('rejects an inspect success whose nested item omits contract fields', () =>
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       result: { item: {} },
     }),
   });
@@ -917,7 +917,7 @@ test('forwards an exact inspect success envelope at exit zero', () => {
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       result: { item: validCoreItem() },
     }),
   });
@@ -935,7 +935,7 @@ test('rejects an inspect success whose core view has an undocumented member', ()
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       result: { item },
     }),
   });
@@ -953,7 +953,7 @@ test('rejects an inspect success whose core view disagrees with its source bytes
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       result: { item },
     }),
   });
@@ -976,7 +976,7 @@ test('rejects an inspect success whose source-consistent core status is outside 
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       result: { item },
     }),
   });
@@ -998,7 +998,7 @@ test('rejects an inspect success when invalid source relations normalize into a 
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       result: { item },
     }),
   });
@@ -1016,7 +1016,7 @@ test('returns unknown when create success does not have exit zero', () => {
     process: processObservation({
       ok: true,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'committed',
       result: { item: validCoreItem() },
     }, { exit_code: 2 }),
@@ -1038,7 +1038,7 @@ test('returns unknown when a committed create result has unauthenticated source 
     process: processObservation({
       ok: true,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'committed',
       result: { item },
     }),
@@ -1058,7 +1058,7 @@ test('returns unknown when transition declares an unknown core mutation state', 
     process: processObservation({
       ok: false,
       command: 'transition',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unknown',
       error: {
         code: 'write-outcome-unknown',
@@ -1087,7 +1087,7 @@ test('returns unknown when create reports a transition-only core error code', ()
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'item-not-found',
@@ -1222,7 +1222,7 @@ test('refuses approved mutations when trusted approval is unavailable', async ()
         return processObservation({
           ok: true,
           command: 'create',
-          contract_version: 3,
+          contract_version: 4,
           state: 'committed',
           result: { item: {} },
         });
@@ -1382,7 +1382,7 @@ function mutationRuntime(request, dynamic, launch) {
     },
     core: {
       executable_identity: `sha256:${'a'.repeat(64)}`,
-      contract_version: 3,
+      contract_version: 4,
       argv: ['create', '--ledger', '/approved/workspace/ledger', '--input', '-', '--json'],
       input_base64: coreInput.toString('base64'),
     },
@@ -1472,7 +1472,7 @@ test('accepts a core inspect envelope whose item carries number and priority', (
     process: processObservation({
       ok: true,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       result: { item },
     }),
   });
@@ -1499,7 +1499,7 @@ test('reference oracle correlates a patch success with the requested fields', ()
   const response = processObservation({
     ok: true,
     command: 'patch',
-    contract_version: 3,
+    contract_version: 4,
     state: 'committed',
     result: { item: after },
   });
@@ -1558,7 +1558,7 @@ test('reference oracle correlates a patch success with the requested body', () =
     process: processObservation({
       ok: true,
       command: 'patch',
-      contract_version: 3,
+      contract_version: 4,
       state: 'committed',
       result: { item: after },
     }),
@@ -1601,7 +1601,7 @@ test('reference oracle correlates a patch success with the requested title', () 
     process: processObservation({
       ok: true,
       command: 'patch',
-      contract_version: 3,
+      contract_version: 4,
       state: 'committed',
       result: { item: after },
     }),
@@ -1713,7 +1713,7 @@ test('forwards an items-directory-unavailable create refusal instead of calling 
   const refusal = (details) => ({
     ok: false,
     command: 'create',
-    contract_version: 3,
+    contract_version: 4,
     state: 'unchanged',
     error: {
       code: 'items-directory-unavailable',
@@ -1794,7 +1794,7 @@ test('forwards an inspect refusal on an invalid ledger instead of calling it a p
     process: processObservation({
       ok: false,
       command: 'inspect',
-      contract_version: 3,
+      contract_version: 4,
       error,
     }, { exit_code: exitCode }),
   });
@@ -1864,7 +1864,7 @@ test('refuses a mutation ledger-invalid that smuggles an item snapshot', async (
     process: processObservation({
       ok: false,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'ledger-invalid',

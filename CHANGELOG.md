@@ -7,6 +7,38 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Changed
+
+- **The item source is bounded at every candidate door, and the core contract
+  moves to 4.** The published version 3 core accepted a 50-MiB `create` with
+  exit `0` and state `committed` in 0.70 s: `create`, `transition`, and `patch`
+  had no bound
+  anywhere, and `publish-claimed` alone bounded candidates but reported an
+  oversized, perfectly canonical candidate as `The candidate source is not
+  canonical base64.` One shared `MAX_ITEM_SOURCE_BYTES` of 8,388,608 now bounds
+  the complete serialized successor at all four doors, and every one of them
+  answers the same named refusal: `item-source-too-large`, exit 2, state
+  `unchanged`, details exactly `{id, size_bytes, limit_bytes}` in the core
+  domain and `{item_id, size_bytes, limit_bytes}` in the ledger-publication
+  domain. The measurement is serialized UTF-8 bytes, so frontmatter, decisions,
+  extensions, and body all draw on the same budget; `transition` is bounded
+  because its decision block can push a legal stored item past it. Core
+  capabilities advertises the value at `result.limits.max_item_source_bytes`.
+  This narrows accepted input against a published version, so the core contract
+  moves to 4 and version 3 consumers fail closed at negotiation. A ledger
+  committed before the bound does not brick: an oversized item still validates,
+  still inspects, and a patch that shrinks it under the bound is accepted.
+
+- **The work-claim API moves to 2.** The oversized-candidate response replaces
+  the error `publish-claimed` version 1 pinned for that input, so
+  `result.operations.work_claim.api_version` is now `2` and version 1 consumers
+  fail closed. Malformed base64 keeps its version 1 `invalid-request`: without
+  canonical base64 there is no item source to measure. The base64-character
+  precheck is gone — the 11,534,336-byte serialized-request bound already caps
+  what a candidate can decode to, and the precheck was the remaining path that
+  answered a genuine size refusal with a false base64 message. That transport
+  bound is unchanged and still measures a different object.
+
 ### Fixed
 
 - **A committed `patch` is forwarded instead of reported as an unknown

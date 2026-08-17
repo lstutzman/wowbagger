@@ -99,11 +99,11 @@
     },
     {
       "path": "scenarios/01-inspect-item-not-found/expected-adapter-result.json",
-      "sha256": "sha256:f1ac7766746951c0d1ef3a9892ac726eb33fd089e560688add2959da1c333fd6"
+      "sha256": "sha256:bf9412b0b9d06a6a808b276b7493be2e74e87570f3955be2dfe7efc6b856f819"
     },
     {
       "path": "scenarios/01-inspect-item-not-found/expected-core-stdout.jsonl",
-      "sha256": "sha256:4bfc65a169a761e9a3a5301ef2e11148297f4b1e3e11aadee40f03be81be40f1"
+      "sha256": "sha256:b99e79d8b7fa7681e43b1737339edcbe40e381aa2350e1956f476b04f48c9585"
     },
     {
       "path": "scenarios/01-inspect-item-not-found/invocation.json",
@@ -111,7 +111,7 @@
     },
     {
       "path": "scenarios/01-inspect-item-not-found/scenario.json",
-      "sha256": "sha256:eee0ecf41efbab6e91a4c11bd60dfd8a63b4e516432127b34f2f7bae0d2b44e7"
+      "sha256": "sha256:bd7302850e77e6a702774f68497793b4071904666fabda071978fc529233f998"
     },
     {
       "path": "scenarios/02-create-committed/after/wb_01Q45X474N28T5CY4GNF6YY4HM.md",
@@ -123,11 +123,11 @@
     },
     {
       "path": "scenarios/02-create-committed/expected-adapter-result.json",
-      "sha256": "sha256:3b4a325e98466abbf3b2157506f433a79bd7a297c628ce0856e6ece1697db090"
+      "sha256": "sha256:4559ea4b144e9a9af0ef199d1d90e1ea7ffed863cc7a44f6559da3091b9e46b0"
     },
     {
       "path": "scenarios/02-create-committed/expected-core-stdout.jsonl",
-      "sha256": "sha256:83556892fd17fa8c7f525887370c26564185e7858c272ada8880102da74faf21"
+      "sha256": "sha256:06146be1b3626c1d1b47ec71c1dca5c266535b16736b4a4fe7133256e9cc749a"
     },
     {
       "path": "scenarios/02-create-committed/invocation.json",
@@ -139,7 +139,7 @@
     },
     {
       "path": "scenarios/02-create-committed/scenario.json",
-      "sha256": "sha256:a7e6ae462a04f7ca98166002077a9f928cea53c91dd96e66d55c50a2af242860"
+      "sha256": "sha256:a944ada4cedc34e787fb96e9ff8da48c720f377968b3afbecf7064ca0594faad"
     },
     {
       "path": "scenarios/03-transition-committed/after/wb_01Q4AS1Y80248J48HK6D248NAN.md",
@@ -155,11 +155,11 @@
     },
     {
       "path": "scenarios/03-transition-committed/expected-adapter-result.json",
-      "sha256": "sha256:361314e03bef8053801a8001aeb90fcf5a3e15ded2c8434ba24d2fbc34094501"
+      "sha256": "sha256:7880b9c404134c1f452684a92b9c26bcce8326cadf75f63432c481f02d6b1bec"
     },
     {
       "path": "scenarios/03-transition-committed/expected-core-stdout.jsonl",
-      "sha256": "sha256:64f535a3375c06a119c4e8bd51c2bbbb1e74b4838fc4ab2892ec0ac2eb97c197"
+      "sha256": "sha256:f5c21a29c4a532af6067b350a01261d85175290d9f2ae43a03ed08292a75c396"
     },
     {
       "path": "scenarios/03-transition-committed/invocation.json",
@@ -171,7 +171,7 @@
     },
     {
       "path": "scenarios/03-transition-committed/scenario.json",
-      "sha256": "sha256:e16921c7cd962dcbf501ec5f6c512bd1370c4283939cdfd7f204e2dfdd490a07"
+      "sha256": "sha256:03f58aec82c1a83f22ed96537987f92e0c9eab8e37d3183cfb70b3e9a1da9f26"
     },
     {
       "path": "scenarios/04-patch-body-committed/after/wb_01Q4ZK3DG020ANANANANANANAM.md",
@@ -187,11 +187,11 @@
     },
     {
       "path": "scenarios/04-patch-body-committed/expected-adapter-result.json",
-      "sha256": "sha256:dbc27e299ec40de4c743db1853eec53956bd190d2b9d2ae060158ebad3a94add"
+      "sha256": "sha256:6d59e5ebf94160aa25a912404b028b2e3d5e646ce31e065a1eb3130a6b669b06"
     },
     {
       "path": "scenarios/04-patch-body-committed/expected-core-stdout.jsonl",
-      "sha256": "sha256:cc447ac432fe3fd01b56de98a1abde5923aa5f498ef429e542ab7f9180aad964"
+      "sha256": "sha256:ddd00caddbb8ade577ce638ebbba997c39ca8e0c7bf4fc06293dea184ccbeaac"
     },
     {
       "path": "scenarios/04-patch-body-committed/invocation.json",
@@ -203,7 +203,7 @@
     },
     {
       "path": "scenarios/04-patch-body-committed/scenario.json",
-      "sha256": "sha256:98b2c4dc2f1f3aeced4511d08119f983a8823e8e1c9e0befe6eacf9e745d193d"
+      "sha256": "sha256:929089ec65af28d8734aea11cfada25c578a0e2fc7c5f146213702c5d8eed3d5"
     },
     {
       "path": "scenarios/05-patch-extensions-committed/after/wb_01Q4ZK3DG020ANANANANANANAM.md",
@@ -223,11 +223,11 @@
     },
     {
       "path": "scenarios/05-patch-extensions-committed/expected-adapter-result.json",
-      "sha256": "sha256:ae6388c36905ae6b5669de6c57458d357a8f933e99ad9e2ab999a455aed53633"
+      "sha256": "sha256:def37563d5611db6f9e2c08f694157f9b056d7c2f71f29001ad742427016f929"
     },
     {
       "path": "scenarios/05-patch-extensions-committed/expected-core-stdout.jsonl",
-      "sha256": "sha256:506524f6f728e94cbc7387c14c97160786ec96c97531670bde271c9747e5abbd"
+      "sha256": "sha256:9c701d78dc2b0f5fd06e751733821ddceede91d40904f36aca2b8eac6d52b913"
     },
     {
       "path": "scenarios/05-patch-extensions-committed/invocation.json",
@@ -239,7 +239,7 @@
     },
     {
       "path": "scenarios/05-patch-extensions-committed/scenario.json",
-      "sha256": "sha256:3f7f5768a10cd19484357c50a1638fa482293fda119ecfe99553754c18df08cf"
+      "sha256": "sha256:960959cd2e78c73b9c0acce98db1990e5be4969f06be386f4150758f5c855eba"
     },
     {
       "path": "scenarios/06-transition-date-refused/before/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
@@ -251,11 +251,11 @@
     },
     {
       "path": "scenarios/06-transition-date-refused/expected-adapter-result.json",
-      "sha256": "sha256:043f4b30ce622287c30ddbaf729095b3ca728537b336ff2dd765c273d7b51876"
+      "sha256": "sha256:22f05df59031989146b4d75e6f0be5716b8093e185ffaef18d483de2665ea9ba"
     },
     {
       "path": "scenarios/06-transition-date-refused/expected-core-stdout.jsonl",
-      "sha256": "sha256:2b5127cec1ba846f8b1f087b7ecd6773fb3d6641563dbacc5b066fb24fea4c44"
+      "sha256": "sha256:152bce44b3f8c460034ee3aa73cb439db0b51ad435b99017277da03d461d0091"
     },
     {
       "path": "scenarios/06-transition-date-refused/invocation.json",
@@ -267,7 +267,7 @@
     },
     {
       "path": "scenarios/06-transition-date-refused/scenario.json",
-      "sha256": "sha256:9ac5357c2410afcbe4f036c77103c3652057a98563f6ea4b0a0c557e671b59cb"
+      "sha256": "sha256:8e20577e0ae91e01b7c9b08ab65a57b5314d848676b8386be2686b4f28fba5cc"
     },
     {
       "path": "scenarios/07-create-claimed-item-write-refused/before/namespace",

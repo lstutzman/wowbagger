@@ -22,13 +22,18 @@ const INPUT_DELIVERY_STATES = ['delivered', 'failed', 'unread'];
 const PLATFORM_KEYS = ['darwin', 'linux', 'win32'];
 const PLATFORM_STATUS = new Set(['supported', 'unsupported', 'unverified']);
 const ADAPTER_CONTRACT_VERSION = 2;
-const CORE_CONTRACT_VERSION = 3;
+const CORE_CONTRACT_VERSION = 4;
+// Written independently of `src/limits.js`: the oracle pins the contract value,
+// never the production constant.
+const MAX_ITEM_SOURCE_BYTES = 8388608;
+const WORK_CLAIM_API_VERSION = 2;
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],
   ['transition-precondition-failed', 2],
   ['patch-precondition-failed', 2],
   ['candidate-invalid', 2],
+  ['item-source-too-large', 2],
   ['items-directory-unavailable', 2],
   ['ledger-invalid', 3],
   ['revision-conflict', 4],
@@ -77,18 +82,21 @@ const CORE_ERROR_CODES_BY_COMMAND = Object.freeze({
   inspect: new Set(['invalid-request', 'item-not-found', 'ledger-invalid']),
   create: new Set([
     'invalid-request', 'ledger-invalid', 'lock-held', 'id-collision', 'path-collision',
-    'candidate-invalid', 'items-directory-unavailable', 'capability-unavailable',
+    'candidate-invalid', 'item-source-too-large', 'items-directory-unavailable',
+    'capability-unavailable',
     'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
   ]),
   transition: new Set([
     'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
     'revision-conflict', 'atomic-scope-required', 'transition-precondition-failed',
-    'candidate-invalid', 'operation-failed', 'post-commit-recovery-required',
+    'candidate-invalid', 'item-source-too-large', 'operation-failed',
+    'post-commit-recovery-required',
     'write-outcome-unknown',
   ]),
   patch: new Set([
     'invalid-request', 'item-not-found', 'ledger-invalid', 'lock-held',
     'revision-conflict', 'patch-precondition-failed', 'candidate-invalid',
+    'item-source-too-large',
     'operation-failed', 'post-commit-recovery-required', 'write-outcome-unknown',
   ]),
 });
@@ -618,7 +626,7 @@ export function referenceCoreCapabilities() {
         },
         work_claim: {
           supported: false,
-          api_version: 1,
+          api_version: WORK_CLAIM_API_VERSION,
           mode: 'advisory',
           claim_protected_publication: false,
           fencing_enforced_at: 'none',
@@ -632,6 +640,7 @@ export function referenceCoreCapabilities() {
         power_loss_guarantee: 'none',
       },
       limits: {
+        max_item_source_bytes: MAX_ITEM_SOURCE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,
@@ -1401,7 +1410,7 @@ function coreCapabilitiesSchemaIssue(value) {
     'fencing_enforced_at', 'safe_exclusive_dispatch',
   ])
     || typeof workClaim.supported !== 'boolean'
-    || workClaim.api_version !== 1
+    || workClaim.api_version !== WORK_CLAIM_API_VERSION
     || workClaim.mode !== 'advisory'
     || workClaim.claim_protected_publication !== false
     || workClaim.fencing_enforced_at !== 'none'
@@ -1418,10 +1427,12 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.durability.power_loss_guarantee !== 'none') return 'result.durability';
   const limits = result.limits;
   if (!hasExactKeys(limits, [
+    'max_item_source_bytes',
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection',
     'automatic_stale_lock_breaking',
   ])
+    || limits.max_item_source_bytes !== MAX_ITEM_SOURCE_BYTES
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
     || limits.cross_worktree_coordination !== false
@@ -1984,6 +1995,7 @@ function coreErrorMessageMatches(code, command, message) {
     'transition-precondition-failed': 'The requested lifecycle transition failed its preconditions.',
     'patch-precondition-failed': 'The requested patch failed its preconditions.',
     'candidate-invalid': 'The proposed item would make the ledger invalid.',
+    'item-source-too-large': 'The proposed item source exceeds the supported byte limit.',
     'items-directory-unavailable': 'The configured items directory is unavailable.',
     'revision-conflict': 'The item changed after it was inspected.',
     'lock-held': 'The item is locked by another cooperative Wowbagger writer.',
@@ -2030,6 +2042,11 @@ function validCoreErrorDetails(code, details, command, responseContext) {
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validPatchIssues(details.issues, patchExtensionMembers(responseContext, command))
       && details.issues.length > 0;
+    case 'item-source-too-large': return hasExactKeys(details, [
+      'id', 'size_bytes', 'limit_bytes',
+    ]) && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
+      && details.limit_bytes === MAX_ITEM_SOURCE_BYTES
+      && Number.isSafeInteger(details.size_bytes) && details.size_bytes > MAX_ITEM_SOURCE_BYTES;
     case 'candidate-invalid': return hasExactKeys(details, ['id', 'validation_errors'])
       && WOWBAGGER_ID.test(details.id) && matchesItemId(details.id)
       && validValidationErrors(details.validation_errors) && details.validation_errors.length > 0;

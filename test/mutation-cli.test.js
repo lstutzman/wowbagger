@@ -162,7 +162,7 @@ test('create refuses an absent configured items directory by name before it lock
     assert.deepEqual(JSON.parse(result.stdout), {
       ok: false,
       command: 'create',
-      contract_version: 3,
+      contract_version: 4,
       state: 'unchanged',
       error: {
         code: 'items-directory-unavailable',
@@ -499,7 +499,7 @@ test('contract JSON commands return deterministic invalid-request envelopes for 
     const expected = {
       ok: false,
       command,
-      contract_version: 3,
+      contract_version: 4,
       ...(command === 'create' || command === 'transition' ? { state: 'unchanged' } : {}),
       error: {
         code: 'invalid-request',
@@ -520,7 +520,7 @@ test('an unreadable mutation input is an invalid-request input issue before an I
   const expected = {
     ok: false,
     command: 'create',
-    contract_version: 3,
+    contract_version: 4,
     state: 'unchanged',
     error: {
       code: 'invalid-request',

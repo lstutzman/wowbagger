@@ -1,11 +1,11 @@
 # Work-claim contract
 
 Status: accepted protocol design. The standalone Wowbagger CLI implements the
-version 1 claim operations and the merge-coordinated Git-journal profile for
+version 2 claim operations and the merge-coordinated Git-journal profile for
 provisioned Git-backed ledgers. The no-I/O reference model and conformance
 fixtures remain the oracle for the strict fenced protocol.
 
-This document defines version 1 of the transport-neutral work-claim and
+This document defines version 2 of the transport-neutral work-claim and
 claimed-publication API, plus the merge-coordinated capability profile. The
 words MUST, MUST NOT, SHOULD, and MAY are normative. JSON examples show objects
 before compact serialization; a CLI prints exactly one compact JSON object
@@ -14,13 +14,34 @@ followed by LF.
 Work-claim version negotiation uses
 `result.operations.work_claim.api_version` from
 `claim capabilities --ledger <dir> --json`. The top-level
-`contract_version: 1` remains the legacy claim-envelope marker. It is not the
-core mutation contract version and MUST NOT be compared with the
-`contract_version` from core `capabilities --json`.
+`contract_version: 1` remains the legacy claim-envelope marker. It does not
+move with the API version, it is not the core mutation contract version, and it
+MUST NOT be compared with the `contract_version` from core
+`capabilities --json`.
 
 Generic consumers migrate without a wire change: they first identify the
 work-claim envelope by `namespace: "work-claim"`, then require the advertised
-`api_version`. Existing version 1 consumers can keep exact-member validation.
+`api_version`.
+
+### Version 2
+
+Version 2 retains every version 1 request, response, state, exit, fencing, and
+recovery rule except for this one delta, which is the complete difference
+against published version 1 (`0.1.0-alpha.6`):
+
+- **`publish-claimed` names an oversized candidate.** A candidate that decodes
+  to more than 8,388,608 bytes returned exit 2 `invalid-request` with message
+  `The candidate source is not canonical base64.` and
+  `details.field: "candidate_source_base64"`. It now returns exit 2
+  `item-source-too-large` (section 6). The accepted publication set does not
+  narrow — the same candidates are accepted and the same candidates are refused
+  — but a version 1 consumer that pinned the old code, message, or details for
+  that input is wrong about a real response, so the version moves and such a
+  consumer fails closed.
+
+Malformed base64 keeps its version 1 `invalid-request` unchanged: without
+canonical base64 there is no item source to measure, so spelling still decides
+first. The serialized-request transport bound is unchanged.
 
 This contract owns three `namespace` values, and all three carry
 `contract_version: 1`: `work-claim` for claim lifecycle operations,
@@ -157,7 +178,7 @@ most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
     "operations": {
       "work_claim": {
         "supported": true,
-        "api_version": 1,
+        "api_version": 2,
         "mode": "fenced",
         "claim_protected_publication": true,
         "fencing_enforced_at": "ledger-publication-commit-boundary",
@@ -245,7 +266,7 @@ A provisioned Git-journal backend MAY instead report:
   "operations": {
     "work_claim": {
       "supported": true,
-      "api_version": 1,
+      "api_version": 2,
       "mode": "merge-coordinated",
       "claim_protected_publication": true,
       "fencing_enforced_at": "git-history-reconciliation",
@@ -619,7 +640,7 @@ the exact normalized read-back in `error.details`.
 
 ## 6. Claimed publication API
 
-The public operation is `ledger-publication.publish-claimed` version 1. It
+The public operation is `ledger-publication.publish-claimed` version 2. It
 accepts exactly:
 
 ```json
@@ -648,8 +669,9 @@ and compares it before any revision, clock, fence, or candidate-ledger
 decision. `expected_revision` and `candidate_sha256` are
 lowercase `sha256:` plus 64 hexadecimal digits. `candidate_source_base64` is
 canonical padded RFC 4648 base64 without whitespace and decodes to at most
-8,388,608 bytes. Its SHA-256 MUST equal `candidate_sha256`. The candidate is
-the complete replacement ledger source, not a patch.
+8,388,608 bytes, the same `max_item_source_bytes` the core capability envelope
+advertises. Its SHA-256 MUST equal `candidate_sha256`. The candidate is the
+complete replacement ledger source, not a patch.
 
 The CLI bounds the complete serialized `publish-claimed` request at 11,534,336
 bytes before end-of-stream or JSON parsing. This limit admits every valid
@@ -691,6 +713,7 @@ version 1 ledger item and require its canonical `id` to equal the request's
 | 1 | 2 `invalid-request` | `The request is not unique-key UTF-8 JSON.` |
 | 2 | 2 `invalid-request` | `The request does not match publish-claimed version 1.` |
 | 2, base64 | 2 `invalid-request` | `The candidate source is not canonical base64.` |
+| 2, size | 2 `item-source-too-large` | `The proposed item source exceeds the supported byte limit.` |
 | 2, digest | 2 `candidate-digest-mismatch` | `The candidate digest does not match the candidate source.` |
 | 3 | 2 `ledger-namespace-unbound` | `The ledger namespace is not provisioned for this endpoint.` |
 | 4 | 4 `idempotency-conflict` | `The operation identity is already bound to a different request.` |
@@ -715,6 +738,14 @@ MUST omit `operation_id`: it cannot echo what it never read, and inventing one
 would be a guess. A conformance comparison against the reference transcript
 therefore excludes `operation_id` when the backend under test refuses before
 reading.
+
+The `2, base64` and `2, size` rows are ordered: a candidate that is not
+canonical base64 is not an item source, so it can never be measured. Only a
+canonical candidate reaches the size decision, and when it does the size
+decision precedes the digest, the namespace binding, the durable
+`operation_id` lookup, and candidate-ledger validation. `item-source-too-large`
+details are exactly `{item_id, size_bytes, limit_bytes}` and the envelope keeps
+its top-level `operation_id`.
 
 Steps 1 through 3 use `state: "unchanged"` and deterministic `details` naming
 the first invalid JSON pointer or namespace. Step 5 details are the ordered

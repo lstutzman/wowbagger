@@ -193,7 +193,7 @@
   "artifacts": [
     {
       "path": "scenarios.json",
-      "sha256": "sha256:2a86cd1ac4faa348fdc4b89767f2b794ff697a59fb9e1d845868fe5a2ca7f1fa"
+      "sha256": "sha256:8b8553f6e748633529d964ad83dc6619598f62a2da6a693885fa85c265183196"
     }
   ]
 }

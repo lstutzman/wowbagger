@@ -44,7 +44,7 @@
     {
       "path": "expected-core-stdout.jsonl",
       "source": "spec/fixtures/mutations/patch-body/expected.json",
-      "sha256": "sha256:91d7375c6336fe9d7a33bcfa6a9da96b3845c19228cbea5667d9258ddf38a50a",
+      "sha256": "sha256:8d847914a0f75b8246a018b24eefa4d6688abeafcdf7e445bb96f858ac76ef9f",
       "form": "compact-json-line"
     }
   ]
