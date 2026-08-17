@@ -16,6 +16,9 @@ const SAFE_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const NONCE = /^[A-Za-z0-9._-]{16,128}$/;
 const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
+// What the runner may say about the request it wrote to the core's standard
+// input. Only `delivered` means the core received the whole request.
+const INPUT_DELIVERY_STATES = ['delivered', 'failed', 'unread'];
 const PLATFORM_KEYS = ['darwin', 'linux', 'win32'];
 const PLATFORM_STATUS = new Set(['supported', 'unsupported', 'unverified']);
 const ADAPTER_CONTRACT_VERSION = 2;
@@ -407,9 +410,18 @@ export function mapProcessOutcome({
     return mutationUnknown(base, command, itemId, expectedRevision, process, null, responseContext);
   }
   if (process.timed_out) {
+    // A request the runner reports as anything other than delivered never
+    // reached the core. The wait that followed is then the adapter's own
+    // silence, not an unobservable core hang, and it is named as such.
+    const requestArrived = !Object.hasOwn(process, 'input_delivery')
+      || process.input_delivery === 'delivered';
     return {
       ...base,
-      error: outerAdapterError('core-timeout', {}),
+      error: requestArrived
+        ? outerAdapterError('core-timeout', {})
+        : outerAdapterError('core-observation-incomplete', {
+            reason: 'core-input-undelivered', input_delivery: process.input_delivery,
+          }),
       process: processSummary(process, command, responseContext),
     };
   }
@@ -2403,7 +2415,11 @@ function processObservationIssue(process) {
   if (!hasExactKeys(process, [
     'started', 'process_tree_contained', 'orphaned', 'exit_code', 'signal', 'timed_out',
     'stdout_complete', 'stderr_complete', 'stdout_base64', 'stderr_base64',
-  ])) return 'members';
+  ], ['input_delivery'])) return 'members';
+  const claimsDelivery = Object.hasOwn(process, 'input_delivery');
+  if (claimsDelivery && !INPUT_DELIVERY_STATES.includes(process.input_delivery)) {
+    return 'input_delivery';
+  }
   for (const member of [
     'started', 'process_tree_contained', 'orphaned', 'timed_out',
     'stdout_complete', 'stderr_complete',
@@ -2417,7 +2433,10 @@ function processObservationIssue(process) {
   const stderr = decodeCanonicalBase64(process.stderr_base64);
   if (stderr === null) return 'stderr_base64';
   if (!process.started) {
+    // Nothing was written to a core that never ran, so any delivery claim here
+    // contradicts the observation that is supposed to prove a clean non-start.
     if (process.exit_code !== null || process.signal !== null || process.timed_out
+      || claimsDelivery
       || !process.process_tree_contained || process.orphaned
       || !process.stdout_complete || !process.stderr_complete
       || stdout.length !== 0 || stderr.length !== 0) {

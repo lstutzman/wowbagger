@@ -390,6 +390,25 @@ test('the core launcher reports an input write a living core never drains', asyn
   assert.equal(observation.input_delivery, 'unread');
 });
 
+// A launch that never happened wrote nothing, so it must claim no delivery
+// state at all. Claiming one contradicts `started: false`, and the classifier
+// then loses the deterministic `core-launch-failed` this observation proves.
+test('the core launcher claims no delivery state when the core never started', async (t) => {
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-core-nostart-'));
+  t.after(() => rm(temporaryDirectory, { force: true, recursive: true }));
+
+  const observation = await launchCoreProcess({
+    executable: path.join(temporaryDirectory, 'never-runs.js'),
+    argv: [],
+    cwd: path.join(temporaryDirectory, 'absent-working-directory'),
+    input: Buffer.alloc(1024 * 1024, 0x61),
+    limits: { stdout_bytes: 4096, stderr_bytes: 4096, timeout_ms: 5000 },
+  });
+
+  assert.equal(observation.started, false);
+  assert.equal(Object.hasOwn(observation, 'input_delivery'), false);
+});
+
 // The ordinary case has to be nameable too, or the classifier cannot tell a
 // core that never got its request from one that got it and misbehaved. The
 // core here proves delivery by counting the bytes it read.
