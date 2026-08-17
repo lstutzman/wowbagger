@@ -5,7 +5,7 @@ number: 113
 title: "Give unauthorized-revision a non-destructive adoption remedy"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
