@@ -5,9 +5,10 @@ number: 124
 title: "Repair the release channels and make the cut a command"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T15:48:55Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Ideation survivor: latest serves dead alpha.1 to every bare install today; the cut command kills a proven drift class."
+  - action: complete
+    date: 2026-08-17
+    summary: "Release channels checkable; the cut is one command."
+    rationale: "release:channels check/repair encodes the prerelease policy (next only, no latest, alpha.1 deprecated); release:cut proves version-site coverage by exact-set equality against a checked-in manifest, gates on a copy, and cuts one commit plus an annotated tag on the release-branch tip. Live registry repair deferred to the maintainer's passkey. The manifest's fail-closed refusal fired on this very session's new doc, as designed."
 ---
 
 Ideation survivor 3 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-release.md - the enrichment is the authoritative scope; this body is its summary.
