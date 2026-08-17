@@ -404,3 +404,220 @@ test('patch counts multi-byte UTF-8 successor bytes, not string length', async (
   assert.equal(refused.envelope.error.details.size_bytes, LIMIT + 1);
   assert.equal(refused.committed.toString('utf8'), refused.before);
 });
+
+// A ledger committed before the bound existed must stay readable and
+// repairable. Only its successors are bounded.
+const LEGACY_BODY_BYTES = LIMIT + 4096;
+
+async function withLegacyOversizedLedger(callback) {
+  const source = seedSource(LEGACY_BODY_BYTES);
+  assert.ok(Buffer.byteLength(source, 'utf8') > LIMIT);
+  return withLedger({ [`${TARGET_ID}.md`]: source }, async (ledger) => callback(ledger, source));
+}
+
+test('a legacy oversized item still validates clean', async () => {
+  await withLegacyOversizedLedger(async (ledger) => {
+    const result = runLargeCli('validate', '--ledger', ledger, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { valid: true, errors: [] });
+  });
+});
+
+test('a legacy oversized item is still inspectable', async () => {
+  await withLegacyOversizedLedger(async (ledger, source) => {
+    const result = runLargeCli('inspect', '--ledger', ledger, '--id', TARGET_ID, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.ok, true);
+    assert.equal(envelope.result.item.revision, revisionOf(source));
+    assert.equal(
+      Buffer.from(envelope.result.item.source_base64, 'base64').toString('utf8'),
+      source,
+    );
+  });
+});
+
+test('a patch that shrinks a legacy oversized item under the bound is accepted', async () => {
+  await withLegacyOversizedLedger(async (ledger, source) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: TARGET_ID,
+      expected_revision: revisionOf(source),
+      date: PATCH_DATE,
+      set: { body: '\nrepaired\n' },
+    }), 'utf8');
+
+    const result = runLargeCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 0, result.stderr);
+    const committed = await readFile(path.join(ledger, `${TARGET_ID}.md`));
+    assert.ok(committed.length < LIMIT);
+    assert.equal(JSON.parse(result.stdout).state, 'committed');
+  });
+});
+
+test('a patch that leaves a legacy oversized item over the bound refuses', async () => {
+  await withLegacyOversizedLedger(async (ledger, source) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: TARGET_ID,
+      expected_revision: revisionOf(source),
+      date: PATCH_DATE,
+      set: { priority: 30 },
+    }), 'utf8');
+
+    const result = runLargeCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2);
+    assert.equal(JSON.parse(result.stdout).error.code, 'item-source-too-large');
+    assert.equal((await readFile(path.join(ledger, `${TARGET_ID}.md`))).toString('utf8'), source);
+  });
+});
+
+test('a body append to a legacy oversized item refuses', async () => {
+  await withLegacyOversizedLedger(async (ledger, source) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: TARGET_ID,
+      expected_revision: revisionOf(source),
+      date: PATCH_DATE,
+      set: { body_append: 'more\n' },
+    }), 'utf8');
+
+    const result = runLargeCli('patch', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2);
+    assert.equal(JSON.parse(result.stdout).error.code, 'item-source-too-large');
+    assert.equal((await readFile(path.join(ledger, `${TARGET_ID}.md`))).toString('utf8'), source);
+  });
+});
+
+test('a transition of a legacy oversized item refuses', async () => {
+  await withLegacyOversizedLedger(async (ledger, source) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: TARGET_ID,
+      expected_revision: revisionOf(source),
+      ...TRANSITION_REQUEST,
+    }), 'utf8');
+
+    const result = runLargeCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2);
+    assert.equal(JSON.parse(result.stdout).error.code, 'item-source-too-large');
+    assert.equal((await readFile(path.join(ledger, `${TARGET_ID}.md`))).toString('utf8'), source);
+  });
+});
+
+// Size is not the first question a door asks. Every refusal class the engine
+// already decided before serializing a successor still wins, and the classes it
+// decides after the successor exists lose.
+const OVERSIZED_BODY = LIMIT + 4096;
+
+test('an invalid ledger still refuses before the successor is measured', async () => {
+  const source = seedSource(OVERSIZED_BODY);
+  await withLedger({
+    [`${TARGET_ID}.md`]: source,
+    'broken.md': 'not an item\n',
+  }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: TARGET_ID, expected_revision: revisionOf(source), ...TRANSITION_REQUEST,
+    }), 'utf8');
+
+    const result = runLargeCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 3);
+    assert.equal(JSON.parse(result.stdout).error.code, 'ledger-invalid');
+  });
+});
+
+test('a missing item still refuses before the successor is measured', async () => {
+  const { result, envelope } = await runOnSeeded('transition', OVERSIZED_BODY, {
+    ...TRANSITION_REQUEST,
+    id: 'wb_01Q4AS1Y80248J48HK6D248NAM',
+  });
+
+  assert.equal(result.status, 2);
+  assert.equal(envelope.error.code, 'item-not-found');
+});
+
+test('a stale revision still refuses before the successor is measured', async () => {
+  const { result, envelope } = await runOnSeeded('transition', OVERSIZED_BODY, {
+    ...TRANSITION_REQUEST,
+    expected_revision: `sha256:${'0'.repeat(64)}`,
+  });
+
+  assert.equal(result.status, 4);
+  assert.equal(envelope.error.code, 'revision-conflict');
+});
+
+test('a failed transition precondition still refuses before the successor is measured', async () => {
+  const { result, envelope } = await runOnSeeded('transition', OVERSIZED_BODY, {
+    ...TRANSITION_REQUEST,
+    date: '2030-01-11',
+  });
+
+  assert.equal(result.status, 2);
+  assert.equal(envelope.error.code, 'transition-precondition-failed');
+});
+
+test('a failed patch precondition still refuses before the successor is measured', async () => {
+  const { result, envelope } = await runOnSeeded('patch', OVERSIZED_BODY, {
+    date: '2030-01-11',
+    set: { priority: 30 },
+  });
+
+  assert.equal(result.status, 2);
+  assert.equal(envelope.error.code, 'patch-precondition-failed');
+});
+
+test('an ID collision still refuses before the create candidate is measured', async () => {
+  const overhead = await createOverheadBytes();
+  const existing = [
+    '---',
+    'schema_version: 2',
+    `id: ${CREATE_ID}`,
+    'number: 1',
+    'title: "Already here"',
+    'kind: task',
+    'status: backlog',
+    'created: 2030-01-10',
+    'updated: 2030-01-10',
+    'provenance:',
+    '  source: "fixture/item-source-limit"',
+    '  recorded_at: "2030-01-10T12:34:56.789Z"',
+    'depends_on: []',
+    'related: []',
+    '---',
+    '',
+    'already here',
+    '',
+  ].join('\n');
+  await withLedger({ [`${CREATE_ID}.md`]: existing }, async (ledger) => {
+    const { result, envelope } = await runCreate(ledger, 'x'.repeat(LIMIT - overhead + 1));
+
+    assert.equal(result.status, 4);
+    assert.equal(envelope.error.code, 'id-collision');
+  });
+});
+
+// candidate-invalid is decided from the serialized successor, so the successor
+// must be within the bound before the question is worth asking.
+test('an oversized create that would also invalidate the ledger reports its size', async () => {
+  const overhead = await createOverheadBytes();
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    const request = createRequest('x'.repeat(LIMIT - overhead + 1));
+    request.item.depends_on = ['wb_01Q4AS1Y80248J48HK6D248NAM'];
+    await writeFile(requestPath, JSON.stringify(request), 'utf8');
+
+    const result = runLargeCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+
+    assert.equal(result.status, 2);
+    assert.equal(JSON.parse(result.stdout).error.code, 'item-source-too-large');
+    await assertNothingPublished(ledger);
+  });
+});

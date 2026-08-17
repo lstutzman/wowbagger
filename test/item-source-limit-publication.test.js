@@ -53,12 +53,12 @@ ${body}`);
 
 // A provisioned ledger holding one committed item and one active claim, ready
 // for a publish-claimed request whose candidate the caller chooses.
-async function publicationFixture() {
+async function publicationFixture(body = 'before\n') {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-publish-limit-'));
   const ledger = path.join(root, 'ledger');
   assert.equal(spawnSync('git', ['init', '--quiet', root]).status, 0);
   await mkdir(ledger);
-  const before = itemSource('before\n');
+  const before = itemSource(body);
   await writeFile(path.join(ledger, 'item.md'), before);
 
   const provisioned = run(root, 'provision', '--ledger', ledger, '--json');
@@ -335,3 +335,27 @@ for (const operation of ['ledger-publication.preflight', 'ledger-publication.com
     assert.notEqual(result.transcript[0].stdout?.error?.code, 'item-source-too-large');
   });
 }
+
+// The claim fence decides before the legacy write runs at all, so an active
+// claim still refuses a transition whose successor would also be oversized.
+test('an active claim still refuses a legacy transition before the successor is measured', async () => {
+  const fixture = await publicationFixture('x'.repeat(LIMIT));
+  assert.ok((await readFile(fixture.itemPath)).length > LIMIT);
+  const requestPath = path.join(fixture.root, 'transition.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: ITEM_ID,
+    expected_revision: digestOf(fixture.before),
+    to_status: 'done',
+    date: '2030-01-13',
+    decision: { summary: 'Complete it.', rationale: 'Because the fence decides first.' },
+  }));
+
+  const refused = run(
+    fixture.root, 'transition', '--ledger', fixture.ledger, '--input', requestPath, '--json',
+  );
+
+  assert.equal(refused.exit, 4);
+  assert.equal(refused.envelope.namespace, 'ledger-mutation');
+  assert.equal(refused.envelope.error.code, 'active-claim-write-refused');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
