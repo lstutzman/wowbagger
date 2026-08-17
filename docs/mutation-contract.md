@@ -75,7 +75,17 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
   negotiated the narrower shape. A consumer that reads only
   `details.validation_errors` cannot observe the difference; a consumer that
   matches `ledger-invalid` details exactly must accept the optional member on
-  `inspect`, which is why this is listed as a delta rather than left silent.
+  `inspect`, which is why this is listed as a delta rather than left silent; and
+- **the documented inspect selector detail.** An `inspect` `item-not-found`
+  refusal carries the selector the request used — `details.id` for `--id`,
+  `details.number` for `--number` (section 5). This entry documents an already
+  published wire; it does not change one. `--number` and this refusal shipped
+  together in `0.1.0-alpha.5`, the release that published version 3, and that
+  release already emits `{"number": N}` here. No emitted byte moves, and no
+  version 2 consumer can have negotiated the narrower shape, because version 2
+  had no `--number` selector to reach it. What was wrong was the prose: section
+  5 claimed these details contain only `id` from the day `--number` shipped.
+  The version stays 3.
 
 Two version-2-era changes are deliberately **not** version 3 deltas. The
 section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
@@ -602,8 +612,13 @@ delimiter. It is not trimmed or normalized. An item with no bytes after the
 delimiter LF has body "". A conventional blank line before Markdown means body
 begins with LF.
 
-item-not-found exits 2 and has details containing only id. ledger-invalid exits
-3 and has details.validation_errors equal to the existing deterministic
+item-not-found exits 2 and has details containing exactly the selector the
+request used: id when the request selected by `--id`, number when it selected
+by `--number`. The one member present repeats the value the caller supplied,
+because the selector the caller named is the honest thing to hand back. Only
+inspect accepts `--number`; every other command that can refuse item-not-found
+selects an item by id alone, so their details contain only id. ledger-invalid
+exits 3 and has details.validation_errors equal to the existing deterministic
 SPEC.md validation-error sequence. Neither read-only error has state.
 
 An invalid ledger stays a refusal. Inspect does not fall back to reading one

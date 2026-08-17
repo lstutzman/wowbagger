@@ -5,6 +5,23 @@ A change to what a command accepts, refuses, emits, or writes is a behaviour
 change even when the commit that carried it was labelled refactor, docs, or
 consolidation. The first tagged release inherits this file.
 
+## Unreleased
+
+### Documentation
+
+- **The contract documents the selector an `inspect` `item-not-found` refusal
+  echoes.** `inspect --number <n>` on a number no item carries emits
+  `details: {"number": <n>}`, and it has done so since `--number` shipped in
+  0.1.0-alpha.5. Mutation contract section 5 claimed these details contain only
+  `id`, so the published prose and the published wire disagreed. Section 5 now
+  states the rule the runtime follows — the details carry exactly the selector
+  the request used, `id` for `--id` and `number` for `--number` — and
+  `spec/fixtures/mutations/inspect-number-not-found/` pins it. No emitted byte
+  changes and the core contract stays version 3: this documents a shipped
+  shape, it does not introduce one. The adapter surfaces still require id-only
+  details, deliberately: the adapter's `inspect` request accepts no `number`
+  member and always invokes `--id`, so it can never see the number variant.
+
 ## 0.1.0-alpha.5 - 2026-08-16
 
 ### Breaking
