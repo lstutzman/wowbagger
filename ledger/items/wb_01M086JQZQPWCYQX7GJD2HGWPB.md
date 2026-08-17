@@ -5,7 +5,7 @@ number: 125
 title: "Author end-to-end core-outcome vectors for the adapters"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
