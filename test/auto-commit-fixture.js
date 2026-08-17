@@ -83,12 +83,15 @@ export function sha256(value) {
   return `sha256:${createHash('sha256').update(value).digest('hex')}`;
 }
 
-export function itemSource(id, { number, title = 'Before', status = 'backlog', body = 'Before' } = {}) {
+export function itemSource(id, {
+  number, title = 'Before', status = 'backlog', body = 'Before', schemaVersion = 2,
+} = {}) {
+  // A schema-1 item has no number member at all: the generation that predates
+  // the human handle.
   return `---
-schema_version: 2
+schema_version: ${schemaVersion}
 id: ${id}
-number: ${number}
-title: "${title}"
+${schemaVersion === 2 ? `number: ${number}\n` : ''}title: "${title}"
 kind: task
 status: ${status}
 created: 2026-08-06
@@ -104,7 +107,7 @@ ${body}
 `;
 }
 
-export async function provisionedLedger({ items = [[ITEM_ID, 1]] } = {}) {
+export async function provisionedLedger({ items = [[ITEM_ID, 1]], schemaVersion = 2 } = {}) {
   const base = await mkdtemp(path.join(tmpdir(), 'wb-autocommit-'));
   const root = path.join(base, 'repo');
   await mkdir(root);
@@ -113,9 +116,15 @@ export async function provisionedLedger({ items = [[ITEM_ID, 1]] } = {}) {
   git(root, 'config', 'user.name', 'Wowbagger Test');
   const ledger = path.join(root, 'ledger');
   await mkdir(path.join(ledger, 'items'), { recursive: true });
+  await mkdir(path.join(ledger, '.wowbagger'), { recursive: true });
+  // The dogfood layout: items live under items/, so create publishes there.
+  await writeFile(
+    path.join(ledger, '.wowbagger', 'layout.json'),
+    `${JSON.stringify({ layout_version: 1, items_directory: 'items' })}\n`,
+  );
   const sources = new Map();
   for (const [id, number] of items) {
-    const source = itemSource(id, { number });
+    const source = itemSource(id, { number, schemaVersion });
     sources.set(id, source);
     await writeFile(path.join(ledger, 'items', `${id}.md`), source);
   }
@@ -169,11 +178,14 @@ export function patchRequest(fixture, id = ITEM_ID, overrides = {}) {
 export function createRequest(id, overrides = {}) {
   return {
     id,
-    title: 'Created by auto-commit',
-    kind: 'task',
+    item: {
+      title: 'Created by auto-commit',
+      kind: 'task',
+      provenance: { source: 'fixture/auto-commit', recorded_at: '2026-08-17T00:00:00Z' },
+      depends_on: [],
+      related: [],
+    },
     body: 'Created.\n',
-    date: '2026-08-17',
-    provenance: { source: 'fixture/auto-commit', recorded_at: '2026-08-17T00:00:00Z' },
     ...overrides,
   };
 }
