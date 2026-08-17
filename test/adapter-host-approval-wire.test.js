@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const shippedTargets = ['claude-code', 'codex', 'opencode'];
-const entrypointModule = fileURLToPath(new URL('../src/adapter/entrypoint-main.js', import.meta.url));
-const oracleModule = fileURLToPath(new URL('../spec/adapter-reference.js', import.meta.url));
+const entrypointModule = new URL('../src/adapter/entrypoint-main.js', import.meta.url).href;
+const oracleModule = new URL('../spec/adapter-reference.js', import.meta.url).href;
 const coreExecutable = path.join(projectRoot, 'bin', 'wowbagger.js');
 const createRequestPath = path.join(projectRoot, 'spec', 'fixtures', 'mutations', 'create', 'request.json');
 const createdItemPath = 'wb_01Q45X474N28T5CY4GNF6YY4HM.md';
