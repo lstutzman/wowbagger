@@ -16,7 +16,7 @@ decisions:
   - action: accept
     date: 2026-08-17
     summary: "Accept into the backlog."
-    rationale: "probe"
+    rationale: "Field-blocked consumer staging on published alpha.5; the only documented remedy discards reviewed, merged work."
 ---
 
 Field issue from PropertyCompass2 on published alpha.5 (their staging, 1,574-item provisioned ledger, docs/wowbagger-feedback.md on their side): `unauthorized-revision` has no non-destructive remedy. Their staging checkout is blocked exit 6 with three findings (observed_surface: working-tree, reason: unauthorized-revision) on items whose bodies were hand-edited in a design session and MERGED (their PRs #2208/#2209). The refusal is correct - the edits bypassed the protocol. The only documented remedy (work-claim contract section 3.1: "restore the authorized revision, then claim-verify") destroys reviewed, merged work. Their runnable workaround is three steps and rewrites updated: restore authorized bytes, claim-verify, re-apply through patch set.body.
