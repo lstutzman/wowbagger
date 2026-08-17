@@ -53,7 +53,9 @@ export async function withLedger(files, callback) {
 
     return await callback(ledger);
   } finally {
-    await rm(temporaryDirectory, { force: true, recursive: true });
+    // win32 releases child-held file handles asynchronously; bounded retries
+    // keep teardown from racing them. No effect elsewhere.
+    await rm(temporaryDirectory, { force: true, recursive: true, maxRetries: 10, retryDelay: 50 });
   }
 }
 
