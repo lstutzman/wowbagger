@@ -9,6 +9,38 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- **`set.extensions` gives consumer-owned extension members a sanctioned patch
+  path.** Two field reports in two days: a consumer's own identifier field
+  rides a permitted extension member, and a wrong or missing one had no
+  ledger-side repair verb at all. On a provisioned ledger the hand-edit that
+  filled the gap is a stale write, so the protocol was forcing the edit it then
+  punished. `patch` now accepts an `extensions` container whose members name
+  extension members and whose values replace each one whole; `null` removes a
+  member. The fixed `set` allowlist is unchanged — `extensions` is one more
+  name on it, not an opening for arbitrary keys — so a top-level typo is still
+  an `unknown-member` refusal. Which members the container may name comes from
+  the committed `<ledger>/.wowbagger/extensions.json`, which declares a member
+  name and one value type each (`string`, `integer`, `boolean`, `string-list`).
+  **A ledger without that file has no patchable extension member at all**, and
+  the refusal names the missing declaration. Five new
+  `patch-precondition-failed` issue codes carry the refusals —
+  `extension-declaration-missing`, `extension-declaration-invalid`,
+  `extension-not-declared`, `extension-value-invalid`, `extension-anchored` —
+  in the existing four-member issue shape, with the member at fault named in
+  `field`. A member the item writes with a YAML anchor or alias is refused
+  rather than replaced, because replacing it would change every node bound to
+  the anchor; every member the request does not name keeps its exact
+  `extensionNodeIdentity` guarantee. The declaration authorizes a write and
+  never describes the ledger: `validate` does not read it, so an item whose
+  extension member disagrees with it stays valid and stays repairable. Nested
+  extension values still have no patch path and stay a reviewable hand-edit.
+  Core contract version stays 3 — the patch request schema widens and no
+  response envelope member is added, removed, or renamed — but version 3 is
+  published, so `contract_version` cannot answer whether a core carries this:
+  probe by sending an extension patch and reading the refusal, or pin the
+  distribution version. Documented in mutation contract section 9 and pinned by
+  `spec/fixtures/mutations/patch-extensions/`.
+
 - **`claim-adopt` gives `unauthorized-revision` a non-destructive remedy.** A
   consumer's staging checkout was blocked exit 6 on three items whose bodies
   were hand-edited in a design session and merged. The refusal was correct, but

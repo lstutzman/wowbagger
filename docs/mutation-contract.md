@@ -1834,7 +1834,9 @@ multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
 unchanged/committed/unknown states; and patch field boundaries, CAS,
 serialization, preconditions, the body swap with its untouched
-frontmatter, and the body append with its exclusivity refusal.
+frontmatter, the body append with its exclusivity refusal, and the declared
+extension-member correction with its untouched anchored extension nodes and
+its undeclared-member refusal.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.
