@@ -927,6 +927,68 @@
         "state",
         "error"
       ]
+    },
+    {
+      "class": "create.item-source-too-large",
+      "domain": "core",
+      "command": "create",
+      "exit": 2,
+      "state": "unchanged",
+      "error_code": "item-source-too-large",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "transition.item-source-too-large",
+      "domain": "core",
+      "command": "transition",
+      "exit": 2,
+      "state": "unchanged",
+      "error_code": "item-source-too-large",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "patch.item-source-too-large",
+      "domain": "core",
+      "command": "patch",
+      "exit": 2,
+      "state": "unchanged",
+      "error_code": "item-source-too-large",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "publish-claimed.item-source-too-large",
+      "domain": "ledger-publication",
+      "command": "publish-claimed",
+      "exit": 2,
+      "state": "unchanged",
+      "error_code": "item-source-too-large",
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "operation_id",
+        "error"
+      ]
     }
   ]
 }
