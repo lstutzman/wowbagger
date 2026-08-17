@@ -4,6 +4,7 @@ id: wb_01M07V3M3AHKRPAYYNBV8V7DTF
 number: 118
 title: "Give consumer-owned extension members a sanctioned patch path"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-17
 updated: 2026-08-17
