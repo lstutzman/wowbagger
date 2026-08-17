@@ -7,6 +7,18 @@ consolidation. The first tagged release inherits this file.
 
 ## 0.1.0-alpha.5 - 2026-08-16
 
+### Breaking
+
+- **`number` is no longer caller-settable on schema version 2 ledgers.**
+  `create` refuses a request supplying `item.number` and assigns the next
+  number itself (`max + 1` under the number-index lock); `patch` refuses
+  `set.number` because the number is the immutable item identity. A consumer
+  mirroring a legacy backlog cannot carry its legacy numbers into wowbagger
+  handles — keep legacy identifiers in a permitted extension member or in the
+  item body instead. (Shipped as part of the number-as-identity work; this
+  notice was added after the 0.1.0-alpha.5 tarball was cut, so the packaged
+  changelog carries it only inside the contract version 3 delta note.)
+
 ### Added
 
 - **The report draws the whole ledger as a 3D dependency graph.** It sits below
