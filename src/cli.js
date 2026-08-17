@@ -467,7 +467,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       namespace,
       request,
       scenario,
-    }), scenario));
+    }), scenario, request.operation_id));
     return;
   }
 
@@ -837,9 +837,9 @@ function parseContractOptions(command, argumentsList) {
 
 // `--auto-commit` is the only bare flag beyond `--json`, and it changes what
 // happens after the mutation, never the mutation itself.
-function autoCommitted(command, options, run, scenario) {
+function autoCommitted(command, options, run, scenario, operationId = null) {
   if (!options.autoCommit) return run();
-  return withAutoCommit({ ledgerDirectory: options.ledger, command, run, scenario });
+  return withAutoCommit({ ledgerDirectory: options.ledger, command, operationId, run, scenario });
 }
 
 function argumentIssue(index, code, message) {

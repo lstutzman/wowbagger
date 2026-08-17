@@ -54,8 +54,8 @@ const COMMIT_SUBJECT_VERBS = {
   'publish-claimed': 'publish claimed',
 };
 
-export async function withAutoCommit({ ledgerDirectory, command, run, scenario }) {
-  const shape = command === 'publish-claimed' ? publicationShape() : coreShape(command);
+export async function withAutoCommit({ ledgerDirectory, command, operationId = null, run, scenario }) {
+  const shape = command === 'publish-claimed' ? publicationShape(operationId) : coreShape(command);
   let gitCommonDir;
   try {
     gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory, { failClosed: true });
@@ -604,7 +604,9 @@ function coreError(code, message, state, exit, details) {
   return { ok: false, exit, state, error: { code, message, details } };
 }
 
-function publicationShape() {
+// Every envelope this shape builds keeps the claimed-publication domain and its
+// top-level operation_id, so a failure answers where the success would have.
+function publicationShape(operationId) {
   const envelope = (state, exit, body) => ({
     exit,
     stdout: {
@@ -613,6 +615,7 @@ function publicationShape() {
       command: 'publish-claimed',
       contract_version: 1,
       state,
+      ...(operationId === null ? {} : { operation_id: operationId }),
       ...body,
     },
   });
@@ -656,19 +659,6 @@ function publicationShape() {
       operation_id: outcome.stdout.operation_id,
     }),
     command: 'publish-claimed',
-  };
-}
-
-// The publication envelopes above build their own root members, so a refusal
-// that must carry operation_id restores it from the request outcome.
-export function withOperationId(envelope, operationId) {
-  if (!operationId || !envelope.stdout || Object.hasOwn(envelope.stdout, 'operation_id')) return envelope;
-  const { ok, namespace, command, contract_version: contractVersion, state, ...rest } = envelope.stdout;
-  return {
-    ...envelope,
-    stdout: {
-      ok, namespace, command, contract_version: contractVersion, state, operation_id: operationId, ...rest,
-    },
   };
 }
 

@@ -7,6 +7,67 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- **`--auto-commit` folds the commit-per-mutation ceremony into the mutation.**
+  The invariant is correct and the ceremony around it was the consumer's most
+  frequent daily cost: mutate, `git add`, `git commit`, `claim-verify`, repeat,
+  ten times for ten items. On a provisioned merge-coordinated ledger the new
+  opt-in bare flag on `create`, `transition`, `patch`, and `publish-claimed`
+  does that loop inside one invocation. It takes a per-working-tree mutex,
+  refuses any staged path anywhere and any dirty path under the ledger, checks
+  Git identity, runs an internal pre-mutation `claim-verify`, runs the mutation
+  unchanged, then commits **exactly** the changed item plus at most one
+  `.wowbagger/reconcile-<namespace>.md` under a fixed subject
+  (`wowbagger: transition item #7`; the canonical item ID for a schema-1 item
+  with no number). It verifies the resulting commit's parent, subject,
+  changed-path set, and every blob, then runs `claim-verify` again before it
+  answers. Success adds `git_commit`, `commit_paths`, and `claim_verified` to
+  `result`.
+
+  There is no configuration file setting, environment default, or repository
+  default, because a hidden default would make existing mutation automation
+  create Git commits unexpectedly. An invocation without the flag is
+  byte-identical to before, so the core contract stays 3 and the work-claim API
+  stays 1. The flag is direct-CLI only in this release; no adapter advertises or
+  constructs it.
+
+  What it will not do: commit anything on `state: "unchanged"` or
+  `state: "unknown"`, including the documented reconcile-log residue a refused
+  `publish-claimed` leaves behind; stage a path outside the ledger; broad-add,
+  amend, squash, reset, clean, stash, or unstage; pass `--no-verify` or disable
+  signing; fabricate an author; customize a commit message; or push, fetch,
+  pull, merge, or rebase. Hooks through `core.hooksPath`, `commit.gpgSign`, and
+  signing programs are honoured, and a hook that rewrites the subject or the
+  tree is reported rather than accepted.
+
+- **An honest commit-failed contract, and one idempotent recovery verb.** A
+  post-publication Git failure that proves the commit is absent is exit 6
+  `git-commit-failed` with `state: "committed"` — the state still describes item
+  publication, not Git finalization — carrying the published revision, the exact
+  ledger-relative commit set with digests, `failure_stage`, `reason`, and a
+  bounded `recovery_token`. `create`, `transition`, and `patch` keep the core
+  domain; `publish-claimed` keeps `ledger-publication` and its top-level
+  `operation_id`. An **ambiguous** Git outcome is `git-commit-outcome-unknown`,
+  never `git-commit-failed`, and a commit that stands while reconciliation then
+  refuses is `post-commit-reconciliation-failed`. No failure envelope carries
+  hook output, signing output, absolute paths, or environment values.
+
+  New command: `wowbagger mutation-finalize --ledger <dir> --recovery-token
+  <token> --json`, answering in the work-claim domain because it changes Git
+  reconciliation state and no item byte. It re-derives every path from the
+  ledger and the provisioned namespace — the token is a witness, never authority
+  to select a path — re-checks the current bytes and the foreign-change rules,
+  creates the exact commit if it is absent, then runs `claim-verify`. When
+  `HEAD` already holds that exact commit it verifies and returns it without
+  creating a second one, so a lost response and a failed commit recover through
+  the same command, and repeating it is safe.
+
+  A failed attempt leaves its own commit set staged, because the design forbids
+  unstaging. Recovery tolerates exactly that residue and refuses anything else
+  staged; until it runs, the next `--auto-commit` invocation refuses on
+  `staged-paths-present`, which is the intended signal.
+
 ## 0.1.0-alpha.6 - 2026-08-17
 
 ### Added

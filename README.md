@@ -649,6 +649,43 @@ repeat the refused command.
 Batch work is where this bites. Filing ten items means ten commits, not one
 commit at the end.
 
+### Or fold the commit into the mutation
+
+`--auto-commit` performs that whole loop inside one invocation, on a provisioned
+ledger only:
+
+```sh
+./bin/wowbagger.js transition --ledger path/to/ledger --input next.json --json --auto-commit
+```
+
+It is opt-in per invocation. There is no configuration setting or environment
+default, because a hidden default would make existing automation create Git
+commits unexpectedly. The flag is accepted on `create`, `transition`, `patch`,
+and `publish-claimed`.
+
+What one flagged invocation does: refuse if anything is staged anywhere or any
+path under the ledger is dirty; reconcile; run the mutation unchanged; commit
+exactly the changed item and at most one
+`.wowbagger/reconcile-<namespace>.md` with a fixed subject such as
+`wowbagger: transition item #7`; verify the commit; then run `claim-verify`
+before it answers. On success the result gains `git_commit`, `commit_paths`, and
+`claim_verified`.
+
+Unstaged and untracked files **outside** the ledger are left alone. Hooks and
+signing are honoured; `--no-verify` is never passed. Nothing is pushed.
+
+A refused mutation never commits. When the item is published but the commit
+fails, the answer is exit 6 `git-commit-failed` with a recovery token, and one
+idempotent command finishes the job:
+
+```sh
+./bin/wowbagger.js mutation-finalize --ledger path/to/ledger --recovery-token <token> --json
+```
+
+Repeating it creates no second commit, so a lost response and a failed commit
+recover the same way. [docs/mutation-contract.md](docs/mutation-contract.md)
+section 13 is the full contract.
+
 ### When the item was changed outside the protocol
 
 An `unauthorized-revision` finding means someone edited the item without going

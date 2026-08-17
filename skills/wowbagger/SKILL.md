@@ -359,6 +359,41 @@ edit a ledger file to get past it.
 Batch work is where this bites: filing ten items means ten commits, not one
 commit at the end. Tell the user that before starting a batch.
 
+### Or use --auto-commit and let one invocation do it
+
+On a provisioned ledger, `--auto-commit` performs that whole loop inside one
+invocation. It is accepted on `create`, `transition`, `patch`, and
+`publish-claimed`, once each, and only with the flag present — there is no
+setting that turns it on for you.
+
+```sh
+wowbagger transition --ledger <dir> --input next.json --json --auto-commit
+```
+
+One flagged invocation refuses if anything is staged anywhere or any path under
+the ledger is dirty, reconciles, runs the mutation unchanged, commits exactly
+the changed item plus at most one `.wowbagger/reconcile-<namespace>.md` with a
+fixed subject, verifies that commit, and runs `claim-verify` before it answers.
+Success adds `git_commit`, `commit_paths`, and `claim_verified` to `result`.
+
+Say these limits plainly when you use it:
+
+- A refused mutation never commits. `state: "unchanged"` means no Git action.
+- Files outside the ledger are never staged, and nothing is ever pushed.
+- Hooks and signing run. It never passes `--no-verify`.
+- It does not make claims exclusive. `safe_exclusive_dispatch` is still false.
+
+When the item is published but the commit fails, the answer is exit 6
+`git-commit-failed` carrying `recovery_token`. Do not retry the mutation and do
+not hand-commit. Run the one recovery command, which is idempotent:
+
+```sh
+wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json
+```
+
+An ambiguous Git outcome is `git-commit-outcome-unknown` instead. Stop, report
+it, and inspect before writing anything else.
+
 ## Work claims are merge-coordinated
 
 ```sh
@@ -366,9 +401,13 @@ wowbagger claim capabilities --ledger <dir> --json
 wowbagger provision --ledger <dir> --json
 wowbagger claim capabilities --ledger <dir> --json
 wowbagger claim read|acquire|renew|release --ledger <dir> --input request.json --json
-wowbagger publish-claimed --ledger <dir> --input request.json --json
+wowbagger publish-claimed --ledger <dir> --input request.json --json [--auto-commit]
 wowbagger claim-verify --ledger <dir> --json
 ```
+
+`--auto-commit` on `publish-claimed` commits the published item and its
+reconciliation log and runs `claim-verify` in the same invocation, so the
+claimed loop needs no separate commit step.
 
 The Git-backed capability reports `mode: "merge-coordinated"` and
 `safe_exclusive_dispatch: false`. Say both facts plainly. An acquire uses
@@ -493,7 +532,8 @@ response envelopes, refusal precedence, and recovery rules.
    require exit 0 before the next `create`, `transition`, or `patch`.
 
 Write, commit, `claim-verify`, next write. The unclaimed loop obeys the same
-rule as the claimed one, because both run through the same coordinator.
+rule as the claimed one, because both run through the same coordinator. Steps 7
+and 8 collapse into step 5 when you pass `--auto-commit`.
 
 ## Friction is a finding
 

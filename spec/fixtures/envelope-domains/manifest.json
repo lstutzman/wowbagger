@@ -9,7 +9,8 @@
     "claim-fenced-legacy-mutation",
     "claimed-publication",
     "dispatch-rule",
-    "work-claim"
+    "work-claim",
+    "auto-commit-git-finalization"
   ],
   "dispatch_rule": {
     "steps": [
@@ -101,7 +102,8 @@
         "claim read",
         "claim acquire",
         "claim renew",
-        "claim release"
+        "claim release",
+        "mutation-finalize"
       ],
       "root_member_shapes": {
         "read_success": [
@@ -791,6 +793,132 @@
       "exit": 4,
       "state": "unchanged",
       "error_code": "adoption-witness-mismatch",
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "transition.capability-unavailable",
+      "domain": "core",
+      "command": "transition",
+      "exit": 5,
+      "state": "unchanged",
+      "error_code": "capability-unavailable",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "transition.auto-commit-preflight-failed",
+      "domain": "core",
+      "command": "transition",
+      "exit": 4,
+      "state": "unchanged",
+      "error_code": "auto-commit-preflight-failed",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "transition.git-commit-failed",
+      "domain": "core",
+      "command": "transition",
+      "exit": 6,
+      "state": "committed",
+      "error_code": "git-commit-failed",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "publish-claimed.git-commit-failed",
+      "domain": "ledger-publication",
+      "command": "publish-claimed",
+      "exit": 6,
+      "state": "committed",
+      "error_code": "git-commit-failed",
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "operation_id",
+        "error"
+      ]
+    },
+    {
+      "class": "mutation-finalize.success",
+      "domain": "work-claim",
+      "command": "mutation-finalize",
+      "exit": 0,
+      "state": "committed",
+      "error_code": null,
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "result"
+      ]
+    },
+    {
+      "class": "mutation-finalize.invalid-request",
+      "domain": "work-claim",
+      "command": "mutation-finalize",
+      "exit": 2,
+      "state": "unchanged",
+      "error_code": "invalid-request",
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "mutation-finalize.mutation-finalize-refused",
+      "domain": "work-claim",
+      "command": "mutation-finalize",
+      "exit": 4,
+      "state": "unchanged",
+      "error_code": "mutation-finalize-refused",
+      "root_members": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ]
+    },
+    {
+      "class": "mutation-finalize.git-commit-failed",
+      "domain": "work-claim",
+      "command": "mutation-finalize",
+      "exit": 6,
+      "state": "unchanged",
+      "error_code": "git-commit-failed",
       "root_members": [
         "ok",
         "namespace",
