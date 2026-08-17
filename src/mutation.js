@@ -741,8 +741,7 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
 // The exact patchable field set (mutation contract section 9), in the order a
 // patch applies them. `number` is the immutable item identity, assigned once at
 // create, so it is not patchable; everything else stays a reviewable hand-edit
-// or a transition concern. `title` is a required field, so it never needs a
-// PATCH_FIELD_ANCHORS entry: every valid item already carries the node.
+// or a transition concern.
 const PATCHABLE_FIELDS = ['title', 'priority', 'depends_on', 'related', 'body'];
 // The patchable fields that live in the frontmatter. `body` is the one patchable
 // value outside it, so it takes its own validation and serialization path.
@@ -750,7 +749,8 @@ const PATCH_FRONTMATTER_FIELDS = PATCHABLE_FIELDS.filter((field) => field !== 'b
 // Patchable fields whose value is a whole relation list rather than a scalar.
 const PATCH_RELATION_FIELDS = new Set(['depends_on', 'related']);
 // Where a newly added field lands in the frontmatter; the anchor is a member
-// every valid item carries, so it always exists.
+// every valid item carries, so it always exists. `title` needs no entry: it is
+// itself a required member, so a patch always rewrites it in place.
 const PATCH_FIELD_ANCHORS = { priority: 'kind', depends_on: 'provenance', related: 'depends_on' };
 
 export function validatePatchRequest(request, parseIssues = []) {

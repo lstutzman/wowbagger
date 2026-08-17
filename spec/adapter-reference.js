@@ -2224,11 +2224,12 @@ function validPatchResultCorrelation(item, request) {
       if (item.body !== requested) return false;
       continue;
     }
+    // A removal correlates with an absent core member; a value correlates with
+    // the requested one, after priority's integer parse.
     if (field === 'title' || field === 'priority') {
-      const expected = field === 'title' ? requested : parsedIntegerValue(requested, 0);
       if (requested === null) {
         if (Object.hasOwn(item.core, field)) return false;
-      } else if (item.core[field] !== expected) {
+      } else if (item.core[field] !== (field === 'title' ? requested : parsedIntegerValue(requested, 0))) {
         return false;
       }
       continue;
