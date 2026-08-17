@@ -4,9 +4,10 @@ id: wb_01KZHX3E00ZH5SA7H0M3WNVP7N
 number: 38
 title: "Earn a supported platform claim on linux and win32"
 kind: task
+priority: 10
 status: backlog
 created: 2026-08-09
-updated: 2026-08-10
+updated: 2026-08-17
 provenance:
   source: "repository-backlog"
   recorded_at: "2026-08-09T13:31:00.000Z"
