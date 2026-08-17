@@ -778,7 +778,10 @@ reconciles the journal, persists the clock floor, rechecks idempotency against
 what reconciliation resolved, validates the candidate ledger, checks fence and
 revision, then fsyncs a `publish-intent` before writing the candidate item
 bytes. Before the first journal append, it fsyncs each new journal-directory
-entry and the empty journal file. It then appends a terminal `publish-final`
+entry and the empty journal file. Directory fsync is attempted and tolerated
+as unsupported where the platform has no such primitive (the same rule the
+mutation contract states for atomic publication); file fsyncs are always
+required. It then appends a terminal `publish-final`
 outcome. The caller commits or merges the resulting item change and runs
 `claim-verify`.
 
