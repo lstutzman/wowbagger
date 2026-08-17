@@ -12,6 +12,7 @@ import {
   loadExtensionDeclaration,
 } from './extensions.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
+import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
 import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
 
@@ -324,6 +325,9 @@ async function createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnap
       } catch {
         return await finishUncommitted(operationFailed(id, 'serialize-candidate', 'serialization-failed'));
       }
+      if (bytes.length > MAX_ITEM_SOURCE_BYTES) {
+        return await finishUncommitted(itemSourceTooLarge(id, bytes.length));
+      }
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         null,
@@ -604,6 +608,9 @@ async function mutateExistingItem(ledgerDirectory, request, scenario, operation,
         return await finishUncommitted(built.outcome);
       }
       const { successor, bytes } = built;
+      if (bytes.length > MAX_ITEM_SOURCE_BYTES) {
+        return await finishUncommitted(itemSourceTooLarge(id, bytes.length));
+      }
       const candidateValidation = validateSerializedCandidate(
         current.ledger,
         id,
@@ -1853,6 +1860,19 @@ function mutationError(code, message, state, exit, details) {
     state,
     error: { code, message, details },
   };
+}
+
+// One named refusal at every candidate door: the successor is measured as
+// serialized UTF-8 bytes, so frontmatter, decisions, extensions, and body all
+// draw on the same budget.
+function itemSourceTooLarge(id, sizeBytes) {
+  return mutationError(
+    'item-source-too-large',
+    'The proposed item source exceeds the supported byte limit.',
+    'unchanged',
+    2,
+    { id, size_bytes: sizeBytes, limit_bytes: MAX_ITEM_SOURCE_BYTES },
+  );
 }
 
 function ledgerInvalid(validation) {

@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   referenceCoreCapabilities,
@@ -7,7 +12,10 @@ import {
 } from '../spec/adapter-reference.js';
 import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { dynamicDescribe } from './adapter-contract-fixtures.js';
-import { runCli } from './support.js';
+import { runCli, withLedger } from './support.js';
+
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const cliPath = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 
 // The one public bound on a complete serialized item source. Written here as a
 // literal, never imported from src: a test that reads the production constant
@@ -97,3 +105,302 @@ for (const [name, capabilities, verify] of PROBES) {
     assert.deepEqual(refusalOf(result).detail, { member: 'result.limits' });
   });
 }
+
+const CREATE_ID = 'wb_01Q45X474N28T5CY4GNF6YY4HM';
+
+// A refusal publishes no item and leaves no temporary file behind. The lock
+// directory itself outlives every locked mutation; a retained lock file inside
+// it would not.
+async function assertNothingPublished(ledger) {
+  const entries = (await readdir(ledger)).sort();
+  assert.deepEqual(entries.filter((entry) => entry !== '.wowbagger-locks'), []);
+  if (entries.includes('.wowbagger-locks')) {
+    assert.deepEqual(await readdir(path.join(ledger, '.wowbagger-locks')), []);
+  }
+}
+
+function createRequest(body) {
+  return {
+    id: CREATE_ID,
+    item: {
+      title: 'Bound the item source',
+      kind: 'task',
+      provenance: { source: 'fixture/item-source-limit', recorded_at: '2030-01-10T12:34:56.789Z' },
+      depends_on: [],
+      related: [],
+    },
+    body,
+  };
+}
+
+// spawnSync truncates at 1 MiB by default, and an accepted 8-MiB item answers
+// with its decoded body plus its base64 source.
+function runLargeCli(...argumentsList) {
+  return spawnSync(process.execPath, [cliPath, ...argumentsList], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    maxBuffer: 128 * 1024 * 1024,
+  });
+}
+
+async function runCreate(ledger, body) {
+  const requestPath = path.join(path.dirname(ledger), 'request.json');
+  await writeFile(requestPath, JSON.stringify(createRequest(body)), 'utf8');
+  const result = runLargeCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+  assert.equal(result.stderr, '');
+  return { result, envelope: JSON.parse(result.stdout) };
+}
+
+function runCreateFromStdin(ledger, body) {
+  const result = spawnSync(process.execPath, [
+    cliPath, 'create', '--ledger', ledger, '--input', '-', '--json',
+  ], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    maxBuffer: 256 * 1024 * 1024,
+    input: JSON.stringify(createRequest(body)),
+  });
+  assert.equal(result.stderr, '');
+  return { result, envelope: JSON.parse(result.stdout) };
+}
+
+// The serializer writes fixed frontmatter, one LF, then the body verbatim, so
+// one measured create fixes the overhead every other create in this file uses.
+// Measured, never recomputed from the production serializer.
+async function createOverheadBytes() {
+  return withLedger({}, async (ledger) => {
+    const { envelope } = await runCreate(ledger, 'x');
+    assert.equal(envelope.ok, true);
+    return Buffer.from(envelope.result.item.source_base64, 'base64').length - 1;
+  });
+}
+
+test('create accepts an item source of exactly the byte limit', async () => {
+  const overhead = await createOverheadBytes();
+  await withLedger({}, async (ledger) => {
+    const { result, envelope } = await runCreate(ledger, 'x'.repeat(LIMIT - overhead));
+
+    assert.equal(result.status, 0);
+    assert.equal(envelope.ok, true);
+    assert.equal(envelope.state, 'committed');
+    assert.equal(Buffer.from(envelope.result.item.source_base64, 'base64').length, LIMIT);
+  });
+});
+
+test('create refuses an item source one byte over the limit and publishes nothing', async () => {
+  const overhead = await createOverheadBytes();
+  await withLedger({}, async (ledger) => {
+    const { result, envelope } = await runCreate(ledger, 'x'.repeat(LIMIT - overhead + 1));
+
+    assert.equal(result.status, 2);
+    assert.deepEqual(envelope, {
+      ok: false,
+      command: 'create',
+      contract_version: 4,
+      state: 'unchanged',
+      error: {
+        code: 'item-source-too-large',
+        message: 'The proposed item source exceeds the supported byte limit.',
+        details: { id: CREATE_ID, size_bytes: LIMIT + 1, limit_bytes: LIMIT },
+      },
+    });
+    await assertNothingPublished(ledger);
+  });
+});
+
+// Byte accounting, not string length: 2,097,152 three-byte characters are
+// 6,291,456 bytes and 2,097,152 JavaScript string units.
+test('create counts multi-byte UTF-8 source bytes, not string length', async () => {
+  const overhead = await createOverheadBytes();
+  await withLedger({}, async (ledger) => {
+    const wide = '€'.repeat(2097152);
+    const body = wide + 'x'.repeat(LIMIT - overhead + 1 - Buffer.byteLength(wide, 'utf8'));
+    assert.equal(Buffer.byteLength(body, 'utf8'), LIMIT - overhead + 1);
+    assert.ok(body.length < Buffer.byteLength(body, 'utf8'));
+
+    const { result, envelope } = await runCreate(ledger, body);
+
+    assert.equal(result.status, 2);
+    assert.equal(envelope.error.code, 'item-source-too-large');
+    assert.equal(envelope.error.details.size_bytes, LIMIT + 1);
+    await assertNothingPublished(ledger);
+  });
+});
+
+test('the stdin create vector refuses exactly where the file vector refuses', async () => {
+  const overhead = await createOverheadBytes();
+  await withLedger({}, async (ledger) => {
+    const accepted = runCreateFromStdin(ledger, 'x'.repeat(LIMIT - overhead));
+    assert.equal(accepted.result.status, 0);
+    assert.equal(Buffer.from(accepted.envelope.result.item.source_base64, 'base64').length, LIMIT);
+  });
+  await withLedger({}, async (ledger) => {
+    const { result, envelope } = runCreateFromStdin(ledger, 'x'.repeat(LIMIT - overhead + 1));
+
+    assert.equal(result.status, 2);
+    assert.equal(envelope.error.code, 'item-source-too-large');
+    assert.deepEqual(envelope.error.details, {
+      id: CREATE_ID, size_bytes: LIMIT + 1, limit_bytes: LIMIT,
+    });
+    await assertNothingPublished(ledger);
+  });
+});
+
+// alpha.6 accepted this create with exit 0 and state committed.
+test('a fifty-mebibyte create refuses and publishes no item', async () => {
+  await withLedger({}, async (ledger) => {
+    const { result, envelope } = await runCreate(ledger, 'x'.repeat(52428800));
+
+    assert.equal(result.status, 2);
+    assert.equal(envelope.error.code, 'item-source-too-large');
+    assert.equal(envelope.error.details.limit_bytes, LIMIT);
+    assert.ok(envelope.error.details.size_bytes > 52428800);
+    await assertNothingPublished(ledger);
+  });
+});
+
+const TARGET_ID = 'wb_01Q4AS1Y80248J48HK6D248NAN';
+const TARGET_FRONTMATTER = [
+  '---',
+  'schema_version: 1',
+  `id: ${TARGET_ID}`,
+  'title: "Bound the successor"',
+  'kind: task',
+  'status: triage',
+  'created: 2030-01-12',
+  'updated: 2030-01-12',
+  'provenance:',
+  '  source: "fixture/item-source-limit"',
+  '  recorded_at: "2030-01-12T10:00:00Z"',
+  'depends_on: []',
+  'related: []',
+  '---',
+  '',
+].join('\n');
+
+function seedSource(bodyBytes) {
+  return `${TARGET_FRONTMATTER}${'x'.repeat(bodyBytes)}`;
+}
+
+function revisionOf(text) {
+  return `sha256:${createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex')}`;
+}
+
+// Runs one mutating verb against a ledger holding exactly one seeded item of
+// the requested body size, and reports the envelope plus the bytes on disk.
+async function runOnSeeded(command, bodyBytes, requestMembers) {
+  const source = seedSource(bodyBytes);
+  return withLedger({ [`${TARGET_ID}.md`]: source }, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'request.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: TARGET_ID,
+      expected_revision: revisionOf(source),
+      ...requestMembers,
+    }), 'utf8');
+
+    const result = runLargeCli(command, '--ledger', ledger, '--input', requestPath, '--json');
+    assert.equal(result.stderr, '');
+    const committed = await readFile(path.join(ledger, `${TARGET_ID}.md`));
+    return { result, envelope: JSON.parse(result.stdout), committed, before: source };
+  });
+}
+
+const TRANSITION_REQUEST = {
+  to_status: 'backlog',
+  date: '2030-01-13',
+  decision: {
+    summary: 'Accept the bounded successor.',
+    rationale: 'The decision block is what pushes this successor across the bound.',
+  },
+};
+
+const PATCH_DATE = '2030-01-13';
+
+// Each verb writes a different successor around the same body, so each one's
+// non-body overhead is measured once from a real committed successor.
+async function overheadFor(command, requestMembers) {
+  const { envelope, committed } = await runOnSeeded(command, 1, requestMembers);
+  assert.equal(envelope.ok, true, JSON.stringify(envelope.error ?? {}));
+  return committed.length - 1;
+}
+
+test('transition refuses a successor its decision block pushes one byte over the limit', async () => {
+  const overhead = await overheadFor('transition', TRANSITION_REQUEST);
+
+  const accepted = await runOnSeeded('transition', LIMIT - overhead, TRANSITION_REQUEST);
+  assert.equal(accepted.result.status, 0, JSON.stringify(accepted.envelope.error ?? {}));
+  assert.equal(accepted.committed.length, LIMIT);
+
+  const refused = await runOnSeeded('transition', LIMIT - overhead + 1, TRANSITION_REQUEST);
+  assert.equal(refused.result.status, 2);
+  assert.deepEqual(refused.envelope, {
+    ok: false,
+    command: 'transition',
+    contract_version: 4,
+    state: 'unchanged',
+    error: {
+      code: 'item-source-too-large',
+      message: 'The proposed item source exceeds the supported byte limit.',
+      details: { id: TARGET_ID, size_bytes: LIMIT + 1, limit_bytes: LIMIT },
+    },
+  });
+  // The stored item was legal; only the successor is not.
+  assert.ok(refused.before.length < LIMIT);
+  assert.equal(refused.committed.toString('utf8'), refused.before);
+});
+
+test('patch body replacement refuses a successor one byte over the limit', async () => {
+  const request = (body) => ({ date: PATCH_DATE, set: { body } });
+  const overhead = await overheadFor('patch', request('x'));
+
+  const accepted = await runOnSeeded('patch', 1, request('x'.repeat(LIMIT - overhead)));
+  assert.equal(accepted.result.status, 0, JSON.stringify(accepted.envelope.error ?? {}));
+  assert.equal(accepted.committed.length, LIMIT);
+
+  const refused = await runOnSeeded('patch', 1, request('x'.repeat(LIMIT - overhead + 1)));
+  assert.equal(refused.result.status, 2);
+  assert.deepEqual(refused.envelope, {
+    ok: false,
+    command: 'patch',
+    contract_version: 4,
+    state: 'unchanged',
+    error: {
+      code: 'item-source-too-large',
+      message: 'The proposed item source exceeds the supported byte limit.',
+      details: { id: TARGET_ID, size_bytes: LIMIT + 1, limit_bytes: LIMIT },
+    },
+  });
+  assert.equal(refused.committed.toString('utf8'), refused.before);
+});
+
+test('patch body append refuses a successor one byte over the limit', async () => {
+  const request = (bodyAppend) => ({ date: PATCH_DATE, set: { body_append: bodyAppend } });
+  const overhead = await overheadFor('patch', request('x'));
+
+  const accepted = await runOnSeeded('patch', 1, request('x'.repeat(LIMIT - overhead)));
+  assert.equal(accepted.result.status, 0, JSON.stringify(accepted.envelope.error ?? {}));
+  assert.equal(accepted.committed.length, LIMIT);
+
+  const refused = await runOnSeeded('patch', 1, request('x'.repeat(LIMIT - overhead + 1)));
+  assert.equal(refused.result.status, 2);
+  assert.equal(refused.envelope.error.code, 'item-source-too-large');
+  assert.deepEqual(refused.envelope.error.details, {
+    id: TARGET_ID, size_bytes: LIMIT + 1, limit_bytes: LIMIT,
+  });
+  assert.equal(refused.committed.toString('utf8'), refused.before);
+});
+
+test('patch counts multi-byte UTF-8 successor bytes, not string length', async () => {
+  const request = (body) => ({ date: PATCH_DATE, set: { body } });
+  const overhead = await overheadFor('patch', request('x'));
+  const wide = '€'.repeat(2097152);
+  const body = wide + 'x'.repeat(LIMIT - overhead + 1 - Buffer.byteLength(wide, 'utf8'));
+  assert.ok(body.length < Buffer.byteLength(body, 'utf8'));
+
+  const refused = await runOnSeeded('patch', 1, request(body));
+
+  assert.equal(refused.result.status, 2);
+  assert.equal(refused.envelope.error.code, 'item-source-too-large');
+  assert.equal(refused.envelope.error.details.size_bytes, LIMIT + 1);
+  assert.equal(refused.committed.toString('utf8'), refused.before);
+});
