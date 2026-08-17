@@ -5,7 +5,7 @@ number: 126
 title: "Bound the item source at every candidate door"
 kind: task
 priority: 20
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
