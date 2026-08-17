@@ -8,6 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 const LAYOUT = '{"layout_version":1,"items_directory":"items"}\n';
+// Item dates derive from the ULID timestamp in UTC, so a transition dated
+// before the run's own creates is refused. Derive the date; never hardcode it.
+const TODAY = new Date().toISOString().slice(0, 10);
 
 function run(root, ...argumentsList) {
   const result = spawnSync(process.execPath, [CLI, ...argumentsList], {
@@ -155,7 +158,7 @@ test('a committed root-misplaced item blocks every guarded mutation when layout.
     id: placed.id,
     expected_revision: placed.revision,
     to_status: 'backlog',
-    date: '2026-08-16',
+    date: TODAY,
     decision: { summary: 'Accept the placed item.', rationale: 'Prove the block is ledger-wide.' },
   }), '--json');
   assert.equal(transitioned.exit, 3);
@@ -184,7 +187,7 @@ test('a root-misplaced item committed before layout.json refuses the same way on
     id: rooted.id,
     expected_revision: rooted.revision,
     to_status: 'backlog',
-    date: '2026-08-16',
+    date: TODAY,
     decision: { summary: 'Accept before the layout.', rationale: 'Record a publication at the root path.' },
   }), '--json');
   assert.equal(accepted.exit, 0, JSON.stringify(accepted.envelope));
@@ -209,7 +212,7 @@ test('a root-misplaced item committed before layout.json refuses the same way on
     id: rooted.id,
     expected_revision: accepted.envelope.result.item.revision,
     to_status: 'in-progress',
-    date: '2026-08-16',
+    date: TODAY,
   }), '--json');
   assert.equal(transitioned.exit, 3);
   assert.deepEqual(transitioned.envelope.error.details.validation_errors, [expectedError]);
