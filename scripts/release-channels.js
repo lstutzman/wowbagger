@@ -145,7 +145,7 @@ export function runChannels({
   if (mode === 'check') {
     const result = checkChannels(state);
     if (result.ok) {
-      write(`ok: ${state.packageName} dist-tags are exactly { next: ${version} } and ${ALPHA_1} is deprecated`);
+      write(`ok: ${state.packageName} carries latest and next at ${version} and ${ALPHA_1} is deprecated`);
       return 0;
     }
     for (const { code, detail } of result.problems) write(`${code}: ${detail}`);
