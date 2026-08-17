@@ -85,23 +85,13 @@ try {
   const gitCommonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8' }).trim();
   const resolved = path.resolve(root, gitCommonDir);
   const publication = await import(pathToFileURL(path.join(repo, 'src', 'claim-publication.js')));
-  console.log('claim-publication exports:', Object.keys(publication).join(', '));
-  if (publication.reconcileClaimJournal) {
-    const reconciled = await publication.reconcileClaimJournal({
-      ledgerDirectory: ledger,
-      gitCommonDir: resolved,
-      namespace,
-    });
-    console.log('reconcile ok:', JSON.stringify({ unsafe: reconciled.unsafe, findings: reconciled.findings?.length }));
-  }
-  if (publication.verifyClaimJournal) {
-    const verified = await publication.verifyClaimJournal({
-      ledgerDirectory: ledger,
-      gitCommonDir: resolved,
-      namespace,
-    });
-    console.log('verify envelope:', JSON.stringify(verified).slice(0, 300));
-  }
+  process.env.WOWBAGGER_DEBUG_CLAIM_STORE = '1';
+  const verified = await publication.verifyClaimJournal({
+    ledgerDirectory: ledger,
+    gitCommonDir: resolved,
+    namespace,
+  });
+  console.log('verify envelope:', JSON.stringify(verified.stdout).slice(0, 300));
 } catch (error) {
   console.log('RECONCILE RAW ERROR:', error?.code, error?.message);
   console.log(error?.stack);
