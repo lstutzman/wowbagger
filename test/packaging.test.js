@@ -159,6 +159,10 @@ test('the npm tarball ships all public contracts with every adapter executable',
   const packed = spawnSync('npm', ['pack', '--dry-run', '--json'], {
     cwd: projectRoot,
     encoding: 'utf8',
+    // On win32 `npm` is a `.cmd`, and since Node 20.12 a batch file cannot be
+    // spawned without a shell at all. The arguments are fixed literals, so
+    // there is nothing here for a shell to reinterpret.
+    shell: process.platform === 'win32',
   });
   assert.equal(packed.status, 0, packed.stderr);
   const files = new Set(JSON.parse(packed.stdout)[0].files.map(({ path: file }) => file));
