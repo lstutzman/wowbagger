@@ -1,0 +1,12 @@
+{
+  "command": "transition",
+  "argv": [
+    "transition",
+    "--ledger",
+    "ledger",
+    "--input",
+    "-",
+    "--json"
+  ],
+  "stdin_base64": "ewogICJpZCI6ICJ3Yl8wMVE0REpBQ0cwMjA2WFZRRVhWUUVYVlFFWCIsCiAgImV4cGVjdGVkX3JldmlzaW9uIjogInNoYTI1NjplM2U4MzRjOGQwNjUyZTUzYjQ4MTZjOTRjOGNkYzg2NDk2MDdjOWI5NzYxMjVjMjk1NDY5NzE0MDk5MDQxYTI3IiwKICAidG9fc3RhdHVzIjogImJhY2tsb2ciLAogICJkYXRlIjogIjIwMzAtMDEtMTIiLAogICJkZWNpc2lvbiI6IHsKICAgICJzdW1tYXJ5IjogIkFjY2VwdCB0aGUgZmljdGlvbmFsIHN1bmRpYWwgdGFzay4iLAogICAgInJhdGlvbmFsZSI6ICJUaGUgZGF0ZSBpcyBpbnRlbnRpb25hbGx5IHN0YWxlIGZvciB0aGlzIHZlY3Rvci4iCiAgfQp9Cg=="
+}

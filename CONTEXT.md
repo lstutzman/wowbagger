@@ -42,3 +42,7 @@ One line per term. This is a glossary, not documentation.
 - **dual-run** — PropertyCompass2's adoption posture: the provisioned wowbagger ledger running alongside its legacy backlog store, reconciled by drift audits until the legacy store retires.
 - **mirror consumer** — a consumer whose ledger items mirror content held in an upstream source of truth, so its writes are regenerations rather than authoring; the class that finds boundary-ownership gaps.
 - **field-report loop** — the adoption mechanism proven this week: consumer files a field report, maintainer triages it into ledger items, fixes ship, the consumer re-measures; the loop is the product.
+- **core-outcome vector** — a conformance scenario that runs the direct real core in one isolated temp workspace and the spawned real entrypoint against the real core in a second, then compares exact streams and both resulting ledgers.
+- **clock horizon** — the seeded future clock floor a claim-fence vector pins so `observed_at` is deterministic; both runners fail loudly and name its expiry date once wall time reaches it.
+- **derived_from pin** — a fixture-local copy's declared source path and SHA-256 in the repository; drift on either side stops the vector and demands a reviewed golden change instead of a regeneration.
+- **conformance host approval provider** — the code-level approval source `spec/adapter-conformance-entrypoint-main.js` wires in `decline` or `grant` mode; evidence it produces is the production engine under a conformance host, never a live consumer approval mechanism.

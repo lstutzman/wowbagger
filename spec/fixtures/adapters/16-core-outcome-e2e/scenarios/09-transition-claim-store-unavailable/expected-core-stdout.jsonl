@@ -1,0 +1,1 @@
+{"ok":false,"namespace":"ledger-mutation","command":"transition-v1","contract_version":1,"state":"unchanged","error":{"code":"claim-store-unavailable","message":"The durable claim store is unavailable.","details":{"reason":"git-verification-failed"}}}

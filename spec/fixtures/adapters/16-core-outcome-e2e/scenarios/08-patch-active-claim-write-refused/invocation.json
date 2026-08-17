@@ -1,0 +1,25 @@
+{
+  "adapter_contract_version": 2,
+  "request_id": "core-outcome-patch-active-claim-refused-0001",
+  "workspace": {
+    "workspace_id": "core-outcome-workspace",
+    "cwd": "."
+  },
+  "core_request": {
+    "command": "patch",
+    "ledger": "ledger",
+    "input_base64": "ewogICJpZCI6ICJ3Yl8wMVE0WkszREcwMjBBTkFOQU5BTkFOQU5BTSIsCiAgImV4cGVjdGVkX3JldmlzaW9uIjogInNoYTI1NjpjZDFmNjU4ZjcyZjZlMGU5OWRiNmYxOTg2NzU4OTkxNDQ1Y2IxY2JiMWI1ZTI5MzZlMjEwMDk4ZjMyZTk3MDY0IiwKICAiZGF0ZSI6ICIyMDMwLTAxLTIyIiwKICAic2V0IjogewogICAgImJvZHkiOiAiXG5UaGUgbGVnYWN5IGNhcmQgbm93IHJlYWRzIGRvbmUuXG4iCiAgfQp9Cg=="
+  },
+  "instruction_input": {
+    "instruction_input_version": 1,
+    "required": false,
+    "sources": []
+  },
+  "handoff_carrier": null,
+  "limits": {
+    "context_bytes": 0,
+    "stdout_bytes": 65536,
+    "stderr_bytes": 4096,
+    "timeout_ms": 30000
+  }
+}

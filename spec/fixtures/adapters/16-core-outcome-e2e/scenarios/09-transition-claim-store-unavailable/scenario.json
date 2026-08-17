@@ -1,0 +1,40 @@
+{
+  "scenario": "09-transition-claim-store-unavailable",
+  "core_command": "transition",
+  "approval": "consumer",
+  "workspace": {
+    "kind": "git-unverifiable",
+    "marker": "git-marker"
+  },
+  "mutation_input": "mutation-input.json",
+  "ledger": {
+    "before": [
+      {
+        "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+        "source_file": "before/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+        "sha256": "sha256:17ac31f4fc0cf9f20fcab06a9af082708acc671c17c24c4ab8475e0eaa236888"
+      }
+    ],
+    "after": [
+      {
+        "path": "ledger/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+        "source_file": "before/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+        "sha256": "sha256:17ac31f4fc0cf9f20fcab06a9af082708acc671c17c24c4ab8475e0eaa236888"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "mutation-input.json",
+      "source": "spec/fixtures/mutations/transition-success/request.json",
+      "sha256": "sha256:880478e9f2d6ec131e2a96b36059a8d45f149a4f947360d596f2a825d9b7c3ac",
+      "form": "bytes"
+    },
+    {
+      "path": "before/wb_01Q4AS1Y80248J48HK6D248NAN.md",
+      "source": "spec/fixtures/mutations/transition-success/before.md",
+      "sha256": "sha256:17ac31f4fc0cf9f20fcab06a9af082708acc671c17c24c4ab8475e0eaa236888",
+      "form": "bytes"
+    }
+  ]
+}

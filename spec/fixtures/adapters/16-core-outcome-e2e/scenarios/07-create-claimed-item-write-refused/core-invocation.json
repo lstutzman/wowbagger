@@ -1,0 +1,12 @@
+{
+  "command": "create",
+  "argv": [
+    "create",
+    "--ledger",
+    "ledger",
+    "--input",
+    "-",
+    "--json"
+  ],
+  "stdin_base64": "ewogICJpZCI6ICJ3Yl8wMVE0NVg0NzROMjhUNUNZNEdORjZZWTRITSIsCiAgIml0ZW0iOiB7CiAgICAidGl0bGUiOiAiTWFwIGEgZmljdGlvbmFsIG1vb24gcm91dGUiLAogICAgImtpbmQiOiAidGFzayIsCiAgICAicHJvdmVuYW5jZSI6IHsKICAgICAgInNvdXJjZSI6ICJmaXh0dXJlL211dGF0aW9ucyIsCiAgICAgICJyZWNvcmRlZF9hdCI6ICIyMDMwLTAxLTEwVDEyOjM0OjU2Ljc4OVoiCiAgICB9LAogICAgImRlcGVuZHNfb24iOiBbXSwKICAgICJyZWxhdGVkIjogW10sCiAgICAiZmljdGlvbmFsX2xhYmVsIjogIm5lYnVsYS03IgogIH0sCiAgImJvZHkiOiAiXG5QbG90IGEgZmljdGlvbmFsIHJvdXRlIGZyb20gQnJpbmRsZSBTdGF0aW9uIHRvIEx1bWVuIFJlZWYuXG4iCn0K"
+}

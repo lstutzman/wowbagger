@@ -1,0 +1,51 @@
+{
+  "scenario": "04-patch-body-committed",
+  "core_command": "patch",
+  "approval": "consumer",
+  "workspace": {
+    "kind": "plain"
+  },
+  "mutation_input": "mutation-input.json",
+  "ledger": {
+    "before": [
+      {
+        "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "source_file": "before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "sha256": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064"
+      }
+    ],
+    "after": [
+      {
+        "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "source_file": "after/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "sha256": "sha256:d9fdfffe605a6e7feeb4c6e20aa60838670a420881d267217ed87a42134c5592"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "mutation-input.json",
+      "source": "spec/fixtures/mutations/patch-body/request.json",
+      "sha256": "sha256:19208b8bcdcc8f4f18fc022d4f303eda815cddce0904c323162122433f637f81",
+      "form": "bytes"
+    },
+    {
+      "path": "before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "source": "spec/fixtures/mutations/patch-body/ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064",
+      "form": "bytes"
+    },
+    {
+      "path": "after/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "source": "spec/fixtures/mutations/patch-body/expected-item.md",
+      "sha256": "sha256:d9fdfffe605a6e7feeb4c6e20aa60838670a420881d267217ed87a42134c5592",
+      "form": "bytes"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "source": "spec/fixtures/mutations/patch-body/expected.json",
+      "sha256": "sha256:91d7375c6336fe9d7a33bcfa6a9da96b3845c19228cbea5667d9258ddf38a50a",
+      "form": "compact-json-line"
+    }
+  ]
+}

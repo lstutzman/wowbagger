@@ -1,0 +1,12 @@
+{
+  "command": "patch",
+  "argv": [
+    "patch",
+    "--ledger",
+    "ledger",
+    "--input",
+    "-",
+    "--json"
+  ],
+  "stdin_base64": "ewogICJpZCI6ICJ3Yl8wMVE0WkszREcwMjBBTkFOQU5BTkFOQU5BTSIsCiAgImV4cGVjdGVkX3JldmlzaW9uIjogInNoYTI1NjpjZDFmNjU4ZjcyZjZlMGU5OWRiNmYxOTg2NzU4OTkxNDQ1Y2IxY2JiMWI1ZTI5MzZlMjEwMDk4ZjMyZTk3MDY0IiwKICAiZGF0ZSI6ICIyMDMwLTAxLTIyIiwKICAic2V0IjogewogICAgImJvZHkiOiAiXG5UaGUgbGVnYWN5IGNhcmQgbm93IHJlYWRzIGRvbmUuXG4iCiAgfQp9Cg=="
+}

@@ -107,14 +107,14 @@ test('reports the honest claude-code result with every assertion executed', asyn
   assert.equal(result.status, 'pass');
   assert.equal(result.implementations['claude-code'], 'pass');
   assert.equal(result.evidence_platform, 'darwin');
-  assert.equal(result.cases.length, 15);
+  assert.equal(result.cases.length, 16);
   assert.deepEqual(
     result.cases.filter(({ status }) => status === 'fail').map(({ case: name }) => name),
     [],
   );
 
   const executed = result.cases.flatMap((entry) => entry.executed_assertions);
-  assert.equal(executed.length, 200);
+  assert.equal(executed.length, 210);
 });
 
 test('reports the codex target with every codex-targeted assertion executed', async () => {
@@ -123,10 +123,10 @@ test('reports the codex target with every codex-targeted assertion executed', as
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations.codex, 'fail');
   assert.equal(Object.hasOwn(result.implementations, 'claude-code'), false);
-  assert.equal(result.cases.length, 15);
+  assert.equal(result.cases.length, 16);
 
   const executed = result.cases.flatMap((entry) => entry.executed_assertions);
-  assert.equal(executed.length, 200);
+  assert.equal(executed.length, 210);
 });
 
 test('a trailing --target with no value fails fast instead of reporting no cases', async () => {
@@ -149,8 +149,8 @@ test('reports the opencode target with every opencode-targeted assertion execute
 
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations.opencode, 'fail');
-  assert.equal(result.cases.length, 15);
-  assert.equal(result.cases.flatMap((entry) => entry.executed_assertions).length, 200);
+  assert.equal(result.cases.length, 16);
+  assert.equal(result.cases.flatMap((entry) => entry.executed_assertions).length, 210);
 });
 
 test('fails closed on an unknown assertion type', async (t) => {
@@ -526,8 +526,8 @@ test('evidences every Plan 3 assertion through a shipped module', async () => {
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 200);
-  assert.equal(200 - evidenced.length, 0);
+  assert.equal(evidenced.length, 210);
+  assert.equal(210 - evidenced.length, 0);
   assert.equal(result.status, 'pass');
   assert.equal(result.implementations['claude-code'], 'pass');
 });
@@ -586,8 +586,15 @@ test('requires consumer approval without granting Git authority', async () => {
   assert.deepEqual(mutationCase.assertion_evidence, [
     { id: 'do-not-mutate-before-approval', evidence: 'adapters/claude-code/entrypoint.js' },
     { id: 'do-not-grant-git-authority', evidence: 'src/adapter/approval.js' },
+    {
+      id: 'do-not-advertise-approval-without-a-host-provider',
+      evidence: 'adapters/claude-code/entrypoint.js',
+    },
   ]);
+  // Both pre-launch refusals are observed: a host that can approve and did
+  // not, and a bare runtime that advertises no approval source at all.
   assert.ok(mutationCase.observed_error_codes.includes('consumer-approval-required'));
+  assert.ok(mutationCase.observed_error_codes.includes('capability-unavailable'));
 });
 
 test('every negotiation assertion it evidences agrees with the fixture expectation', async (t) => {

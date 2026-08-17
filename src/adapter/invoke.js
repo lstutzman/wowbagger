@@ -97,6 +97,24 @@ function refusal(requestId, code, details) {
   };
 }
 
+// A host may hand the adapter a finished approval event, or a resolver the
+// adapter calls with the exact binding it is about to approve. The resolver
+// form is the one a live consumer prompt needs: the argv, absolute paths, and
+// digests an approval binds are only known once this function has resolved
+// them, so nothing upstream can mint the approval first. Either way the
+// approval arrives through the runtime, never through the request — §5.1
+// forbids a model-supplied approval, and the request schema has no member for
+// one. A resolver that throws produced no approval, so the mutation refuses
+// instead of the adapter dying before it can answer.
+async function resolveHostApproval(approval, context) {
+  if (typeof approval !== 'function') return approval;
+  try {
+    return await approval(context);
+  } catch {
+    return null;
+  }
+}
+
 export async function invokeAdapter(requestBytes, runtime) {
   if (!(requestBytes instanceof Uint8Array) || !isPositiveSafeInteger(runtime?.max_request_bytes)) {
     return refusal(null, 'invalid-invocation', { member: 'request' });
@@ -215,33 +233,34 @@ export async function invokeAdapter(requestBytes, runtime) {
     if (described.result.host.trusted_approval?.supported !== true) {
       return refusal(requestId, 'capability-unavailable', { missing: ['trusted-approval'] });
     }
+    const binding = {
+      request_id: requestId,
+      adapter: {
+        id: described.result.adapter_id,
+        version: described.result.adapter_version,
+        contract_version: described.result.selected_adapter_contract_version,
+      },
+      core: {
+        executable_identity: runtime.core_executable_identity,
+        contract_version: described.result.core.required_core_contract_version,
+        argv,
+        input_base64: request.core_request.input_base64,
+      },
+      workspace: {
+        id: request.workspace.workspace_id,
+        root: runtime.workspaces[request.workspace.workspace_id].root,
+        cwd: workspace.cwd,
+        ledger: workspace.ledger,
+      },
+      limits: request.limits,
+      instruction_set_digest: context.instructions.instruction_set_digest,
+      handoff_digest: request.handoff_carrier?.sha256 ?? null,
+    };
     const authority = verifyMutationAuthority({
       command,
-      approval: runtime.approval,
+      approval: await resolveHostApproval(runtime.approval, { command, binding }),
       approvalOptions: {
-        binding: {
-          request_id: requestId,
-          adapter: {
-            id: described.result.adapter_id,
-            version: described.result.adapter_version,
-            contract_version: described.result.selected_adapter_contract_version,
-          },
-          core: {
-            executable_identity: runtime.core_executable_identity,
-            contract_version: described.result.core.required_core_contract_version,
-            argv,
-            input_base64: request.core_request.input_base64,
-          },
-          workspace: {
-            id: request.workspace.workspace_id,
-            root: runtime.workspaces[request.workspace.workspace_id].root,
-            cwd: workspace.cwd,
-            ledger: workspace.ledger,
-          },
-          limits: request.limits,
-          instruction_set_digest: context.instructions.instruction_set_digest,
-          handoff_digest: request.handoff_carrier?.sha256 ?? null,
-        },
+        binding,
         now: runtime.now,
         redeemedNonces: runtime.redeemed_nonces,
         trustedSources: new Set(described.result.host.trusted_approval.sources),

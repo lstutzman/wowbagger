@@ -1,0 +1,45 @@
+{
+  "scenario": "06-transition-date-refused",
+  "core_command": "transition",
+  "approval": "consumer",
+  "workspace": {
+    "kind": "plain"
+  },
+  "mutation_input": "mutation-input.json",
+  "ledger": {
+    "before": [
+      {
+        "path": "ledger/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+        "source_file": "before/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+        "sha256": "sha256:e3e834c8d0652e53b4816c94c8cdc8649607c9b976125c295469714099041a27"
+      }
+    ],
+    "after": [
+      {
+        "path": "ledger/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+        "source_file": "before/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+        "sha256": "sha256:e3e834c8d0652e53b4816c94c8cdc8649607c9b976125c295469714099041a27"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "mutation-input.json",
+      "source": "spec/fixtures/mutations/date-rollback/request.json",
+      "sha256": "sha256:9aec8096e3f66a23e20d01f722c3633330c8b160921c7bead6b538b826a8bb82",
+      "form": "bytes"
+    },
+    {
+      "path": "before/wb_01Q4DJACG0206XVQEXVQEXVQEX.md",
+      "source": "spec/fixtures/mutations/date-rollback/before.md",
+      "sha256": "sha256:e3e834c8d0652e53b4816c94c8cdc8649607c9b976125c295469714099041a27",
+      "form": "bytes"
+    },
+    {
+      "path": "expected-core-stdout.jsonl",
+      "source": "spec/fixtures/mutations/date-rollback/expected.json",
+      "sha256": "sha256:b563800f7e73ab7b22902fea4886dda161d944fa757c07a7b69fbe6770b7d472",
+      "form": "compact-json-line"
+    }
+  ]
+}

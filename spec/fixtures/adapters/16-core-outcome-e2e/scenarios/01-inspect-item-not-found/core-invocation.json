@@ -1,0 +1,12 @@
+{
+  "command": "inspect",
+  "argv": [
+    "inspect",
+    "--ledger",
+    "ledger",
+    "--id",
+    "wb_01Q4AZXNG0206CSK6CSK6CSK6C",
+    "--json"
+  ],
+  "stdin_base64": ""
+}

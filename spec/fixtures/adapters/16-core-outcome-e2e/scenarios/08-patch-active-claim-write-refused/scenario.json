@@ -1,0 +1,62 @@
+{
+  "scenario": "08-patch-active-claim-write-refused",
+  "core_command": "patch",
+  "approval": "consumer",
+  "workspace": {
+    "kind": "git-provisioned",
+    "namespace": "wbns_0123456789abcdef0123456789abcdef",
+    "journal": "journal.ndjson",
+    "clock_horizon": "2031-01-15T12:01:00.000Z"
+  },
+  "mutation_input": "mutation-input.json",
+  "ledger": {
+    "before": [
+      {
+        "path": "ledger/.wowbagger/namespace",
+        "source_file": "before/namespace",
+        "sha256": "sha256:dcce8d0da259447d14ee17b0aaf39c861b19ae7cd2679e1004c0fb9c59b6d592"
+      },
+      {
+        "path": "ledger/.wowbagger/reconcile-wbns_0123456789abcdef0123456789abcdef.md",
+        "source_file": "before/reconcile.md",
+        "sha256": "sha256:ed3dfa6d4f361f213245de9f8211ec0bbc16ce958439f53da82c8323a51f5463"
+      },
+      {
+        "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "source_file": "before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "sha256": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064"
+      }
+    ],
+    "after": [
+      {
+        "path": "ledger/.wowbagger/namespace",
+        "source_file": "before/namespace",
+        "sha256": "sha256:dcce8d0da259447d14ee17b0aaf39c861b19ae7cd2679e1004c0fb9c59b6d592"
+      },
+      {
+        "path": "ledger/.wowbagger/reconcile-wbns_0123456789abcdef0123456789abcdef.md",
+        "source_file": "before/reconcile.md",
+        "sha256": "sha256:ed3dfa6d4f361f213245de9f8211ec0bbc16ce958439f53da82c8323a51f5463"
+      },
+      {
+        "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "source_file": "before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+        "sha256": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064"
+      }
+    ]
+  },
+  "derived_from": [
+    {
+      "path": "mutation-input.json",
+      "source": "spec/fixtures/mutations/patch-body/request.json",
+      "sha256": "sha256:19208b8bcdcc8f4f18fc022d4f303eda815cddce0904c323162122433f637f81",
+      "form": "bytes"
+    },
+    {
+      "path": "before/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "source": "spec/fixtures/mutations/patch-body/ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+      "sha256": "sha256:cd1f658f72f6e0e99db6f1986758991445cb1cbb1b5e2936e210098f32e97064",
+      "form": "bytes"
+    }
+  ]
+}
