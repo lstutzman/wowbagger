@@ -1256,7 +1256,7 @@ adapter, so its implementation statuses remain `unverified`.
 `node spec/run-adapter-implementation.js` accepts the same fixture directory,
 evaluates transactions through the shipped Claude Code entrypoint and emits the
 same result shape with an evidence platform. Its current native Darwin run is
-`pass`: 200 of 200 assertions and 15 of 15 cases pass. That native common-vector
+`pass`: 201 of 201 assertions and 15 of 15 cases pass. That native common-vector
 evidence earns the Claude Code manifest's Darwin `supported` declaration.
 Codex, Kimi, and generic adapter implementations remain `unverified`.
 

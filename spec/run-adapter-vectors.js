@@ -169,6 +169,20 @@ async function evaluateAssertion(directory, caseName, assertion) {
         }));
         assert.deepEqual(result, refusal);
         return evidenceWithResult('invokeAdapter', result);
+      } else if (assertion.expect === 'trusted-approval-unavailable') {
+        // The unwired runtime: a describe result that declares no trusted
+        // approval at all makes every mutation `capability-unavailable`
+        // before an approval is validated or redeemed (§5.1). This is the
+        // refusal a bare shipped entrypoint owes its caller (item 120).
+        const refusal = await json(directory, 'expected-unwired-refusal.json');
+        const unwired = referenceRuntime({ workspaces: runtimeWorkspace(invocation) });
+        delete unwired.dynamic.host.trusted_approval;
+        const result = await invokeAdapter(
+          Buffer.from(`${JSON.stringify(invocation)}\n`),
+          unwired,
+        );
+        assert.deepEqual(result, refusal);
+        return evidenceWithResult('invokeAdapter', result);
       } else {
         const approved = await json(directory, 'approved-authority.json');
         const result = verifyMutationAuthority({

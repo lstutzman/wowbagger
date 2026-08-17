@@ -54,5 +54,24 @@ export async function runAdapterEntrypoint(options) {
     dynamicResult,
     coreProbe: runtimeConfig.core_probe,
     launch,
+    hostRuntime: conformanceHostRuntime(runtimeConfig),
   });
+}
+
+// A conformance host that wires the code-level approval provider. Only the
+// declining provider exists: it is what separates "this host cannot approve at
+// all" from "this host can approve and did not approve this invocation", the
+// two refusals case 07 pins. An unknown mode is a fixture defect, refused
+// rather than silently downgraded to no provider at all.
+function conformanceHostRuntime(runtimeConfig) {
+  if (!Object.hasOwn(runtimeConfig, 'host_approval')) return undefined;
+  if (runtimeConfig.host_approval !== 'decline') {
+    throw new Error(`unknown conformance host_approval mode ${runtimeConfig.host_approval}`);
+  }
+  return {
+    approval: () => null,
+    now: () => '2030-01-15T12:01:00Z',
+    redeemedNonces: new Set(),
+    coreExecutableIdentity: `sha256:${'a'.repeat(64)}`,
+  };
 }
