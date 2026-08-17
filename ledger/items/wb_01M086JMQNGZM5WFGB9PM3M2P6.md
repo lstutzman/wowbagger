@@ -4,7 +4,7 @@ id: wb_01M086JMQNGZM5WFGB9PM3M2P6
 number: 120
 title: "Plumb host approvals through the shipped adapter entrypoints"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-17T15:48:53Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Verified in source: the shipped entrypoints advertise approval support they do not plumb - mutations through every shipped adapter dead-end. Found by the ideation enrichment."
 ---
 
 Verified defect, found during the 2026-08-17 ideation enrichment (docs/ideation/enrichments/2026-08-17-vectors.md section 2): the shipped adapter entrypoint advertises trusted approval but plumbs none, so a mutation through any shipped entrypoint can never succeed.
