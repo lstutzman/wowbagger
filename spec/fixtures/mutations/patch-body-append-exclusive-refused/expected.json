@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 3,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The patch request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "/set",
+          "code": "invalid-value",
+          "message": "Set members body and body_append are mutually exclusive; name one."
+        }
+      ]
+    }
+  }
+}

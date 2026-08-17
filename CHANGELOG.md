@@ -86,8 +86,32 @@ consolidation. The first tagged release inherits this file.
   extension schema, a stated rule for anchored and nested values, and an
   oracle-visible surface — so the deferral is a design boundary rather than a
   silence. Their status is stated in the ownership table either way.
+- **`patch` gains `set.body_append`.** It takes a JSON string written after the
+  item's current body, under the same string rules `set.body` takes: the empty
+  string is valid, the bytes are the UTF-8 encoding of the string exactly, and
+  `null` is refused at `/set/body_append` because appending nothing is the empty
+  string. It is the same byte splice after the closing delimiter, so no
+  frontmatter byte moves, `updated` becomes request.date, and every existing
+  body byte survives — the request never names them. `body` and `body_append`
+  are mutually exclusive in one request: naming both is an `invalid-request`
+  issue at `/set`, exit 2, unchanged. This covers the annotation shape a mirror
+  consumer needs without making it carry a merge. The core contract stays
+  version 3 — it widens the patch request schema and moves no response envelope
+  member — but version 3 is already published without it, so a consumer
+  **cannot** probe for append support by reading `contract_version`. Send an
+  append and read the refusal instead: a core without it answers `unknown-member`
+  at `/set/body_append`, exit 2, unchanged.
 
 ### Documentation
+
+- **The contract states that `set.body` replaces and never merges.** A consumer
+  mirroring an external source regenerated an item body from its upstream card
+  and destroyed a ledger-only annotation; every check passed, because
+  `expected_revision` is a byte-level lost-update guard with no semantic safety.
+  Mutation contract section 9 and the skill's body bullet now say it plainly:
+  the replacement is total, and a mirroring consumer MUST read-modify-write from
+  the current item body and MUST never regenerate from the source alone. Docs
+  guards pin both sentences.
 
 - **The contract documents the selector an `inspect` `item-not-found` refusal
   echoes.** `inspect --number <n>` on a number no item carries emits

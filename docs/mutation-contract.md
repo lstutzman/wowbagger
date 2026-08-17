@@ -99,7 +99,22 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
   version 2 consumer can have negotiated the narrower shape, because version 2
   had no `--number` selector to reach it. What was wrong was the prose: section
   5 claimed these details contain only `id` from the day `--number` shipped.
-  The version stays 3.
+  The version stays 3; and
+- **the appendable body.** `body_append` joins the patch request as a JSON
+  string appended after the current body, mutually exclusive with `body` in one
+  request, `null` refused at `/set/body_append` (section 9). The version stays
+  3 by the same argument the `body` delta makes: it widens the patch request
+  schema, adds, removes, and renames no response envelope member, and a
+  consumer that never sends it cannot observe the difference. The honesty this
+  entry owes is the other half. Version 3 is **published** — `0.1.0-alpha.5`
+  released it, and that release has no `body_append` — so a consumer **cannot**
+  probe for append support by reading `contract_version`. The core that lacks
+  it and the core that carries it both report 3. A consumer that needs append
+  either pins the distribution version, where the first release after
+  `0.1.0-alpha.5` carries it, or sends an append and reads the refusal: a core
+  without it answers `invalid-request` with an `unknown-member` issue at
+  `/set/body_append`, exit 2, `unchanged`, so the probe costs nothing and
+  changes no byte.
 
 Two version-2-era changes are deliberately **not** version 3 deltas. The
 section 2 envelope rule documents the wire that versions 1, 2, and 3 all emit:
@@ -1341,6 +1356,42 @@ rules: the empty string and an LF-leading string are distinct and both valid,
 and the bytes are written exactly as the UTF-8 encoding of the string. A
 non-string body is an invalid-type issue at `/set/body`.
 
+`set.body` replaces the whole body and never merges. Nothing in the item's
+current body survives a body patch that does not carry it: the core reads
+`set.body` as the complete successor body and splices those bytes in. The
+compare-and-swap fence does not soften this. `expected_revision` is a byte-level
+lost-update guard and carries no semantic safety at all: a request built from
+the item's current revision is accepted, committed, and reported `ok: true`
+however much meaning it destroys.
+
+A consumer whose items mirror an external source — a card, an issue, an
+upstream document — MUST read-modify-write from the current item body, and MUST
+never regenerate from the source alone. Regeneration passes every check the core
+can make and discards every ledger-only byte the caller just read: the
+annotations, decisions, and local notes that exist in the ledger because they
+exist nowhere upstream. The merge is the consumer's, and it belongs on the body
+returned by the `inspect` whose revision the request fences with.
+`set.body_append` covers the append-only case without a merge.
+
+`body_append` takes a JSON string under the same rules `body` takes one: the
+empty string is valid, the bytes are written exactly as the UTF-8 encoding of
+the string, and a non-string value is an invalid-type issue at
+`/set/body_append`. `null` is refused as an invalid-value issue at
+`/set/body_append` — appending nothing is the empty string, not a removal — for
+the same reason `set.body` refuses it. The published body is the item's current
+body bytes followed by the string. The request never names the bytes in front
+of the addition, so every existing byte survives by construction: an annotation
+cannot destroy a ledger-only block by forgetting it.
+
+`body` and `body_append` are mutually exclusive in one request. A replacement
+and an append cannot both describe the successor body, so a `set` naming both
+is an invalid-request issue at `/set` naming the exclusivity, exit 2, and
+unchanged, whatever the two values are. An append is otherwise an ordinary
+patch: it rides the same lock, locked re-read, exact-byte compare-and-swap,
+candidate validation, atomic publication, and claim rules, it sets `updated` to
+request.date, and it rewrites no frontmatter byte — the addition is the same
+byte splice after the closing delimiter that a replacement is.
+
 null removes the field, for every patchable **frontmatter** field alike.
 `related` is optional, so removing it succeeds and the item reads back with an
 empty related list. `depends_on` and `title` are required item fields, so
@@ -1493,6 +1544,11 @@ same rule create serializes under: no newline is invented, trimmed, or removed,
 and no line ending is translated. An empty body leaves no byte after the
 closing delimiter's newline.
 
+An append serializes through the same splice with the item's current body bytes
+in front of the addition, so the same rules hold: nothing is invented between
+the two, no line ending is translated, and an empty `body_append` republishes
+the body byte for byte.
+
 ### Adapter advertisement
 
 The version 1 capabilities envelope and the version 1 adapter core probe do
@@ -1613,8 +1669,8 @@ edges, the schema version 1 dependent-cleanup blocker and the other two
 multi-item reasons, terminal referrers, combined blockers,
 candidate validation, deterministic operation failures, and
 unchanged/committed/unknown states; and patch field boundaries, CAS,
-serialization, preconditions, and the body swap with its untouched
-frontmatter.
+serialization, preconditions, the body swap with its untouched
+frontmatter, and the body append with its exclusivity refusal.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.
