@@ -29,6 +29,7 @@ import {
   withClaimLock,
   writeClaimState,
 } from './claim-store.js';
+import { withAutoCommit } from './git-autocommit.js';
 import { loadLedger } from './ledger.js';
 import {
   assertReportOutputOutsideLedger,
@@ -57,6 +58,7 @@ import { isCalendarDate, validateLedger } from './validate.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 3;
+const AUTO_COMMIT_COMMANDS = new Set(['create', 'transition', 'patch', 'publish-claimed']);
 
 const MAX_PUBLICATION_REQUEST_BYTES = 11 * 1024 * 1024;
 const DISTRIBUTION_VERSION = JSON.parse(
@@ -234,7 +236,9 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeInvalidRequest(command, issues);
       return;
     }
-    writeMutation(command, await createItem(parsedOptions.options.ledger, parsedRequest.value, scenario));
+    writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
+      createItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
+    )));
     return;
   }
 
@@ -257,7 +261,9 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeInvalidRequest(command, issues);
       return;
     }
-    writeMutation(command, await transitionItem(parsedOptions.options.ledger, parsedRequest.value, scenario));
+    writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
+      transitionItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
+    )));
     return;
   }
 
@@ -300,7 +306,9 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeInvalidRequest(command, issues);
       return;
     }
-    writeMutation(command, await patchItem(parsedOptions.options.ledger, parsedRequest.value, scenario));
+    writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
+      patchItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
+    )));
     return;
   }
 
@@ -438,13 +446,13 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeClaimEnvelope(invalid);
       return;
     }
-    writeClaimEnvelope(await publishClaimed({
+    writeClaimEnvelope(await autoCommitted(command, parsedOptions.options, () => publishClaimed({
       ledgerDirectory: parsedOptions.options.ledger,
       gitCommonDir,
       namespace,
       request,
       scenario,
-    }));
+    })));
     return;
   }
 
@@ -739,6 +747,12 @@ function parseContractOptions(command, argumentsList) {
           : command === 'mint-id'
             ? new Map([['--date', 'date']])
             : new Map();
+  // Bare flags carry no value. `--auto-commit` is accepted only on the four
+  // commands whose Git finalization it folds in; every other command reports it
+  // as an unknown argument.
+  const bareFlags = AUTO_COMMIT_COMMANDS.has(command)
+    ? new Map([['--auto-commit', 'autoCommit']])
+    : new Map();
   const optionalFlags = command === 'mint-id'
     ? new Set(['--date'])
     : command === 'report'
@@ -754,6 +768,14 @@ function parseContractOptions(command, argumentsList) {
       }
       seen.add(argument);
       options.json = true;
+      continue;
+    }
+    if (bareFlags.has(argument)) {
+      if (seen.has(argument)) {
+        issues.push(argumentIssue(index + 1, 'repeated-argument', `Argument ${argument} must not be repeated.`));
+      }
+      seen.add(argument);
+      options[bareFlags.get(argument)] = true;
       continue;
     }
     if (!valueFlags.has(argument)) {
@@ -794,6 +816,13 @@ function parseContractOptions(command, argumentsList) {
     issues.push(argumentIssue(-1, 'missing-argument', 'Argument --json is required.'));
   }
   return { options, issues: sortIssues(issues) };
+}
+
+// `--auto-commit` is the only bare flag beyond `--json`, and it changes what
+// happens after the mutation, never the mutation itself.
+function autoCommitted(command, options, run) {
+  if (!options.autoCommit) return run();
+  return withAutoCommit({ ledgerDirectory: options.ledger, command, run });
 }
 
 function argumentIssue(index, code, message) {
@@ -1183,7 +1212,7 @@ function usage(command) {
   }
 
   if (command === 'publish-claimed') {
-    return 'Usage: wowbagger publish-claimed';
+    return 'Usage: wowbagger publish-claimed --ledger <dir> --input <json-file|-> --json [--auto-commit]';
   }
 
   if (command === 'claim-adopt') {
@@ -1202,15 +1231,15 @@ function usage(command) {
   }
 
   if (command === 'create') {
-    return 'Usage: wowbagger create --ledger <dir> --input <json-file|-> --json';
+    return 'Usage: wowbagger create --ledger <dir> --input <json-file|-> --json [--auto-commit]';
   }
 
   if (command === 'transition') {
-    return 'Usage: wowbagger transition --ledger <dir> --input <json-file|-> --json';
+    return 'Usage: wowbagger transition --ledger <dir> --input <json-file|-> --json [--auto-commit]';
   }
 
   if (command === 'patch') {
-    return 'Usage: wowbagger patch --ledger <dir> --input <json-file|-> --json';
+    return 'Usage: wowbagger patch --ledger <dir> --input <json-file|-> --json [--auto-commit]';
   }
 
   if (command === 'mint-id') {
