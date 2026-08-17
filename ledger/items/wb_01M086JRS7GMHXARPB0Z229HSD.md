@@ -5,9 +5,10 @@ number: 126
 title: "Bound the item source at every candidate door"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-17
+completed: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-17T15:48:57Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-17
     summary: "Accept into the backlog."
     rationale: "Ideation survivor: alpha.6 accepts a 50MiB item with a false message on the one bounded path; first contract narrowing, v4 bundled with #122."
+  - action: complete
+    date: 2026-08-17
+    summary: "Item source bounded at all four doors; core contract v4, work-claim api 2."
+    rationale: "MAX_ITEM_SOURCE_BYTES=8388608 over the complete serialized successor at create, transition, patch, publish-claimed; one named item-source-too-large refusal per domain; the false canonical-base64 message for oversized candidates is gone (the v1 surface WAS the lie, hence api_version 2); legacy oversized items validate, inspect, and shrink; v3 consumers fail closed at negotiation. 90 new tests, ~30 mutations red, both oracles mirrored independently."
 ---
 
 Ideation survivor 5 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-bodybound.md - the enrichment is the authoritative scope; this body is its summary. RELATED to the provisioned-performance program: both require core contract v4 - bundle into one version bump and one release.
