@@ -4,7 +4,7 @@ id: wb_01M086JP4HBS1D80B3YJ6VEWVV
 number: 122
 title: "Run the provisioned-performance program"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
 updated: 2026-08-17
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-08-17T15:48:54Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-17
+    summary: "Accept into the backlog."
+    rationale: "Ideation survivor: the only program attacking the two measured provisioned-scale costs; instrument-first per the Sol enrichment; v4 bundled with #126."
 ---
 
 Ideation survivor 1 of 5 (2026-08-17). Full design basis: docs/ideation/2026-08-17-open-ideation.md and the Sol enrichment at docs/ideation/enrichments/2026-08-17-perf.md - the enrichment is the authoritative scope; this body is its summary.
