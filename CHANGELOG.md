@@ -5,6 +5,8 @@ A change to what a command accepts, refuses, emits, or writes is a behaviour
 change even when the commit that carried it was labelled refactor, docs, or
 consolidation. The first tagged release inherits this file.
 
+## Unreleased
+
 ## 0.1.0-alpha.6 - 2026-08-17
 
 ### Added
