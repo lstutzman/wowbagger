@@ -34,3 +34,7 @@ Acceptance:
 - The consumer's exact trap is dead end-to-end: a title correction lands in-band on a provisioned fixture ledger with no unauthorized-revision aftermath.
 - The ownership boundary table exists in the contract, guarded by a docs test; the skill states it.
 - Oracle and core agree both directions, mutation-guarded; gate green on both runtimes.
+
+## Second occurrence (2026-08-17, same consumer)
+
+One day later, the same shape from ordinary backlog hygiene: three legacy items whose only defect is a wrong or missing identifier field have no ledger-side repair verb at all. Two independent occurrences in two days upgrade scope 3's extension-member decision: consumer-owned identifier fields ride permitted extension members, and "include if trivially the same machinery" becomes "field evidence demands a sanctioned path; if the machinery is not trivial, say what is and split it - but the boundary table must give these fields a named home either way."
