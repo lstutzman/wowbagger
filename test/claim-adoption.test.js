@@ -143,6 +143,20 @@ test('the journal accepts a well-formed revision-adoption entry', async () => {
   assert.equal(replayed.entries[0].type, 'revision-adoption');
 });
 
+test('an unauthorized-revision finding names both the destructive and the non-destructive remedy', async () => {
+  const fixture = await blockedByUnauthorizedRevision();
+
+  const blocked = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(blocked.exit, 6, JSON.stringify(blocked.envelope));
+  const finding = blocked.envelope.result.findings[0];
+  assert.equal(finding.reason, 'unauthorized-revision');
+  assert.equal(
+    finding.remediation,
+    'Restore the authorized revision at item.md, then run claim-verify; that discards the edit. Or adopt the committed revision of item.md with claim-adopt, then run claim-verify; that keeps the edit.',
+  );
+});
+
 test('an adoption recorded in the journal makes the committed bytes authorized', async () => {
   const fixture = await blockedByUnauthorizedRevision();
   const blocked = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');

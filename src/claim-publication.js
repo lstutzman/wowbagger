@@ -663,10 +663,13 @@ function reconciliationDiagnosis({
       remediation: `Synchronize this worktree to the commit that wrote ${pathLabel} (pull or merge), then run claim-verify.`,
     };
   }
+  // Two remedies, both named, in the order that makes the cost obvious. The
+  // field report behind item #113 read the single restore sentence as the only
+  // way out and discarded reviewed, merged work to obey it.
   return {
     reason: 'unauthorized-revision',
     ...(expectedPath ? { expected_path: expectedPath } : {}),
-    remediation: `Restore the authorized revision at ${pathLabel}, then run claim-verify.`,
+    remediation: `Restore the authorized revision at ${pathLabel}, then run claim-verify; that discards the edit. Or adopt the committed revision of ${pathLabel} with claim-adopt, then run claim-verify; that keeps the edit.`,
   };
 }
 
