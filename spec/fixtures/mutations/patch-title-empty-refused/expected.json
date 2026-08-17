@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "patch",
+  "contract_version": 3,
+  "state": "unchanged",
+  "error": {
+    "code": "invalid-request",
+    "message": "The patch request is invalid.",
+    "details": {
+      "issues": [
+        {
+          "path": "/set/title",
+          "code": "invalid-type",
+          "message": "Set member title must be a non-empty string."
+        }
+      ]
+    }
+  }
+}

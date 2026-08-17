@@ -36,12 +36,12 @@ const writing = section(skill, '## Writing', 'the installed skill');
 test('the installed skill names the exact patchable field set', () => {
   assert.match(
     writing,
-    phrase('patchable field set is exactly priority depends_on related and body'),
+    phrase('patchable field set is exactly title priority depends_on related and body'),
     'the skill must state the boundary rather than leave it to be discovered',
   );
   assert.match(
     contract,
-    phrase('patchable field set is exactly priority depends_on related and body'),
+    phrase('patchable field set is exactly title priority depends_on related and body'),
     'the contract must state the same boundary',
   );
 });
@@ -64,8 +64,8 @@ test('the installed skill rules the whole-list replacement and its clearing valu
   );
   assert.match(
     writing,
-    phrase('depends_on is required'),
-    'the skill must say why null is refused for depends_on',
+    phrase('depends_on and title are required'),
+    'the skill must say why null is refused for the required fields',
   );
   assert.match(
     writing,

@@ -1,0 +1,42 @@
+{
+  "case": "patch-title-mirror-correction",
+  "argv": [
+    "patch",
+    "--ledger",
+    "ledger",
+    "--input",
+    "request.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "file",
+    "path": "request.json"
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+          "source_file": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+          "sha256": "sha256:1694588e666e0114452bdca7a7d979c1525541ea75018296797312135471d757"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01Q4ZK3DG020ANANANANANANAM.md",
+          "source_file": "expected-item.md",
+          "sha256": "sha256:0373d3b98be85b5a1dc446cb13206c9626060484d9a19690281ea51a5d84069d"
+        }
+      ]
+    }
+  }
+}

@@ -46,6 +46,46 @@ consolidation. The first tagged release inherits this file.
   human-readable `remediation` prose changed. `revision-regression` keeps its
   restore-only string on purpose: it only fires while an active claim holds the
   item, which is a state adoption refuses.
+- **`patch` corrects an item title.** `set.title` takes a non-empty schema
+  string and replaces the title whole, under the same per-ID lock, exact-byte
+  compare-and-swap, candidate complete-ledger validation, and atomic
+  publication as every other patch; an item with an active claim is refused,
+  and `updated` moves to `request.date`. The scalar node is rewritten in place,
+  so the quoting style, the comments, the anchors, and every extension node
+  survive byte for byte. This closes a protocol contradiction reported twice
+  from the field: correcting a title used to require an out-of-protocol edit,
+  and on a provisioned ledger that edit is a stale write, so the next mutation
+  refused exit 6 `unauthorized-revision` and every later mutation stayed
+  blocked. `null` follows the frontmatter removal convention onto
+  `candidate-invalid`, because title is required; `""` is refused one step
+  earlier, at the request.
+- **The mutation contract states the frontmatter ownership boundary.** Section
+  9 gains a `Frontmatter ownership` table: one row per member, sorted into
+  core-owned (`schema_version`, `id`, `number`, `status`, `created`, `updated`,
+  the terminal dates, `decisions`), consumer-editable through `patch` (`title`,
+  `priority`, `depends_on`, `related`, `body`), and create-once (`kind`,
+  `provenance`, `parent`, `snoozed_until`). The boundary was previously
+  discoverable only by sending a patch and reading the refusal. A docs test
+  pins every row and the skill teaches the same three classes.
+
+### Decided
+
+- **`kind` stays unpatchable, and the contract now says why.** A task-to-epic
+  flip changes which parent and children rules the item is validated under and
+  which lifecycle edges it may take. It needs its own verb with its own
+  preconditions, not a wider patch set.
+- **Extension members stay out of `patch`, and the contract records the
+  reasons.** Two field reports asked for a sanctioned path for consumer-owned
+  identifier fields riding permitted extension members. The widening was
+  assessed against title's machinery and is not the same machinery: the
+  fail-closed `set` rule has no room for an arbitrary key, candidate validation
+  constrains no extension value, nested and anchored values do not survive a
+  whole-value replace the way a scalar does, and the oracle has no observable
+  surface to correlate an extension patch against. Section 9 names what a real
+  path would need — a `set.extensions` container, a declared per-ledger
+  extension schema, a stated rule for anchored and nested values, and an
+  oracle-visible surface — so the deferral is a design boundary rather than a
+  silence. Their status is stated in the ownership table either way.
 
 ### Documentation
 
