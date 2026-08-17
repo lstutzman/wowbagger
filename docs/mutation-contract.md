@@ -1935,6 +1935,9 @@ uncommitted mutation looks like.
 
 `spec/fixtures/mutation-refusals/uncommitted-prior-mutation/manifest.json` is
 the normative envelope for this refusal.
+`spec/fixtures/mutation-autocommit/` is the companion set for section 13: it
+pins the success envelope, the commit-failed envelope, and the recovery
+envelope, subject and commit set included.
 
 ### Reconciliation
 
@@ -2146,4 +2149,12 @@ mode removes ceremony and names every failure it can observe; it does not remove
 the need to inspect after a process dies.
 
 The flag is direct-CLI only. No adapter advertises or constructs it, and adapter
-handoff resume still forbids automatic Git commits.
+handoff resume still forbids automatic Git commits. The ledger-specific
+`claim capabilities` envelope does not advertise it either: its shape is an
+exact pinned consumer surface, and adding a member there would require a
+coordinated adapter contract change this release does not make. A consumer
+detects the feature by sending the flag.
+
+`spec/fixtures/mutation-autocommit/` pins the success, commit-failed, and
+recovery envelopes; `spec/fixtures/envelope-domains/manifest.json` pins their
+response domains and exact root members.
