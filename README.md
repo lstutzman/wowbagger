@@ -279,8 +279,8 @@ version.
 - **Node.js:** 20 and later. The adapter conformance vectors run against Node
   20 and the current runtime before each release.
 - **Platforms:** the core runs wherever Node.js runs. The Claude Code adapter
-  declares Darwin and Linux `supported` from native common-vector evidence.
-  Windows and every other shipped adapter target remain `unverified`.
+  declares Darwin, Linux, and Windows `supported` from native common-vector
+  evidence. Every other shipped adapter target remains `unverified`.
 - **Other tooling:** `wowbagger` manages a Git-tracked Markdown ledger. It
   needs an accessible Git checkout for work-claim and namespace operations.
   Before `provision`, run

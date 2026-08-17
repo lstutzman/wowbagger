@@ -98,11 +98,6 @@ jobs:
       - name: install
         run: npm ci
 
-      - name: win32 claim diagnostic (TEMPORARY)
-        if: runner.os == 'Windows'
-        continue-on-error: true
-        run: node .github/win32-claim-diagnose.mjs
-
       # One Node per runner, so the two documented test commands collapse into
       # this one.
       - name: unit suite

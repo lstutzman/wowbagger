@@ -1296,10 +1296,10 @@ expected result is semantically rejected rather than merely read. Its status is
 adapter, so its implementation statuses remain `unverified`.
 `node spec/run-adapter-implementation.js` accepts the same fixture directory,
 evaluates transactions through the shipped Claude Code entrypoint and emits the
-same result shape with an evidence platform. Its current native Darwin and Linux
-runs are each `pass`: 210 of 210 assertions and 16 of 16 cases pass. That native
-common-vector evidence earns the Claude Code manifest's Darwin and Linux
-`supported` declarations; win32 remains `unverified`.
+same result shape with an evidence platform. Its current native Darwin, Linux,
+and Windows runs are each `pass`: 210 of 210 assertions and 16 of 16 cases
+pass. That native common-vector evidence earns the Claude Code manifest's
+Darwin, Linux, and win32 `supported` declarations.
 Codex, Kimi, and generic adapter implementations remain `unverified`.
 
 The supported manifest assertion types are `core-baseline`, `capability`,
