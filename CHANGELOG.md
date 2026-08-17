@@ -7,6 +7,68 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- **A host process can wire consumer approval into a shipped adapter
+  entrypoint.** `runAdapterEntrypoint` now accepts an optional `hostRuntime`
+  carrying the approval source, the current time, the redeemed-nonce store, and
+  the core executable identity the host attests. It is a code-level parameter of
+  the embedding process and is deliberately absent from every wire: the
+  bootstrap request root schema is exact and has no approval member, so an
+  approval a model places on the request is an `invalid-invocation` that never
+  reaches the gate, exactly as adapter contract section 5.1 requires. The
+  approval may be a finished event or a resolver the adapter calls with the
+  exact binding it has just resolved — the argument vector, absolute workspace
+  paths, and instruction and handoff digests an approval covers do not exist
+  until the adapter has built them, so an interactive consumer prompt cannot
+  mint the approval any earlier. A resolver that fails produced no approval and
+  the mutation refuses; it never proceeds unapproved. The default is unchanged
+  and remains no approval. `test/adapter-host-approval-wire.test.js` carries the
+  first approved mutation in this repository to cross a spawned entrypoint into
+  a launched core and change a ledger, with its binding digest canonicalized by
+  the independent reference model rather than by the engine under test. No
+  version moved in any domain: `host.trusted_approval` has been optional since
+  version 1, the approval object and binding are untouched, and the mechanism is
+  invisible on every wire the contract defines. Adapter contract sections 3.2,
+  3.3, 5.1, 10, and 12 state the seam, the honesty rule, the two-runtime
+  evidence, and the version argument.
+
+### Fixed
+
+- **A shipped adapter no longer advertises trusted approval it cannot
+  exercise.** The three shipped entrypoints declared
+  `trusted_approval: {"supported": true, "sources": ["consumer"]}` while
+  `runAdapterEntrypoint` passed no approval, clock, nonce store, or core
+  executable identity to the invoke engine, so `create`, `transition`, and
+  `patch` through every shipped adapter refused `consumer-approval-required`
+  and could not succeed on any input. The declaration now reflects the runtime
+  of the invocation, the way `optional_features.claims` already reflects the
+  core probe: a bare entrypoint run declares no trusted approval and refuses a
+  mutation `capability-unavailable` with `missing: ["trusted-approval"]`, the
+  refusal section 5.1 already required for an absent declaration, and a host
+  that wires an approval source declares it truthfully. The two refusals stay
+  distinguishable, because they are different facts — no approval source at all
+  versus a source that produced no approval for this invocation — and conformance
+  case `07-mutation-approval` now pins both against the runtimes that produce
+  them, taking the suite to 201 assertions across 15 cases.
+- **A committed `create` is forwarded instead of reported as an unknown
+  outcome.** Both adapter engines required `schema_version: 1` in a create
+  result and re-serialized the expected candidate with the schema 1 default, so
+  every create against a real ledger — an empty ledger is schema 2 — failed the
+  result correlation, was judged an invalid core envelope, and came back as
+  `mutation-outcome-unknown` with recovery guidance about a write that had
+  provably committed. The ledger's schema version and the number the core
+  assigns under its own lock are the only two members of the answer a caller
+  could not have known; both engines now read those from the result and
+  re-derive the whole candidate from the request bytes, leaving every other
+  member pinned by an exact byte comparison against the source the core
+  returned. The defect was unreachable while every shipped mutation refused
+  before launch, and surfaced the moment a host runtime carried a real approval
+  through to the core.
+- Adapter contract section 5's core-request table and section 5.1's approval
+  rule named only `create` and `transition`. Both have accepted `patch` since
+  adapter contract version 2; the prose now says so.
+
 ## 0.1.0-alpha.6 - 2026-08-17
 
 ### Added

@@ -462,6 +462,17 @@ pending target-specific evidence, and every platform declaration on those two
 manifests stays `unverified`. The Kimi and OpenAI-compatible harness adapters
 are not written.
 
+**All three shipped packages are read-only as they stand, and say so.** None
+wires a consumer approval source, so each declares no trusted approval and
+refuses `create`, `transition`, and `patch` with `capability-unavailable`
+naming the missing capability, before any core process starts. Mutation
+authority is a runtime dependency a host supplies in code: a process that
+embeds `runAdapterEntrypoint` passes `hostRuntime` — the approval source, the
+clock, the redeemed-nonce store, and the core executable identity it attests —
+and its describe result then advertises trusted approval truthfully. The
+approval never rides the bootstrap request, which the model controls;
+`docs/adapter-contract.md` section 5.1 states the mechanism and its rules.
+
 ## Core commands
 
 The current core requires Node.js 20 or later. From a Wowbagger checkout,

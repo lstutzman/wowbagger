@@ -305,9 +305,19 @@ When present, version 1 trusted approval has exactly one authority label:
 `trusted_approval.sources` MUST equal `["consumer"]`. Model, agent, system,
 tool, harness, and additional source labels are invalid describe results; they
 cannot become trusted through configuration. `trusted_approval.supported` MUST
-be `true` for `create` or `transition`. A false or absent member makes those
-commands unavailable before an approval is validated or redeemed. Read-only
-commands remain available.
+be `true` for `create`, `transition`, or `patch`. A false or absent member makes
+those commands unavailable before an approval is validated or redeemed.
+Read-only commands remain available.
+
+`trusted_approval` describes the runtime of the invocation being described, not
+the harness in the abstract. An adapter MUST declare it only when that
+invocation has an approval source it can actually reach; when the same adapter
+package runs with no approval source, the honest declaration is absence. This
+is the same rule `optional_features.claims` already follows: describe reports
+what this run can do, not what some run could do. Advertising a capability the
+invocation cannot exercise is a describe defect even though every field has the
+right type, because the caller's next mutation then fails at the approval gate
+with no way to have known.
 
 A non-null `handoff_carrier` requires `host.handoff.supported: true` before
 the carrier is parsed. A supported value of `false` is a
@@ -375,7 +385,8 @@ Command entrypoints use the same bootstrap transport for `describe` and
 The describe request contains only `bootstrap_wire_version`,
 `supported_adapter_contract_versions`, and an opaque `request_id`. The invoke
 request uses the selected version. A describe result advertises
-`trusted_approval`; absence means mutations are unavailable. Static and dynamic
+`trusted_approval` when this runtime has an approval source; absence means
+mutations are unavailable. Static and dynamic
 adapter ID, adapter version, selected contract, complete three-platform map,
 and `core.required_core_contract_version` MUST match exactly. The independently
 launched core probe must then match that required core version. Error
@@ -501,6 +512,7 @@ The tagged `core_request` members are exact:
 | `inspect` | `command`, `ledger`, `id` | `inspect --ledger <ledger> --id <id> --json` |
 | `create` | `command`, `ledger`, `input_base64` | `create --ledger <ledger> --input - --json` |
 | `transition` | `command`, `ledger`, `input_base64` | `transition --ledger <ledger> --input - --json` |
+| `patch` | `command`, `ledger`, `input_base64` | `patch --ledger <ledger> --input - --json` |
 
 `input_base64` is RFC 4648 base64 without line breaks. Its decoded bytes are
 the exact UTF-8 JSON request sent to standard input. The adapter MUST check the
@@ -523,13 +535,42 @@ replaced by guessed files or prior-session memory.
 
 ### 5.1 Consumer authority
 
-`create` and `transition` require an explicit consumer approval event for that
-invocation and `trusted_approval.supported: true` in describe. The event may be
-represented to the adapter by a trusted host mechanism, but a model-supplied
-Boolean is not approval. If approval is absent, the adapter returns
-`consumer-approval-required` without launching the core. If trusted approval
-is false or absent, it returns `capability-unavailable` with
+`create`, `transition`, and `patch` require an explicit consumer approval event
+for that invocation and `trusted_approval.supported: true` in describe. The
+event may be represented to the adapter by a trusted host mechanism, but a
+model-supplied Boolean is not approval. If approval is absent, the adapter
+returns `consumer-approval-required` without launching the core. If trusted
+approval is false or absent, it returns `capability-unavailable` with
 `missing: ["trusted-approval"]` before validating or redeeming any approval.
+
+The two refusals are different facts and a caller may rely on the difference.
+`capability-unavailable` says this runtime has no approval source at all, so no
+approval could change the answer. `consumer-approval-required` says this runtime
+has one and it produced no approval for this invocation — the consumer declined,
+or was never asked.
+
+The trusted host mechanism is a runtime dependency of the adapter process, never
+a request member. A process embedding an adapter entrypoint supplies, in code,
+the approval source, the current time, the redeemed-nonce store, and the core
+executable identity it attests. The request root schema is exact and has no
+approval member, so an approval a model places on the request is an
+`invalid-invocation` and never reaches the gate. An adapter MUST NOT read an
+approval from the bootstrap request, the instruction input, the handoff carrier,
+or the mutation request bytes; all four are model-reachable.
+
+The approval source may be the finished approval event, or a resolver the
+adapter calls with the exact binding below once it has resolved the argument
+vector, the absolute workspace paths, and the instruction and handoff digests.
+The resolver form is what an interactive consumer prompt requires: the binding
+an approval covers does not exist until the adapter has built it, so no earlier
+stage can mint the approval. A resolver that fails produced no approval and the
+mutation refuses `consumer-approval-required`; it never proceeds unapproved.
+
+An adapter that ships without a wired host mechanism is fail-closed by
+construction: it declares no trusted approval, and every mutation refuses
+`capability-unavailable` before path validation, approval validation, or core
+launch. That is a complete and honest adapter, not a broken one — it forwards
+every read-only command.
 
 Read operations do not grant mutation authority. No version 1 request grants
 authority to commit, push, modify remote configuration, install dependencies,
@@ -1283,6 +1324,23 @@ invocation because model transport alone is not a coding harness. A generic
 OpenAI-compatible *harness* that advertises the required filesystem and command
 capabilities must meet the same forwarding vectors as the other adapters.
 
+Mutation authority is measured against two runtimes, because the section 5.1
+refusals are two different facts. The `07-mutation-approval` case runs the
+shipped entrypoint bare — no host approval source — and pins
+`capability-unavailable` with `missing: ["trusted-approval"]`, and runs it again
+under a conformance host that wires a declining approval provider and pins
+`consumer-approval-required`. Both refusals are observed before any core child
+starts; the case's child-process audit fails it if one does. An approved
+mutation reaching a real core is proven separately, at the same process
+boundary, by `test/adapter-host-approval-wire.test.js`: a host process embeds
+the entrypoint, wires a real approval provider, and a `create` crosses the
+spawned entrypoint into the launched core and changes an isolated ledger. That
+approval's binding digest is canonicalized by the independent reference model,
+so a drifted shipped canonicalizer refuses the approval rather than agreeing
+with itself. The conformance runner deliberately holds no granting provider:
+`spec/adapter-conformance-entrypoint-main.js` accepts only the declining mode
+and refuses any other, so no conformance fixture can manufacture authority.
+
 ## 11. Non-goals
 
 This contract does not:
@@ -1392,6 +1450,26 @@ condition is named by the code that fits it instead of by the timeout that
 masked it, so version 2 consumers gain a correct diagnosis where they had an
 unobservable wait and none of them loses a documented guarantee. Fail-closed
 negotiation and the mutation-recovery rules are untouched in both directions.
+
+The section 3.2 rule that `trusted_approval` reflects the runtime, and the
+section 5.1 host approval mechanism, are likewise **not** version 2 deltas, on
+the same grounds. `host.trusted_approval` has been optional since version 1, so
+an adapter that declares no approval source emits a describe result this
+contract already accepted, and `capability-unavailable` with
+`missing: ["trusted-approval"]` is the refusal section 5.1 already required for
+that declaration. No request or response member is added, removed, or renamed,
+no error code enters the public registry, and the approval object and its
+binding are untouched — the approval format version stays 1. The host mechanism
+is a runtime dependency of the adapter process, invisible on every wire this
+contract defines: two adapters that differ only in whether a host wired one are
+byte-identical in their manifests and differ in exactly the one describe member
+that has always been allowed to vary. This follows the section 6.1 precedent:
+what changes is which declaration the adapter is permitted to make about
+itself, not the shape of anything it sends. A consumer that read
+`trusted_approval.supported: true` from a bare shipped adapter and expected a
+mutation to succeed was reading a false declaration, and its mutations already
+failed; it loses no documented guarantee. Fail-closed negotiation is untouched
+in both directions, and the default remains no approval.
 
 Bootstrap wire version 1 and the manifest, approval, instruction-input,
 handoff, and adapter-vector format versions remain 1; they are separate
