@@ -5,9 +5,9 @@ number: 109
 title: "Name an undelivered core input instead of timing out"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-16
-updated: 2026-08-16
+updated: 2026-08-17
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-08-16T21:38:08Z"
