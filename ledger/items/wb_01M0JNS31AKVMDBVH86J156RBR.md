@@ -5,9 +5,10 @@ number: 129
 title: "Add a bounded machine-readable item-list query"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-21
 updated: 2026-08-21
+completed: 2026-08-21
 provenance:
   source: "orca-ledger-workbench-contract-audit"
   recorded_at: "2026-08-21T17:27:09.989Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-21
     summary: "Accept the bounded item-list contract as a P0 workbench blocker."
     rationale: "Wowbagger v4 cannot enumerate non-ready items through a supported machine seam. Orca source evidence confirms bounded transport, snapshot, and N+1 constraints; the enriched contract keeps policy and authoritative state in Wowbagger."
+  - action: complete
+    date: 2026-08-21
+    summary: "Complete the bounded machine-readable list contract in core v5."
+    rationale: "Commits 398108c and e97e6b4 implement strict list query validation, bounded rows, filtering, deterministic full-value sorting, cursor/snapshot conflict semantics, response limits, capabilities, core v5 negotiation, and five normative vectors. Task review and scoped re-review are clean. Focused current-Node and Node-20 gates each pass 69/69."
 ---
 
 ## Problem
