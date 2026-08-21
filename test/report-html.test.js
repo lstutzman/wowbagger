@@ -196,6 +196,23 @@ test('renders a checked control for hiding terminal history', async () => {
   assert.match(html, /<section id="history" class="panel">/);
 });
 
+// The dropdown only moves the body's richness attribute, so a mode is visible
+// on a shut card only if the summary itself carries richness-gated nodes.
+test('gates extra collapsed-card summary content behind the standard and detailed modes', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+  const card = html.slice(html.indexOf('<details class="card"'));
+  const summary = card.slice(0, card.indexOf('</summary>'));
+
+  assert.match(summary, /class="summary-context standard-only"[^>]*>[^<]*task[^<]*<\/span>/);
+  assert.match(summary, /updated 2026-08-02/);
+  assert.match(summary, /class="summary-preview detailed-only"[^>]*># Body/);
+  assert.match(
+    html,
+    /body\[data-richness="basic"\] \.standard-only[^{]*body\[data-richness="standard"\] \.detailed-only\{display:none\}/,
+  );
+});
+
 test('opens with the ranked work-next list and its reasons', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
