@@ -4,6 +4,7 @@ id: wb_01M0JNS61XWMN8ZPDQKCFD9Q9R
 number: 130
 title: "Expose native transition affordances per item"
 kind: task
+priority: 1
 status: triage
 created: 2026-08-21
 updated: 2026-08-21
@@ -11,7 +12,7 @@ provenance:
   source: "orca-ledger-workbench-contract-audit"
   recorded_at: "2026-08-21T17:27:09.989Z"
 depends_on: []
-related: [wb_01KZW6PA0044GM0VX1KD0DYD1M, wb_01M058NZK1NK5EDXX2C09K707V]
+related: [ wb_01KZW6PA0044GM0VX1KD0DYD1M, wb_01M058NZK1NK5EDXX2C09K707V, wb_01M0JNS9DQEGYFS2M2WB2PXAMN ]
 ---
 
 ## Problem
@@ -51,3 +52,24 @@ No Orca-specific status names, automatic transitions, event listeners, claims UI
 ## Evidence
 
 `src/cli.js:capabilities` advertises only transition support and CAS scope. `src/mutation.js:transitionEdge`, `transitionPreconditions`, and `transitionBlockers` hold the actual vocabulary. No machine-readable transition-discovery surface existed in the 2026-08-21 audit.
+
+## Orca triage enrichment — 2026-08-21
+
+Maintainer disposition: accept as a P0 explicit-transition blocker (`priority: 1`). It is independent of #129. #131 is related as the response-loss behavior contract, and #132 depends on this item.
+
+Required consumer behavior is now explicit:
+
+- The affordance projection includes inspected revision, target status, enabled state, generated action, decision requirement, minimum date, and blockers.
+- Orca renders only returned affordances. It never copies `transitionEdge`, blocker, date, or decision logic.
+- Orca submits the exact inspected revision as `expected_revision`. Exit 4 invalidates the item and requires re-inspection; it never triggers automatic retry.
+- Agent events, worktree events, focus changes, and claim events never trigger a ledger transition. Every transition remains a deliberate user action.
+- A returned affordance is an observation, not a lease. The core still rechecks revision, locks, claim fencing, reconciliation, and candidate validity.
+
+Orca source evidence, reported by the Orca architecture agent:
+
+- `src/shared/plugins/plugin-host-api.ts`: `PLUGIN_HOST_API_V0`.
+- `src/main/plugins/plugin-host-methods.ts`: `executePluginHostCall`.
+- `src/main/plugins/plugin-host-method-bindings.ts`: `HANDLERS`, especially `workspace.readContext` and `terminal.sendText`.
+- `src/shared/plugins/plugin-manifest.ts`: `PLUGIN_EVENT_NAMES`.
+
+These surfaces show why the panel must consume a core-owned lifecycle projection and why event delivery must remain separate from transitions.
