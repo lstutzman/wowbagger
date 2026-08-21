@@ -43,7 +43,7 @@ mutation-verified in the tree. Refusal, never a guess.
 
 A v1-only consumer receives `unsupported-adapter-contract-version` from a v2
 adapter and no dynamic capability result. A v1, v2, or v3 adapter probing the v4
-core sees `contract_version: 4` and refuses before the requested command.
+core sees `contract_version: 5` and refuses before the requested command.
 Neither pairing silently selects the other version's behavior.
 
 ## How a candidate release is checked

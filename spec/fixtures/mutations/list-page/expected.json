@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "command": "list",
+  "contract_version": 5,
+  "result": {
+    "query_version": 1,
+    "as_of": "2030-01-11",
+    "snapshot": {
+      "revision": "sha256:2fb759617a5bb6e9d79ba2e27f2d7520096b36618f1d27854f5698dbcbd2390a",
+      "item_count": 4
+    },
+    "page": {
+      "size": 2,
+      "offset": 0,
+      "returned": 2,
+      "matched": 4,
+      "has_more": true,
+      "next_cursor": "eyJ2IjoxLCJxIjoic2hhMjU2OjcxNWNmZGU4YjM4NGIxZGU0MTBlNjI2ZTZmNDdhMzJiN2M5MGMzNTRmNzg0MDYzNmZhMGFiZTM2MTMwNzQ2MDYiLCJzIjoic2hhMjU2OjJmYjc1OTYxN2E1YmI2ZTlkNzliYTJlMjdmMmQ3NTIwMDk2YjM2NjE4ZjFkMjc4NTRmNTY5OGRiY2JkMjM5MGEiLCJvIjoyfQ"
+    },
+    "items": [
+      {
+        "id": "wb_01KYX9XP00000000000000000A",
+        "number": 1,
+        "title": "Alpha ledger tool",
+        "title_truncated": false,
+        "kind": "task",
+        "status": "backlog",
+        "priority": 0,
+        "created": "2026-08-01",
+        "updated": "2026-08-01",
+        "revision": "sha256:d225c949d6b86ce07e62f0b25c522d1aee8e5b475467aeecbfc5a7fa98c14ff7",
+        "ready": true
+      },
+      {
+        "id": "wb_01KYX9XP00000000000000000B",
+        "number": 2,
+        "title": "Beta report",
+        "title_truncated": false,
+        "kind": "epic",
+        "status": "triage",
+        "created": "2026-08-01",
+        "updated": "2026-08-01",
+        "revision": "sha256:1744660e579ebe66aaad567e9771ed62ec0990202013eb1bb9469e6c7b313510",
+        "ready": false
+      }
+    ]
+  }
+}

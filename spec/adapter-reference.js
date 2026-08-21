@@ -22,10 +22,15 @@ const INPUT_DELIVERY_STATES = ['delivered', 'failed', 'unread'];
 const PLATFORM_KEYS = ['darwin', 'linux', 'win32'];
 const PLATFORM_STATUS = new Set(['supported', 'unsupported', 'unverified']);
 const ADAPTER_CONTRACT_VERSION = 2;
-const CORE_CONTRACT_VERSION = 4;
+const CORE_CONTRACT_VERSION = 5;
 // Written independently of `src/limits.js`: the oracle pins the contract value,
 // never the production constant.
 const MAX_ITEM_SOURCE_BYTES = 8388608;
+const LIST_QUERY_VERSION = 1;
+const DEFAULT_LIST_PAGE_SIZE = 50;
+const MAX_LIST_PAGE_SIZE = 200;
+const MAX_LIST_TITLE_CHARACTERS = 120;
+const MAX_LIST_RESPONSE_BYTES = 131072;
 const WORK_CLAIM_API_VERSION = 2;
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
@@ -607,6 +612,12 @@ export function referenceCoreCapabilities() {
       },
       operations: {
         inspect: { supported: true, write_scope: 'none', cas_scope: 'none' },
+        list: {
+          supported: true,
+          write_scope: 'none',
+          cas_scope: 'none',
+          query_version: LIST_QUERY_VERSION,
+        },
         create: {
           supported: true,
           write_scope: 'single-item',
@@ -641,6 +652,10 @@ export function referenceCoreCapabilities() {
       },
       limits: {
         max_item_source_bytes: MAX_ITEM_SOURCE_BYTES,
+        default_list_page_size: DEFAULT_LIST_PAGE_SIZE,
+        max_list_page_size: MAX_LIST_PAGE_SIZE,
+        max_list_title_characters: MAX_LIST_TITLE_CHARACTERS,
+        max_list_response_bytes: MAX_LIST_RESPONSE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,
@@ -1372,13 +1387,18 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.backend.coordination_scope !== 'same-working-copy-cooperative-writers') {
     return 'result.backend';
   }
-  if (!hasExactKeys(result.operations, ['inspect', 'create', 'transition', 'patch', 'work_claim'])) {
+  if (!hasExactKeys(result.operations, ['inspect', 'list', 'create', 'transition', 'patch', 'work_claim'])) {
     return 'result.operations';
   }
   if (!hasExactKeys(result.operations.inspect, ['supported', 'write_scope', 'cas_scope'])
     || result.operations.inspect.supported !== true
     || result.operations.inspect.write_scope !== 'none'
     || result.operations.inspect.cas_scope !== 'none') return 'result.operations.inspect';
+  if (!hasExactKeys(result.operations.list, ['supported', 'write_scope', 'cas_scope', 'query_version'])
+    || result.operations.list.supported !== true
+    || result.operations.list.write_scope !== 'none'
+    || result.operations.list.cas_scope !== 'none'
+    || result.operations.list.query_version !== LIST_QUERY_VERSION) return 'result.operations.list';
   if (!hasExactKeys(result.operations.create, [
     'supported', 'write_scope', 'cas_scope', 'publication_visibility', 'publication_probe',
   ])
@@ -1428,11 +1448,17 @@ function coreCapabilitiesSchemaIssue(value) {
   const limits = result.limits;
   if (!hasExactKeys(limits, [
     'max_item_source_bytes',
+    'default_list_page_size', 'max_list_page_size', 'max_list_title_characters',
+    'max_list_response_bytes',
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection',
     'automatic_stale_lock_breaking',
   ])
     || limits.max_item_source_bytes !== MAX_ITEM_SOURCE_BYTES
+    || limits.default_list_page_size !== DEFAULT_LIST_PAGE_SIZE
+    || limits.max_list_page_size !== MAX_LIST_PAGE_SIZE
+    || limits.max_list_title_characters !== MAX_LIST_TITLE_CHARACTERS
+    || limits.max_list_response_bytes !== MAX_LIST_RESPONSE_BYTES
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
     || limits.cross_worktree_coordination !== false

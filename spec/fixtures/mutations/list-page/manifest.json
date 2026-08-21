@@ -1,0 +1,72 @@
+{
+  "case": "list-first-page-bounded-rows",
+  "argv": [
+    "list",
+    "--ledger",
+    "ledger",
+    "--input",
+    "query.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "sha256": "sha256:d225c949d6b86ce07e62f0b25c522d1aee8e5b475467aeecbfc5a7fa98c14ff7"
+        },
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "sha256": "sha256:1744660e579ebe66aaad567e9771ed62ec0990202013eb1bb9469e6c7b313510"
+        },
+        {
+          "path": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "source_file": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "sha256": "sha256:c44cf695c6d7f9a5065d0d2a239a92eee62025c193efb00ca5c1f4c64a980be3"
+        },
+        {
+          "path": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "source_file": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "sha256": "sha256:bfe8d6916d503cb53f2c8dc76efe0b0ff4e8ecb510911c7e1f3fe95965ade4a3"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "sha256": "sha256:d225c949d6b86ce07e62f0b25c522d1aee8e5b475467aeecbfc5a7fa98c14ff7"
+        },
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "sha256": "sha256:1744660e579ebe66aaad567e9771ed62ec0990202013eb1bb9469e6c7b313510"
+        },
+        {
+          "path": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "source_file": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "sha256": "sha256:c44cf695c6d7f9a5065d0d2a239a92eee62025c193efb00ca5c1f4c64a980be3"
+        },
+        {
+          "path": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "source_file": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "sha256": "sha256:bfe8d6916d503cb53f2c8dc76efe0b0ff4e8ecb510911c7e1f3fe95965ade4a3"
+        }
+      ]
+    }
+  }
+}

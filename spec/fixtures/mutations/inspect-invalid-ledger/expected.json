@@ -1,7 +1,7 @@
 {
   "ok": false,
   "command": "inspect",
-  "contract_version": 4,
+  "contract_version": 5,
   "error": {
     "code": "ledger-invalid",
     "message": "The configured ledger is invalid.",

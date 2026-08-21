@@ -22,7 +22,7 @@ const BASE_MANIFEST = {
   adapter_version: '1.0.0',
   adapter_contract_versions: [2],
   bootstrap_wire_version: 1,
-  required_core_contract_version: 4,
+  required_core_contract_version: 5,
   entrypoints: {
     describe: { kind: 'command', executable: 'bin/adapter', fixed_args: ['describe'] },
     invoke: { kind: 'command', executable: 'bin/adapter', fixed_args: ['invoke'] },

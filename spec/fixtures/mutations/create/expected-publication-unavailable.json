@@ -1,7 +1,7 @@
 {
   "ok": false,
   "command": "create",
-  "contract_version": 4,
+  "contract_version": 5,
   "state": "unchanged",
   "error": {
     "code": "capability-unavailable",

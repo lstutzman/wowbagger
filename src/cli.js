@@ -50,7 +50,15 @@ import {
   validatePatchRequest,
   validateTransitionRequest,
 } from './mutation.js';
-import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
+import {
+  DEFAULT_LIST_PAGE_SIZE,
+  LIST_QUERY_VERSION,
+  MAX_ITEM_SOURCE_BYTES,
+  MAX_LIST_PAGE_SIZE,
+  MAX_LIST_RESPONSE_BYTES,
+  MAX_LIST_TITLE_CHARACTERS,
+} from './limits.js';
+import { listLedger, validateListQuery } from './list.js';
 import { mintId } from './mint.js';
 import { provisionNamespace, readNamespace } from './namespace.js';
 import { normalizeJsonValue, parseJsonRequest, sortIssues } from './request.js';
@@ -58,10 +66,13 @@ import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
-const MUTATION_CONTRACT_VERSION = 4;
+const MUTATION_CONTRACT_VERSION = 5;
 const AUTO_COMMIT_COMMANDS = new Set(['create', 'transition', 'patch', 'publish-claimed']);
 
 const MAX_PUBLICATION_REQUEST_BYTES = 11 * 1024 * 1024;
+// A list query is a handful of scalars and short arrays. The bound exists so an
+// unbounded input can never be read into memory, not to shape the query.
+const MAX_LIST_REQUEST_BYTES = 64 * 1024;
 const DISTRIBUTION_VERSION = JSON.parse(
   readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
 ).version;
@@ -72,6 +83,7 @@ const COMMAND_SUMMARIES = {
   report: 'Render one validated ledger as a self-contained HTML report.',
   capabilities: 'Describe the core contract and unbound default claim profile.',
   inspect: 'Inspect one ledger item as a lossless raw-byte snapshot.',
+  list: 'List a validated ledger as bounded, paginated item summaries.',
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
   patch: "Patch an item's priority and relation lists, guarded the same way.",
@@ -90,6 +102,7 @@ const KNOWN_COMMANDS = new Set([
   'report',
   'capabilities',
   'inspect',
+  'list',
   'create',
   'transition',
   'patch',
@@ -217,6 +230,71 @@ export async function runCli(argumentsList, { scenario } = {}) {
       contract_version: MUTATION_CONTRACT_VERSION,
       result: { item: result.item },
     })}\n`);
+    return;
+  }
+
+  if (command === 'list') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input, MAX_LIST_REQUEST_BYTES);
+    } catch {
+      writeInvalidRequest(command, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    const queryIssues = validateListQuery(parsedRequest.value, parsedRequest.issues);
+    if (queryIssues.length > 0) {
+      writeInvalidRequest(command, queryIssues);
+      return;
+    }
+    const outcome = await listLedger(
+      parsedOptions.options.ledger,
+      normalizeJsonValue(parsedRequest.value),
+    );
+    if (outcome.validation) {
+      writeListFailure('ledger-invalid', 'The configured ledger is invalid.', {
+        validation_errors: outcome.validation.errors,
+      }, 3);
+      return;
+    }
+    if (outcome.snapshotChanged) {
+      writeListFailure(
+        'list-snapshot-changed',
+        'The ledger snapshot the cursor was issued against is no longer current.',
+        outcome.snapshotChanged,
+        4,
+      );
+      return;
+    }
+    // The advertised bound is measured on the exact bytes this command would
+    // write, trailing LF included. Over the bound the page is refused whole: a
+    // list response is never a partial page.
+    const response = `${JSON.stringify({
+      ok: true,
+      command,
+      contract_version: MUTATION_CONTRACT_VERSION,
+      result: outcome.result,
+    })}\n`;
+    const responseBytes = Buffer.byteLength(response, 'utf8');
+    if (responseBytes > MAX_LIST_RESPONSE_BYTES) {
+      writeListFailure(
+        'list-response-too-large',
+        'The requested page does not fit the supported list response byte limit.',
+        {
+          max_list_response_bytes: MAX_LIST_RESPONSE_BYTES,
+          response_bytes: responseBytes,
+          page_size: outcome.result.page.size,
+        },
+        2,
+      );
+      return;
+    }
+    process.stdout.write(response);
     return;
   }
 
@@ -638,6 +716,18 @@ function writeReportFailure(code, message, details, exit) {
   process.exitCode = exit;
 }
 
+// A list refusal is a read-only envelope: no state member, and never a partial
+// result beside the error.
+function writeListFailure(code, message, details, exit) {
+  process.stdout.write(`${JSON.stringify({
+    ok: false,
+    command: 'list',
+    contract_version: MUTATION_CONTRACT_VERSION,
+    error: { code, message, details },
+  })}\n`);
+  process.exitCode = exit;
+}
+
 async function capabilities(ledger) {
   const gitCommonDir = await resolveGitCommonDir(ledger ?? process.cwd());
   return {
@@ -654,6 +744,12 @@ async function capabilities(ledger) {
           supported: true,
           write_scope: 'none',
           cas_scope: 'none',
+        },
+        list: {
+          supported: true,
+          write_scope: 'none',
+          cas_scope: 'none',
+          query_version: LIST_QUERY_VERSION,
         },
         create: {
           supported: true,
@@ -682,6 +778,10 @@ async function capabilities(ledger) {
       },
       limits: {
         max_item_source_bytes: MAX_ITEM_SOURCE_BYTES,
+        default_list_page_size: DEFAULT_LIST_PAGE_SIZE,
+        max_list_page_size: MAX_LIST_PAGE_SIZE,
+        max_list_title_characters: MAX_LIST_TITLE_CHARACTERS,
+        max_list_response_bytes: MAX_LIST_RESPONSE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,
@@ -754,7 +854,7 @@ function parseContractOptions(command, argumentsList) {
     ? new Map([['--ledger', 'ledger'], ['--id', 'id'], ['--number', 'number']])
     : command === 'report'
       ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out']])
-      : command === 'create' || command === 'transition' || command === 'patch'
+      : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
         || command === 'publish-claimed' || command === 'publication-read'
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
         || command === 'claim-release' || command === 'claim-adopt'
@@ -1253,6 +1353,10 @@ function usage(command) {
 
   if (command === 'inspect') {
     return 'Usage: wowbagger inspect --ledger <dir> (--id <id> | --number <n>) --json';
+  }
+
+  if (command === 'list') {
+    return 'Usage: wowbagger list --ledger <dir> --input <json-file|-> --json';
   }
 
   if (command === 'create') {

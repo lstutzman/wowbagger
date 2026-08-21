@@ -1,4 +1,11 @@
-import { MAX_ITEM_SOURCE_BYTES } from '../limits.js';
+import {
+  DEFAULT_LIST_PAGE_SIZE,
+  LIST_QUERY_VERSION,
+  MAX_ITEM_SOURCE_BYTES,
+  MAX_LIST_PAGE_SIZE,
+  MAX_LIST_RESPONSE_BYTES,
+  MAX_LIST_TITLE_CHARACTERS,
+} from '../limits.js';
 import { hasExactMembers } from './schema-helpers.js';
 
 // The version 3 core command list, in the fixed advertising order (contract
@@ -7,7 +14,7 @@ import { hasExactMembers } from './schema-helpers.js';
 export const CORE_COMMAND_ORDER = Object.freeze([
   'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
-export const CORE_CONTRACT_VERSION = 4;
+export const CORE_CONTRACT_VERSION = 5;
 // The work-claim API lives in its own version domain. It moved to 2 with the
 // item-source refusal that replaced publish-claimed's version 1 error for an
 // oversized candidate.
@@ -89,11 +96,23 @@ function workClaimOperationIssue(workClaim) {
   return null;
 }
 
+function listOperationIssue(list) {
+  if (!hasExactMembers(list, ['supported', 'write_scope', 'cas_scope', 'query_version'])
+    || list.supported !== true
+    || list.write_scope !== 'none'
+    || list.cas_scope !== 'none'
+    || list.query_version !== LIST_QUERY_VERSION) {
+    return 'result.operations.list';
+  }
+  return null;
+}
+
 function operationsIssue(operations) {
-  if (!hasExactMembers(operations, ['inspect', 'create', 'transition', 'patch', 'work_claim'])) {
+  if (!hasExactMembers(operations, ['inspect', 'list', 'create', 'transition', 'patch', 'work_claim'])) {
     return 'result.operations';
   }
   return inspectOperationIssue(operations.inspect)
+    || listOperationIssue(operations.list)
     || createOperationIssue(operations.create)
     || transitionOperationIssue(operations.transition)
     || patchOperationIssue(operations.patch)
@@ -116,10 +135,15 @@ function durabilityIssue(durability) {
 function limitsIssue(limits) {
   if (!hasExactMembers(limits, [
     'max_item_source_bytes',
+    'default_list_page_size', 'max_list_page_size', 'max_list_title_characters', 'max_list_response_bytes',
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection', 'automatic_stale_lock_breaking',
   ])
     || limits.max_item_source_bytes !== MAX_ITEM_SOURCE_BYTES
+    || limits.default_list_page_size !== DEFAULT_LIST_PAGE_SIZE
+    || limits.max_list_page_size !== MAX_LIST_PAGE_SIZE
+    || limits.max_list_title_characters !== MAX_LIST_TITLE_CHARACTERS
+    || limits.max_list_response_bytes !== MAX_LIST_RESPONSE_BYTES
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
     || limits.cross_worktree_coordination !== false
@@ -201,6 +225,12 @@ export function coreCapabilities() {
       backend: { name: 'local-filesystem', coordination_scope: 'same-working-copy-cooperative-writers' },
       operations: {
         inspect: { supported: true, write_scope: 'none', cas_scope: 'none' },
+        list: {
+          supported: true,
+          write_scope: 'none',
+          cas_scope: 'none',
+          query_version: LIST_QUERY_VERSION,
+        },
         create: {
           supported: true,
           write_scope: 'single-item',
@@ -227,6 +257,10 @@ export function coreCapabilities() {
       },
       limits: {
         max_item_source_bytes: MAX_ITEM_SOURCE_BYTES,
+        default_list_page_size: DEFAULT_LIST_PAGE_SIZE,
+        max_list_page_size: MAX_LIST_PAGE_SIZE,
+        max_list_title_characters: MAX_LIST_TITLE_CHARACTERS,
+        max_list_response_bytes: MAX_LIST_RESPONSE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,

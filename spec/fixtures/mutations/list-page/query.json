@@ -1,0 +1,16 @@
+{
+  "query_version": 1,
+  "as_of": "2030-01-11",
+  "filters": {
+    "status": [
+      "backlog",
+      "triage",
+      "done"
+    ]
+  },
+  "sort": {
+    "field": "number",
+    "direction": "ascending"
+  },
+  "page_size": 2
+}

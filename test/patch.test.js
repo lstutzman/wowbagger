@@ -232,7 +232,7 @@ test('patch changes priority under compare-and-swap and bumps updated', async ()
     const envelope = JSON.parse(result.stdout);
     assert.equal(envelope.ok, true);
     assert.equal(envelope.command, 'patch');
-    assert.equal(envelope.contract_version, 4);
+    assert.equal(envelope.contract_version, 5);
     assert.equal(envelope.state, 'committed');
     const item = envelope.result.item;
     assert.equal(item.core.priority, 1);

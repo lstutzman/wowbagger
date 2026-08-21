@@ -1415,7 +1415,7 @@ error registry. It changes only this versioned surface:
 | Independently probed core `contract_version` | Exactly `4` |
 
 The core capability probe adapter contract version 2 requires is core
-contract version 4. It adds exactly
+contract version 5. It adds exactly
 `operations.patch: {"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}`,
 `operations.work_claim.api_version: 2`, and
 `limits.max_item_source_bytes: 8388608` as the first member of
@@ -1507,6 +1507,6 @@ receives exactly the compact refusal
 `{"ok":false,"error":{"code":"unsupported-adapter-contract-version"}}` plus
 one LF. It receives no v2 describe result and no requested core child is
 launched. Conversely, an adapter that requires core contract version 1, 2, or 3 while
-probing a version 4 core observes `contract_version: 4` and refuses the
+probing a version 5 core observes `contract_version: 5` and refuses the
 pairing as `core-contract-version-mismatch`; neither direction silently
 receives the other version's behavior.

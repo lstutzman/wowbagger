@@ -1,0 +1,14 @@
+{
+  "ok": false,
+  "command": "list",
+  "contract_version": 5,
+  "error": {
+    "code": "list-snapshot-changed",
+    "message": "The ledger snapshot the cursor was issued against is no longer current.",
+    "details": {
+      "mismatch": "snapshot",
+      "cursor_snapshot_revision": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "current_snapshot_revision": "sha256:2fb759617a5bb6e9d79ba2e27f2d7520096b36618f1d27854f5698dbcbd2390a"
+    }
+  }
+}

@@ -195,7 +195,7 @@ test('neither adapter surface accepts a forwarded number-selector not-found deta
     process: processObservation({
       ok: false,
       command: 'inspect',
-      contract_version: 4,
+      contract_version: 5,
       error: {
         code: 'item-not-found',
         message: 'The requested item was not found.',
@@ -217,7 +217,7 @@ test('both adapter surfaces still forward the id-selector not-found refusal', ()
     process: processObservation({
       ok: false,
       command: 'inspect',
-      contract_version: 4,
+      contract_version: 5,
       error: {
         code: 'item-not-found',
         message: 'The requested item was not found.',

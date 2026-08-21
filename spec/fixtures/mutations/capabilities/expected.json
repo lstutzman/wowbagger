@@ -1,7 +1,7 @@
 {
   "ok": true,
   "command": "capabilities",
-  "contract_version": 4,
+  "contract_version": 5,
   "result": {
     "backend": {
       "name": "local-filesystem",
@@ -12,6 +12,12 @@
         "supported": true,
         "write_scope": "none",
         "cas_scope": "none"
+      },
+      "list": {
+        "supported": true,
+        "write_scope": "none",
+        "cas_scope": "none",
+        "query_version": 1
       },
       "create": {
         "supported": true,
@@ -47,6 +53,10 @@
     },
     "limits": {
       "max_item_source_bytes": 8388608,
+      "default_list_page_size": 50,
+      "max_list_page_size": 200,
+      "max_list_title_characters": 120,
+      "max_list_response_bytes": 131072,
       "multi_item_atomicity": false,
       "cross_clone_coordination": false,
       "cross_worktree_coordination": false,

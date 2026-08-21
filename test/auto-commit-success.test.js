@@ -27,7 +27,7 @@ test('a provisioned transition --auto-commit creates one commit of the item and 
   assert.equal(result.exit, 0, result.stdout);
   assert.equal(result.envelope.ok, true);
   assert.equal(result.envelope.command, 'transition');
-  assert.equal(result.envelope.contract_version, 4);
+  assert.equal(result.envelope.contract_version, 5);
   assert.equal(result.envelope.state, 'committed');
 
   const commit = git(fixture.root, 'rev-parse', 'HEAD');

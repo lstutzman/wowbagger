@@ -6,7 +6,7 @@
   "adapter_contract_versions": [
     2
   ],
-  "required_core_contract_version": 4,
+  "required_core_contract_version": 5,
   "entrypoints": {
     "describe": {
       "kind": "host-tool",

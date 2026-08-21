@@ -22,7 +22,7 @@ function refusalResponse() {
   return {
     ok: false,
     command: 'patch',
-    contract_version: 4,
+    contract_version: 5,
     state: 'unchanged',
     error: {
       code: 'patch-precondition-failed',
@@ -118,7 +118,7 @@ test('the oracle correlates an appended result body as a suffix of the item it r
   const success = (body) => ({
     ok: true,
     command: 'patch',
-    contract_version: 4,
+    contract_version: 5,
     state: 'committed',
     result: {
       item: {

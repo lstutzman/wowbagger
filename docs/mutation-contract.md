@@ -159,10 +159,9 @@ and stops. That is the intended outcome, not a regression.
 
 ### Version 4
 
-Version 4 is the version this document defines and the runtime emits. It
-retains every version 3 request, response, state, exit, locking, CAS,
-publication, and recovery rule except for these explicit deltas, which are the
-complete difference against published version 3 (`0.1.0-alpha.6`):
+Version 4 retained every version 3 request, response, state, exit, locking,
+CAS, publication, and recovery rule except for these explicit deltas, which are
+the complete difference against published version 3 (`0.1.0-alpha.6`):
 
 - every core command envelope carries `contract_version: 4`;
 - **the bounded item source.** `MAX_ITEM_SOURCE_BYTES` is 8,388,608 and bounds
@@ -210,6 +209,42 @@ matches root members exactly still matches; a consumer that matches issue
 members exactly must negotiate version 3 before reading a date refusal, and a
 consumer that must not have its accepted input narrowed underneath it must
 negotiate version 4 before writing an item.
+
+### Version 5
+
+Version 5 is the version this document defines and the runtime emits. It
+retains every version 4 request, response, state, exit, locking, CAS,
+publication, and recovery rule except for these explicit deltas, which are the
+complete difference against published version 4 (`0.1.0-alpha.7`):
+
+- every core command envelope carries `contract_version: 5`;
+- **the bounded list operation.** `list` is a new read-only core command
+  (section 5.1). It enumerates a validated ledger as bounded item summaries
+  under closed filters, one selected sort field, and cursor pagination. It adds
+  the refusals `list-snapshot-changed` (exit 4) and `list-response-too-large`
+  (exit 2); and
+- **the advertised list bounds.** `result.operations.list` and four new
+  `result.limits` members carry the list contract's exact numbers (section 4).
+  A version 4 consumer that validated `result.operations` or `result.limits` by
+  exact members refuses the new members, which is the same fail-closed outcome
+  the version field already produces.
+
+Nothing else moves. `validate` and `ready` carry no version member and their
+bytes are unchanged. `inspect`, `create`, `transition`, `patch`, `mint-id`,
+`report`, and `capabilities` change only in the `contract_version` number: no
+root member, result member, issue member, error code, or exit meaning of an
+existing invocation changes.
+
+A version 4 consumer fails closed against a version 5 core the same way: it
+reads `contract_version: 5` from `capabilities --json`, does not recognize it,
+and stops.
+
+The bootstrap wire, adapter approval, instruction, handoff, and fixture-format
+versions are separate version domains and remain version 1. The adapter
+contract remains version 2 and the work-claim API remains version 2. The list
+query has its own version domain, `query_version`, which is `1`: a consumer
+negotiates the query shape through `result.operations.list.query_version`, not
+through the core contract version.
 
 ## 1. Scope
 
@@ -263,6 +298,7 @@ The local commands are:
 ~~~text
 wowbagger capabilities --json
 wowbagger inspect --ledger <dir> --id <id> --json
+wowbagger list --ledger <dir> --input <json-file|-> --json
 wowbagger create --ledger <dir> --input <json-file|-> --json [--auto-commit]
 wowbagger transition --ledger <dir> --input <json-file|-> --json [--auto-commit]
 wowbagger patch --ledger <dir> --input <json-file|-> --json [--auto-commit]
@@ -468,9 +504,9 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, item-source-too-large, items-directory-unavailable |
+| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, item-source-too-large, items-directory-unavailable, list-response-too-large |
 | 3 | The complete configured ledger is invalid. | ledger-invalid |
-| 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision, auto-commit-preflight-failed, mutation-finalize-refused |
+| 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision, auto-commit-preflight-failed, mutation-finalize-refused, list-snapshot-changed |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
 | 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown, git-commit-failed, git-commit-outcome-unknown, post-commit-reconciliation-failed |
 
@@ -596,20 +632,46 @@ members above. This is the one input to `capabilities`, so the response is
 deterministic for a given working directory but not fixed across working
 directories.
 
-### Contract version 4 capability delta
+### Contract version 5 capability delta
 
 The preceding JSON and three-member Git-dependent coupling remain the exact
-version 1 definition. Versions 2, 3, and 4 change only the following capability
-paths; all omitted paths retain their version 1 values:
+version 1 definition. Versions 2, 3, 4, and 5 change only the following
+capability paths; all omitted paths retain their version 1 values:
 
-| Path | Version 4 value |
+| Path | Version 5 value |
 |---|---|
-| `contract_version` | `4` |
+| `contract_version` | `5` |
 | `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
+| `result.operations.list` | `{"supported":true,"write_scope":"none","cas_scope":"none","query_version":1}` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
 | `result.operations.work_claim.api_version` | `2` |
 | `result.limits.max_item_source_bytes` | `8388608` |
+| `result.limits.default_list_page_size` | `50` |
+| `result.limits.max_list_page_size` | `200` |
+| `result.limits.max_list_title_characters` | `120` |
+| `result.limits.max_list_response_bytes` | `131072` |
 | `result.limits.cross_worktree_coordination` | `false` |
+
+`result.operations` advertises in the fixed order `inspect`, `list`, `create`,
+`transition`, `patch`, `work_claim`. `result.limits` advertises
+`max_item_source_bytes` first, then the four list bounds in the order above,
+then the version 1 booleans. `list` is read-only, so its `write_scope` and
+`cas_scope` are `none`, exactly like `inspect`.
+
+The four list bounds are exact numbers, not advice:
+
+- `default_list_page_size` is the page size a query that omits `page_size` receives;
+- `max_list_page_size` is the largest `page_size` a query may request;
+- `max_list_title_characters` is the exact number of Unicode code points a row's
+  projected title may carry before it is truncated and flagged; and
+- `max_list_response_bytes` bounds the complete `list` response, envelope and
+  trailing LF included.
+
+A full page of maximum-width rows can exceed `max_list_response_bytes`. When it
+does, the command refuses the page whole with `list-response-too-large` and the
+caller lowers `page_size`; neither bound silently rewrites the other, and a
+`list` response is never a partial page. A consumer with its own transport
+budget uses the lower of that budget and `max_list_response_bytes`.
 
 `result.limits.max_item_source_bytes` is the first member of `result.limits`,
 before `multi_item_atomicity`. It is the exact number of bytes the complete
@@ -754,6 +816,160 @@ used to set: the tool refusing to show the item it tells the operator to fix.
 An operator repairing an invalid ledger reads the bytes and revision of the
 items around the fault with `inspect`, and reads the fault itself from
 `validation_errors`, whose `expected_path` and `remediation` name the repair.
+
+### 5.1 The bounded list query
+
+`list` enumerates a validated ledger. It is read-only, takes no lock, and
+returns no item source and no body: a caller selects a row, then reads that one
+item with `inspect`. `--ledger` is required; `list` performs no ledger discovery
+and binds no implicit path.
+
+`list` loads and validates the complete ledger before it projects anything. An
+invalid ledger returns `ledger-invalid`, exit 3, with `details.validation_errors`
+and no rows: there is no partial list.
+
+#### The query
+
+The request is UTF-8 JSON with one top-level object and exactly these members:
+
+| Member | Required | Value |
+|---|---|---|
+| `query_version` | yes | `1` |
+| `as_of` | yes | ISO calendar date; readiness is projected as of this date |
+| `sort` | yes | object with exactly `field` and `direction` |
+| `filters` | no | object with a subset of the closed filter members below |
+| `page_size` | no | integer from 1 to `max_list_page_size`; default `default_list_page_size` |
+| `cursor` | no | an opaque cursor from a previous `list` response |
+
+`sort.field` is one of `created`, `id`, `number`, `priority`, `status`, `title`,
+`updated`. `sort.direction` is `ascending` or `descending`.
+
+`filters` members are:
+
+| Filter | Value | Meaning |
+|---|---|---|
+| `status` | non-empty array of distinct statuses | row status is in the set |
+| `kind` | non-empty array of distinct kinds | row kind is in the set |
+| `ready` | boolean | row readiness as of `as_of` equals the value |
+| `number` | non-empty array of distinct positive integers | row number is in the set |
+| `title_contains` | non-empty string | the stored title contains it |
+
+Filters are a conjunction: every named filter must accept the item. A value
+filter is a set, so an empty array or a repeated entry is `invalid-request`
+rather than a silently widened or deduplicated query. `title_contains` is a
+case-sensitive substring test against the whole stored title, not against the
+bounded excerpt a row carries; there is no locale collation, case folding, or
+Unicode normalization.
+
+Unknown, missing, and mistyped members are `invalid-request`, exit 2, with the
+aggregated issues of section 3. A JSON number is an integer only when its
+literal is canonical, so `page_size: 1.0` is `invalid-value`.
+
+#### Order
+
+The selected field decides the primary order. An item that does not carry the
+selected member sorts after every item that does in `ascending` order;
+`descending` is the exact reverse of the ascending primary comparison. Every
+order then breaks ties on ascending immutable ID, in both directions, so the
+total order is stable across invocations and a full traversal never depends on
+file order.
+
+#### The response
+
+~~~json
+{
+  "ok": true,
+  "command": "list",
+  "contract_version": 5,
+  "result": {
+    "query_version": 1,
+    "as_of": "2026-08-21",
+    "snapshot": { "revision": "sha256:…", "item_count": 5 },
+    "page": {
+      "size": 2,
+      "offset": 0,
+      "returned": 2,
+      "matched": 5,
+      "has_more": true,
+      "next_cursor": "…"
+    },
+    "items": []
+  }
+}
+~~~
+
+`snapshot.revision` is the ledger-snapshot witness: a digest over every item's
+ledger-relative path and exact item revision, so any item added, removed,
+renamed, or byte-modified changes it. `snapshot.item_count` counts the whole
+validated ledger, not the filtered page.
+
+`page.matched` counts every row the filters accept in that snapshot.
+`page.next_cursor` is a string when `has_more` is `true` and `null` otherwise.
+
+Each row has exactly:
+
+| Member | Presence | Value |
+|---|---|---|
+| `id` | always | immutable item ID; the only identity |
+| `number` | when the item carries one | the short handle, never identity |
+| `title` | always | the title, truncated to `max_list_title_characters` code points |
+| `title_truncated` | always | `true` when the projection dropped code points |
+| `kind` | always | `task` or `epic` |
+| `status` | always | the item status |
+| `priority` | when the item carries one | the supplied priority, never recomputed |
+| `created` | always | ISO calendar date |
+| `updated` | always | ISO calendar date |
+| `revision` | always | the exact item revision, as `inspect` reports it |
+| `ready` | always | readiness as of `as_of` |
+
+#### Cursor pagination
+
+A cursor is opaque and carries no ledger content. It binds three things: the
+digest of the query it was issued for, the snapshot revision it was issued
+against, and the offset to resume at. A caller passes it back unchanged with the
+same query.
+
+A string that is not a cursor this core issued is `invalid-request`, exit 2, at
+`/cursor`. It is never treated as a restart from offset zero.
+
+When either binding no longer holds, the cursor is refused with
+`list-snapshot-changed`, exit 4:
+
+~~~json
+{
+  "ok": false,
+  "command": "list",
+  "contract_version": 5,
+  "error": {
+    "code": "list-snapshot-changed",
+    "message": "The ledger snapshot the cursor was issued against is no longer current.",
+    "details": {
+      "mismatch": "snapshot",
+      "cursor_snapshot_revision": "sha256:…",
+      "current_snapshot_revision": "sha256:…"
+    }
+  }
+}
+~~~
+
+`details.mismatch` is `snapshot` when the ledger changed and `query` when the
+same cursor was replayed under a different `as_of`, `filters`, or `sort`. Both
+carry one remedy: restart pagination with no cursor. A caller MUST NOT combine
+pages from different snapshot revisions; across one unchanged traversal every
+matching item appears exactly once.
+
+The response is a live projection on every invocation. A consumer may cache it
+as transient interface state only; it never becomes a second ledger store.
+
+#### Exit and error summary
+
+| Exit | Code | Condition |
+|---:|---|---|
+| 0 | none | the page was projected and fits the response bound |
+| 2 | `invalid-request` | arguments, JSON, query schema, or cursor form |
+| 2 | `list-response-too-large` | the exact rows exceed `max_list_response_bytes` |
+| 3 | `ledger-invalid` | the complete configured ledger is invalid |
+| 4 | `list-snapshot-changed` | the cursor's snapshot or query binding moved |
 
 ## 6. Cooperative lock and snapshot protocol
 
@@ -1812,6 +2028,8 @@ patch.
 | patch-precondition-failed | id, issues |
 | candidate-invalid | id, validation_errors |
 | item-source-too-large | id, size_bytes, limit_bytes |
+| list-response-too-large | max_list_response_bytes, response_bytes, page_size |
+| list-snapshot-changed | mismatch, cursor_snapshot_revision, current_snapshot_revision |
 | revision-conflict | id, expected_revision, actual_revision |
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |

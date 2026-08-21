@@ -39,7 +39,7 @@ function refusalEnvelope(command, details) {
   return Buffer.from(`${JSON.stringify({
     ok: false,
     command,
-    contract_version: 4,
+    contract_version: 5,
     state: 'unchanged',
     error: {
       code: 'item-source-too-large',
@@ -128,7 +128,7 @@ for (const command of ['create', 'transition', 'patch']) {
       const stdout = Buffer.from(`${JSON.stringify({
         ok: false,
         command,
-        contract_version: 4,
+        contract_version: 5,
         state: 'unchanged',
         error: {
           code: 'item-source-too-large',

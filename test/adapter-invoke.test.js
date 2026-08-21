@@ -154,7 +154,7 @@ test('forwards an approved patch with exact argv and stdin as a mutation', async
     adapter: { id: configured.dynamic.adapter_id, version: configured.dynamic.adapter_version, contract_version: 2 },
     core: {
       executable_identity: `sha256:${'a'.repeat(64)}`,
-      contract_version: 4,
+      contract_version: 5,
       argv,
       input_base64: input.toString('base64'),
     },
@@ -239,7 +239,7 @@ test('rejects an approval whose nonce is a number, not a string', () => {
     adapter: { id: 'a', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: `sha256:${'a'.repeat(64)}`,
-      contract_version: 4,
+      contract_version: 5,
       argv: ['capabilities', '--json'],
       input_base64: '',
     },

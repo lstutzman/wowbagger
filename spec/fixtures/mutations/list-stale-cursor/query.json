@@ -1,0 +1,17 @@
+{
+  "query_version": 1,
+  "as_of": "2030-01-11",
+  "filters": {
+    "status": [
+      "backlog",
+      "triage",
+      "done"
+    ]
+  },
+  "sort": {
+    "field": "number",
+    "direction": "ascending"
+  },
+  "page_size": 2,
+  "cursor": "eyJ2IjoxLCJxIjoic2hhMjU2OjcxNWNmZGU4YjM4NGIxZGU0MTBlNjI2ZTZmNDdhMzJiN2M5MGMzNTRmNzg0MDYzNmZhMGFiZTM2MTMwNzQ2MDYiLCJzIjoic2hhMjU2OjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJvIjoyfQ"
+}

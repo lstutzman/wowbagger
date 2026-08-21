@@ -22,11 +22,11 @@ const cliPath = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 // cannot notice the constant moving.
 const LIMIT = 8388608;
 
-test('capabilities negotiates core contract version 4', () => {
+test('capabilities negotiates core contract version 5', () => {
   const result = runCli('capabilities', '--json');
 
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(JSON.parse(result.stdout).contract_version, 4);
+  assert.equal(JSON.parse(result.stdout).contract_version, 5);
 });
 
 test('capabilities advertises the exact item source byte limit', () => {
@@ -53,7 +53,7 @@ const PROBES = [
 ];
 
 for (const [name, capabilities, verify] of PROBES) {
-  test(`${name}: a complete version 4 core envelope passes probe negotiation`, () => {
+  test(`${name}: a complete version 5 core envelope passes probe negotiation`, () => {
     assert.deepEqual(verify(dynamicDescribe(), capabilities()), { ok: true });
   });
 
@@ -196,7 +196,7 @@ test('create refuses an item source one byte over the limit and publishes nothin
     assert.deepEqual(envelope, {
       ok: false,
       command: 'create',
-      contract_version: 4,
+      contract_version: 5,
       state: 'unchanged',
       error: {
         code: 'item-source-too-large',
@@ -336,7 +336,7 @@ test('transition refuses a successor its decision block pushes one byte over the
   assert.deepEqual(refused.envelope, {
     ok: false,
     command: 'transition',
-    contract_version: 4,
+    contract_version: 5,
     state: 'unchanged',
     error: {
       code: 'item-source-too-large',
@@ -362,7 +362,7 @@ test('patch body replacement refuses a successor one byte over the limit', async
   assert.deepEqual(refused.envelope, {
     ok: false,
     command: 'patch',
-    contract_version: 4,
+    contract_version: 5,
     state: 'unchanged',
     error: {
       code: 'item-source-too-large',

@@ -83,7 +83,7 @@ function binding() {
     adapter: { id: 'example.reference', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: revision('a'),
-      contract_version: 4,
+      contract_version: 5,
       argv: ['transition', '--ledger', '/approved/workspace/ledger', '--input', '-', '--json'],
       input_base64: 'e30K',
     },
@@ -247,7 +247,7 @@ test('reference oracle forwards an approved patch with exact argv and stdin as a
     adapter: { id: 'example.reference', version: '1.0.0', contract_version: 2 },
     core: {
       executable_identity: revision('a'),
-      contract_version: 4,
+      contract_version: 5,
       argv,
       input_base64: input.toString('base64'),
     },
@@ -296,7 +296,7 @@ test('reference oracle independently validates definitive patch preconditions', 
   const response = {
     ok: false,
     command: 'patch',
-    contract_version: 4,
+    contract_version: 5,
     state: 'unchanged',
     error: {
       code: 'patch-precondition-failed',
@@ -920,7 +920,7 @@ test('an items-directory-unavailable create refusal forwards only with its exact
   const refusal = (details) => ({
     ok: false,
     command: 'create',
-    contract_version: 4,
+    contract_version: 5,
     state: 'unchanged',
     error: {
       code: 'items-directory-unavailable',
