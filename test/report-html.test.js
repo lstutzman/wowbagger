@@ -200,6 +200,34 @@ function decisionSurface(html) {
   return html.slice(0, html.indexOf('id="drilldown"'));
 }
 
+// What a screen reader would read out of the element an aria reference names:
+// the report escapes every ledger value, so stripping tags is enough to get the
+// announced text out of the rendered string.
+function elementText(html, id) {
+  const at = html.indexOf(`id="${id}"`);
+  assert.notEqual(at, -1, `no element carries id ${id}`);
+  const tag = /^<([a-z]+)/.exec(html.slice(html.lastIndexOf('<', at)))[1];
+  const start = html.indexOf('>', at) + 1;
+  let cursor = start;
+  let depth = 1;
+  while (depth > 0) {
+    const opened = html.indexOf(`<${tag}`, cursor);
+    const closed = html.indexOf(`</${tag}`, cursor);
+    assert.notEqual(closed, -1, `element ${id} is never closed`);
+    if (opened !== -1 && opened < closed) {
+      depth += 1;
+      cursor = opened + tag.length + 1;
+      continue;
+    }
+    depth -= 1;
+    if (depth === 0) {
+      return html.slice(start, closed).replace(/<[^>]*>/g, ' ');
+    }
+    cursor = closed + tag.length + 2;
+  }
+  throw new Error(`unreachable for ${id}`);
+}
+
 test('renders deterministic self-contained HTML without executable ledger content', async () => {
   const report = await import('../src/report-html.js').catch(() => ({}));
   const first = report.renderReportHtml?.(model(), options());
@@ -273,7 +301,7 @@ test('links a work-next row as a whole row to the canonical drill-down card', as
 
   assert.match(detail, /<details class="card" id="item-7"/);
   assert.match(row, /<li><a class="row-link" href="#item-7" data-reveal="item-7"/);
-  assert.match(row, /aria-label="Show details for #7 /);
+  assert.match(row, /aria-labelledby="row-work-next-item-7-name" aria-describedby="row-work-next-item-7-detail"/);
   assert.ok(row.indexOf('age 13d') < row.indexOf('</a>'));
 });
 
@@ -300,6 +328,43 @@ test('links every attention row to the canonical drill-down card', async () => {
   assert.match(lists[0], /<li><a class="row-link" href="#item-12" data-reveal="item-12"[^>]*>.*age 10d.*<\/a><\/li>/s);
   assert.match(lists[1], /<li><a class="row-link" href="#item-3" data-reveal="item-3"[^>]*>.*age 225d.*<\/a><\/li>/s);
   assert.match(lists[2], /<li><a class="row-link" href="#item-10" data-reveal="item-10"[^>]*>.*p85 20d.*<\/a><\/li>/s);
+});
+
+// aria-label replaces every node nested inside the anchor, so a free-text label
+// on a whole-row link costs the reader exactly what the row is for: the ranking
+// reasons on Work next, and the blocked-by, age, and p85 facts on Attention. The
+// row's own printed nodes have to be the name and the description.
+test('names every row link by its handle and title and describes it with the row facts', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+  const surface = decisionSurface(html);
+  const rows = [...surface.matchAll(/<a class="row-link"[^>]*>.*?<\/a>/gs)].map((match) => match[0]);
+  const expected = new Map([
+    ['item-7', { name: ['#7', 'Unsafe'], detail: ['priority 1', 'age 13d'] }],
+    ['item-12', { name: ['#12', 'Blocked item'], detail: ['blocked by #5', 'age 10d'] }],
+    ['item-3', { name: ['#3', 'Old item'], detail: ['age 225d', 'backlog', 'ready'] }],
+    ['item-10', { name: ['#10', 'Stuck item'], detail: ['44d since accept', 'p85 20d'] }],
+  ]);
+
+  assert.equal(rows.length, expected.size);
+  assert.doesNotMatch(surface, /class="row-link"[^>]*aria-label=/);
+
+  for (const row of rows) {
+    const anchor = /data-reveal="([^"]+)"/.exec(row)[1];
+    const nameId = /aria-labelledby="([^"]+)"/.exec(row)?.[1];
+    const detailId = /aria-describedby="([^"]+)"/.exec(row)?.[1];
+    assert.ok(nameId !== undefined && detailId !== undefined, `${anchor} row link names nothing: ${row}`);
+
+    const facts = expected.get(anchor);
+    for (const [id, substrings] of [[nameId, facts.name], [detailId, facts.detail]]) {
+      assert.equal(html.split(`id="${id}"`).length - 1, 1, `id ${id} is not unique in the document`);
+      assert.ok(row.includes(`id="${id}"`), `${anchor} points outside its own row at ${id}`);
+      const text = elementText(html, id);
+      for (const substring of substrings) {
+        assert.match(text, new RegExp(substring.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      }
+    }
+  }
 });
 
 test('renders the evidence layer with throughput, buckets, and forecast bands', async () => {

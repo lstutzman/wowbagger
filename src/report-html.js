@@ -146,9 +146,17 @@ function numberHandle(item) {
 // An item named above the drill-down is a way into it. The whole row is the
 // link, so the pointer target is the reading target, and the href alone
 // reaches the canonical card when scripting is off.
-function rowLink(entry, content) {
+//
+// A free-text aria-label would replace every node inside the anchor, costing
+// the reader the reasons and facts the row exists to state, so the row names
+// itself with its own handle and title and describes itself with its own detail
+// line. The collection scope keeps the ids unique where one item is on two
+// lists.
+function rowLink(entry, scope, content) {
   const anchor = itemAnchor(entry);
-  return `<a class="row-link" href="#${anchor}" data-reveal="${anchor}" aria-label="Show details for ${escapeHtml(numberHandle(entry))} ${escapeHtml(entry.title)}">${content}</a>`;
+  const nameId = `row-${scope}-${anchor}-name`;
+  const detailId = `row-${scope}-${anchor}-detail`;
+  return `<a class="row-link" href="#${anchor}" data-reveal="${anchor}" aria-labelledby="${nameId}" aria-describedby="${detailId}">${content(nameId, detailId)}</a>`;
 }
 
 // The ranked list is the report. Each entry states the factors that placed it,
@@ -160,24 +168,24 @@ function renderWorkNext(entries, unknownClasses) {
     : `<p class="notice">Unrecognised class values, ranked as standard: ${unknownClasses.map((entry) => `${escapeHtml(entry.value)} (${entry.numbers.map((number) => `#${number}`).join(', ')})`).join('; ')}</p>`;
   const body = entries.length === 0
     ? '<p class="muted">No ready items.</p>'
-    : `<ol class="ranked">${entries.map((entry) => `<li>${rowLink(entry, `<span class="summary-main"><span class="handle">${escapeHtml(numberHandle(entry))}</span><span class="title">${escapeHtml(entry.title)}</span></span><p class="why">${entry.reasons.map((reason) => `<span class="reason reason-${escapeHtml(reason.code)}">${escapeHtml(reason.label)}</span>`).join('')}</p>`)}</li>`).join('')}</ol>`;
+    : `<ol class="ranked">${entries.map((entry) => `<li>${rowLink(entry, 'work-next', (nameId, detailId) => `<span class="summary-main" id="${nameId}"><span class="handle">${escapeHtml(numberHandle(entry))}</span><span class="title">${escapeHtml(entry.title)}</span></span><p class="why" id="${detailId}">${entry.reasons.map((reason) => `<span class="reason reason-${escapeHtml(reason.code)}">${escapeHtml(reason.label)}</span>`).join('')}</p>`)}</li>`).join('')}</ol>`;
   return `<section id="work-next" class="panel"><div class="section-heading"><div><p class="eyebrow">Recommended order</p><h2>Work next</h2></div><p class="muted">Ready items only. Derived at render time; the deterministic <code>ready</code> queue is unchanged.</p></div>${notice}${body}</section>`;
 }
 
 // Every attention row is the same shape: the handle and title as the row's
 // name, one muted line of the facts that put the item on this list, and the
 // whole row as the way into the item.
-function attentionList(entries, emptyMessage, detail) {
+function attentionList(entries, scope, emptyMessage, detail) {
   if (entries.length === 0) {
     return `<p class="muted">${emptyMessage}</p>`;
   }
-  return `<ul class="plain">${entries.map((entry) => `<li>${rowLink(entry, `<span class="handle">${escapeHtml(numberHandle(entry))}</span> ${escapeHtml(entry.title)}<br><span class="muted">${detail(entry)}</span>`)}</li>`).join('')}</ul>`;
+  return `<ul class="plain">${entries.map((entry) => `<li>${rowLink(entry, scope, (nameId, detailId) => `<span class="row-name" id="${nameId}"><span class="handle">${escapeHtml(numberHandle(entry))}</span> ${escapeHtml(entry.title)}</span><br><span class="muted" id="${detailId}">${detail(entry)}</span>`)}</li>`).join('')}</ul>`;
 }
 
 function renderAttention(attention) {
-  const blocked = attentionList(attention.blocked, 'Nothing blocked.', (entry) => `blocked by ${entry.blockers.map((blocker) => `${escapeHtml(numberHandle(blocker))}${blocker.status === null ? '' : ` (${escapeHtml(blocker.status)})`}`).join(', ')} · age ${entry.ageDays}d`);
-  const aging = attentionList(attention.aging, 'No open items.', (entry) => `age ${entry.ageDays}d · ${escapeHtml(entry.status)} · ${escapeHtml(entry.state)}`);
-  const stuck = attentionList(attention.stuck, 'Nothing started is past the historical 85th percentile.', (entry) => `${entry.elapsedDays}d since accept ${escapeHtml(entry.startedOn)} · p85 ${entry.thresholdDays}d`);
+  const blocked = attentionList(attention.blocked, 'blocked', 'Nothing blocked.', (entry) => `blocked by ${entry.blockers.map((blocker) => `${escapeHtml(numberHandle(blocker))}${blocker.status === null ? '' : ` (${escapeHtml(blocker.status)})`}`).join(', ')} · age ${entry.ageDays}d`);
+  const aging = attentionList(attention.aging, 'aging', 'No open items.', (entry) => `age ${entry.ageDays}d · ${escapeHtml(entry.status)} · ${escapeHtml(entry.state)}`);
+  const stuck = attentionList(attention.stuck, 'stuck', 'Nothing started is past the historical 85th percentile.', (entry) => `${entry.elapsedDays}d since accept ${escapeHtml(entry.startedOn)} · p85 ${entry.thresholdDays}d`);
 
   return `<section id="attention" class="panel"><div class="section-heading"><div><p class="eyebrow">Needs a decision</p><h2>Attention</h2></div><p class="muted">Blocked work, the oldest open work, and started work past this ledger's own 85th-percentile cycle time.</p></div><div class="attention-grid"><section><h3>Blocked</h3>${blocked}${renderTruncation(attention.blocked, attention.blockedTotal)}</section><section><h3>Aging</h3>${aging}${renderTruncation(attention.aging, attention.agingTotal)}</section><section><h3>Past p85</h3>${stuck}${renderTruncation(attention.stuck, attention.stuckTotal)}</section></div></section>`;
 }
