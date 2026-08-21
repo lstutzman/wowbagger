@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { reportDom, runReportClient } from './report-dom.js';
 
 // The report always carries the dependency graph, so every render needs the
 // vendored bundle. A stub keeps these tests about the report, not the renderer.
@@ -10,6 +11,40 @@ const graphBundle = {
 
 function options(extra = {}) {
   return { graphBundle: graphBundle, ...extra };
+}
+
+// Two cards, one ready and one blocked, with one mapped value between them:
+// enough for a state filter, a search term, and a slot filter each to detach
+// the card a row above the drill-down points at.
+function revealDom() {
+  return reportDom({
+    items: [
+      {
+        id: 'item-7',
+        order: 0,
+        state: 'ready',
+        status: 'backlog',
+        priority: 1,
+        created: '2026-08-01',
+        title: 'Ready item',
+        fields: { area: 'core' },
+        search: '#7 ready item core',
+        body: '# Ready body',
+      },
+      {
+        id: 'item-12',
+        order: 1,
+        state: 'blocked',
+        status: 'backlog',
+        priority: null,
+        created: '2026-08-02',
+        title: 'Blocked item',
+        fields: { area: 'docs' },
+        search: '#12 blocked item docs',
+        body: '# Blocked body',
+      },
+    ],
+  });
 }
 
 function sequencing(overrides = {}) {
@@ -226,6 +261,22 @@ test('opens with the ranked work-next list and its reasons', async () => {
   assert.match(surface, /age 13d/);
 });
 
+// A decision surface that names an item has to be able to show it. The row is
+// the whole link so the pointer target matches the reading target, and the
+// href alone reaches the card when scripting is off.
+test('links a work-next row as a whole row to the canonical drill-down card', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+  const surface = decisionSurface(html);
+  const detail = html.slice(html.indexOf('id="drilldown"'));
+  const row = surface.slice(surface.indexOf('<ol class="ranked">'), surface.indexOf('</ol>'));
+
+  assert.match(detail, /<details class="card" id="item-7"/);
+  assert.match(row, /<li><a class="row-link" href="#item-7" data-reveal="item-7"/);
+  assert.match(row, /aria-label="Show details for #7 /);
+  assert.ok(row.indexOf('age 13d') < row.indexOf('</a>'));
+});
+
 test('renders the attention layer with blocker numbers and ages', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const surface = decisionSurface(renderReportHtml(model(), options()));
@@ -235,6 +286,20 @@ test('renders the attention layer with blocker numbers and ages', async () => {
   assert.match(surface, /225d/);
   assert.match(surface, /44d/);
   assert.match(surface, /p85 20d/);
+});
+
+// Attention is three lists of items to act on, so every row in all three is a
+// way into the item, not only the blocked ones.
+test('links every attention row to the canonical drill-down card', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const attention = surface.slice(surface.indexOf('id="attention"'), surface.indexOf('id="evidence"'));
+  const lists = attention.split('<h3>').slice(1).map((section) => section.slice(0, section.indexOf('</section>')));
+
+  assert.equal(lists.length, 3);
+  assert.match(lists[0], /<li><a class="row-link" href="#item-12" data-reveal="item-12"[^>]*>.*age 10d.*<\/a><\/li>/s);
+  assert.match(lists[1], /<li><a class="row-link" href="#item-3" data-reveal="item-3"[^>]*>.*age 225d.*<\/a><\/li>/s);
+  assert.match(lists[2], /<li><a class="row-link" href="#item-10" data-reveal="item-10"[^>]*>.*p85 20d.*<\/a><\/li>/s);
 });
 
 test('renders the evidence layer with throughput, buckets, and forecast bands', async () => {
@@ -382,4 +447,121 @@ test('says how much of a truncated attention list is not shown', async () => {
   const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /Showing 1 of 3\./);
+});
+
+// A row above the drill-down is a promise that the item can be seen. The
+// drill-down's own filters can have detached that card, so the runtime clears
+// what hides it, re-applies the list, and then opens what it promised.
+test('clears the filters that detach a targeted card and opens it', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+  const target = dom.card('item-12');
+  dom.search().value = 'ready';
+  dom.slotFilter.value = 'core';
+  dom.filter('ready').dispatch('click');
+
+  assert.equal(target.isConnected, false);
+
+  const event = dom.link('item-12').dispatch('click');
+
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(dom.search().value, '');
+  assert.equal(dom.slotFilter.value, '');
+  assert.equal(dom.filter('all').classList.contains('active'), true);
+  assert.equal(dom.filter('ready').classList.contains('active'), false);
+  assert.equal(target.isConnected, true);
+  assert.equal(target.open, true);
+  assert.equal(target.querySelector('.rendered-markdown').dataset.rendered, '1');
+  assert.equal(target.querySelector('.rendered-markdown').innerHTML, '<p># Blocked body</p>');
+  assert.equal(dom.document.activeElement, target.querySelector('summary'));
+  assert.deepEqual(target.scrolls, [{ behavior: 'smooth', block: 'start' }]);
+});
+
+test('jumps to a revealed card without animation when motion is not wanted', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  dom.prefersReducedMotion();
+  runReportClient(reportClientSource(), dom);
+  const target = dom.card('item-7');
+
+  dom.link('item-7').dispatch('click');
+
+  assert.deepEqual(target.scrolls, [{ behavior: 'auto', block: 'start' }]);
+});
+
+// Scrolling a card to the top of the viewport parks it under the sticky
+// control strip, which is opaque. The reveal has to clear the strip's own
+// height, and only while the strip is actually sticky.
+test('keeps a revealed card clear of the sticky control strip', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+  const target = dom.card('item-7');
+
+  dom.link('item-7').dispatch('click');
+
+  assert.equal(target.style.scrollMarginTop, '141px');
+});
+
+test('adds no scroll offset where the control strip does not stick', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  dom.unstickControls();
+  runReportClient(reportClientSource(), dom);
+  const target = dom.card('item-7');
+
+  dom.link('item-7').dispatch('click');
+
+  assert.equal(target.style.scrollMarginTop, '0px');
+});
+
+// Focusing an element scrolls it, which cancels the smooth scroll already
+// running and abandons the card wherever the animation had reached. The focus
+// has to leave the scroll alone.
+test('focuses a revealed card without cancelling the scroll to it', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+  const target = dom.card('item-7');
+
+  dom.link('item-7').dispatch('click');
+
+  assert.deepEqual(target.querySelector('summary').focusOptions, { preventScroll: true });
+});
+
+// A row whose padding belongs to the list item has a dead border around its
+// link, so a click near the edge or on the rank badge does nothing. The row's
+// own spacing belongs to the link.
+test('gives the whole row, padding and rank badge included, to its link', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.equal(/\.ranked li\{([^}]*)\}/.exec(html)[1], 'counter-increment:rank;border:1px solid var(--line);border-radius:9px;background:#fff');
+  assert.match(html, /\.ranked \.row-link\{position:relative;padding:12px 14px 12px 52px\}/);
+  assert.match(html, /\.ranked \.row-link::before\{content:counter\(rank\);position:absolute/);
+  assert.equal(/\.plain li\{([^}]*)\}/.exec(html)[1], 'border-bottom:1px solid var(--line)');
+  assert.match(html, /\.plain \.row-link\{padding-bottom:8px\}/);
+  assert.match(html, /\.plain li:last-child \.row-link\{padding-bottom:0\}/);
+});
+
+// The href is the whole behaviour when scripting is off, and a bare hash jump
+// parks the card under the sticky control strip. The stylesheet has to clear
+// the strip on its own, wherever the strip is sticky.
+test('keeps a hash-targeted card clear of the control strip without scripting', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.match(html, /@media\(min-width:851px\)\{\.card\{scroll-margin-top:140px\}\}/);
+});
+
+// A card holds a whole item: a wrapped title, badges, readiness, relations, a
+// decision, and a body. Tiling those side by side at desktop widths costs the
+// line length the content needs, so an item group is one column at any width.
+test('lays ledger items out as full-width rows at every width', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.equal(/\.card-grid\{([^}]*)\}/.exec(html)[1], 'display:grid;grid-template-columns:1fr;gap:12px');
+  assert.doesNotMatch(html, /\.card\[open\]\{[^}]*grid-column/);
 });
