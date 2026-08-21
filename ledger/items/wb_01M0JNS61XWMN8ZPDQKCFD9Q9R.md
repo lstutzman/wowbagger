@@ -5,7 +5,7 @@ number: 130
 title: "Expose native transition affordances per item"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-21T17:27:09.989Z"
 depends_on: []
 related: [ wb_01KZW6PA0044GM0VX1KD0DYD1M, wb_01M058NZK1NK5EDXX2C09K707V, wb_01M0JNS9DQEGYFS2M2WB2PXAMN ]
+decisions:
+  - action: accept
+    date: 2026-08-21
+    summary: "Accept native transition affordances as a P0 explicit-transition blocker."
+    rationale: "The workbench cannot safely discover actions by copying lifecycle logic or probing a mutating command. Orca evidence confirms that UI events and host methods are separate surfaces; Wowbagger must return an observed, revision-bound affordance projection and retain final authority under lock."
 ---
 
 ## Problem
