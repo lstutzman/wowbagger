@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { graphDom, runReportClient } from './report-dom.js';
 
 const readyId = 'wb_01KZAAAAAAAAAAAAAAAAAAAAAA';
 const blockedId = 'wb_01KZBBBBBBBBBBBBBBBBBBBBBB';
@@ -191,6 +192,30 @@ test('the graph sits below the decision surface, never above it', async () => {
   assert.deepEqual([...order].sort((left, right) => left - right), order);
 });
 
+// The graph draws the whole ledger, and most questions asked of it are about
+// part of it. The status filter is therefore part of the graph, above the
+// stage, in the same chip vocabulary the drill-down filters use: real
+// checkboxes in a named group, so holding two statuses at once is the
+// control's own semantics. Everything is selected until a reader says
+// otherwise, because the graph's default is the whole ledger.
+test('renders the graph status filter as accessible multi-select chips, all selected', async () => {
+  const html = await fixtureHtml();
+  const filter = html.slice(html.indexOf('id="graph-filter"'), html.indexOf('id="graph-stage"'));
+
+  assert.ok(html.indexOf('id="graph-filter"') > -1, 'the graph must carry its own status filter');
+  assert.ok(html.indexOf('id="graph-filter"') < html.indexOf('id="graph-stage"'), 'the filter sits above the stage');
+  assert.match(filter, /<fieldset class="facet-group" data-group="graph-status"><legend>Status<\/legend>/);
+  for (const [status, count] of [['backlog', 4], ['done', 1]]) {
+    assert.match(
+      filter,
+      new RegExp(`<label class="chip"><input type="checkbox" class="graph-status" value="${status}" checked><span class="chip-text">${status}</span> <span class="chip-count">${count}</span></label>`),
+    );
+  }
+  assert.match(filter, /<button type="button" id="graph-status-all">Select all<\/button>/);
+  assert.match(filter, /<button type="button" id="graph-status-clear">Clear<\/button>/);
+  assert.match(filter, /<p id="graph-node-count" class="result-count" role="status" aria-live="polite">Showing 5 of 5 nodes<\/p>/);
+});
+
 test('every node is readable without WebGL, with its status, age, and reasons', async () => {
   const html = await fixtureHtml();
   const { graph } = await fixtureGraph();
@@ -198,7 +223,7 @@ test('every node is readable without WebGL, with its status, age, and reasons', 
 
   assert.ok(roster, 'the graph section must carry its own item roster');
   assert.match(html, /id="graph-nowebgl"[^>]*hidden/, 'the notice only appears when the graph cannot draw');
-  const entries = [...roster.matchAll(/<li class="graph-band-[^"]*">([\s\S]*?)<\/li>/g)].map((match) => match[1]);
+  const entries = [...roster.matchAll(/<li class="graph-band-[^"]*"[^>]*>([\s\S]*?)<\/li>/g)].map((match) => match[1]);
   assert.equal(entries.length, graph.nodes.length);
   for (const [index, node] of graph.nodes.entries()) {
     const entry = entries[index];
@@ -222,4 +247,109 @@ test('escapes hostile item text in both the markup and the inline graph model', 
   assert.doesNotMatch(html, /<img src="https:\/\/evil\.test/);
   assert.equal(scriptOpens, scriptCloses);
   assert.ok(html.includes('\\u003c/script>'), 'the graph model must not be able to close its element');
+});
+
+// One node whose prerequisite is terminal: enough for a status the reader hides
+// to take a link with it.
+async function clientGraph() {
+  const items = fixtureItems();
+  items[1].data.depends_on = [readyId, doneId];
+  const { graph } = await fixtureGraph(items);
+  return graph;
+}
+
+// A hidden node's edges have nowhere to land. Leaving them drawn would show a
+// dependency between things the reader cannot see, which is worse than showing
+// nothing: the filter drops the node, its links, and its label together.
+test('hides every node outside the selected statuses, with the links that touch them', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const graph = await clientGraph();
+  const dom = graphDom(graph);
+  runReportClient(graphClientSource(graph), dom);
+
+  assert.equal(dom.lastData().nodes.length, 5);
+  assert.equal(dom.lastData().links.length, 3);
+
+  dom.only('backlog');
+
+  const data = dom.lastData();
+  assert.deepEqual(data.nodes.map((node) => node.id).sort(), [readyId, blockedId, childId, epicId].sort());
+  assert.equal(data.links.length, 2);
+  assert.ok(
+    data.links.every((link) => link.source !== doneId && link.target !== doneId),
+    'a link to a hidden node is a dependency the reader cannot see',
+  );
+  assert.deepEqual(dom.rosterStatuses(), ['backlog', 'backlog', 'backlog', 'backlog']);
+  assert.equal(dom.nodeCount(), 'Showing 4 of 5 nodes');
+
+  dom.only('done');
+
+  assert.deepEqual(dom.lastData().nodes.map((node) => node.id), [doneId]);
+  assert.equal(dom.lastData().links.length, 0);
+  assert.deepEqual(dom.rosterStatuses(), ['done']);
+});
+
+test('takes a hidden node off the graph card and out of the label layer', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const graph = await clientGraph();
+  const dom = graphDom(graph);
+  runReportClient(graphClientSource(graph), dom);
+  const done = dom.lastData().nodes.find((node) => node.id === doneId);
+
+  dom.hover(done);
+
+  assert.equal(dom.card.hidden, false);
+
+  dom.only('backlog');
+
+  assert.equal(dom.card.hidden, true, 'the card must not keep describing a node the graph no longer draws');
+  const label = dom.labels().find((node) => node.textContent === '#4');
+  assert.equal(label.hidden, true);
+  assert.equal(label.style.opacity, '0');
+});
+
+// Clearing every status is a legitimate thing to ask for, and the honest answer
+// is an empty graph that says it is empty — not the whole ledger back, and not
+// a stage that silently keeps the last drawing.
+test('empties the graph on Clear, says so, and gives it all back on Select all', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const graph = await clientGraph();
+  const dom = graphDom(graph);
+  runReportClient(graphClientSource(graph), dom);
+
+  assert.equal(dom.emptyState.hidden, true);
+
+  dom.clear.dispatch('click');
+
+  assert.equal(dom.statusChip('backlog').checked, false);
+  assert.equal(dom.statusChip('done').checked, false);
+  assert.deepEqual(dom.lastData(), { nodes: [], links: [] });
+  assert.deepEqual(dom.rosterStatuses(), []);
+  assert.equal(dom.nodeCount(), 'Showing 0 of 5 nodes');
+  assert.equal(dom.emptyState.hidden, false);
+
+  dom.selectAll.dispatch('click');
+
+  assert.equal(dom.statusChip('backlog').checked, true);
+  assert.equal(dom.statusChip('done').checked, true);
+  assert.equal(dom.lastData().nodes.length, 5);
+  assert.equal(dom.lastData().links.length, 3);
+  assert.equal(dom.nodeCount(), 'Showing 5 of 5 nodes');
+  assert.equal(dom.emptyState.hidden, true);
+});
+
+// Without WebGL the roster is the graph, so the same chips have to filter it.
+test('filters the roster and the count where the graph cannot draw at all', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const graph = await clientGraph();
+  const dom = graphDom(graph, { webgl: false });
+  runReportClient(graphClientSource(graph), dom);
+
+  assert.equal(dom.stage.hidden, true);
+  assert.equal(dom.notice.hidden, false);
+
+  dom.only('done');
+
+  assert.deepEqual(dom.rosterStatuses(), ['done']);
+  assert.equal(dom.nodeCount(), 'Showing 1 of 5 nodes');
 });

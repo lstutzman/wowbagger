@@ -32,7 +32,9 @@ class FakeElement {
     this.checked = false;
     this.scrolls = [];
     this.focuses = 0;
-    this.style = {};
+    this.style = { setProperty(name, value) { this[name] = value; } };
+    this.clientWidth = 0;
+    this.clientHeight = 0;
     this.rect = { top: 0, height: 0 };
     this.computed = { position: 'static' };
   }
@@ -57,6 +59,10 @@ class FakeElement {
 
   get className() {
     return [...this.classes].join(' ');
+  }
+
+  get parentNode() {
+    return this.parent;
   }
 
   get isConnected() {
@@ -188,6 +194,7 @@ function card(item) {
       order: String(item.order),
       state: item.state,
       status: item.status,
+      kind: item.kind ?? 'task',
       priority: item.priority ?? '',
       created: item.created,
       title: item.title.toLocaleLowerCase('en-US'),
@@ -221,12 +228,6 @@ export function reportDom({ items, fieldName = 'area' }) {
   };
   body.owner = document;
 
-  const slotFilter = element('select', { classes: ['slot-filter'], dataset: { field: fieldName } });
-  slotFilter.value = '';
-  const filters = ['all', 'ready', 'blocked', 'ineligible'].map((state) => {
-    const button = element('button', { dataset: { filter: state }, classes: state === 'all' ? ['filter', 'active'] : ['filter'] });
-    return button;
-  });
   const showHistory = element('input', { id: 'show-history' });
   showHistory.checked = true;
   // The report's control strip sticks to the top of the viewport above 850px,
@@ -239,12 +240,37 @@ export function reportDom({ items, fieldName = 'area' }) {
     control('select', 'group-by', 'none'),
     control('select', 'sort-by', 'default'),
     control('select', 'richness', 'standard'),
-    slotFilter,
-    ...filters,
     showHistory,
     element('button', { id: 'expand-all' }),
     element('button', { id: 'collapse-all' }),
   );
+
+  // One chip per value the fixture's own cards carry, grouped exactly as
+  // `renderFacets` groups them: readiness, status, kind, then the mapped field.
+  const chips = new Map();
+  const resultCount = element('p', { id: 'result-count' });
+  const clearFacets = element('button', { id: 'clear-facets' });
+  const facets = element('section', { id: 'facets', classes: ['facets'] });
+  facets.append(resultCount, clearFacets);
+  const groupValues = [
+    ['readiness', items.map((item) => item.state)],
+    ['status', items.map((item) => item.status)],
+    ['kind', items.map((item) => item.kind ?? 'task')],
+    [`field:${fieldName}`, items.map((item) => item.fields[fieldName]).filter((value) => value !== undefined)],
+  ];
+  for (const [group, values] of groupValues) {
+    const fieldset = element('fieldset', { classes: ['facet-group'], dataset: { group } });
+    for (const value of [...new Set(values)].sort()) {
+      const chip = element('label', { classes: ['chip'] });
+      const input = element('input', { classes: ['facet'], dataset: { group } });
+      input.value = value;
+      const count = element('span', { classes: ['chip-count'] });
+      chip.append(input, element('span', { classes: ['chip-text'], textContent: value }), count);
+      fieldset.append(chip);
+      chips.set(`${group}=${value}`, { chip, input, count });
+    }
+    facets.append(fieldset);
+  }
 
   const rows = element('ol', { classes: ['ranked'] });
   rows.append(...items.map((item) => {
@@ -256,12 +282,20 @@ export function reportDom({ items, fieldName = 'area' }) {
   const itemRoot = element('div', { id: 'items' });
   itemRoot.append(...items.map(card));
 
+  // The report is one document: the ledger graph's own status chips share the
+  // chip vocabulary further down the page, and the drill-down runtime has to
+  // leave them alone.
+  const graphChip = element('label', { classes: ['chip'] });
+  graphChip.append(element('input', { classes: ['graph-status'] }), element('span', { classes: ['chip-count'] }));
+
   body.append(
     controls,
+    facets,
     rows,
     itemRoot,
     element('p', { id: 'empty' }),
     element('section', { id: 'history' }),
+    graphChip,
   );
 
   const reduced = new Set();
@@ -279,13 +313,159 @@ export function reportDom({ items, fieldName = 'area' }) {
     },
     card: (id) => document.getElementById(id),
     link: (id) => body.querySelector(`[data-reveal="${id}"]`),
-    filter: (state) => body.querySelector(`[data-filter="${state}"]`),
-    slotFilter,
     controls,
     unstickControls() {
       controls.computed = { position: 'static' };
     },
     search: () => document.getElementById('search'),
+    chip: (group, value) => chips.get(`${group}=${value}`).input,
+    chipState: (group, value) => chips.get(`${group}=${value}`).chip,
+    chipCount: (group, value) => chips.get(`${group}=${value}`).count.textContent,
+    resultCount: () => resultCount.textContent,
+    clearFacets,
+    select(group, value) {
+      const input = chips.get(`${group}=${value}`).input;
+      input.checked = true;
+      input.dispatch('change');
+    },
+    visible: () => itemRoot.querySelectorAll('[data-item]').map((node) => node.id),
+  };
+}
+
+// The renderer the graph runtime drives, reduced to what the runtime asks of
+// it: a chainable builder that records what it was handed. Every chained call
+// is recorded, so a case can read the data the graph was last given and the
+// handlers it registered instead of asserting on the runtime's own text.
+function forceGraphStub() {
+  const calls = [];
+  const handlers = {};
+  const holder = {};
+  const base = {
+    calls,
+    handlers,
+    camera: () => ({
+      position: { x: 0, y: 0, z: 120, clone: () => ({ x: 0, y: 0, z: 0 }) },
+      getWorldDirection: (target) => Object.assign(target, { x: 0, y: 0, z: -1 }),
+    }),
+    graph2ScreenCoords: (x, y) => ({ x, y }),
+    d3Force: () => ({ strength: () => undefined }),
+  };
+  holder.graph = new Proxy(base, {
+    get(target, property) {
+      if (property in target) {
+        return target[property];
+      }
+      return (...args) => {
+        calls.push([property, ...args]);
+        if (property.startsWith('on') && typeof args[0] === 'function') {
+          handlers[property] = args[0];
+        }
+        return holder.graph;
+      };
+    },
+  });
+  return holder.graph;
+}
+
+// The graph fixture mirrors what `graphSection` emits: the status chips above
+// the stage, the stage and its card, the honest empty statement, and the roster
+// rows the same filter hides.
+export function graphDom(model, { webgl = true } = {}) {
+  const body = element('body');
+  body.root = true;
+  const document = {
+    body,
+    activeElement: null,
+    createElement: (tag) => element(tag),
+    getElementById: (id) => body.descendants().find((node) => node.id === id) ?? null,
+    querySelectorAll: (selector) => body.querySelectorAll(selector),
+    querySelector: (selector) => body.querySelector(selector),
+  };
+  body.owner = document;
+
+  const chips = new Map();
+  const group = element('fieldset', { classes: ['facet-group'], dataset: { group: 'graph-status' } });
+  for (const status of [...new Set(model.nodes.map((node) => node.status))].sort()) {
+    const chip = element('label', { classes: ['chip'] });
+    const input = element('input', { classes: ['graph-status'] });
+    input.value = status;
+    input.checked = true;
+    chip.append(input, element('span', { classes: ['chip-text'], textContent: status }));
+    group.append(chip);
+    chips.set(status, { chip, input });
+  }
+  const nodeCount = element('p', { id: 'graph-node-count' });
+  const selectAll = element('button', { id: 'graph-status-all' });
+  const clear = element('button', { id: 'graph-status-clear' });
+  const filter = element('div', { id: 'graph-filter' });
+  filter.append(group, nodeCount, selectAll, clear);
+
+  const labelLayer = element('div', { id: 'graph-labels' });
+  const card = element('aside', { id: 'graph-card' });
+  card.hidden = true;
+  const mount = element('div', { id: 'graph-canvas' });
+  mount.clientWidth = 800;
+  mount.clientHeight = 600;
+  const stage = element('div', { id: 'graph-stage' });
+  stage.append(mount, labelLayer, card);
+  const notice = element('p', { id: 'graph-nowebgl' });
+  notice.hidden = true;
+  const emptyState = element('p', { id: 'graph-empty' });
+  emptyState.hidden = true;
+
+  const roster = element('ol', { classes: ['graph-roster'] });
+  roster.append(...model.nodes.map((node) => element('li', {
+    classes: [`graph-band-${node.band}`],
+    dataset: { nodeStatus: node.status },
+  })));
+  const fallback = element('details', { classes: ['graph-fallback'] });
+  fallback.append(roster);
+
+  body.append(filter, stage, notice, emptyState, fallback);
+
+  const frames = [];
+  const reduced = new Set();
+  let renderer = null;
+  const window = {
+    ForceGraph3D: webgl ? function ForceGraph3D() { renderer = forceGraphStub(); return renderer; } : undefined,
+    WebGLRenderingContext: webgl ? function WebGLRenderingContext() {} : undefined,
+    requestAnimationFrame: (callback) => frames.push(callback),
+    addEventListener: () => undefined,
+    matchMedia: (query) => ({ matches: reduced.has(query) }),
+    getComputedStyle: (node) => node.computed,
+  };
+  document.createElement = (tag) => {
+    const node = element(tag);
+    if (tag === 'canvas') {
+      node.getContext = () => (webgl ? {} : null);
+    }
+    return node;
+  };
+
+  return {
+    document,
+    window,
+    stage,
+    card,
+    notice,
+    emptyState,
+    fallback,
+    nodeCount: () => nodeCount.textContent,
+    // The data the graph was last handed, and the handlers it registered.
+    renderer: () => renderer,
+    lastData: () => renderer.calls.filter(([name]) => name === 'graphData').at(-1)[1],
+    hover: (node) => renderer.handlers.onNodeHover(node),
+    statusChip: (status) => chips.get(status).input,
+    only(...statuses) {
+      for (const [status, entry] of chips) {
+        entry.input.checked = statuses.includes(status);
+      }
+      [...chips.values()][0].input.dispatch('change');
+    },
+    selectAll,
+    clear,
+    labels: () => labelLayer.children,
+    rosterStatuses: () => roster.children.filter((node) => !node.hidden).map((node) => node.dataset.nodeStatus),
   };
 }
 

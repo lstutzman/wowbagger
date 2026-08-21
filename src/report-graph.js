@@ -173,6 +173,13 @@ export function graphStyleSource() {
     .join('');
   return `${bandRules}
 #graph-stage{position:relative;height:min(66vh,620px);border-radius:11px;background:#080b0f;overflow:hidden}
+.graph-filter{margin-bottom:13px}
+.graph-filter .facet-group{padding:0}
+.graph-filter-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px}
+.graph-filter-buttons{display:flex;gap:8px}
+.graph-filter-actions button{padding:7px 10px}
+.graph-filter-actions .result-count{margin-right:auto}
+#graph-empty{margin:12px 0 0;border-left:3px solid var(--navy);background:#eef1f4;padding:10px 13px}
 #graph-canvas{position:absolute;inset:0}
 #graph-labels{position:absolute;inset:0;pointer-events:none}
 .graph-node-label{position:absolute;top:0;left:0;margin:-24px 0 0 9px;padding:1px 5px;border-radius:5px;background:rgba(8,11,15,.62);color:#e6edf3;font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;opacity:0;white-space:nowrap;will-change:transform}
@@ -208,7 +215,7 @@ export function graphStyleSource() {
 // the graph's decision-relevant content lives. The 3D view adds shape and
 // adjacency to it and holds nothing the roster does not already say.
 function renderRoster(nodes) {
-  return `<details class="graph-fallback"><summary>Every node, without the graph</summary><ol class="graph-roster">${nodes.map((node) => `<li class="graph-band-${escapeHtml(node.band)}"><p class="graph-head"><span class="graph-handle">${escapeHtml(node.handle)}</span><span class="graph-title">${escapeHtml(node.title)}</span><span class="graph-meta">${escapeHtml(BAND_LABELS[node.band] ?? node.band)} · ${escapeHtml(node.status)} · age ${escapeHtml(node.ageDays)}d · unblocks ${escapeHtml(node.leverage)}</span></p><p class="graph-why">${node.reasons.map((reason) => `<span class="graph-reason">${escapeHtml(reason.label)}</span>`).join('')}</p></li>`).join('')}</ol></details>`;
+  return `<details class="graph-fallback"><summary>Every node, without the graph</summary><ol class="graph-roster">${nodes.map((node) => `<li class="graph-band-${escapeHtml(node.band)}" data-node-status="${escapeHtml(node.status)}"><p class="graph-head"><span class="graph-handle">${escapeHtml(node.handle)}</span><span class="graph-title">${escapeHtml(node.title)}</span><span class="graph-meta">${escapeHtml(BAND_LABELS[node.band] ?? node.band)} · ${escapeHtml(node.status)} · age ${escapeHtml(node.ageDays)}d · unblocks ${escapeHtml(node.leverage)}</span></p><p class="graph-why">${node.reasons.map((reason) => `<span class="graph-reason">${escapeHtml(reason.label)}</span>`).join('')}</p></li>`).join('')}</ol></details>`;
 }
 
 function renderLegend() {
@@ -218,10 +225,25 @@ function renderLegend() {
   return `<div id="graph-legend">${bands}<span class="graph-key graph-key-edge graph-band-depends">Unblocks (depends_on)</span><span class="graph-key graph-key-edge graph-key-edge-parent graph-band-parent">Parent to child</span></div>`;
 }
 
+// The filter offers the lifecycle statuses the ledger actually holds, each
+// carrying how many nodes answer to it, and starts with all of them selected:
+// the graph's own default is the whole ledger. Select all and Clear are the two
+// moves a chip strip cannot make on its own.
+function renderStatusFilter(nodes) {
+  const statuses = [...new Set(nodes.map((node) => node.status))].sort();
+  const chips = statuses.map((status) => {
+    const count = nodes.filter((node) => node.status === status).length;
+    return `<label class="chip"><input type="checkbox" class="graph-status" value="${escapeHtml(status)}" checked><span class="chip-text">${escapeHtml(status)}</span> <span class="chip-count">${count}</span></label>`;
+  }).join('');
+  return `<div id="graph-filter" class="graph-filter"><fieldset class="facet-group" data-group="graph-status"><legend>Status</legend><div class="chips">${chips}</div></fieldset><div class="graph-filter-actions"><p id="graph-node-count" class="result-count" role="status" aria-live="polite">Showing ${nodes.length} of ${nodes.length} ${nodes.length === 1 ? 'node' : 'nodes'}</p><span class="graph-filter-buttons"><button type="button" id="graph-status-all">Select all</button><button type="button" id="graph-status-clear">Clear</button></span></div></div>`;
+}
+
 export function graphSection(model, manifest) {
   return `<section id="graph" class="panel"><div class="section-heading"><div><p class="eyebrow">Dependencies</p><h2>Ledger graph</h2></div><p class="muted">Every item as a node, sized by how much it unblocks. Edges run from a prerequisite or parent to the item it releases.</p></div>
+${renderStatusFilter(model.nodes)}
 <div id="graph-stage"><div id="graph-canvas"></div><div id="graph-labels" aria-hidden="true"></div><aside id="graph-card" hidden></aside><p id="graph-hint">Drag to orbit · scroll to zoom · hover or click a node</p></div>
 <p id="graph-nowebgl" hidden>This browser has no WebGL, so the graph cannot draw. Nothing is lost: every node, its status, its age, and the reasons that place it are listed below, and the graph only adds the shape of the dependencies between them.</p>
+<p id="graph-empty" hidden>No status is selected, so the graph is empty. Select a status above to draw that part of the ledger.</p>
 ${renderLegend()}
 ${renderRoster(model.nodes)}
 <p class="muted">Rendered by ${escapeHtml(manifest.package)} ${escapeHtml(manifest.version)}, vendored and checksummed in this repository and inlined here. This report fetches nothing.</p></section>`;
@@ -233,7 +255,15 @@ var GRAPH_MODEL=${scriptJson(model)};
 var GRAPH_COLORS=${scriptJson(BAND_COLORS)};
 var graphStage=document.getElementById('graph-stage');
 var graphNotice=document.getElementById('graph-nowebgl');
+var graphEmpty=document.getElementById('graph-empty');
+var graphCount=document.getElementById('graph-node-count');
 var graphFallback=document.querySelector('.graph-fallback');
+var graphStatusInputs=Array.prototype.slice.call(document.querySelectorAll('.graph-status'));
+var graphRosterRows=Array.prototype.slice.call(document.querySelectorAll('[data-node-status]'));
+// The stage hands back the one function that redraws it. Without WebGL there is
+// no stage, and the filter still runs: it is the roster's filter too.
+var graphDraw=null;
+var graphShownId=null;
 function graphWebglAvailable(){
   try{
     var probe=document.createElement('canvas');
@@ -268,6 +298,34 @@ function graphRenderCard(card,node){
   });
   card.append(handle,title,facts,why);
   card.hidden=false;
+  graphShownId=node.id;
+}
+function graphSelectedStatuses(){
+  var chosen=Object.create(null);
+  graphStatusInputs.forEach(function(input){
+    if(input.checked)chosen[input.value]=true;
+  });
+  return chosen;
+}
+// One selection drives the stage, the roster, and the count together, so the
+// three can never disagree about which part of the ledger is on screen.
+function graphApplyFilter(){
+  var chosen=graphSelectedStatuses();
+  var shown=0;
+  GRAPH_MODEL.nodes.forEach(function(node){if(chosen[node.status]===true)shown+=1;});
+  graphRosterRows.forEach(function(row){
+    row.hidden=chosen[row.getAttribute('data-node-status')]!==true;
+  });
+  var total=GRAPH_MODEL.nodes.length;
+  graphCount.textContent='Showing '+shown+' of '+total+(total===1?' node':' nodes');
+  graphEmpty.hidden=shown!==0;
+  if(graphDraw)graphDraw(chosen);
+}
+// The two moves a chip strip cannot make on its own. Clearing every status is a
+// legitimate request, and its honest answer is an empty graph that says so.
+function graphSetEveryStatus(checked){
+  graphStatusInputs.forEach(function(input){input.checked=checked;});
+  graphApplyFilter();
 }
 if(!window.ForceGraph3D||!graphWebglAvailable()){
   graphStage.hidden=true;
@@ -276,15 +334,19 @@ if(!window.ForceGraph3D||!graphWebglAvailable()){
 }else{
   graphStart();
 }
+graphStatusInputs.forEach(function(input){input.addEventListener('change',graphApplyFilter);});
+document.getElementById('graph-status-all').addEventListener('click',function(){graphSetEveryStatus(true);});
+document.getElementById('graph-status-clear').addEventListener('click',function(){graphSetEveryStatus(false);});
+graphApplyFilter();
 function graphStart(){
   var mount=document.getElementById('graph-canvas');
   var labelLayer=document.getElementById('graph-labels');
   var card=document.getElementById('graph-card');
-  var data={
-    nodes:GRAPH_MODEL.nodes.map(function(node){return Object.assign({},node);}),
-    links:GRAPH_MODEL.links.map(function(link){return Object.assign({},link);})
-  };
-  var graph=new ForceGraph3D(mount,{controlType:'orbit'})
+  // One object per node for the whole life of the page: the layout writes its
+  // positions onto them, so a node that comes back after a filter comes back
+  // where it was rather than flying in from nowhere.
+  var nodes=GRAPH_MODEL.nodes.map(function(node){return Object.assign({},node);});
+  var graph=new window.ForceGraph3D(mount,{controlType:'orbit'})
     .backgroundColor('#080b0f')
     .showNavInfo(false)
     .width(mount.clientWidth)
@@ -304,11 +366,10 @@ function graphStart(){
     .linkDirectionalArrowRelPos(1)
     .onNodeHover(function(node){if(node)graphRenderCard(card,node);})
     .onNodeClick(function(node){if(node)graphRenderCard(card,node);})
-    .onBackgroundClick(function(){card.hidden=true;})
-    .cooldownTicks(220)
-    .graphData(data);
+    .onBackgroundClick(function(){card.hidden=true;graphShownId=null;})
+    .cooldownTicks(220);
   graph.d3Force('charge').strength(-40);
-  var labels=data.nodes.map(function(node){
+  var labels=nodes.map(function(node){
     var element=document.createElement('span');
     element.className='graph-node-label';
     element.textContent=node.handle;
@@ -316,14 +377,42 @@ function graphStart(){
     return {node:node,element:element};
   });
   var framed=false;
+  var drawn=0;
   graph.onEngineStop(function(){
-    if(framed)return;
+    if(framed||drawn===0)return;
     framed=true;
     graph.zoomToFit(800,20);
   });
   window.addEventListener('resize',function(){
     graph.width(mount.clientWidth).height(mount.clientHeight);
   });
+  // A hidden node's edges have nowhere to land, and its label would hang over
+  // empty space, so the node, its links, and its label leave together. Handing
+  // the graph new data reheats the layout, which is what re-forms the remaining
+  // shape without reloading anything.
+  graphDraw=function(chosen){
+    var visible=Object.create(null);
+    var drawnNodes=nodes.filter(function(node){
+      if(chosen[node.status]!==true)return false;
+      visible[node.id]=true;
+      return true;
+    });
+    var drawnLinks=GRAPH_MODEL.links.filter(function(link){
+      return visible[link.source]===true&&visible[link.target]===true;
+    }).map(function(link){return Object.assign({},link);});
+    labels.forEach(function(label){
+      var kept=visible[label.node.id]===true;
+      label.element.hidden=kept===false;
+      if(!kept)label.element.style.opacity='0';
+    });
+    if(graphShownId!==null&&visible[graphShownId]!==true){
+      card.hidden=true;
+      graphShownId=null;
+    }
+    drawn=drawnNodes.length;
+    framed=false;
+    graph.graphData({nodes:drawnNodes,links:drawnLinks});
+  };
   var placements=[];
   // Labels are drawn nearest-first into a coarse screen grid: a label whose
   // cell is already taken is dropped for that frame rather than stacked into an
@@ -339,6 +428,7 @@ function graphStart(){
     for(index=0;index<labels.length;index+=1){
       var node=labels[index].node;
       var element=labels[index].element;
+      if(element.hidden)continue;
       if(typeof node.x!=='number'){element.style.opacity='0';continue;}
       var depth=(node.x-eye.x)*forward.x+(node.y-eye.y)*forward.y+(node.z-eye.z)*forward.z;
       if(depth<=0){element.style.opacity='0';continue;}

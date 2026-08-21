@@ -242,7 +242,7 @@ test('renders deterministic self-contained HTML without executable ledger conten
   assert.match(first, /\\u003c\/script>/);
   assert.match(first, /<table[^>]*>.*Completed item.*<\/table>/s);
   assert.match(first, /id="sort-by"/);
-  assert.match(first, /class="slot-filter" data-field="area"/);
+  assert.match(first, /<fieldset class="facet-group" data-group="field:area">/);
   assert.match(first, /class="body-excerpt standard-only"/);
   assert.match(first, /class="body-section detailed-only"/);
   assert.doesNotMatch(first, /<script>alert\(1\)<\/script>|<img src=x|<link\s|<script\s+src=/);
@@ -514,17 +514,261 @@ test('says how much of a truncated attention list is not shown', async () => {
   assert.match(surface, /Showing 1 of 3\./);
 });
 
+// One filter vocabulary for the whole drill-down: every dimension of the open
+// set is a named group of checkbox chips, so a reader can hold two readiness
+// states at once instead of choosing one and losing the other. A group is a
+// fieldset with a legend, and a chip is a real checkbox inside its own label,
+// so the grouping and the multi-select are announced rather than implied.
+test('renders the drill-down filters as grouped accessible multi-select chips', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+  const facets = html.slice(html.indexOf('id="facets"'), html.indexOf('id="items"'));
+
+  assert.doesNotMatch(html, /slot-filter|data-filter=/);
+  assert.match(facets, /<fieldset class="facet-group" data-group="readiness"><legend>Readiness<\/legend>/);
+  for (const [value, label] of [['ready', 'Ready'], ['blocked', 'Blocked'], ['ineligible', 'Ineligible']]) {
+    assert.match(
+      facets,
+      new RegExp(`<label class="chip"><input type="checkbox" class="facet" data-group="readiness" value="${value}"><span class="chip-text">${label}</span>`),
+    );
+  }
+  assert.match(facets, /<fieldset class="facet-group" data-group="status"><legend>Status<\/legend>.*value="backlog"/);
+  assert.match(facets, /<fieldset class="facet-group" data-group="kind"><legend>Kind<\/legend>.*value="task".*value="epic"/);
+  assert.match(facets, /<p id="result-count" class="result-count" role="status" aria-live="polite">Showing 1 of 1 item<\/p>/);
+  assert.match(facets, /<button type="button" id="clear-facets">Clear filters<\/button>/);
+});
+
+// A chip's name is read out as one string. With the count welded to the label
+// it is announced as "bug0", so the two carry a separator that flexbox drops
+// from the layout and the accessible name keeps.
+test('separates a chip label from its count in the announced name', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const mapped = model();
+  mapped.items[0].fields = { class: 'bug' };
+  const html = renderReportHtml(mapped, options());
+
+  assert.match(html, /<span class="chip-text">Ready<\/span> <span class="chip-count">0<\/span>/);
+  assert.match(html, /<span class="chip-text">bug<\/span> <span class="chip-count">1<\/span>/);
+  assert.doesNotMatch(html, /<\/span><span class="chip-count">/);
+});
+
+// Four cards spanning three readiness states, three statuses, both kinds, and
+// two mapped areas: enough for one group to widen and another to narrow.
+function facetDom() {
+  return reportDom({
+    items: [
+      {
+        id: 'item-1',
+        order: 0,
+        state: 'ready',
+        status: 'backlog',
+        kind: 'task',
+        priority: 1,
+        created: '2026-08-01',
+        title: 'Ready core task',
+        fields: { area: 'core' },
+        search: '#1 ready core task',
+        body: '# One',
+      },
+      {
+        id: 'item-2',
+        order: 1,
+        state: 'blocked',
+        status: 'backlog',
+        kind: 'task',
+        priority: 2,
+        created: '2026-08-02',
+        title: 'Blocked docs task',
+        fields: { area: 'docs' },
+        search: '#2 blocked docs task',
+        body: '# Two',
+      },
+      {
+        id: 'item-3',
+        order: 2,
+        state: 'ready',
+        status: 'in-progress',
+        kind: 'task',
+        priority: 3,
+        created: '2026-08-03',
+        title: 'Ready core in flight',
+        fields: { area: 'core' },
+        search: '#3 ready core in flight',
+        body: '# Three',
+      },
+      {
+        id: 'item-4',
+        order: 3,
+        state: 'ineligible',
+        status: 'triage',
+        kind: 'epic',
+        priority: null,
+        created: '2026-08-04',
+        title: 'Triage epic',
+        fields: {},
+        search: '#4 triage epic',
+        body: '# Four',
+      },
+    ],
+  });
+}
+
+// Two values in one group are alternatives and two groups are conditions: a
+// reader asking for ready-or-blocked backlog work is asking one question, and
+// the search box is one more condition on the same answer.
+test('widens within a facet group and narrows across facet groups and the search', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = facetDom();
+  runReportClient(reportClientSource(), dom);
+
+  assert.deepEqual(dom.visible(), ['item-1', 'item-2', 'item-3', 'item-4']);
+
+  dom.select('readiness', 'ready');
+  assert.deepEqual(dom.visible(), ['item-1', 'item-3']);
+
+  dom.select('readiness', 'blocked');
+  assert.deepEqual(dom.visible(), ['item-1', 'item-2', 'item-3']);
+
+  dom.select('status', 'backlog');
+  assert.deepEqual(dom.visible(), ['item-1', 'item-2']);
+
+  dom.search().value = 'docs';
+  dom.search().dispatch('input');
+  assert.deepEqual(dom.visible(), ['item-2']);
+});
+
+test('treats kind as one more facet group over the same cards', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = facetDom();
+  runReportClient(reportClientSource(), dom);
+
+  dom.select('kind', 'epic');
+
+  assert.deepEqual(dom.visible(), ['item-4']);
+
+  dom.select('kind', 'task');
+
+  assert.deepEqual(dom.visible(), ['item-1', 'item-2', 'item-3', 'item-4']);
+});
+
+// A chip's count answers one question: how many items would be left if this
+// value were the one selected in its group. Counting a chip against its own
+// group makes every unselected sibling read zero the moment anything in the
+// group is selected, which is a lie the reader cannot see through.
+test('counts every chip against the search and the other groups, never its own', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = facetDom();
+  runReportClient(reportClientSource(), dom);
+
+  assert.equal(dom.chipCount('readiness', 'ready'), '2');
+  assert.equal(dom.chipCount('status', 'backlog'), '2');
+  assert.equal(dom.resultCount(), 'Showing 4 of 4 items');
+
+  dom.select('status', 'backlog');
+
+  assert.equal(dom.chipCount('readiness', 'ready'), '1');
+  assert.equal(dom.chipCount('readiness', 'blocked'), '1');
+  assert.equal(dom.chipCount('readiness', 'ineligible'), '0');
+  assert.equal(dom.chipCount('status', 'in-progress'), '1');
+  assert.equal(dom.resultCount(), 'Showing 2 of 4 items');
+
+  dom.select('readiness', 'ready');
+
+  assert.equal(dom.chipCount('readiness', 'blocked'), '1');
+  assert.equal(dom.chipCount('status', 'backlog'), '1');
+  assert.equal(dom.resultCount(), 'Showing 1 of 4 items');
+
+  dom.select('readiness', 'blocked');
+
+  assert.equal(dom.chipCount('status', 'backlog'), '2');
+  assert.equal(dom.chipCount('readiness', 'ready'), '1');
+  assert.equal(dom.resultCount(), 'Showing 2 of 4 items');
+
+  dom.search().value = 'docs';
+  dom.search().dispatch('input');
+
+  assert.equal(dom.chipCount('readiness', 'ready'), '0');
+  assert.equal(dom.chipCount('readiness', 'blocked'), '1');
+  assert.equal(dom.resultCount(), 'Showing 1 of 4 items');
+});
+
+test('marks a selected chip and gives every selection back at once', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = facetDom();
+  runReportClient(reportClientSource(), dom);
+
+  dom.select('readiness', 'ready');
+  dom.select('status', 'in-progress');
+
+  assert.equal(dom.chipState('readiness', 'ready').classList.contains('selected'), true);
+  assert.equal(dom.chipState('readiness', 'blocked').classList.contains('selected'), false);
+  assert.deepEqual(dom.visible(), ['item-3']);
+
+  dom.clearFacets.dispatch('click');
+
+  assert.equal(dom.chip('readiness', 'ready').checked, false);
+  assert.equal(dom.chip('status', 'in-progress').checked, false);
+  assert.equal(dom.chipState('readiness', 'ready').classList.contains('selected'), false);
+  assert.deepEqual(dom.visible(), ['item-1', 'item-2', 'item-3', 'item-4']);
+  assert.equal(dom.resultCount(), 'Showing 4 of 4 items');
+});
+
+// Every configured mapped field is a dimension of the same open set, so its
+// values are chips beside the built-in groups rather than a separate control.
+// The values are the ledger's own: nothing is inferred from a title.
+test('gives every configured mapped field its own facet group of its own values', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const mapped = model();
+  mapped.items[0].fields = { area: 'Core & CLI', class: 'bug' };
+  const html = renderReportHtml(mapped, options());
+  const facets = html.slice(html.indexOf('id="facets"'), html.indexOf('id="items"'));
+
+  assert.match(facets, /<fieldset class="facet-group" data-group="field:area"><legend>Area<\/legend>/);
+  assert.match(
+    facets,
+    /<fieldset class="facet-group" data-group="field:class"><legend>Class<\/legend><div class="chips"><label class="chip"><input type="checkbox" class="facet" data-group="field:class" value="bug"><span class="chip-text">bug<\/span> <span class="chip-count">1<\/span><\/label>/,
+  );
+  assert.doesNotMatch(facets, /data-group="field:complexity"/);
+});
+
+// A card that does not carry the mapped field has no value in that dimension.
+// Selecting a value there must leave it out rather than wave it through, or a
+// facet would widen the answer instead of narrowing it.
+test('filters by mapped field values and leaves out cards that carry none', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = facetDom();
+  runReportClient(reportClientSource(), dom);
+
+  assert.equal(dom.chipCount('field:area', 'core'), '2');
+  assert.equal(dom.chipCount('field:area', 'docs'), '1');
+
+  dom.select('field:area', 'core');
+
+  assert.deepEqual(dom.visible(), ['item-1', 'item-3']);
+
+  dom.select('field:area', 'docs');
+
+  assert.deepEqual(dom.visible(), ['item-1', 'item-2', 'item-3']);
+  assert.equal(dom.resultCount(), 'Showing 3 of 4 items');
+
+  dom.select('readiness', 'ready');
+
+  assert.deepEqual(dom.visible(), ['item-1', 'item-3']);
+  assert.equal(dom.chipCount('field:area', 'docs'), '0');
+});
+
 // A row above the drill-down is a promise that the item can be seen. The
 // drill-down's own filters can have detached that card, so the runtime clears
 // what hides it, re-applies the list, and then opens what it promised.
-test('clears the filters that detach a targeted card and opens it', async () => {
+test('clears the facets and the search that detach a targeted card and opens it', async () => {
   const { reportClientSource } = await import('../src/report-html.js');
   const dom = revealDom();
   runReportClient(reportClientSource(), dom);
   const target = dom.card('item-12');
   dom.search().value = 'ready';
-  dom.slotFilter.value = 'core';
-  dom.filter('ready').dispatch('click');
+  dom.search().dispatch('input');
+  dom.select('readiness', 'ready');
+  dom.select('field:area', 'core');
 
   assert.equal(target.isConnected, false);
 
@@ -532,9 +776,10 @@ test('clears the filters that detach a targeted card and opens it', async () => 
 
   assert.equal(event.defaultPrevented, true);
   assert.equal(dom.search().value, '');
-  assert.equal(dom.slotFilter.value, '');
-  assert.equal(dom.filter('all').classList.contains('active'), true);
-  assert.equal(dom.filter('ready').classList.contains('active'), false);
+  assert.equal(dom.chip('readiness', 'ready').checked, false);
+  assert.equal(dom.chip('field:area', 'core').checked, false);
+  assert.equal(dom.chipState('readiness', 'ready').classList.contains('selected'), false);
+  assert.equal(dom.resultCount(), 'Showing 2 of 2 items');
   assert.equal(target.isConnected, true);
   assert.equal(target.open, true);
   assert.equal(target.querySelector('.rendered-markdown').dataset.rendered, '1');

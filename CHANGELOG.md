@@ -7,6 +7,29 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Changed
+
+- **The report filters by facet groups instead of one value at a time.** The
+  drill-down's single-value mapped-field selects and its All/Ready/Blocked/
+  Ineligible buttons are gone. In their place is one group of checkbox chips per
+  dimension of the open set — Readiness, Status, Kind, and every configured
+  mapped field, so a mapped `class: bug` is a chip rather than a value hidden in
+  a dropdown. Values inside a group are alternatives, groups narrow each other,
+  and the search box is one more condition; every chip states the count it would
+  leave, measured against the search and the other groups but never against its
+  own, so two selections in one group cannot make their siblings read zero. A
+  visible result count, per-chip selected state, and `Clear filters` are new, and
+  opening a Work next or Attention row still clears whatever detached its card,
+  facets included.
+- **The ledger graph filters by lifecycle status.** One chip group above the
+  stage carries the statuses the ledger holds, all selected, with `Select all`
+  and `Clear`. Deselecting a status drops its nodes, every link incident to one,
+  and their labels, reheats the layout in place, and takes a hidden node off the
+  hover card; the roster and node count follow the same selection, and an empty
+  selection draws an empty graph that says so. The legend, the WebGL-less
+  roster, camera interaction, and the no-fetch contract are unchanged, and
+  nothing here reads or writes the ledger.
+
 ## 0.1.0-alpha.7 - 2026-08-18
 
 ### Changed

@@ -771,6 +771,18 @@ graph**. State counts, item cards, filters, grouping, detail levels, terminal
 history, and area-diverse ready batches all remain, demoted below that decision
 surface.
 
+The drill-down filters are **facet groups**: Readiness, Status, Kind, and one
+group for every configured mapped field, each a fieldset of checkbox chips.
+Values inside a group are alternatives and groups narrow each other, so
+`ready` or `blocked` in Readiness plus `bug` in Class means ready-or-blocked
+bugs; the search box is one more condition on the same answer. Every chip
+carries the count it would leave, measured against the search and the other
+groups but never against its own, so two selections in one group cannot make
+their siblings read zero. The result count states how much of the open set is
+showing, and **Clear filters** gives every selection back. A Work next or
+Attention row still reaches its card: opening one clears the facets and the
+search first, because a row that names an item promises the item can be seen.
+
 The evidence layer is inline SVG, drawn at generation time and embedded in the
 file: an aging heatmap, weekly arrivals against completions, throughput with a
 four-week mean, a cumulative flow area, accept-to-complete cycle time, and a
@@ -788,6 +800,14 @@ or a parent to the item it releases: a `depends_on` edge is straight and
 arrowed, a `parent` edge is curved and unarrowed. Hovering or clicking a node
 opens a card with its number, title, status, age, leverage, and the same
 reasons line the ranked list prints for it.
+
+Above the stage sits one chip group of the lifecycle statuses the ledger holds,
+all selected, with **Select all** and **Clear**. Deselecting a status drops its
+nodes, every link that touched one of them, and their labels together, then
+reheats the layout in place: nothing is reloaded and the ledger is never
+touched. The roster and the node count follow the same selection, and clearing
+every status draws an empty graph that says it is empty rather than quietly
+showing the last one.
 
 The renderer is [`3d-force-graph`](https://github.com/vasturiano/3d-force-graph)
 over Three.js, vendored into `vendor/3d-force-graph/` at a pinned version
