@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "command": "list",
+  "contract_version": 5,
+  "result": {
+    "query_version": 1,
+    "as_of": "2030-01-11",
+    "snapshot": {
+      "revision": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "item_count": 0
+    },
+    "page": {
+      "size": 50,
+      "offset": 0,
+      "returned": 0,
+      "matched": 0,
+      "has_more": false,
+      "next_cursor": null
+    },
+    "items": []
+  }
+}

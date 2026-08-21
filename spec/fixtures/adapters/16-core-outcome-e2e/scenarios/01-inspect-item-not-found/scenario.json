@@ -31,7 +31,7 @@
     {
       "path": "expected-core-stdout.jsonl",
       "source": "spec/fixtures/mutations/inspect/expected-not-found.json",
-      "sha256": "sha256:43a4c8f329b0c3bfa553ed02a8c66a0d787b84c9058cb19935191b038410e75b",
+      "sha256": "sha256:bb907dc93d7dcdb5cc6757581b339c9b0e36253833d096e1699944a53dacbad3",
       "form": "compact-json-line"
     }
   ]

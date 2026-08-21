@@ -1,0 +1,25 @@
+{
+  "ok": false,
+  "command": "list",
+  "contract_version": 5,
+  "error": {
+    "code": "ledger-invalid",
+    "message": "The configured ledger is invalid.",
+    "details": {
+      "validation_errors": [
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "field": "number",
+          "code": "duplicate-number",
+          "message": "Number 1 is used by more than one ledger item."
+        },
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "field": "number",
+          "code": "duplicate-number",
+          "message": "Number 1 is used by more than one ledger item."
+        }
+      ]
+    }
+  }
+}

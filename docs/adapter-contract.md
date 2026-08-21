@@ -1408,11 +1408,11 @@ error registry. It changes only this versioned surface:
 | Path or behavior | Version 2 requirement |
 |---|---|
 | Manifest `adapter_contract_versions` | Exactly `[2]` |
-| Manifest and describe required core contract | Exactly `4` |
+| Manifest and describe required core contract | Exactly `5` |
 | Describe `selected_adapter_contract_version` | Exactly `2` |
 | Describe `core.commands` order | `capabilities`, `create`, `inspect`, `patch`, `ready`, `transition`, `validate` |
 | Invoke and result `adapter_contract_version` | Exactly `2` |
-| Independently probed core `contract_version` | Exactly `4` |
+| Independently probed core `contract_version` | Exactly `5` |
 
 The core capability probe adapter contract version 2 requires is core
 contract version 5. It adds exactly

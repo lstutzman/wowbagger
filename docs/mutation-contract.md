@@ -348,7 +348,7 @@ answer in two domains.
 
 | Domain | Root `namespace` | `contract_version` | Version to negotiate |
 |---|---|---|---|
-| core | absent | 4 | top-level `contract_version` of `capabilities --json` |
+| core | absent | 5 | top-level `contract_version` of `capabilities --json` |
 | work-claim | `work-claim` | 1, the legacy envelope marker | `result.operations.work_claim.api_version` of `claim capabilities --json` |
 | ledger-publication | `ledger-publication` | 1, the legacy envelope marker | the same work-claim `api_version` |
 | ledger-mutation | `ledger-mutation` | 1, the legacy envelope marker | the same work-claim `api_version` |
@@ -375,6 +375,7 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `ready` | bare result `{as_of, valid, ready}` | bare result `{valid, errors}` on an invalid ledger, exit 1 |
 | `capabilities` | core | core |
 | `inspect` | core | core |
+| `list` | core | core |
 | `mint-id` | core | core |
 | `report` | core | core |
 | `create` | core | core, or ledger-mutation when the claim fence refuses |
@@ -2161,6 +2162,13 @@ serialization, preconditions, the body swap with its untouched
 frontmatter, the body append with its exclusivity refusal, and the declared
 extension-member correction with its untouched anchored extension nodes and
 its undeclared-member refusal.
+
+The `list` cases cover the seven categories section 5.1 is accepted against: an
+empty ledger's witnessed empty page (`list-empty`), a mixed-status filtered
+first page with its continuation cursor (`list-page`), a cursor whose bound
+snapshot moved (`list-stale-cursor`), an invalid ledger refused with no rows
+beside the error (`list-invalid-ledger`), and a maximum page whose exact rows
+exceed the advertised response bound (`list-response-too-large`).
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.

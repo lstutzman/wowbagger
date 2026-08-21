@@ -32,7 +32,7 @@
     {
       "path": "expected-core-stdout.jsonl",
       "source": "spec/fixtures/mutations/create/expected.json",
-      "sha256": "sha256:f864aebf4095395988f63f509b4efeb72fca37d195849fae385fe66a6cb34fd6",
+      "sha256": "sha256:c181b1a121a814e1ad8407a12ca217e5e972383ad8dc7525a350eddd59d00ac9",
       "form": "compact-json-line"
     }
   ]

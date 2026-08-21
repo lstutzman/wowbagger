@@ -33,6 +33,7 @@
       "commands": [
         "capabilities",
         "inspect",
+        "list",
         "create",
         "transition",
         "patch",

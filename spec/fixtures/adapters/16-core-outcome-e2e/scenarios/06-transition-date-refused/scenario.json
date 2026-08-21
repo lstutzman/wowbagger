@@ -38,7 +38,7 @@
     {
       "path": "expected-core-stdout.jsonl",
       "source": "spec/fixtures/mutations/date-rollback/expected.json",
-      "sha256": "sha256:3350d13e5fa8a2c7b591001b478973cc3bbbd593d01012de3adfbdfaffabdfd4",
+      "sha256": "sha256:46badff4e7b5b5c96f93ff8fe2548dcd807382f416b90c7aacc7c6b4dfea3b21",
       "form": "compact-json-line"
     }
   ]

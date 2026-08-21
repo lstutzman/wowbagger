@@ -1,0 +1,14 @@
+{
+  "ok": false,
+  "command": "list",
+  "contract_version": 5,
+  "error": {
+    "code": "list-response-too-large",
+    "message": "The requested page does not fit the supported list response byte limit.",
+    "details": {
+      "max_list_response_bytes": 131072,
+      "response_bytes": 149013,
+      "page_size": 200
+    }
+  }
+}

@@ -299,6 +299,47 @@ test('every sort field orders the snapshot and ties break on immutable ID', asyn
   });
 });
 
+// The row's title is an excerpt; the order is not. Two items whose titles agree
+// on the first `max_list_title_characters` code points and diverge after them
+// must order by their full stored titles, not collapse onto the ID tie-break.
+test('a title sort orders by the full stored title, not the bounded excerpt', async () => {
+  const shared = 'z'.repeat(MAX_TITLE_CHARACTERS);
+
+  await withLedger({
+    // The lower ID carries the title that sorts last, so an order that fell
+    // through to the ID tie-break would return these two the other way around.
+    'later.md': item({
+      id: ALPHA_A, number: 1, title: `${shared}zzz`, created: '2026-08-01', updated: '2026-08-01',
+    }),
+    'earlier.md': item({
+      id: ALPHA_B, number: 2, title: `${shared}aaa`, created: '2026-08-01', updated: '2026-08-01',
+    }),
+  }, async (ledger) => {
+    const ascending = await list(ledger, {
+      query_version: 1,
+      as_of: '2026-08-21',
+      sort: { field: 'title', direction: 'ascending' },
+    });
+    const descending = await list(ledger, {
+      query_version: 1,
+      as_of: '2026-08-21',
+      sort: { field: 'title', direction: 'descending' },
+    });
+
+    assert.equal(ascending.result.status, 0, ascending.result.stderr);
+    assert.deepEqual(idsOf(ascending.envelope), [ALPHA_B, ALPHA_A]);
+    assert.equal(descending.result.status, 0, descending.result.stderr);
+    assert.deepEqual(idsOf(descending.envelope), [ALPHA_A, ALPHA_B]);
+
+    // Both rows still project the same truncated excerpt, which is exactly why
+    // the excerpt cannot be the sort key.
+    for (const row of ascending.envelope.result.items) {
+      assert.equal(row.title, shared);
+      assert.equal(row.title_truncated, true);
+    }
+  });
+});
+
 test('cursor pagination visits every matching item exactly once', async () => {
   await withFixture(async (ledger) => {
     const first = await list(ledger, {

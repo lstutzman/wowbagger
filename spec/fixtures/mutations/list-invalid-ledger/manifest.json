@@ -1,0 +1,52 @@
+{
+  "case": "list-invalid-ledger-no-partial-rows",
+  "argv": [
+    "list",
+    "--ledger",
+    "ledger",
+    "--input",
+    "query.json",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 3,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "sha256": "sha256:e0640616ac2b938b3e5ce77844e06595bb39cdd4a9573f437aa841b4143a4d06"
+        },
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "sha256": "sha256:d0377bc01b3a12615f422d96e8b9d5c4f23ce9b54543fd4f23d69bea9ec6c7c4"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "sha256": "sha256:e0640616ac2b938b3e5ce77844e06595bb39cdd4a9573f437aa841b4143a4d06"
+        },
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000B.md",
+          "sha256": "sha256:d0377bc01b3a12615f422d96e8b9d5c4f23ce9b54543fd4f23d69bea9ec6c7c4"
+        }
+      ]
+    }
+  }
+}

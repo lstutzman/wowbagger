@@ -37,14 +37,15 @@ either pin to make a check pass.
   installed and required versions. An older core can share a contract version
   while still lacking behavior this skill requires. Do not guess from the
   contract version alone.
-- `contract_version` is anything other than `4` → stop and say so plainly. A
+- `contract_version` is anything other than `5` → stop and say so plainly. A
   core reporting `1` predates schema version 2, where `depends_on` records
   declared prerequisites rather than only live blockers. A core reporting `2`
   predates the widened date-refusal issue shape, the `depends_on`/`related`
   patch field set, and core-assigned item numbers. A core reporting `3` accepts
   an item source of any size, so it publishes items this skill's bound would
-  refuse. An older or newer core may have changed the request or response
-  shape. Do not guess.
+  refuse. A core reporting `4` has no `list` command, so the ledger cannot be
+  enumerated through a supported seam. An older or newer core may have changed
+  the request or response shape. Do not guess.
 
 Run both commands once per session before the first ledger command, not before
 every command.

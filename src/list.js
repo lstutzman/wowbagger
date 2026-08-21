@@ -174,10 +174,14 @@ export async function listLedger(ledgerDirectory, query) {
 
   const snapshot = snapshotWitness(ledger.items);
   const readiness = projectReadiness(ledger.items, query.as_of);
+  // Order is decided on the stored frontmatter and only then projected into
+  // bounded rows. Sorting projected rows would compare the truncated title
+  // excerpt, so two titles sharing a bounded prefix would collapse onto the ID
+  // tie-break instead of ordering by their real text.
   const matched = ledger.items
     .filter((entry) => matchesFilters(entry.data, isReady(entry, readiness), query.filters))
-    .map((entry) => listRow(entry, readiness))
-    .sort(rowComparator(query.sort));
+    .sort(itemComparator(query.sort))
+    .map((entry) => listRow(entry, readiness));
 
   const digest = queryDigest(query);
   const resume = query.cursor === undefined ? null : decodeCursor(query.cursor);
@@ -349,11 +353,14 @@ function projectTitle(title) {
 // ascending immutable ID, so a tie is never resolved by file order and a full
 // traversal is stable. `descending` reverses the primary comparison only: the
 // ID tie-break stays ascending in both directions.
-function rowComparator(sort) {
+//
+// The comparison reads each item's stored frontmatter, never a projected row:
+// every sort field is a frontmatter member, and the row's title is bounded.
+function itemComparator(sort) {
   const descending = sort.direction === 'descending';
   return (left, right) => {
-    const primary = comparePrimary(left, right, sort.field);
-    return (descending ? -primary : primary) || compareText(left.id, right.id);
+    const primary = comparePrimary(left.data, right.data, sort.field);
+    return (descending ? -primary : primary) || compareText(left.data.id, right.data.id);
   };
 }
 

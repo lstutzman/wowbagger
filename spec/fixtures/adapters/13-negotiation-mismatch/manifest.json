@@ -85,6 +85,6 @@
     { "id": "core-probe-mismatch-is-refused", "type": "negotiation", "scenario": "required-core-version" }
   ],
   "artifacts": [
-    { "path": "scenarios.json", "sha256": "sha256:f00c919a0dc6235cffd04d3f4ab0c7d76e49cecae6dc2ce2b4757b182fc3a78b" }
+    { "path": "scenarios.json", "sha256": "sha256:840104ba15a3c1699c995ee518db910033e1826ad2c867ab9b693670abc7be93" }
   ]
 }

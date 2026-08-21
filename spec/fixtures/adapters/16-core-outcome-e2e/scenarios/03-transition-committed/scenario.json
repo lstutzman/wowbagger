@@ -44,7 +44,7 @@
     {
       "path": "expected-core-stdout.jsonl",
       "source": "spec/fixtures/mutations/transition-success/expected.json",
-      "sha256": "sha256:52b292fdf38b1af5b094de170d6f6f8b93dc1f3190d6ee63bede4d40d21261ee",
+      "sha256": "sha256:9d2b209ccef5612fbb3104f2e4a8966e9e5e6173c103cd9b9ca816b5ff7cc003",
       "form": "compact-json-line"
     }
   ]
