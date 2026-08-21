@@ -5,7 +5,7 @@ number: 131
 title: "Define response-loss behavior for native transitions"
 kind: task
 priority: 10
-status: triage
+status: backlog
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-21T17:27:09.989Z"
 depends_on: []
 related: [ wb_01KZW6PA0033YQ4GER7S86N6VJ, wb_01M086JPRKRHXNW5YB0GND09ZX, wb_01M0JNS61XWMN8ZPDQKCFD9Q9R ]
+decisions:
+  - action: accept
+    date: 2026-08-21
+    summary: "Accept the narrowed response-loss contract at P1."
+    rationale: "Remote process observation can disappear after a native transition dispatch, but permanent no-automatic-transition policy removes the need for operation IDs in the first release. The accepted scope stabilizes honest unknown outcomes and mandates once-only dispatch, no replay, invalidation, reconnect, and re-read."
 ---
 
 ## Problem
