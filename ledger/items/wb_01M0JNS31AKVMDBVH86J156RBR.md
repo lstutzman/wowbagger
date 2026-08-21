@@ -5,7 +5,7 @@ number: 129
 title: "Add a bounded machine-readable item-list query"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
