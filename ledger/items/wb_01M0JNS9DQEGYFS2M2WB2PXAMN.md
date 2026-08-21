@@ -2,8 +2,9 @@
 schema_version: 2
 id: wb_01M0JNS9DQEGYFS2M2WB2PXAMN
 number: 131
-title: "Define response-loss recovery for native transitions"
+title: "Define response-loss behavior for native transitions"
 kind: task
+priority: 10
 status: triage
 created: 2026-08-21
 updated: 2026-08-21
@@ -11,37 +12,47 @@ provenance:
   source: "orca-ledger-workbench-contract-audit"
   recorded_at: "2026-08-21T17:27:09.989Z"
 depends_on: []
-related: [wb_01KZW6PA0033YQ4GER7S86N6VJ, wb_01M086JPRKRHXNW5YB0GND09ZX]
+related: [ wb_01KZW6PA0033YQ4GER7S86N6VJ, wb_01M086JPRKRHXNW5YB0GND09ZX, wb_01M0JNS61XWMN8ZPDQKCFD9Q9R ]
 ---
 
 ## Problem
 
-Native `transition` has exact-byte compare-and-set but no operation identity or outcome lookup. A caller that loses the response after publication cannot safely replay the request: a successful first call changed the revision, so a second call normally returns `revision-conflict`. Inspecting current bytes can show current state but cannot always correlate a later state with the lost operation after another legitimate mutation.
+An explicit native transition can complete on a workspace-owning host after the UI-side SSH or paired-runtime transport loses the response. Replaying the same request is unsafe: success changed the item revision, and a retry can duplicate intent, race later work, or misreport another writer's result. Inspecting later bytes establishes current ledger state but cannot prove whether the lost request caused it.
 
-This is a product boundary for direct SSH and paired runtimes, where the owning host may complete a mutation after the UI-side connection disappears. Automatic retry risks appending duplicate evidence or misreporting another writer's result.
+The first workbench release permanently forbids automatic transitions and automatic retries. It therefore needs an honest unresolved-outcome contract, not a durable operation-ID subsystem.
 
-## Required decision
+## Accepted minimum contract
 
-Define the native-transition response-loss contract before an Orca plugin exposes remote mutation. The preferred shape is a caller-supplied operation ID bound to the complete transition request plus a read/replay path, reusing the established publication-operation discipline where its semantics fit. An alternative is acceptable only if it gives the same mechanical at-most-once and correlation guarantees without requiring a mirrored ledger.
+For explicit user-triggered transitions:
 
-The contract must state behavior for both plain-folder local mutation and provisioned merge-coordinated ledgers. If one backend cannot support replay-safe recovery, capability discovery must say so and the plugin must refuse remote transition rather than guess.
+1. Orca dispatches each consented CAS transition once.
+2. Only a positively observed complete process result establishes success, refusal, or known failure.
+3. Exit 4 invalidates the inspected revision and requires re-inspection; it never triggers automatic retry.
+4. Exit 6, signal, timeout, output truncation, or transport loss after dispatch yields an unverifiable result. Orca does not replay the mutation, invalidates its local view, and re-reads the ledger when the owning host becomes observable.
+5. A later item state describes only current ledger state. The UI must not claim that it proves the lost transition succeeded or failed.
+6. Wowbagger stabilizes and documents its exit-6 `unknown` and reconciliation envelopes, the states that require inspection, and the rule that blind replay is unsafe.
+7. `operation_id` and durable outcome lookup are not required for the first explicit-transition release. The permanent no-automatic-transition decision makes them unnecessary unless future product scope introduces automated mutation or a user-approved retry requirement that demands correlation. Such a change requires a new contract decision.
 
 ## Acceptance criteria
 
-- The request and capability contract state whether native transition accepts an operation ID and how a caller reads a durable outcome after response loss.
-- Repeating the complete same request with the same operation ID cannot append a second decision or publish a second successor.
-- Reusing an operation ID with different request bytes is a deterministic unchanged refusal.
-- Success, ordinary refusal, pre-publication failure, committed-recovery state, unknown publication state, process death before an envelope, and later unrelated mutation each have an unambiguous recovery procedure.
-- Outcome correlation binds at least command, item ID, expected revision, target status, date, decision evidence, and resulting revision when known.
-- Stored operation evidence is bounded and core-owned; it is not a second copy of ledger item state. Retention and exhaustion behavior are explicit.
-- Crash-point tests prove no duplicate lifecycle decision across response-loss retry on current Node and Node 20.
-- Existing transition invocations without the new opt-in keep their current bytes and CAS semantics.
-- No retry path bypasses claim fencing, reconciliation, candidate validation, or the single-item atomicity limit.
+- The mutation contract and packaged schemas distinguish unchanged, committed-recovery, unknown publication, signaled/timed-out transport, and no-envelope outcomes without inventing success.
+- Consumer guidance states the once-only dispatch, no-retry, invalidate, reconnect, and re-read sequence exactly.
+- Core and adapter fixtures cover exit 6 with `state: unknown`, committed recovery, incomplete output, signal, timeout, and launch failure at their existing public seams.
+- A revision conflict continues to return exit 4 and cannot be reclassified as response loss.
+- No new operation store, mirrored item state, automatic retry, or event-driven transition ships under this item.
+- If later product scope requires replay-safe correlation, a separate versioned item defines operation identity, request binding, retention, and collision behavior before implementation.
 
-## Non-goals
+## Orca evidence
 
-No automatic retry policy, background daemon, event-driven transition, cross-clone lock, or Orca-owned outcome database belongs here. The caller still chooses whether and when to retry after reading the core outcome.
+The Orca architecture agent reported these owning-host transport surfaces:
 
-## Evidence
+- `docs/reference/ssh-execution-boundary.md`.
+- `docs/reference/remote-wire-compatibility.md`.
+- `src/relay/agent-exec-handler.ts`: `AgentExecHandler.exec`.
+- `src/main/providers/ssh-git-provider.ts`: `SshGitProvider.runQueuedNonInteractiveExec`.
 
-`TransitionRequest` accepts only ID, expected revision, target status, date, and decision. `mutation-finalize` is idempotent only for auto-commit recovery tokens; work-claim publication has a separate operation-ID contract. The gap was found while evaluating native transitions over Orca host-routed SSH and paired runtimes on 2026-08-21.
+These sources establish that remote process observation can be lost independently of Wowbagger's ledger mutation. Orca owns routing and reconnection; Wowbagger owns honest mutation state and recovery semantics.
+
+## Priority and relations
+
+Accepted as P1 (`priority: 10`): a remote-write contract blocker, but not a read-workbench blocker. It is related to #130 and feeds its decision into #132; it does not depend on #129.
