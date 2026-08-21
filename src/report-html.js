@@ -290,8 +290,8 @@ function facetValue(item, key) {
   return value === undefined ? null : String(value);
 }
 
-function distinctSorted(values) {
-  return [...new Set(values)].sort();
+function observedValues(items, key) {
+  return [...new Set(items.map((item) => facetValue(item, key)).filter((value) => value !== null))].sort();
 }
 
 // Readiness and kind are the schema's own closed vocabularies, so every value
@@ -301,14 +301,12 @@ function distinctSorted(values) {
 function facetGroups(items, fieldNames) {
   const declared = [
     { key: 'readiness', label: 'Readiness', values: ['ready', 'blocked', 'ineligible'] },
-    { key: 'status', label: 'Status', values: distinctSorted(items.map((item) => item.status)) },
+    { key: 'status', label: 'Status', values: observedValues(items, 'status') },
     { key: 'kind', label: 'Kind', values: ['task', 'epic'] },
     ...fieldNames.map((name) => ({
       key: `field:${name}`,
       label: fieldLabel(name),
-      values: distinctSorted(items
-        .map((item) => facetValue(item, `field:${name}`))
-        .filter((value) => value !== null)),
+      values: observedValues(items, `field:${name}`),
     })),
   ];
   return declared.filter((group) => group.values.length > 0).map((group) => ({
@@ -350,27 +348,35 @@ const richness=document.getElementById('richness');
 const empty=document.getElementById('empty');
 const resultCount=document.getElementById('result-count');
 const facetChips=Array.from(document.querySelectorAll('.facet')).map(input=>({chip:input.parentNode,input:input,count:input.parentNode.querySelector('.chip-count')}));
+const chipsByGroup=new Map();
+for(const chip of facetChips){const group=chip.input.dataset.group;if(!chipsByGroup.has(group))chipsByGroup.set(group,[]);chipsByGroup.get(group).push(chip);}
 const showHistory=document.getElementById('show-history');
 const history=document.getElementById('history');
-function fields(card){return JSON.parse(card.dataset.fields);}
+const parsedFields=new Map();
+function fields(card){if(!parsedFields.has(card))parsedFields.set(card,JSON.parse(card.dataset.fields));return parsedFields.get(card);}
 function fieldValue(card,key){const value=fields(card)[key];return value===undefined?'':String(value);}
 function groupLabel(card){const key=groupBy.value;if(key==='none')return 'All items';if(key==='readiness')return card.dataset.state;if(key==='status')return card.dataset.status;if(key.startsWith('field:'))return fieldValue(card,key.slice(6))||'Unclassified';return 'Unclassified';}
 function compareText(left,right){return left<right?-1:left>right?1:0;}
 function facetDimension(card,group){if(group==='readiness')return card.dataset.state;if(group==='status')return card.dataset.status;if(group==='kind')return card.dataset.kind;if(group.startsWith('field:')){const value=fields(card)[group.slice(6)];return value===undefined?undefined:String(value);}return undefined;}
 function selectedFacets(){const groups=new Map();for(const chip of facetChips){if(!chip.input.checked)continue;const key=chip.input.dataset.group;if(!groups.has(key))groups.set(key,new Set());groups.get(key).add(chip.input.value);}return groups;}
+function clearFacets(){for(const chip of facetChips)chip.input.checked=false;}
 function matchesFacets(card,groups,except){for(const [key,values] of groups){if(key!==except&&!values.has(facetDimension(card,key)))return false;}return true;}
 function matchesSearch(card,term){return !term||card.dataset.search.includes(term);}
 function compareCards(left,right){const key=sortBy.value;if(key==='default')return Number(left.dataset.order)-Number(right.dataset.order);if(key==='priority'){const a=left.dataset.priority===''?null:Number(left.dataset.priority);const b=right.dataset.priority===''?null:Number(right.dataset.priority);if(a===null||b===null)return a===b?Number(left.dataset.order)-Number(right.dataset.order):a===null?1:-1;return a-b||Number(left.dataset.order)-Number(right.dataset.order);}if(key==='created')return compareText(left.dataset.created,right.dataset.created)||Number(left.dataset.order)-Number(right.dataset.order);if(key==='title')return compareText(left.dataset.title,right.dataset.title)||Number(left.dataset.order)-Number(right.dataset.order);if(key.startsWith('field:'))return compareText(fieldValue(left,key.slice(6)),fieldValue(right,key.slice(6)))||Number(left.dataset.order)-Number(right.dataset.order);return 0;}
 function applyHistory(){history.hidden=!showHistory.checked;}
-function apply(){const term=search.value.trim().toLocaleLowerCase('en-US');const chosen=selectedFacets();const visible=cards.filter(card=>matchesSearch(card,term)&&matchesFacets(card,chosen)).sort(compareCards);const groups=new Map();for(const card of visible){const label=groupLabel(card);if(!groups.has(label))groups.set(label,[]);groups.get(label).push(card);}itemRoot.replaceChildren();for(const [label,members] of groups){const section=document.createElement('section');section.className='group';if(groupBy.value!=='none'){const heading=document.createElement('h2');heading.textContent=label+' ('+members.length+')';section.append(heading);}const grid=document.createElement('div');grid.className='card-grid';grid.append(...members);section.append(grid);itemRoot.append(section);}empty.hidden=visible.length!==0;for(const chip of facetChips){chip.chip.classList.toggle('selected',chip.input.checked);const group=chip.input.dataset.group;const value=chip.input.value;chip.count.textContent=String(cards.filter(card=>matchesSearch(card,term)&&matchesFacets(card,chosen,group)&&facetDimension(card,group)===value).length);}resultCount.textContent='Showing '+visible.length+' of '+cards.length+(cards.length===1?' item':' items');}
+// Values inside a group are alternatives and groups narrow each other, so each
+// chip is counted in the cohort the search and the other groups already left,
+// never its own: two selections in one group cannot make their siblings zero.
+function refreshChips(searched,chosen){for(const [group,chips] of chipsByGroup){const counts=new Map();for(const card of searched){if(!matchesFacets(card,chosen,group))continue;const value=facetDimension(card,group);counts.set(value,(counts.get(value)??0)+1);}for(const chip of chips){chip.chip.classList.toggle('selected',chip.input.checked);chip.count.textContent=String(counts.get(chip.input.value)??0);}}}
+function apply(){const term=search.value.trim().toLocaleLowerCase('en-US');const chosen=selectedFacets();const searched=cards.filter(card=>matchesSearch(card,term));const visible=searched.filter(card=>matchesFacets(card,chosen)).sort(compareCards);const groups=new Map();for(const card of visible){const label=groupLabel(card);if(!groups.has(label))groups.set(label,[]);groups.get(label).push(card);}itemRoot.replaceChildren();for(const [label,members] of groups){const section=document.createElement('section');section.className='group';if(groupBy.value!=='none'){const heading=document.createElement('h2');heading.textContent=label+' ('+members.length+')';section.append(heading);}const grid=document.createElement('div');grid.className='card-grid';grid.append(...members);section.append(grid);itemRoot.append(section);}empty.hidden=visible.length!==0;refreshChips(searched,chosen);resultCount.textContent='Showing '+visible.length+' of '+cards.length+(cards.length===1?' item':' items');}
 function renderBody(card){const target=card.querySelector('.rendered-markdown');if(target.dataset.rendered==='1')return;const source=card.querySelector('script[type="text/markdown"]');target.innerHTML=window.renderMarkdown(JSON.parse(source.textContent));target.dataset.rendered='1';}
 for(const card of cards){card.addEventListener('toggle',()=>{if(card.open)renderBody(card);});}
 function revealOffset(){const controls=document.querySelector('.controls');return window.getComputedStyle(controls).position==='sticky'?controls.getBoundingClientRect().height+12:0;}
-function reveal(id){const target=cards.find(card=>card.id===id);if(target===undefined)return false;search.value='';for(const chip of facetChips)chip.input.checked=false;apply();target.open=true;renderBody(target);target.style.scrollMarginTop=revealOffset()+'px';target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});target.querySelector('summary').focus({preventScroll:true});return true;}
+function reveal(id){const target=cards.find(card=>card.id===id);if(target===undefined)return false;search.value='';clearFacets();apply();target.open=true;renderBody(target);target.style.scrollMarginTop=revealOffset()+'px';target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});target.querySelector('summary').focus({preventScroll:true});return true;}
 for(const link of document.querySelectorAll('[data-reveal]'))link.addEventListener('click',event=>{if(reveal(link.dataset.reveal))event.preventDefault();});
 search.addEventListener('input',apply);groupBy.addEventListener('change',apply);sortBy.addEventListener('change',apply);for(const chip of facetChips)chip.input.addEventListener('change',apply);richness.addEventListener('change',()=>{document.body.dataset.richness=richness.value;});
 showHistory.addEventListener('change',applyHistory);
-document.getElementById('clear-facets').addEventListener('click',()=>{for(const chip of facetChips)chip.input.checked=false;apply();});
+document.getElementById('clear-facets').addEventListener('click',()=>{clearFacets();apply();});
 document.getElementById('expand-all').addEventListener('click',()=>{for(const card of cards){if(card.isConnected){card.open=true;renderBody(card);}}});
 document.getElementById('collapse-all').addEventListener('click',()=>{for(const card of cards)card.open=false;});
 applyHistory();apply();`;

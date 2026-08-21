@@ -311,15 +311,20 @@ function graphSelectedStatuses(){
 // three can never disagree about which part of the ledger is on screen.
 function graphApplyFilter(){
   var chosen=graphSelectedStatuses();
+  var visible=Object.create(null);
   var shown=0;
-  GRAPH_MODEL.nodes.forEach(function(node){if(chosen[node.status]===true)shown+=1;});
+  GRAPH_MODEL.nodes.forEach(function(node){
+    if(chosen[node.status]!==true)return;
+    visible[node.id]=true;
+    shown+=1;
+  });
   graphRosterRows.forEach(function(row){
     row.hidden=chosen[row.getAttribute('data-node-status')]!==true;
   });
   var total=GRAPH_MODEL.nodes.length;
   graphCount.textContent='Showing '+shown+' of '+total+(total===1?' node':' nodes');
   graphEmpty.hidden=shown!==0;
-  if(graphDraw)graphDraw(chosen);
+  if(graphDraw)graphDraw(visible);
 }
 // The two moves a chip strip cannot make on its own. Clearing every status is a
 // legitimate request, and its honest answer is an empty graph that says so.
@@ -390,19 +395,14 @@ function graphStart(){
   // empty space, so the node, its links, and its label leave together. Handing
   // the graph new data reheats the layout, which is what re-forms the remaining
   // shape without reloading anything.
-  graphDraw=function(chosen){
-    var visible=Object.create(null);
-    var drawnNodes=nodes.filter(function(node){
-      if(chosen[node.status]!==true)return false;
-      visible[node.id]=true;
-      return true;
-    });
+  graphDraw=function(visible){
+    var drawnNodes=nodes.filter(function(node){return visible[node.id]===true;});
     var drawnLinks=GRAPH_MODEL.links.filter(function(link){
       return visible[link.source]===true&&visible[link.target]===true;
     }).map(function(link){return Object.assign({},link);});
     labels.forEach(function(label){
       var kept=visible[label.node.id]===true;
-      label.element.hidden=kept===false;
+      label.element.hidden=!kept;
       if(!kept)label.element.style.opacity='0';
     });
     if(graphShownId!==null&&visible[graphShownId]!==true){
