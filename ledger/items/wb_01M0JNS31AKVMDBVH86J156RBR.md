@@ -5,7 +5,7 @@ number: 129
 title: "Add a bounded machine-readable item-list query"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-21T17:27:09.989Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-21
+    summary: "Accept the bounded item-list contract as a P0 workbench blocker."
+    rationale: "Wowbagger v4 cannot enumerate non-ready items through a supported machine seam. Orca source evidence confirms bounded transport, snapshot, and N+1 constraints; the enriched contract keeps policy and authoritative state in Wowbagger."
 ---
 
 ## Problem
