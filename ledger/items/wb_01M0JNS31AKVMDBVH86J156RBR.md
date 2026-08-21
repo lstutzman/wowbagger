@@ -4,6 +4,7 @@ id: wb_01M0JNS31AKVMDBVH86J156RBR
 number: 129
 title: "Add a bounded machine-readable item-list query"
 kind: task
+priority: 1
 status: triage
 created: 2026-08-21
 updated: 2026-08-21
@@ -53,3 +54,22 @@ No daemon, database, search index, mirrored ledger, report parsing, automatic re
 ## Evidence
 
 `src/cli.js:KNOWN_COMMANDS` has no list operation; `src/ready.js:selectReady` returns only ready IDs; `src/mutation.js:inspectedItem` returns an unbounded full snapshot. Found during the 2026-08-21 Orca ledger-workbench contract audit.
+
+## Orca triage enrichment — 2026-08-21
+
+Maintainer disposition: accept as a P0 read-workbench blocker (`priority: 1`). This item is independent of #130 and #131; #132 depends on it as an integration release gate.
+
+Orca-specific constraints refine the contract without setting Wowbagger's numeric limits:
+
+- Orca's sandboxed panel ingress is bounded today. Its 64 KiB panel message ceiling is evidence that the core must advertise exact page and response limits, not a proposed Wowbagger page limit. A consumer uses the lower of host and core budgets.
+- `ready` cannot substitute for list: expanding ready IDs would omit every non-ready lifecycle state and create an N+1 inspect loop.
+- A snapshot conflict requires restarting pagination. Orca must never combine pages from different ledger states.
+- Rows need stable item IDs and exact revisions so selection and later inspect can correlate without treating number or path as identity.
+
+Orca source evidence, reported by the Orca architecture agent:
+
+- `src/shared/plugins/plugin-panel-bridge.ts`: `PANEL_MESSAGE_MAX_BYTES`, `PANEL_MESSAGE_RATE_LIMIT`.
+- `src/shared/plugins/plugin-host-protocol.ts`: `pluginWorkerCommandResultSchema`, `PLUGIN_WORKER_INVOKE_TIMEOUT_MS`.
+- `src/main/plugins/plugin-panel-controller.ts`: `PluginPanelController.execute`.
+
+These files are Orca evidence only. Their implementation and limits do not become Wowbagger dependencies.
