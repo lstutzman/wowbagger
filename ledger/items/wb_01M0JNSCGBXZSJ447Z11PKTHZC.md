@@ -5,7 +5,7 @@ number: 132
 title: "Publish the Wowbagger machine contract for host-routed consumers"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-21T17:27:09.989Z"
 depends_on: [ wb_01M0JNS31AKVMDBVH86J156RBR, wb_01M0JNS61XWMN8ZPDQKCFD9Q9R, wb_01M0JNS9DQEGYFS2M2WB2PXAMN ]
 related: [ wb_01KZVSW8F6VWX3CJGC4DMA38FP, wb_01M057Q7ATYMR2DD5V62KHRNA0, wb_01KZHX3E00RRK3X1WYTFCW70D4 ]
+decisions:
+  - action: accept
+    date: 2026-08-21
+    summary: "Accept the Wowbagger host-consumer machine contract as a P0 release gate."
+    rationale: "The enriched scope now separates portable Wowbagger capabilities, limits, schemas, launch requirements, and failure semantics from Orca-owned consent, workspace identity, routing, and process enforcement. Dependencies on #129–#131 make the release gate explicit without duplicating #59 or #92."
 ---
 
 ## Problem
