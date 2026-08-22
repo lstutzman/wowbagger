@@ -38,6 +38,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         namespace,
         replayed,
         physicalNow: new Date().toISOString(),
+        targetItemId: itemId,
       });
       if (reconciled.unsafe) {
         return claimStoreUnavailable(command, 'publication-reconciliation-required', {

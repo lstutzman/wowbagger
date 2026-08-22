@@ -366,7 +366,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     }
     writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
       createItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
-    ), scenario));
+    ), scenario, null, parsedRequest.value.id));
     return;
   }
 
@@ -391,7 +391,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     }
     writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
       transitionItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
-    ), scenario));
+    ), scenario, null, parsedRequest.value.id));
     return;
   }
 
@@ -436,7 +436,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
     }
     writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
       patchItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
-    ), scenario));
+    ), scenario, null, parsedRequest.value.id));
     return;
   }
 
@@ -593,7 +593,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       namespace,
       request,
       scenario,
-    }), scenario, request.operation_id));
+    }), scenario, request.operation_id, request.item_id));
     return;
   }
 
@@ -1059,9 +1059,16 @@ function parseContractOptions(command, argumentsList) {
 
 // `--auto-commit` is the only bare flag beyond `--json`, and it changes what
 // happens after the mutation, never the mutation itself.
-function autoCommitted(command, options, run, scenario, operationId = null) {
+function autoCommitted(command, options, run, scenario, operationId = null, targetItemId = null) {
   if (!options.autoCommit) return run();
-  return withAutoCommit({ ledgerDirectory: options.ledger, command, operationId, run, scenario });
+  return withAutoCommit({
+    ledgerDirectory: options.ledger,
+    command,
+    operationId,
+    targetItemId,
+    run,
+    scenario,
+  });
 }
 
 function argumentIssue(index, code, message) {
@@ -1281,6 +1288,7 @@ async function runClaimCommand(claimCommand, argumentsList) {
           namespace,
           replayed,
           physicalNow,
+          targetItemId: request.item_id,
         });
       } catch (error) {
         throw taggedFailure(

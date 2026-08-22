@@ -44,8 +44,8 @@
         "legacy_transition_v1": "reject-active-claim"
       },
       "write_serialization": {
-        "scope": "all-worktrees-of-one-repository",
-        "blocks_until": "peer-commit-visible-in-this-checkout"
+        "scope": "target-item-reconciliation",
+        "blocks_until": "target-item-publication-reconciled"
       }
     },
     "faults": {},
@@ -86,8 +86,8 @@
                 ]
               },
               "write_serialization": {
-                "scope": "all-worktrees-of-one-repository",
-                "blocks_until": "peer-commit-visible-in-this-checkout"
+                "scope": "target-item-reconciliation",
+                "blocks_until": "target-item-publication-reconciled"
               }
             },
             "operations": {
@@ -129,8 +129,8 @@
           "legacy_transition_v1": "reject-active-claim"
         },
         "write_serialization": {
-          "scope": "all-worktrees-of-one-repository",
-          "blocks_until": "peer-commit-visible-in-this-checkout"
+          "scope": "target-item-reconciliation",
+          "blocks_until": "target-item-publication-reconciled"
         }
       },
       "faults": {},

@@ -323,8 +323,8 @@ test('a provisioned namespace advertises merge-coordinated claim capabilities', 
     coordination_scope: 'shared-git-common-dir-serialized-journal',
     ledger_binding: { mode: 'explicit-allowlist', namespaces: [namespace] },
     write_serialization: {
-      scope: 'all-worktrees-of-one-repository',
-      blocks_until: 'peer-commit-visible-in-this-checkout',
+      scope: 'target-item-reconciliation',
+      blocks_until: 'target-item-publication-reconciled',
     },
   });
   assert.deepEqual(capabilities.envelope.result.operations.work_claim, {

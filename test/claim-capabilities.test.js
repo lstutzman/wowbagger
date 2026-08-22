@@ -42,8 +42,8 @@ test('a provisioned git backend advertises the worktrees its journal serializes'
     namespace: 'wbns_0123456789abcdef0123456789abcdef',
   });
   assert.deepEqual(backend.write_serialization, {
-    scope: 'all-worktrees-of-one-repository',
-    blocks_until: 'peer-commit-visible-in-this-checkout',
+    scope: 'target-item-reconciliation',
+    blocks_until: 'target-item-publication-reconciled',
   });
 });
 

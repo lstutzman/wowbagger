@@ -13,7 +13,7 @@ import { advanceClockFloor, readBack } from './claim-operations.js';
 import { claimStorePath, withClaimLock, writeClaimState } from './claim-store.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
-import { readGitHeadLedger } from './git-reconciliation.js';
+import { findRevisionOwner, readGitHeadLedger } from './git-reconciliation.js';
 import { publishClaimedCandidate, revisionFor } from './mutation.js';
 import { validateLedger } from './validate.js';
 
@@ -184,6 +184,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           namespace,
           replayed,
           physicalNow: new Date().toISOString(),
+          targetItemId: request.item_id,
         });
       } catch (error) {
         if (error?.code !== 'CLOCK_FLOOR_PERSISTENCE_FAILED') throw error;
@@ -277,6 +278,7 @@ export async function reconcileClaimJournal({
   namespace,
   replayed,
   physicalNow,
+  targetItemId = null,
 }) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
@@ -526,7 +528,8 @@ export async function reconcileClaimJournal({
       });
       continue;
     }
-    const diagnosis = reconciliationDiagnosis({
+    const diagnosis = await reconciliationDiagnosis({
+      ledgerDirectory,
       actualRevision,
       expectedPath,
       expectedRevision,
@@ -620,7 +623,9 @@ export async function reconcileClaimJournal({
     ledger,
     observedAt,
     state: replayed.state,
-    unsafe: findings.some((finding) => finding.code !== 'pending-intent-resolved'),
+    unsafe: findings.some((finding) => (
+      finding.code !== 'pending-intent-resolved' && blocksTarget(finding, targetItemId)
+    )),
   };
 }
 
@@ -648,7 +653,28 @@ function itemPathRelativeToLedger(ledgerDirectory, file) {
   return path.relative(path.resolve(ledgerDirectory), file).split(path.sep).join('/');
 }
 
-function reconciliationDiagnosis({
+// A mutation names the item it targets. Another item's unresolved publication
+// waits on a synchronization this mutation does not touch, so it reports as a
+// finding without refusing the write. A caller that names no target, such as
+// the `claim-verify` command, keeps every finding blocking.
+function blocksTarget(finding, targetItemId) {
+  if (targetItemId === null || finding.item_id === targetItemId) return true;
+  return finding.reason !== 'worktree-synchronization-required';
+}
+
+// Ownership is evidence, never a guess: an unreadable history or a missing
+// expected path leaves the revision unattributed instead of naming a ref.
+async function revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision) {
+  if (!expectedPath) return { owner_unavailable: true };
+  try {
+    return await findRevisionOwner(ledgerDirectory, expectedPath, expectedRevision);
+  } catch {
+    return { owner_unavailable: true };
+  }
+}
+
+async function reconciliationDiagnosis({
+  ledgerDirectory,
   actualRevision,
   expectedPath,
   expectedRevision,
@@ -664,10 +690,14 @@ function reconciliationDiagnosis({
     };
   }
   if (actualRevision === null && headRevision !== expectedRevision) {
+    const owner = await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
     return {
       reason: 'worktree-synchronization-required',
       ...(expectedPath ? { expected_path: expectedPath } : {}),
-      remediation: `Synchronize this worktree to the commit that wrote ${pathLabel} (pull or merge), then run claim-verify.`,
+      ...owner,
+      remediation: owner.owner_ref
+        ? `WAIT for owner ${owner.owner_ref} to publish ${owner.owner_commit}, then synchronize this worktree and run claim-verify.`
+        : `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
     };
   }
   // Two remedies, both named, in the order that makes the cost obvious. The
@@ -736,7 +766,12 @@ function ledgerValidationReport(ledger) {
   };
 }
 
-export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace }) {
+export async function verifyClaimJournal({
+  ledgerDirectory,
+  gitCommonDir,
+  namespace,
+  targetItemId = null,
+}) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
@@ -747,6 +782,7 @@ export async function verifyClaimJournal({ ledgerDirectory, gitCommonDir, namesp
         namespace,
         replayed: await replayClaimJournal(journalPath, namespace),
         physicalNow: new Date().toISOString(),
+        targetItemId,
       });
       return {
         exit: reconciled.unsafe ? 6 : 0,

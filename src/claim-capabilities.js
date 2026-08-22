@@ -47,12 +47,11 @@ export function resolveClaimBackend({ gitCommonDir, namespace = null }) {
     name: 'local-filesystem-git-journal',
     coordination_scope: 'shared-git-common-dir-serialized-journal',
     ledger_binding: { mode: 'explicit-allowlist', namespaces: [namespace] },
-    // One journal in the shared Git common directory serializes every worktree
-    // of this repository. A recorded write blocks the other worktrees until
-    // its commit is visible in the checkout that wants to write next.
+    // The shared journal still coordinates durable publication, but a private
+    // foreign publication blocks only mutations targeting its item.
     write_serialization: {
-      scope: 'all-worktrees-of-one-repository',
-      blocks_until: 'peer-commit-visible-in-this-checkout',
+      scope: 'target-item-reconciliation',
+      blocks_until: 'target-item-publication-reconciled',
     },
   };
 }

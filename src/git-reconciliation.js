@@ -3,6 +3,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { recordCount, timePhase } from './instrumentation.js';
+import { revisionFor } from './mutation.js';
 
 const execFileAsync = promisify(execFile);
 const MAX_GIT_OUTPUT_BYTES = 16 * 1024 * 1024;
@@ -16,8 +17,7 @@ const GIT_ENVIRONMENT = Object.fromEntries(
 );
 
 export async function readGitHeadLedger(ledgerDirectory) {
-  const root = (await gitText(ledgerDirectory, ['rev-parse', '--show-toplevel'])).trim();
-  const relativeLedger = path.relative(root, await realpath(ledgerDirectory));
+  const { root, relativeLedger } = await resolveWorktreeLedger(ledgerDirectory);
   if (relativeLedger.startsWith(`..${path.sep}`) || path.isAbsolute(relativeLedger)) {
     throw new Error(`ledger is outside the git worktree: ${relativeLedger}`);
   }
@@ -57,6 +57,32 @@ export async function readGitHeadLedger(ledgerDirectory) {
   return { commit, items, root };
 }
 
+// Which local ref carries the revision the journal expects. A finding may name
+// only ownership it can prove from reachable history, so a revision no ref
+// contains stays unattributed rather than guessed from the item path.
+export async function findRevisionOwner(ledgerDirectory, itemPath, expectedRevision) {
+  const { root, relativeLedger } = await resolveWorktreeLedger(ledgerDirectory);
+  const gitPath = toGitPath(path.join(relativeLedger, itemPath));
+  for (const commit of gitLines(await gitText(root, ['rev-list', '--all', '--', gitPath]))) {
+    let bytes;
+    try {
+      bytes = await gitBuffer(root, ['show', `${commit}:${gitPath}`]);
+    } catch {
+      // The path does not exist in this commit, so it cannot carry the revision.
+      continue;
+    }
+    if (revisionFor(bytes) !== expectedRevision) continue;
+    const [ownerRef] = gitLines(await gitText(root, [
+      'for-each-ref',
+      '--contains',
+      commit,
+      '--format=%(refname)',
+    ])).sort();
+    return ownerRef ? { owner_ref: ownerRef, owner_commit: commit } : { owner_unavailable: true };
+  }
+  return { owner_unavailable: true };
+}
+
 async function gitText(cwd, argumentsList) {
   const { stdout } = await execFileAsync('git', argumentsList, {
     cwd,
@@ -75,6 +101,18 @@ async function gitBuffer(cwd, argumentsList) {
     env: GIT_ENVIRONMENT,
   });
   return stdout;
+}
+
+// Every path this module hands to git is relative to the worktree root, so both
+// readers start from the same pair. The caller decides whether a ledger outside
+// the worktree is fatal.
+async function resolveWorktreeLedger(ledgerDirectory) {
+  const root = (await gitText(ledgerDirectory, ['rev-parse', '--show-toplevel'])).trim();
+  return { root, relativeLedger: path.relative(root, await realpath(ledgerDirectory)) };
+}
+
+function gitLines(output) {
+  return output.trim().split('\n').filter(Boolean);
 }
 
 // `git ls-tree -r -l -z` emits `<mode> <type> <object> <size>TAB<name>` records

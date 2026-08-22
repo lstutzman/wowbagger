@@ -1,11 +1,12 @@
 // test/cross-worktree-coordination.test.js
 //
 // A provisioned ledger keeps its claim journal in the shared Git common
-// directory, so one journal serializes every worktree of one repository. A
-// write in one worktree blocks writes in the rest until the writing commit is
-// visible where the next write runs. These vectors pin that behaviour and pin
-// the two refusals apart: the writer's own uncommitted work asks for a commit,
-// a sibling worktree's work asks for synchronization.
+// directory, so one journal spans every worktree of one repository. An
+// unresolved publication blocks only mutations that target its own item; a
+// mutation on any other item proceeds, and verification still reports the
+// finding. These vectors pin that scoping and pin the two refusals apart: the
+// writer's own uncommitted work asks for a commit, a sibling worktree's work
+// asks for synchronization and names the owner holding the revision.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -84,6 +85,17 @@ async function transitionRequest(directory, name, id, expectedRevision) {
   return requestPath;
 }
 
+async function patchRequest(directory, name, id, expectedRevision) {
+  const requestPath = path.join(directory, name);
+  await writeFile(requestPath, JSON.stringify({
+    id,
+    expected_revision: expectedRevision,
+    date: '2026-08-16',
+    set: { title: 'Sibling edit' },
+  }));
+  return requestPath;
+}
+
 // Write an item in the given worktree and record it in the shared journal.
 async function writeItem(root, ledger, label, id) {
   const created = run(
@@ -102,39 +114,92 @@ async function writeItem(root, ledger, label, id) {
   return transitioned.envelope.result.item.revision;
 }
 
-test('a committed sibling worktree write blocks create elsewhere with the synchronize remedy', async () => {
+test('a visible sibling worktree write does not block create elsewhere', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
-  const revision = await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
-  // The field case: the writing worktree commits, but the commit is not yet
-  // visible in the sibling checkout.
+  await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
   git(fixture.root, 'add', 'ledger');
   git(fixture.root, 'commit', '-qm', 'Add the new item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
 
-  const blocked = run(
+  const created = run(
     fixture.siblingRoot,
     'create', '--ledger', fixture.siblingLedger,
-    '--input', await createRequest(fixture.siblingRoot, 'create-sibling.json', 'wb_01M01BFR000TXV22D7KZ6TQYH3'),
+    '--input', await createRequest(
+      fixture.siblingRoot,
+      'create-sibling.json',
+      'wb_01M01BFR000TXV22D7KZ6TQYH3',
+    ),
+    '--json',
+  );
+
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+});
+
+test('an unrelated private branch publication does not block another item mutation', async () => {
+  const fixture = await twoWorktreeRepository();
+  const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add private branch item');
+
+  const unrelated = run(
+    fixture.siblingRoot,
+    'create', '--ledger', fixture.siblingLedger,
+    '--input', await createRequest(
+      fixture.siblingRoot,
+      'create-unrelated.json',
+      'wb_01M01BFR000TXV22D7KZ6TQYH3',
+    ),
+    '--json',
+  );
+
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+  const verified = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const [finding] = verified.envelope.result.findings;
+  assert.equal(finding.item_id, writtenId);
+  assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
+  assert.match(finding.owner_commit, /^[0-9a-f]{40}$/);
+});
+
+test('a private publication still blocks a same-item mutation', async () => {
+  const fixture = await twoWorktreeRepository();
+  const targetId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', targetId, '--json');
+  assert.equal(inspected.exit, 0, JSON.stringify(inspected.envelope));
+  const expectedRevision = inspected.envelope.result.item.revision;
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(fixture.root, 'patch-main.json', targetId, expectedRevision),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Patch private branch item');
+
+  const siblingInspected = run(
+    fixture.siblingRoot,
+    'inspect', '--ledger', fixture.siblingLedger, '--id', targetId, '--json',
+  );
+  const blocked = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-sibling.json',
+      targetId,
+      siblingInspected.envelope.result.item.revision,
+    ),
     '--json',
   );
 
   assert.equal(blocked.exit, 6, JSON.stringify(blocked.envelope));
-  assert.equal(blocked.envelope.state, 'unchanged');
-  assert.equal(blocked.envelope.error.code, 'claim-store-unavailable');
-  assert.equal(blocked.envelope.error.details.reason, 'publication-reconciliation-required');
-  assert.deepEqual(blocked.envelope.error.details.findings, [{
-    code: 'stale-write-detected',
-    item_id: writtenId,
-    actual_revision: null,
-    expected_revision: revision,
-    observed_surface: 'working-tree',
-    reason: 'worktree-synchronization-required',
-    expected_path: `${writtenId}.md`,
-    remediation: `Synchronize this worktree to the commit that wrote ${writtenId}.md (pull or merge), then run claim-verify.`,
-  }]);
+  assert.equal(blocked.envelope.error.details.findings[0].item_id, targetId);
 });
 
-test('only synchronizing the blocked worktree clears a foreign-writer block', async () => {
+test('claim verify reports a private foreign publication until synchronization', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
   await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
@@ -143,33 +208,31 @@ test('only synchronizing the blocked worktree clears a foreign-writer block', as
   const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
   assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
 
-  // claim-verify in the writing worktree satisfies that worktree only. The
-  // journal still expects a revision the sibling checkout cannot see.
-  const stillBlocked = run(
+  const created = run(
     fixture.siblingRoot,
     'create', '--ledger', fixture.siblingLedger,
-    '--input', await createRequest(fixture.siblingRoot, 'create-early.json', 'wb_01M01BFR000TXV22D7KZ6TQYH3'),
+    '--input', await createRequest(
+      fixture.siblingRoot,
+      'create-early.json',
+      'wb_01M01BFR000TXV22D7KZ6TQYH3',
+    ),
     '--json',
   );
-  assert.equal(stillBlocked.exit, 6, JSON.stringify(stillBlocked.envelope));
-  assert.equal(
-    stillBlocked.envelope.error.details.findings[0].reason,
-    'worktree-synchronization-required',
-  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
 
-  // The refused create still wrote a reconcile log into the blocked ledger.
-  // Git refuses to merge over that untracked file, so synchronization has to
+  const stillUnresolved = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
+  assert.equal(stillUnresolved.exit, 6, JSON.stringify(stillUnresolved.envelope));
+  const [finding] = stillUnresolved.envelope.result.findings;
+  assert.equal(finding.item_id, writtenId);
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+
+  // Verification wrote the per-namespace reconcile log into the untracked
+  // ledger. Git refuses to merge over that file, so synchronization has to
   // clear it first.
   await rm(path.join(fixture.siblingLedger, '.wowbagger', `reconcile-${NAMESPACE}.md`));
   git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
-
-  const unblocked = run(
-    fixture.siblingRoot,
-    'create', '--ledger', fixture.siblingLedger,
-    '--input', await createRequest(fixture.siblingRoot, 'create-late.json', 'wb_01M01BFR000TXV22D7KZ6TQYH4'),
-    '--json',
-  );
-  assert.equal(unblocked.exit, 0, JSON.stringify(unblocked.envelope));
+  const resolved = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
+  assert.equal(resolved.exit, 0, JSON.stringify(resolved.envelope));
 });
 
 test('an uncommitted write blocks create in its own worktree with the commit remedy', async () => {

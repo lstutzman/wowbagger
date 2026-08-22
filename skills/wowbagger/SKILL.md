@@ -509,33 +509,36 @@ It is not exclusive coordination. Direct filesystem writes, hostile processes,
 other clones, and alternate tools can bypass the protocol. Never present a
 claim as a lock or build a dispatch loop that requires exclusive ownership.
 
-### One worktree's write blocks the others
+### One worktree's private publication does not block unrelated items
 
-The claim journal lives in the shared Git common directory, so **one journal
-serializes every worktree of one repository**. Read the scope from
-`result.backend.write_serialization` in `claim capabilities`; the provisioned
-profile reports `scope: "all-worktrees-of-one-repository"`. Do not read the
-core envelope's `limits.cross_worktree_coordination: false` as permission to
-write in parallel — it only says the core never synchronizes checkouts.
+The claim journal lives in the shared Git common directory, so every worktree
+shares durable publication evidence. Read `result.backend.write_serialization`
+from `claim capabilities`; the provisioned profile reports
+`scope: "target-item-reconciliation"` and
+`blocks_until: "target-item-publication-reconciled"`. Do not read the core
+envelope's `limits.cross_worktree_coordination: false` as permission to write
+with hostile or noncooperating tools — it only says the core never synchronizes
+checkouts.
 
-A recorded `transition` or `patch` in one worktree refuses every mutation in
-the others with exit 6 `claim-store-unavailable`, reason
-`publication-reconciliation-required`, until the writing commit is visible in
-the blocked checkout. `create` records nothing, so `create` never causes a
-block — but it is usually the command that gets refused by one.
+A recorded `transition`, `patch`, or claimed publication blocks mutations
+targeting that same item with exit 6 `claim-store-unavailable`, reason
+`publication-reconciliation-required`. An unrelated item mutation may proceed
+when the only finding is `worktree-synchronization-required`. `create` records
+nothing, so it never creates a publication block.
 
-Read `error.details.findings[0].reason` and say which case it is:
+Read `error.details.findings[0].reason` and act on the named item:
 
-- `git-finalization-required` — you wrote it here and have not committed.
+- `git-finalization-required` — you wrote the item here and have not committed.
   Commit, then `claim-verify`.
-- `worktree-synchronization-required` — another worktree wrote it. Stop
-  writing. Wait for that worktree to commit and push, remove the untracked
-  reconcile log, pull or merge, run `claim-verify`, then resume.
-- `unauthorized-revision` — the item was changed outside the protocol. Two
-  remedies, and the choice is the operator's, not yours. **Restore** the
-  authorized revision and `claim-verify`: this discards the edit. **Adopt** the
-  committed revision and `claim-verify`: this keeps the edit and moves the
-  authorized revision to it. Ask before you discard reviewed work.
+- `worktree-synchronization-required` — another worktree wrote the item. If the
+  finding names `owner_ref` and `owner_commit`, WAIT for that owner to publish,
+  then synchronize this checkout and run `claim-verify`. If it carries
+  `owner_unavailable: true`, inspect reachable or dangling commits and use
+  explicit restore or `claim-adopt`; never merge unrelated live work.
+- `unauthorized-revision` — the item changed outside the protocol. Two remedies
+  are explicit: **restore** the authorized revision and run `claim-verify` to
+  discard the edit, or **adopt** the committed revision and run `claim-verify`
+  to keep it. Ask before discarding reviewed work.
 
 Adoption is per item and per revision explicit. Name the item and both
 revisions, take them from the finding, and commit the edited bytes first:

@@ -54,7 +54,14 @@ const COMMIT_SUBJECT_VERBS = {
   'publish-claimed': 'publish claimed',
 };
 
-export async function withAutoCommit({ ledgerDirectory, command, operationId = null, run, scenario }) {
+export async function withAutoCommit({
+  ledgerDirectory,
+  command,
+  operationId = null,
+  targetItemId = null,
+  run,
+  scenario,
+}) {
   const shape = command === 'publish-claimed' ? publicationShape(operationId) : coreShape(command);
   let gitCommonDir;
   try {
@@ -86,6 +93,7 @@ export async function withAutoCommit({ ledgerDirectory, command, operationId = n
       ledgerDirectory,
       namespace,
       placement,
+      targetItemId,
       run,
       scenario,
       shape,
@@ -97,7 +105,15 @@ export async function withAutoCommit({ ledgerDirectory, command, operationId = n
 }
 
 async function finalize({
-  command, gitCommonDir, ledgerDirectory, namespace, placement, run, scenario, shape,
+  command,
+  gitCommonDir,
+  ledgerDirectory,
+  namespace,
+  placement,
+  targetItemId,
+  run,
+  scenario,
+  shape,
 }) {
   const { root, prefix } = placement;
   const logPath = ledgerRelative(ledgerDirectory, claimReconcileLogPath(path.resolve(ledgerDirectory), namespace));
@@ -128,7 +144,7 @@ async function finalize({
   // every one of the four mutations already refuses it with ledger-invalid and
   // state unchanged, and duplicating that would add a branch no fixture can
   // distinguish from the mutation's own refusal.
-  const verified = await verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace });
+  const verified = await verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace, targetItemId });
   if (verified.exit !== 0 || verified.stdout.ok !== true) {
     return shape.preflightFailed('claim-state-unreconciled', {
       claim_verify_code: verified.stdout.error?.code ?? null,
@@ -246,7 +262,12 @@ async function finalize({
   }
 
   const evidence = { git_commit: commit.commit, commit_paths: commitSet, claim_verified: true };
-  const reconciled = await verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace });
+  const reconciled = await verifyClaimJournal({
+    ledgerDirectory,
+    gitCommonDir,
+    namespace,
+    targetItemId: published.id,
+  });
   const reconciliation = reconciliationFailureReason(reconciled, commit.commit, context.operationId, published.id);
   if (reconciliation) {
     return shape.reconciliationFailed({
@@ -910,7 +931,12 @@ async function finalizePreconditions({
 async function finalizeVerified({
   commit, commitSet, derived, gitCommonDir, ledgerDirectory, namespace, payload,
 }) {
-  const reconciled = await verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace });
+  const reconciled = await verifyClaimJournal({
+    ledgerDirectory,
+    gitCommonDir,
+    namespace,
+    targetItemId: derived.id,
+  });
   const operationId = payload.operation_id ?? null;
   const reconciliation = reconciliationFailureReason(reconciled, commit, operationId, derived.id);
   if (reconciliation) {

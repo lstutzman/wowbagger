@@ -639,7 +639,8 @@ test('claim-verify names the configured item path when another worktree needs sy
     observed_surface: 'working-tree',
     reason: 'worktree-synchronization-required',
     expected_path: `items/${itemId}.md`,
-    remediation: `Synchronize this worktree to the commit that wrote items/${itemId}.md (pull or merge), then run claim-verify.`,
+    owner_unavailable: true,
+    remediation: `Ownership of items/${itemId}.md revision ${transitioned.envelope.result.item.revision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
   }]);
 });
 
