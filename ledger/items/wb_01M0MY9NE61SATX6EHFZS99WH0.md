@@ -5,9 +5,10 @@ number: 138
 title: "Validate prospective claim-journal semantics before merge"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-22
 updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "propertycompass2-feedback-20-corroboration"
   recorded_at: "2026-08-22T14:34:21.584Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-22
     summary: "Accept item into backlog for maintainer triage."
     rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete prospective claim merge verification."
+    rationale: "The read-only checker evaluates exact merge trees, detects journal/item authorization reversal, exposes bounded JSON, and passes the current Node gate."
 ---
 
 ## Problem
