@@ -521,6 +521,17 @@ export async function migrateParentItem(ledgerDirectory, request, scenario) {
   ));
 }
 
+export async function snoozeItem(ledgerDirectory, request, scenario) {
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize, ledgerSnapshot) => (
+    mutateExistingItem(ledgerDirectory, request, scenario, {
+      name: 'snooze',
+      lockIds: (target) => [target.data.id],
+      build: buildSnooze,
+      authorize,
+    }, ledgerSnapshot)
+  ));
+}
+
 // The namespace-lock-held mutation strategy. A claimed publication runs inside
 // the namespace process lock for its whole length — journal replay, intent
 // fsync, this mutation, terminal append — and every other provisioned writer
@@ -974,6 +985,55 @@ async function buildParentMigration(lockedTarget, ledger, request, scenario, roo
     if (request.parent === null) deleteRootFieldPreservingAliases(document, 'parent');
     else if (document.has('parent')) setRootScalar(document, 'parent', request.parent);
     else insertRootAfter(document, 'kind', 'parent', request.parent);
+  });
+  try {
+    failCandidateSerializationForTest(scenario);
+    return { successor, bytes: serializedMutationBytes(lockedTarget, source) };
+  } catch {
+    return { outcome: operationFailed(request.id, 'serialize-candidate', 'serialization-failed') };
+  }
+}
+export function validateSnoozeRequest(request, parseIssues = []) {
+  const issues = [...parseIssues];
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+    return [issue('', 'invalid-type', 'Request must be an object.')];
+  }
+  for (const member of ['id', 'expected_revision', 'snoozed_until', 'date']) {
+    if (!hasOwn(request, member)) issues.push(issue(`/${member}`, 'missing-member', `Required member ${member} is missing.`));
+  }
+  if (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id)) {
+    issues.push(issue('/id', 'invalid-value', 'Member id must be a canonical Wowbagger item ID.'));
+  }
+  if (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision)) {
+    issues.push(issue('/expected_revision', 'invalid-value', 'Member expected_revision must be a SHA-256 revision.'));
+  }
+  for (const member of ['snoozed_until', 'date']) {
+    if (request[member] !== null && (typeof request[member] !== 'string' || !isCalendarDate(request[member]))) {
+      issues.push(issue(`/${member}`, 'invalid-value', `Member ${member} must be null or an ISO calendar date.`));
+    }
+  }
+  return sortIssues(issues);
+}
+
+async function buildSnooze(lockedTarget, ledger, request, scenario, root) {
+  const issues = [];
+  if (request.date < lockedTarget.data.created) {
+    issues.push(dateIssue('date-before-created', 'Snooze date must not be earlier than created.', lockedTarget.data));
+  }
+  if (request.date < lockedTarget.data.updated) {
+    issues.push(dateIssue('date-before-updated', 'Snooze date must not be earlier than updated.', lockedTarget.data));
+  }
+  if (issues.length > 0) {
+    return { outcome: mutationError('snooze-precondition-failed', 'The snooze request failed its preconditions.', 'unchanged', 2, { id: lockedTarget.data.id, issues }) };
+  }
+  const successor = { ...lockedTarget.data, updated: request.date };
+  if (request.snoozed_until === null) delete successor.snoozed_until;
+  else successor.snoozed_until = request.snoozed_until;
+  const source = rewriteFrontmatter(lockedTarget.source, (document) => {
+    setRootScalar(document, 'updated', successor.updated);
+    if (request.snoozed_until === null) deleteRootFieldPreservingAliases(document, 'snoozed_until');
+    else if (document.has('snoozed_until')) setRootScalar(document, 'snoozed_until', request.snoozed_until);
+    else insertRootAfter(document, 'updated', 'snoozed_until', request.snoozed_until);
   });
   try {
     failCandidateSerializationForTest(scenario);

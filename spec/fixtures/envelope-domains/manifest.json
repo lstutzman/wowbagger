@@ -37,6 +37,7 @@
         "create",
         "transition",
         "parent-migrate",
+        "snooze",
         "patch",
         "extensions-provision",
         "mint-id",

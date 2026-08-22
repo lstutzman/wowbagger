@@ -53,10 +53,12 @@ import {
   migrateParentItem,
   patchItem,
   revisionFor,
+  snoozeItem,
   transitionItem,
   validateCreateRequest,
   validateParentMigrationRequest,
   validatePatchRequest,
+  validateSnoozeRequest,
   validateTransitionRequest,
 } from './mutation.js';
 import {
@@ -109,6 +111,7 @@ const COMMAND_SUMMARIES = {
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
   'parent-migrate': 'Move one live item to or from an epic with CAS fencing.',
+  snooze: 'Set or clear an item snooze date with CAS fencing.',
   patch: "Patch an item's priority and relation lists, guarded the same way.",
   'extensions-provision': 'Declare explicitly selected existing extension members.',
   'mint-id': 'Mint a canonical item ID.',
@@ -129,6 +132,7 @@ const KNOWN_COMMANDS = new Set([
   'create',
   'transition',
   'parent-migrate',
+  'snooze',
   'patch',
   'extensions-provision',
   'mint-id',
@@ -479,6 +483,30 @@ export async function runCli(argumentsList, { scenario } = {}) {
     return;
   }
 
+  if (command === 'snooze') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeInvalidRequest(command, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    const issues = validateSnoozeRequest(parsedRequest.value, parsedRequest.issues);
+    if (issues.length > 0) {
+      writeInvalidRequest(command, issues);
+      return;
+    }
+    writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
+      snoozeItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
+    ), scenario, null, parsedRequest.value.id));
+    return;
+  }
   if (command === 'create') {
     const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
     if (parsedOptions.issues.length > 0) {
@@ -1280,6 +1308,7 @@ function parseContractOptions(command, argumentsList) {
       ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out'], ['--view', 'view']])
       : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
         || command === 'parent-migrate'
+        || command === 'snooze'
         || command === 'extensions-provision'
         || command === 'publish-claimed' || command === 'publication-read'
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
@@ -1797,6 +1826,9 @@ function usage(command) {
   }
   if (command === 'claim-verify') {
     return 'Usage: wowbagger claim-verify --ledger <dir> --json';
+  }
+  if (command === 'snooze') {
+    return 'Usage: wowbagger snooze --ledger <dir> --input <request.json> --json [--auto-commit]';
   }
   if (command === 'claim-merge-verify') {
     return 'Usage: wowbagger claim-merge-verify --ledger <dir> --base <ref> --head <ref> --json';
