@@ -5,9 +5,10 @@ number: 132
 title: "Publish the Wowbagger machine contract for host-routed consumers"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "orca-ledger-workbench-contract-audit"
   recorded_at: "2026-08-21T17:27:09.989Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-21
     summary: "Accept the Wowbagger host-consumer machine contract as a P0 release gate."
     rationale: "The enriched scope now separates portable Wowbagger capabilities, limits, schemas, launch requirements, and failure semantics from Orca-owned consent, workspace identity, routing, and process enforcement. Dependencies on #129–#131 make the release gate explicit without duplicating #59 or #92."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete the host-routed v5 machine contract release gate."
+    rationale: "Commits d83f323, 1c4bbfc, ae9b289, and 4006fcb publish a shell-free package launch seam, 17 standards-validated JSON Schemas, host ownership/limits/response-domain documentation, schema packaging, and reconciled v5/deferred vocabulary. Task review and re-review are clean; focused current-Node and Node-20 gates each pass 58/58. Native Linux/Windows CI exercises the unskipped launch test, but no cross-platform pass is claimed until that workflow runs."
 ---
 
 ## Problem
