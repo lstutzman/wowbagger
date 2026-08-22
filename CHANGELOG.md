@@ -36,8 +36,12 @@ consolidation. The first tagged release inherits this file.
   view. Every schema fixes its root members exactly and pins the version of its
   own domain, so a core envelope refuses a namespaced refusal, a version 4
   envelope, or an extra root member, and a version 1 report configuration
-  refuses a version 2 one. The validator is a test-only dependency; the runtime
-  still has exactly one dependency.
+  refuses a version 2 one. Exactness reaches the members too: an item core must
+  carry both relation lists, because the core view always emits them, and a
+  refusal raised before a commit is established pins its state to `unchanged`
+  rather than admitting the indeterminate state that only an interrupted write
+  can report. The validator is a test-only dependency; the runtime still has
+  exactly one dependency.
 
 ### Documentation
 

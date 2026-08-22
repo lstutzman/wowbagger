@@ -315,6 +315,36 @@ test('a core schema rejects a neighbouring contract version', () => {
   }, 'the core contract version');
 });
 
+// The core view always emits both relation lists — `depends_on` is required of
+// every valid ledger item and `related` is defaulted to an empty array — so a
+// schema that treats them as optional invites a consumer to code a branch the
+// runtime never produces.
+test('the item core schema requires the relation lists the core view always emits', () => {
+  const inspect = fixture('mutations', 'inspect', 'expected.json');
+  accepts('core-inspect-response.json', inspect, 'the lossless inspect fixture');
+  for (const field of ['depends_on', 'related']) {
+    const stripped = structuredClone(inspect);
+    delete stripped.result.item.core[field];
+    rejects('core-inspect-response.json', stripped, `an item core with no ${field}`);
+  }
+});
+
+// `operation-failed` is raised before a commit is established, so its state is
+// always `unchanged`. Admitting `unknown` there would let the schema bless a
+// response that claims an indeterminate write under the one error code that
+// proves no write was attempted.
+test('the transition error schema pins operation-failed to the unchanged state', () => {
+  const failure = fixture('mutations', 'operation-failed', 'expected.json');
+  assert.equal(failure.error.code, 'operation-failed');
+  assert.equal(failure.state, 'unchanged');
+  accepts('core-transition-error-response.json', failure, 'the operation-failed fixture');
+  rejects(
+    'core-transition-error-response.json',
+    { ...failure, state: 'unknown' },
+    'operation-failed with an unknown mutation state',
+  );
+});
+
 test('the report configuration schemas separate version 1 from version 2', () => {
   const version1 = readJson('ledger', '.wowbagger', 'report.json');
   accepts('report-config-v1.json', version1, 'the shipped repository configuration');

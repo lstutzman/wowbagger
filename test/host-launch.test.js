@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
@@ -15,17 +15,45 @@ const manifest = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'),
 // nothing about what npm actually ships.
 let installed;
 
-function installConsumer() {
-  if (installed) return installed;
-  const root = mkdtempSync(path.join(tmpdir(), 'wb-host-launch-'));
-  const packed = spawnSync('npm', ['pack', '--pack-destination', root, '--json'], {
-    cwd: projectRoot,
+function npmRun(args, cwd, message) {
+  const result = spawnSync('npm', args, {
+    cwd,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
     shell: process.platform === 'win32',
   });
-  assert.equal(packed.status, 0, packed.stderr);
-  const tarball = path.join(root, JSON.parse(packed.stdout)[0].filename);
+  assert.equal(result.status, 0, `${message}\n${result.stderr}`);
+  return result;
+}
+
+function packTarball(target, destination, message) {
+  const packed = npmRun(
+    ['pack', target, '--ignore-scripts', '--pack-destination', destination, '--json'],
+    projectRoot,
+    message,
+  );
+  return path.join(destination, JSON.parse(packed.stdout)[0].filename);
+}
+
+function installConsumer() {
+  if (installed) return installed;
+  const root = mkdtempSync(path.join(tmpdir(), 'wb-host-launch-'));
+  const tarball = packTarball('.', root, 'packing the distribution tarball failed');
+
+  // Every declared runtime dependency is packed straight out of the project's
+  // own `node_modules`, so the nested install resolves a local file for each
+  // one and never needs registry metadata. `npm ci` caches package tarballs
+  // but not their packuments, so resolving `yaml@^2.9.0` by range under
+  // `--offline` fails with ENOTCACHED on a machine — or a CI runner — whose
+  // cache only ever saw `npm ci`.
+  const dependencyTarballs = Object.keys(manifest.dependencies).map((name) => {
+    const installedDependency = path.join(projectRoot, 'node_modules', name);
+    assert.ok(
+      existsSync(installedDependency),
+      `${name} is a declared runtime dependency but is not installed; run \`npm install\` at the project root first`,
+    );
+    return packTarball(`./node_modules/${name}`, root, `packing ${name} failed`);
+  });
 
   const consumer = path.join(root, 'consumer');
   mkdirSync(consumer);
@@ -33,13 +61,14 @@ function installConsumer() {
     path.join(consumer, 'package.json'),
     `${JSON.stringify({ name: 'wb-host-consumer', version: '0.0.0', private: true, type: 'module' }, null, 2)}\n`,
   );
-  const install = spawnSync('npm', ['install', '--no-audit', '--no-fund', tarball], {
-    cwd: consumer,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-    shell: process.platform === 'win32',
-  });
-  assert.equal(install.status, 0, install.stderr);
+  // `--offline` and not `--prefer-offline`: the install must complete from
+  // local files alone. A network fallback would make this test pass or fail on
+  // connectivity, which is not what it exists to prove.
+  npmRun(
+    ['install', '--offline', '--no-audit', '--no-fund', ...dependencyTarballs, tarball],
+    consumer,
+    'the offline consumer install failed; run `npm install` at the project root first',
+  );
   installed = { root, consumer };
   return installed;
 }
@@ -155,4 +184,23 @@ test('the installed package still answers a deep import', () => {
 
   assert.equal(observed.list, 131072);
   assert.equal(observed.workbench, 65536);
+});
+
+// The offline install has to resolve the whole runtime closure from the cache,
+// so the installed tree is the honest place to assert what a host actually
+// pays for: every declared runtime dependency present, and no devDependency
+// dragged along behind it.
+test('the installed consumer tree is the declared runtime closure and nothing more', () => {
+  const { consumer } = installConsumer();
+  const installedPackages = readdirSync(path.join(consumer, 'node_modules'))
+    .filter((entry) => !entry.startsWith('.'))
+    .sort();
+
+  assert.deepEqual(installedPackages, ['wowbagger', ...Object.keys(manifest.dependencies)].sort());
+  for (const devDependency of Object.keys(manifest.devDependencies)) {
+    assert.ok(
+      !installedPackages.includes(devDependency),
+      `${devDependency} is a devDependency and must not reach a consumer install`,
+    );
+  }
 });

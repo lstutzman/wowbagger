@@ -712,10 +712,7 @@
           ]
         },
         "state": {
-          "enum": [
-            "unchanged",
-            "unknown"
-          ]
+          "const": "unchanged"
         }
       }
     },

@@ -183,7 +183,9 @@
         "status",
         "created",
         "updated",
-        "provenance"
+        "provenance",
+        "depends_on",
+        "related"
       ],
       "properties": {
         "schema_version": {
