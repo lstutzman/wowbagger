@@ -1475,7 +1475,9 @@ function writeMutation(command, outcome) {
       // flag it is absent and the result member is byte-identical.
       result: {
         item: outcome.item,
-        ...(outcome.changed_paths ? { changed_paths: outcome.changed_paths } : {}),
+        ...(outcome.resultExtra?.commit_paths
+          ? { changed_paths: outcome.resultExtra.commit_paths }
+          : outcome.changed_paths ? { changed_paths: outcome.changed_paths } : {}),
         ...(outcome.resultExtra ?? {}),
       },
     }

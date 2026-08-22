@@ -31,6 +31,10 @@
       "state": "committed",
       "result": {
         "item": "{{ITEM}}",
+        "changed_paths": [
+          "{{LOG_PATH}}",
+          "items/wb_01KZBMBEZKPE7D15HKW9Q3GSZV.md"
+        ],
         "git_commit": "{{GIT_COMMIT}}",
         "commit_paths": [
           "{{LOG_PATH}}",

@@ -370,7 +370,7 @@ export async function reconcileClaimJournal({
         item_id: intent.item_id,
         candidate_sha256: intent.candidate_sha256,
         claim_fence: intent.fence,
-      }, record, observedAt);
+      }, record, observedAt, itemPathRelativeToLedger(ledgerDirectory, item?.file), namespace);
     } else if (higherEpoch) {
       outcome = publicationError({
         operation_id: intent.operation_id,

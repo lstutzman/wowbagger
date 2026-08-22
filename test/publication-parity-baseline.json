@@ -14,6 +14,10 @@
           "ledger_namespace": "<namespace>",
           "item_id": "wb_01M06G96000000000000000001",
           "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+          "changed_paths": [
+            "wb_01M06G96000000000000000001.md",
+            ".wowbagger/reconcile-<namespace>.md"
+          ],
           "claim_fence": {
             "ledger_namespace": "<namespace>",
             "item_id": "wb_01M06G96000000000000000001",
@@ -101,6 +105,10 @@
               "ledger_namespace": "<namespace>",
               "item_id": "wb_01M06G96000000000000000001",
               "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+              "changed_paths": [
+                "wb_01M06G96000000000000000001.md",
+                ".wowbagger/reconcile-<namespace>.md"
+              ],
               "claim_fence": {
                 "ledger_namespace": "<namespace>",
                 "item_id": "wb_01M06G96000000000000000001",
@@ -397,6 +405,10 @@
           "ledger_namespace": "<namespace>",
           "item_id": "wb_01M06G96000000000000000001",
           "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+          "changed_paths": [
+            "wb_01M06G96000000000000000001.md",
+            ".wowbagger/reconcile-<namespace>.md"
+          ],
           "claim_fence": {
             "ledger_namespace": "<namespace>",
             "item_id": "wb_01M06G96000000000000000001",
@@ -484,6 +496,10 @@
               "ledger_namespace": "<namespace>",
               "item_id": "wb_01M06G96000000000000000001",
               "committed_revision": "sha256:145b8a004cd89d29cb453115a2d4fceabf3eace2ad89d6d0adb797bed520ddce",
+              "changed_paths": [
+                "wb_01M06G96000000000000000001.md",
+                ".wowbagger/reconcile-<namespace>.md"
+              ],
               "claim_fence": {
                 "ledger_namespace": "<namespace>",
                 "item_id": "wb_01M06G96000000000000000001",

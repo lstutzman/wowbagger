@@ -111,10 +111,10 @@ test('the unflagged and flagged envelopes differ only by the additive Git member
   assert.equal(withFlag.exit, 0, withFlag.stdout);
 
   assert.deepEqual(Object.keys(withoutFlag.envelope).sort(), Object.keys(withFlag.envelope).sort());
-  assert.deepEqual(Object.keys(withoutFlag.envelope.result), ['item']);
+  assert.deepEqual(Object.keys(withoutFlag.envelope.result), ['item', 'changed_paths']);
   assert.deepEqual(
     Object.keys(withFlag.envelope.result),
-    ['item', 'git_commit', 'commit_paths', 'claim_verified'],
+    ['item', 'changed_paths', 'git_commit', 'commit_paths', 'claim_verified'],
   );
   assert.deepEqual(withFlag.envelope.result.item, withoutFlag.envelope.result.item);
 });

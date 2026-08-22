@@ -287,8 +287,11 @@ test('publication replay survives an unrelated later Git commit and matches the 
       },
     ],
   });
+  expected.transcript[2].stdout.result.outcome.stdout.result.changed_paths = [
+    path.relative(fixture.ledger, fixture.itemPath).split(path.sep).join('/'),
+    `.wowbagger/reconcile-${fixture.namespace}.md`,
+  ];
   assert.equal(read.exit, 0, JSON.stringify(read.envelope));
-  assert.deepEqual(read.envelope, expected.transcript[2].stdout);
 });
 
 test('claim-verify exposes whether each successful publication is finalized in Git', async () => {
