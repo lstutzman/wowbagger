@@ -169,6 +169,10 @@ test('a successful legacy transition writes its mutation into the reconciliation
   ), '--json');
 
   assert.equal(transitioned.exit, 0, JSON.stringify(transitioned.envelope));
+  assert.deepEqual(
+    transitioned.envelope.result.changed_paths,
+    [`${ITEM_ID}.md`, `.wowbagger/reconcile-${fixture.namespace}.md`],
+  );
   const after = await readFile(logPath, 'utf8');
   assert.notEqual(after, before);
   assert.match(after, /"type":"legacy-mutation-intent"/);

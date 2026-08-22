@@ -115,7 +115,11 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         }
         throw error;
       }
-      if (!intent) return outcome;
+      if (!intent) {
+        return outcome?.state === 'committed'
+          ? { ...outcome, changed_paths: [outcome.item?.path].filter(Boolean) }
+          : outcome;
+      }
       if (outcome?.state === 'committed') {
         const committedRevision = outcome.ok === true
           ? outcome.item?.revision
@@ -167,7 +171,15 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         // The tracked reconciliation log is derived. The fsync'd journal
         // already recorded the mutation and the next command rebuilds it.
       }
-      return outcome;
+      return outcome?.state === 'committed'
+        ? {
+          ...outcome,
+          changed_paths: [
+            outcome.item?.path,
+            `.wowbagger/reconcile-${namespace}.md`,
+          ].filter(Boolean),
+        }
+        : outcome;
     });
   } catch (error) {
     return claimStoreUnavailable(command, error?.code === 'CLAIM_LOCK_HELD'

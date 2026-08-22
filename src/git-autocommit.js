@@ -261,7 +261,12 @@ async function finalize({
     }));
   }
 
-  const evidence = { git_commit: commit.commit, commit_paths: commitSet, claim_verified: true };
+  const evidence = {
+    git_commit: commit.commit,
+    commit_paths: commitSet,
+    changed_paths: commitSet,
+    claim_verified: true,
+  };
   const reconciled = await verifyClaimJournal({
     ledgerDirectory,
     gitCommonDir,

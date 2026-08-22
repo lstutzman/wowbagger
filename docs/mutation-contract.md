@@ -418,6 +418,14 @@ A core response has exactly `ok`, `command`, `contract_version`, and one of
 claim-domain response has exactly `ok`, `namespace`, `command`,
 `contract_version`, `state`, and one of `result` or `error`; a `claim
 capabilities` response omits `state`, and a claimed-publication response adds
+
+Successful mutation responses may carry `result.changed_paths`. It is the
+complete deterministic ledger-relative set whose bytes this invocation changed
+in the working tree. It does not mean Git committed those paths. `create`
+returns only its item path; `transition`, `patch`, and `publish-claimed` return
+their item path plus the tracked reconciliation log when that log changed.
+`--auto-commit` additionally returns `commit_paths` and `git_commit`; its
+`changed_paths` equals the committed set.
 `operation_id` once schema validation has accepted it. No expected envelope has
 undocumented root members.
 

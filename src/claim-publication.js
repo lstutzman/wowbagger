@@ -257,7 +257,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
       }
       await publicationTestCheckpoint(scenario, 'after-ledger-commit', ledgerDirectory);
-      const outcome = publicationSuccess(request, record, observedAt);
+      const outcome = publicationSuccess(request, record, observedAt, mutation.item?.path, namespace);
       const terminal = await persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
       await publicationTestCheckpoint(scenario, 'after-terminal-record', ledgerDirectory);
       return terminal;
@@ -1106,7 +1106,7 @@ function mutationFailure(request, mutation) {
   return publicationUnknown(request);
 }
 
-function publicationSuccess(request, record, observedAt) {
+function publicationSuccess(request, record, observedAt, itemPath, namespace) {
   return {
     exit: 0,
     stdout: {
@@ -1120,6 +1120,10 @@ function publicationSuccess(request, record, observedAt) {
         ledger_namespace: request.ledger_namespace,
         item_id: request.item_id,
         committed_revision: request.candidate_sha256,
+        changed_paths: [
+          itemPath,
+          `.wowbagger/reconcile-${namespace}.md`,
+        ].filter(Boolean),
         claim_fence: structuredClone(request.claim_fence),
         claim_read_back: readBack(request.ledger_namespace, request.item_id, observedAt, record),
       },

@@ -31,6 +31,14 @@
       "properties": {
         "item": {
           "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemSnapshot"
+        },
+        "changed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
         }
       },
       "required": [

@@ -412,6 +412,12 @@ what each finding's `remediation` string says (it names the path), run
 `claim-verify` until it exits 0, then repeat the refused command. Never hand-
 edit a ledger file to get past it.
 
+Successful mutation responses also return `result.changed_paths`: the exact
+ledger-relative paths changed by that invocation. Use this set for manual
+staging; never broaden it to `git add <ledger>` and never treat it as proof of
+commit. With `--auto-commit`, `changed_paths` matches `commit_paths`, and
+`git_commit` proves the commit.
+
 Batch work is where this bites: filing ten items means ten commits, not one
 commit at the end. Tell the user that before starting a batch.
 

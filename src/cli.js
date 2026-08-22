@@ -1313,7 +1313,11 @@ function writeMutation(command, outcome) {
       state: outcome.state,
       // resultExtra carries the additive auto-commit evidence. Without the
       // flag it is absent and the result member is byte-identical.
-      result: { item: outcome.item, ...(outcome.resultExtra ?? {}) },
+      result: {
+        item: outcome.item,
+        ...(outcome.changed_paths ? { changed_paths: outcome.changed_paths } : {}),
+        ...(outcome.resultExtra ?? {}),
+      },
     }
     : {
       ok: false,
