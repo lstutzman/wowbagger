@@ -1005,6 +1005,25 @@ test('gives the whole row, padding and rank badge included, to its link', async 
   assert.match(html, /\.plain li:last-child \.row-link\{padding-bottom:0\}/);
 });
 
+// A ledger that has not numbered an item names it by its 26-character ULID,
+// and a ULID carries no break opportunity. A ranked row is a grid item, so
+// that one token sets the track's minimum width and takes the whole document
+// sideways with it: at a 390px viewport the list measured 396px and the report
+// scrolled horizontally. The handle has to break where the title beside it
+// already breaks.
+test('breaks a numberless handle instead of widening the ranked row', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const unnumbered = model();
+  unnumbered.workNext[0].number = null;
+  const html = renderReportHtml(unnumbered, options());
+
+  assert.match(decisionSurface(html), /<span class="handle">wb_hostile<\/span>/);
+  assert.ok(
+    /\.handle\{([^}]*)\}/.exec(html)[1].split(';').includes('overflow-wrap:anywhere'),
+    'a handle with no break opportunity must be breakable',
+  );
+});
+
 // The href is the whole behaviour when scripting is off, and a bare hash jump
 // parks the card under the sticky control strip. The stylesheet has to clear
 // the strip on its own, wherever the strip is sticky.
