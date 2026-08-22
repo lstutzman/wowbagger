@@ -12,7 +12,7 @@ provenance:
   source: "propertycompass2-field-report-22-23"
   recorded_at: "2026-08-22T12:45:57.539Z"
 depends_on: []
-related: [wb_01M057PY03G5AM0MMAKA5R9AT9, wb_01M05ESRM258XEJJW7G15TXJ68]
+related: [ wb_01M057PY03G5AM0MMAKA5R9AT9, wb_01M05ESRM258XEJJW7G15TXJ68 ]
 ---
 
 ## Problem
@@ -45,3 +45,11 @@ Items #89 and #98 made global worktree serialization honest and removed one misl
 ## Evidence
 
 PropertyCompass2 `docs/wowbagger-feedback.md` entries 22 and 23, reported from `staging-7` and feature `1637-page-help-disclosure` on 2026-08-22. Namespace: `wbns_32119a74e42d76532139a4baf4f87a65`. The #1637 transition was unrelated to the blocking #1677 item and never reached its own mutation.
+
+## Additional staging-5 evidence
+
+PropertyCompass2 PR #2237 reproduced the same global barrier from a fresh worktree cut from `origin/staging`. A patch of unrelated item #1533 refused before touching it because claim reconciliation found: (1) an unauthorized committed revision on #1484, repaired successfully with explicit `claim-adopt`; and (2) `worktree-synchronization-required` for private sibling-worktree item #1675 with actual revision null. The private authoring commit was still unpushed in staging-4, so the second finding kept every mutation blocked after the first was repaired.
+
+The report also observed commit `e1fa6653c` apparently going through a Wowbagger command — it wrote reconciliation entries — yet the resulting committed item revision was unauthorized in another session. Reproduction must therefore test where the authorized revision is recorded when the mutation command, Git commit, and later verifier run in different worktrees or machines.
+
+PropertyCompass evidence: `docs/wowbagger-feedback.md`, 2026-08-22 entry in PR #2237; namespace `wbns_32119a74e42d76532139a4baf4f87a65`.
