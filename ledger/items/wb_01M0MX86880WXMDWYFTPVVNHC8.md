@@ -5,14 +5,19 @@ number: 137
 title: "Provision declarations for existing consumer extension fields"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
   source: "propertycompass2-field-report-26"
   recorded_at: "2026-08-22T14:16:07.893Z"
 depends_on: []
-related: [wb_01M07V3M3AHKRPAYYNBV8V7DTF, wb_01KZSM9K009JZBSY9NACGHCBEV]
+related: [ wb_01M07V3M3AHKRPAYYNBV8V7DTF, wb_01KZSM9K009JZBSY9NACGHCBEV ]
+decisions:
+  - action: accept
+    date: 2026-08-22
+    summary: "Accept item into backlog for maintainer triage."
+    rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
 ---
 
 ## Problem
