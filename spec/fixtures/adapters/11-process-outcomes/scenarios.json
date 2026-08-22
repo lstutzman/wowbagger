@@ -839,6 +839,54 @@
       "expected_mutation_outcome": "unknown"
     },
     {
+      "id": "mutation-core-write-outcome-unknown",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "core-write-outcome-unknown",
+        "command": "create",
+        "item_id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+        "expected_revision": null,
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": 6,
+          "signal": null,
+          "timed_out": false,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJvayI6ZmFsc2UsImNvbW1hbmQiOiJjcmVhdGUiLCJjb250cmFjdF92ZXJzaW9uIjo1LCJzdGF0ZSI6InVua25vd24iLCJlcnJvciI6eyJjb2RlIjoid3JpdGUtb3V0Y29tZS11bmtub3duIiwibWVzc2FnZSI6IlRoZSBjcmVhdGUgcHVibGljYXRpb24gb3V0Y29tZSBjb3VsZCBub3QgYmUgdmVyaWZpZWQuIiwiZGV0YWlscyI6eyJpZCI6IndiXzAxUTQ1WDQ3NE4yOFQ1Q1k0R05GNllZNEhNIiwicmVjb3ZlcnlfYXJ0aWZhY3RzIjpbeyJwYXRoIjoid2JfMDFRNDVYNDc0TjI4VDVDWTRHTkY2WVk0SE0ubWQiLCJraW5kIjoiZmluYWwtaXRlbSIsInNoYTI1NiI6bnVsbCwic2l6ZV9ieXRlcyI6bnVsbH1dLCJyZWNvdmVyeV9hcnRpZmFjdHNfdHJ1bmNhdGVkIjpmYWxzZX19fQo=",
+          "stderr_base64": ""
+        }
+      },
+      "expected_code": "mutation-outcome-unknown",
+      "expected_mutation_outcome": "unknown"
+    },
+    {
+      "id": "mutation-core-post-commit-recovery",
+      "request": {
+        "adapter_contract_version": 2,
+        "request_id": "core-post-commit-recovery",
+        "command": "create",
+        "item_id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+        "expected_revision": null,
+        "process": {
+          "started": true,
+          "process_tree_contained": true,
+          "orphaned": false,
+          "exit_code": 6,
+          "signal": null,
+          "timed_out": false,
+          "stdout_complete": true,
+          "stderr_complete": true,
+          "stdout_base64": "eyJvayI6ZmFsc2UsImNvbW1hbmQiOiJjcmVhdGUiLCJjb250cmFjdF92ZXJzaW9uIjo1LCJzdGF0ZSI6ImNvbW1pdHRlZCIsImVycm9yIjp7ImNvZGUiOiJwb3N0LWNvbW1pdC1yZWNvdmVyeS1yZXF1aXJlZCIsIm1lc3NhZ2UiOiJUaGUgaXRlbSB3YXMgY29tbWl0dGVkLCBidXQgY2xlYW51cCByZXF1aXJlcyByZWNvdmVyeS4iLCJkZXRhaWxzIjp7ImlkIjoid2JfMDFRNDVYNDc0TjI4VDVDWTRHTkY2WVk0SE0iLCJyZXZpc2lvbiI6InNoYTI1NjoxOTI1MGFjN2NjMWVkY2M1ZmE5YTMyZDY3NDk4NjEyZWUzZDU4YWIyYzg3NzcxNGU5NTkwNmM0ZjFjZDA5Njc5IiwicmVjb3ZlcnlfYXJ0aWZhY3RzIjpbeyJwYXRoIjoiLndvd2JhZ2dlci1sb2Nrcy93Yl8wMVE0NVg0NzROMjhUNUNZNEdORjZZWTRITS5sb2NrIiwia2luZCI6ImxvY2stZmlsZSIsInNoYTI1NiI6InNoYTI1Njo3OGFmYTUxOGMzNmEzMjU2OTE5OWVjMTkxZDFhOWY2Mzc0Y2JiMTZiMzM1NGI2NWUyZWFiYjQ5NTYwZWJiYzI2Iiwic2l6ZV9ieXRlcyI6MTc5fV0sInJlY292ZXJ5X2FydGlmYWN0c190cnVuY2F0ZWQiOmZhbHNlfX19Cg==",
+          "stderr_base64": ""
+        }
+      },
+      "expected_code": null,
+      "expected_mutation_outcome": null
+    },
+    {
       "id": "read-input-write-failed",
       "request": {
         "adapter_contract_version": 2,

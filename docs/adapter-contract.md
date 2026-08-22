@@ -1082,6 +1082,66 @@ caller-known expected revision with the current revision and state; never
 retry until that observation is reviewed. This distinction prevents both a
 hidden committed mutation and an orphaned duplicate mutation.
 
+### 6.2 Response loss and the unknown-outcome envelope
+
+Losing the response is not the same as observing a failure. A transport between
+the consumer and the workspace-owning host can drop after the adapter dispatched
+the core, and a dropped transport observes nothing about the ledger. The adapter
+therefore reports an unresolved mutation as unresolved, and the consumer answers
+it with one sequence: Dispatch once, never replay, invalidate the inspected
+revision, reconnect, then re-read the ledger. Re-reading returns current ledger
+state only. A later item state never proves that the lost dispatch caused it, so
+a consumer MUST NOT present it as evidence that the mutation succeeded or failed.
+
+An unresolved mutation is exactly this envelope. It carries the root
+`mutation_outcome` member, which no other adapter result has:
+
+```json
+{
+  "ok": false,
+  "adapter_contract_version": 2,
+  "request_id": "transition-recovery-0001",
+  "mutation_outcome": "unknown",
+  "error": {
+    "code": "mutation-outcome-unknown",
+    "message": "The mutation may have been applied; inspect current state before retrying.",
+    "details": {
+      "command": "transition",
+      "item_id": "wb_01Q45X474N28T5CY4GNF6YY4HM",
+      "recovery": {
+        "action": "validate-inspect-and-compare-revision",
+        "expected_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "retry": "never-before-current-state-review"
+      }
+    }
+  },
+  "process": {}
+}
+```
+
+`details.recovery` is the bounded machine-readable form of the recovery rules
+above, and it has exactly one shape per command:
+
+| Command | `action` | Other members | `retry` |
+|---|---|---|---|
+| `create` | `inspect-caller-known-id` | `validate_ledger_first: true` | `only-after-item-not-found-and-audited-artifact-recovery` |
+| `transition`, `patch` | `validate-inspect-and-compare-revision` | `expected_revision`, the caller-known revision or `null` | `never-before-current-state-review` |
+
+`details` also carries `process_issue` naming the contradicted or missing
+observation member when the observation itself was the reason the outcome is
+unknown. `process` is the same bounded observation summary every transport
+failure carries.
+
+Exit 4 is never response loss. A `revision-conflict` with the core state
+`unchanged` is a complete observed refusal: the adapter forwards it verbatim
+with `core_exit_code: 4` and no `mutation_outcome` member. It invalidates the
+consumer's inspected revision and requires re-inspection; relabelling it
+`mutation-outcome-unknown` would turn a proven non-write into an unresolved one.
+
+The adapter adds no operation ID, no durable outcome store, and no replay
+endpoint. Once-only dispatch plus an honest unresolved outcome need no
+correlation identity, and adding one requires a new contract decision.
+
 ## 7. Instruction inputs
 
 The contract does not assume `CLAUDE.md`, `AGENTS.md`, any other filename,
@@ -1297,7 +1357,7 @@ adapter, so its implementation statuses remain `unverified`.
 `node spec/run-adapter-implementation.js` accepts the same fixture directory,
 evaluates transactions through the shipped Claude Code entrypoint and emits the
 same result shape with an evidence platform. Its current native Darwin, Linux,
-and Windows runs are each `pass`: 210 of 210 assertions and 16 of 16 cases
+and Windows runs are each `pass`: 212 of 212 assertions and 16 of 16 cases
 pass. That native common-vector evidence earns the Claude Code manifest's
 Darwin, Linux, and win32 `supported` declarations.
 Codex, Kimi, and generic adapter implementations remain `unverified`.

@@ -170,6 +170,16 @@
       "scenario": "mutation-fence-claim-store-outcome-unknown"
     },
     {
+      "id": "mutation-core-unknown-publication-is-unknown",
+      "type": "process-outcome",
+      "scenario": "mutation-core-write-outcome-unknown"
+    },
+    {
+      "id": "mutation-core-committed-recovery-is-deterministic",
+      "type": "process-outcome",
+      "scenario": "mutation-core-post-commit-recovery"
+    },
+    {
       "id": "read-undelivered-input-is-named",
       "type": "process-outcome",
       "scenario": "read-input-write-failed"
@@ -193,7 +203,7 @@
   "artifacts": [
     {
       "path": "scenarios.json",
-      "sha256": "sha256:53d63cf008d51426d05715f24c0ec467a2090c6d244d0d8fc88111becd4f018b"
+      "sha256": "sha256:b877a88eff3f40e7e2242ed8b14be8915801c265ee45fbfa2bcabd3763484995"
     }
   ]
 }

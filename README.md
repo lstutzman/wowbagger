@@ -39,7 +39,7 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > version is **3**. Three adapter packages ship — Claude Code, Codex, and
 > OpenCode — on one shared engine at adapter contract version 2. Only the Claude
 > Code adapter declares a `supported` platform, Darwin, from a native run of all
-> 210 conformance assertions across all 16 cases. Every other adapter and
+> 212 conformance assertions across all 16 cases. Every other adapter and
 > platform declaration is `unverified`; do not infer support because the CLI
 > starts.
 >
@@ -463,8 +463,8 @@ TMPDIR=/tmp node spec/run-adapter-implementation.js --target codex
 TMPDIR=/tmp node spec/run-adapter-implementation.js --target opencode
 ```
 
-The native Darwin and Linux Claude Code reports each pass all 210 assertions across all 16
-cases and report `"status": "pass"`. Codex and OpenCode execute the same 210
+The native Darwin and Linux Claude Code reports each pass all 212 assertions across all 16
+cases and report `"status": "pass"`. Codex and OpenCode execute the same 212
 assertions through the same engine, but both target reports remain `"fail"`
 pending target-specific evidence, and every platform declaration on those two
 manifests stays `unverified`. The Kimi and OpenAI-compatible harness adapters
@@ -704,6 +704,35 @@ idempotent command finishes the job:
 Repeating it creates no second commit, so a lost response and a failed commit
 recover the same way. [docs/mutation-contract.md](docs/mutation-contract.md)
 section 13 is the full contract.
+
+### When the response is lost
+
+A mutation you dispatched can lose its response: the process is signalled or
+times out, a stream arrives truncated, or the transport to the machine that owns
+the ledger drops. None of that observes the ledger, so none of it says whether
+the write applied.
+
+Only a complete observed result establishes an outcome. Exit 0 with state
+`committed` is a success; a complete refusal with state `unchanged` is a proven
+non-write; exit 6 `post-commit-recovery-required` says the item is published and
+cleanup remains; exit 6 `write-outcome-unknown` says publication was attempted
+and the visible bytes are indeterminate. Anything else — signal, timeout,
+truncated output, no envelope, no response at all — is unresolved.
+
+Unresolved is answered by one sequence, never a retry: Dispatch once, never
+replay, invalidate the inspected revision, reconnect, then re-read the ledger.
+Re-reading is `validate` plus `inspect` of the ID you already know, compared
+against what you observed before you dispatched. What you read back is current
+ledger state; it never proves that the lost dispatch caused it. A person reviews
+that comparison before any new mutation, and the new mutation is built on the
+current revision, not resent.
+
+Exit 4 is not response loss. A `revision-conflict` proves the write did not run;
+re-inspect and decide again.
+
+There is no operation ID and no replay endpoint, because nothing replays.
+[docs/mutation-contract.md](docs/mutation-contract.md) section 10 is the full
+contract.
 
 ### When the item was changed outside the protocol
 
@@ -1162,7 +1191,7 @@ It is the durable work ledger beneath those systems.
   **In progress at core contract version 5; the version is not frozen.**
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
   packages share the version 2 engine; the Claude Code manifest declares Darwin
-  `supported` after passing all 210 native assertions. Other adapter targets and
+  `supported` after passing all 212 native assertions. Other adapter targets and
   platform declarations remain unverified.**
 - Document the generic tool contract for other agent harnesses. **Shipped as the
   adapter contract and the OpenAI-compatible integration guide.**

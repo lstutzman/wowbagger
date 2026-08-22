@@ -443,6 +443,40 @@ wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json
 An ambiguous Git outcome is `git-commit-outcome-unknown` instead. Stop, report
 it, and inspect before writing anything else.
 
+## When the response is lost
+
+A mutation you dispatched can lose its response. The process is signalled or
+times out, output arrives truncated, or the connection to the machine that owns
+the ledger drops. None of that watched the ledger, so none of it tells you
+whether the write applied. Say that out loud instead of guessing.
+
+Only a complete result decides anything:
+
+- exit 0 with `state: "committed"` — it applied, exactly as returned;
+- a complete refusal with `state: "unchanged"` — it did not run;
+- exit 6 `post-commit-recovery-required`, `state: "committed"` — the item is
+  published and cleanup remains;
+- exit 6 `write-outcome-unknown`, `state: "unknown"` — publication was attempted
+  and the visible bytes are indeterminate.
+
+Everything else — signal, timeout, truncated output, no envelope, no response —
+is unresolved. Do this, in order, and nothing else:
+
+1. Dispatch once, never replay, invalidate the inspected revision, reconnect,
+   then re-read the ledger.
+2. Re-read with `validate`, then `inspect` the ID you already know. You minted
+   the ID for a `create`; you sent the `expected_revision` for a `transition` or
+   `patch`.
+3. Compare what you read with what you observed before dispatching, and report
+   it as current state. It never proves that the lost dispatch caused it.
+4. Ask the human before any new mutation, and build that mutation on the current
+   revision. Never resend the same request bytes.
+
+Exit 4 `revision-conflict` is not response loss. It is proof the write did not
+run: re-inspect, then decide again with the revision you just read.
+
+There is no operation ID and no replay command. Do not invent one.
+
 ## Work claims are merge-coordinated
 
 ```sh

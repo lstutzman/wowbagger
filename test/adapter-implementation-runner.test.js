@@ -120,7 +120,7 @@ test('reports the honest claude-code result with every assertion executed', asyn
   );
 
   const executed = result.cases.flatMap((entry) => entry.executed_assertions);
-  assert.equal(executed.length, 210);
+  assert.equal(executed.length, 212);
 });
 
 test('reports the codex target with every codex-targeted assertion executed', async () => {
@@ -132,7 +132,7 @@ test('reports the codex target with every codex-targeted assertion executed', as
   assert.equal(result.cases.length, 16);
 
   const executed = result.cases.flatMap((entry) => entry.executed_assertions);
-  assert.equal(executed.length, 210);
+  assert.equal(executed.length, 212);
 });
 
 test('a trailing --target with no value fails fast instead of reporting no cases', async () => {
@@ -156,7 +156,7 @@ test('reports the opencode target with every opencode-targeted assertion execute
   assert.equal(result.status, 'fail');
   assert.equal(result.implementations.opencode, 'fail');
   assert.equal(result.cases.length, 16);
-  assert.equal(result.cases.flatMap((entry) => entry.executed_assertions).length, 210);
+  assert.equal(result.cases.flatMap((entry) => entry.executed_assertions).length, 212);
 });
 
 test('fails closed on an unknown assertion type', async (t) => {
@@ -311,7 +311,7 @@ test('maps every bounded process observation through the shipped engine', async 
   const processCase = result.cases.find(({ case: name }) => name === 'process-outcomes');
 
   assert.equal(processCase.status, 'pass');
-  assert.equal(processCase.executed_assertions.length, 35);
+  assert.equal(processCase.executed_assertions.length, 37);
   assert.ok(processCase.assertion_evidence
     .every(({ evidence }) => evidence === 'src/adapter/process-outcome.js'));
 });
@@ -532,8 +532,8 @@ test('evidences every Plan 3 assertion through a shipped module', async () => {
   const evidenced = result.cases
     .flatMap((entry) => entry.assertion_evidence)
     .filter(({ evidence }) => evidence !== 'unimplemented');
-  assert.equal(evidenced.length, 210);
-  assert.equal(210 - evidenced.length, 0);
+  assert.equal(evidenced.length, 212);
+  assert.equal(212 - evidenced.length, 0);
   assert.equal(result.status, 'pass');
   assert.equal(result.implementations['claude-code'], 'pass');
 });

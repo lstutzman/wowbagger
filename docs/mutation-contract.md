@@ -2380,6 +2380,58 @@ A cleanup failure reports the remaining bounded artifacts. Locks are never
 auto-broken by age. Clients must inspect after committed-recovery or unknown
 outcomes and must not retry blindly.
 
+### Response loss and once-only dispatch
+
+A caller can lose the response to a mutation it already dispatched: the
+transport between the caller and the owning host can drop after the core
+started, and a dropped transport observes nothing about the ledger. This
+section is normative for every explicit user-triggered `create`, `transition`,
+and `patch`.
+
+Only a complete observed process result establishes an outcome. A result is
+complete when the process is observed to have exited, both captured streams are
+complete and within their bounds, and standard output is one valid envelope for
+the dispatched command. Anything else establishes nothing about the ledger.
+
+| Observation | Established outcome | Required client action |
+|---|---|---|
+| Complete envelope, exit 0, state committed | The mutation applied exactly as returned. | Continue. |
+| Complete envelope, state unchanged, any nonzero exit | The mutation did not create, remove, rename, or byte-modify an item. | Read the refusal; a revision conflict re-inspects. |
+| Complete envelope, exit 6 post-commit-recovery-required, state committed | The item is published; a verify or cleanup step still needs recovery. | Inspect the item and clear the reported recovery artifacts. Never repeat the mutation. |
+| Complete envelope, exit 6 write-outcome-unknown, state unknown | Publication was attempted and the visible bytes are indeterminate. | Validate, inspect, and compare the caller-known revision. Never repeat the mutation. |
+| Signal, timeout, orphan or containment doubt, or an incomplete or over-limit stream | Nothing. The mutation may or may not have applied. | Treat as unresolved. |
+| No envelope, a partial envelope, or no response at all because the transport was lost | Nothing. | Treat as unresolved. |
+
+No row reports success that was not observed, and no row licenses a repeat of
+the mutation.
+
+An unresolved outcome is answered by one sequence, never by a retry:
+
+1. Dispatch once, never replay, invalidate the inspected revision, reconnect,
+   then re-read the ledger.
+2. Re-read means `validate`, then `inspect` the caller-known ID. For `create`
+   the caller already knows the ID it minted; for `transition` and `patch` the
+   caller already knows the expected revision it sent.
+3. Compare the observed current state with the caller's own pre-dispatch
+   observation, and report the comparison as current state. A later item state
+   describes only current ledger state; it never proves that the lost dispatch
+   caused it.
+4. Dispatch a fresh mutation only after a person reviews that comparison, and
+   only as a new explicit decision built on the current revision.
+
+Exit 4 is not response loss. A `revision-conflict` is a complete observed
+refusal with state unchanged: the item changed after it was inspected, and the
+core proves the write did not run. It invalidates the inspected revision and
+requires re-inspection; it never becomes an unresolved outcome and never
+triggers a retry of the same request bytes.
+
+This contract carries no operation identity. There is no operation ID, no
+durable outcome store, and no replay endpoint, because the caller never
+replays: once-only dispatch plus honest unresolved outcomes need no
+correlation. Introducing replay-safe correlation requires a new contract
+decision that defines request binding, retention, and collision behavior before
+implementation.
+
 ## 11. Normative design vectors
 
 The synthetic vectors under

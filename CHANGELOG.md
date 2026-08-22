@@ -7,6 +7,27 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Documentation
+
+- **Response loss is a named contract instead of folklore.** The mutation
+  contract, the adapter contract, the README, and the installed skill now carry
+  the same sequence for a mutation whose response never arrived: dispatch once,
+  never replay, invalidate the inspected revision, reconnect, then re-read the
+  ledger. The mutation contract's new section 10 table separates the outcomes a
+  caller may act on — committed success, proven non-write, committed recovery,
+  unknown publication — from the two that establish nothing, a signalled or
+  timed-out transport and a missing envelope, and states that a later item state
+  never proves that the lost dispatch caused it. Adapter contract section 6.2
+  documents the `mutation_outcome: "unknown"` envelope and its per-command
+  `recovery` object exactly as the adapter emits them, and states that exit 4
+  `revision-conflict` is a proven non-write that is never relabelled response
+  loss. There is no operation ID, durable outcome store, or replay endpoint;
+  adding correlation requires a new contract decision. No command accepts,
+  refuses, emits, or writes anything different. Two conformance vectors now pin
+  the core's own exit-6 `write-outcome-unknown` and `post-commit-recovery-required`
+  envelopes at the adapter's process-outcome seam, taking the adapter vector set
+  to 212 assertions.
+
 ### Changed
 
 - **The report filters by facet groups instead of one value at a time.** The
