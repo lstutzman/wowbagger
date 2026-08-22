@@ -4,7 +4,7 @@ id: wb_01M087RXDCE0JMCD40XDHVA8MH
 number: 127
 title: "Add a CAS-fenced parent relation migration"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-22
 provenance:
