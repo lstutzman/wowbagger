@@ -53,3 +53,11 @@ PropertyCompass2 PR #2237 reproduced the same global barrier from a fresh worktr
 The report also observed commit `e1fa6653c` apparently going through a Wowbagger command — it wrote reconciliation entries — yet the resulting committed item revision was unauthorized in another session. Reproduction must therefore test where the authorized revision is recorded when the mutation command, Git commit, and later verifier run in different worktrees or machines.
 
 PropertyCompass evidence: `docs/wowbagger-feedback.md`, 2026-08-22 entry in PR #2237; namespace `wbns_32119a74e42d76532139a4baf4f87a65`.
+
+## Operator recovery completed
+
+The PropertyCompass staging-7 operator found the missing bytes in dangling local commits rather than adopting unknown data. Commit `bae1cafbb` created the item; `be970da12` contained the exact journal candidate revision `sha256:ddb08a8ec4bbd7289fc0d58aeded5b287f50161ec776cf7005f5161adc103aa5`. The operator restored those exact candidate bytes, committed and pushed repair `f0392bb36`, then explicitly adopted two separately verified unauthorized revisions through commits `4ebf3ce78` and `4ce330b97`.
+
+A real subsequent Wowbagger create succeeded for concierge mirror `wb_01M0MPVSEE2R3F0T2BF8D7E8EN` (#1676), committed as `48d3cd777`. Final PropertyCompass `claim-verify` returned `ok: true`, `state: committed`, `findings: []`; ledger validation returned `valid: true`.
+
+The namespace is operational again. This successful manual recovery does not close the product defect: branch-scoped/private publication state globally blocked unrelated work until an operator searched dangling commits and reconstructed reachability. PropertyCompass feedback entries #22/#23 retain that remaining scope.
