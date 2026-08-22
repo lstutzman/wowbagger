@@ -12,7 +12,7 @@ provenance:
   source: "propertycompass2-field-report-23"
   recorded_at: "2026-08-22T12:45:57.539Z"
 depends_on: []
-related: [wb_01M058P3KQDSD269YXN5B4KSAK, wb_01M057PTYZ18N6EE76AEW46E0R]
+related: [ wb_01M058P3KQDSD269YXN5B4KSAK, wb_01M057PTYZ18N6EE76AEW46E0R ]
 ---
 
 ## Problem
@@ -41,3 +41,11 @@ The report occurred while unrelated global reconciliation findings blocked item 
 ## Evidence
 
 PropertyCompass2 `docs/wowbagger-feedback.md` entry 23 on feature `1637-page-help-disclosure`, 2026-08-22, against published alpha.6. Related completed item #96 and commit-per-mutation documentation item #88.
+
+## Additional staging-5 evidence
+
+PropertyCompass2 PR #2237 reports a refused patch of #1533 appending 11 lines to the tracked reconciliation log even though the command returned `ok: false`, `state: unchanged`, and never touched #1533. The worktree was fresh from `origin/staging`; the refusal came from unrelated global claim findings. The tracked residue then changed a docs-only branch into the full CI profile.
+
+This evidence narrows the current-core reproduction: exercise the pre-mutation global reconciliation refusal path, not only lifecycle/request/revision refusals reached after the legacy mutation fence has authorized an intent. The before/after assertion must include exact reconciliation-log line count and byte digest.
+
+PropertyCompass evidence: `docs/wowbagger-feedback.md`, 2026-08-22 entry in PR #2237.
