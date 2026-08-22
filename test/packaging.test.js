@@ -179,6 +179,27 @@ test('the npm tarball ships all public contracts with every adapter executable',
   }
 });
 
+// A named view exists only in installed guidance: nothing in the artifact or the
+// result tells a consumer that `--view` is available. The surfaces that state
+// the contract therefore have to be shipped paths, not repository-only files.
+test('the npm package ships the named report view contract', () => {
+  for (const [file, text] of [
+    ['README.md', readme],
+    ['skills/wowbagger/SKILL.md', installedSkill],
+    ['docs/mutation-contract.md', installedMutationContract],
+  ]) {
+    assert.ok(
+      text.includes('report --ledger <dir> --view <name> --as-of YYYY-MM-DD --json'),
+      `${file} must state the named view command`,
+    );
+    assert.match(text, /report_version: 2/, file);
+    assert.ok(
+      manifest.files.some((entry) => entry === file || file.startsWith(`${entry}/`)),
+      `${file} must ship`,
+    );
+  }
+});
+
 test('the installed skill requires the core distribution that shipped with it', () => {
   const version = manifest.version.replaceAll('.', '\\.');
 

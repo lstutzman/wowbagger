@@ -104,16 +104,18 @@ ledger. Do not use an npm script as a machine protocol; invoke `wowbagger`
 directly so standard output contains exactly one compact JSON object.
 
 On success, require exit `0`, `ok: true`, `command: "report"`,
-`contract_version: 5`, `result.report_version: 1`, and the requested
-`result.as_of`. Read the generated file from the absolute `result.output`.
-On failure, require `ok: false` and inspect `error.code`; do not treat an
-existing output as fresh because failed publication preserves the prior report.
+`contract_version: 5`, `result.report_version` equal to the configuration's own
+`report_version`, and the requested `result.as_of`. Read the generated file from
+the absolute `result.output`. On failure, require `ok: false` and inspect
+`error.code`; do not treat an existing output as fresh because failed
+publication preserves the prior report. Do not parse the generated HTML and do
+not parse human output: the JSON result is the only machine surface.
 
-The report ends its decision surface with a 3D dependency graph of the whole
-ledger. Its renderer is a pinned, checksummed `3d-force-graph` build vendored
-at `vendor/3d-force-graph/` and inlined at generation time, so the report is
-still one self-contained file that fetches nothing — it is roughly 1.3 MB
-larger for it. A browser without WebGL shows the graph section's plain
+The report ends its decision surface with a 3D dependency graph of the items the
+artifact covers. Its renderer is a pinned, checksummed `3d-force-graph` build
+vendored at `vendor/3d-force-graph/` and inlined at generation time, so the
+report is still one self-contained file that fetches nothing — it is roughly
+1.3 MB larger for it. A browser without WebGL shows the graph section's plain
 explanation and its per-node roster instead; nothing the graph shows is
 missing from the rest of the report.
 
@@ -127,6 +129,40 @@ The report's "Work next" list is a recommended order derived in the report
 layer for a human reader. It is not the queue. `ready --json` remains the only
 machine queue, and its order is priority, created date, then ID. Do not dispatch
 from the report and do not present its order as core output.
+
+### Named custom report views
+
+A configuration at `report_version: 2` names one or more `views`, each a
+read-only projection of the same complete ledger. Generate one by name:
+
+```sh
+wowbagger report --ledger <dir> --view <name> --as-of YYYY-MM-DD --json
+```
+
+For a configured view named `security-blockers`, `<name>` is
+`security-blockers`. Name only a view the configuration defines.
+
+A view's criteria are grouped facets with **OR within one filter group; AND
+across groups**. Every section of the generated file — statistics, Work next,
+Attention, evidence, graph, drill-down, and terminal history — describes only the
+retained subset, and excluded items are absent from the bytes. Readiness is still
+computed against the complete ledger, so excluding a blocker never makes blocked
+work read as ready.
+
+- A named success adds `result.view` naming the selection, and `result.item_count`
+  and `result.ready_count` describe the subset. A base report adds no `view`
+  member, so do not require one.
+- Version 1 configuration is unchanged, and a version 2 configuration with no
+  `--view` publishes the same base report. Do not pass `--view` against a version
+  1 configuration: that and an unknown name both refuse with
+  `report-view-not-found` at exit 2 and leave every output untouched.
+- `--out <file>` overrides the selected output, view or base alike. An empty
+  matched subset is a success with zero items, not a failure.
+- Discover support from `result.operations.report` in `capabilities --json`
+  (`config_versions` and `named_views`). Never probe by generating a file.
+- A custom view is scoped output, **not a security boundary**. It applies no
+  redaction and no access control. Say that plainly if a user asks for a report
+  that hides work from a reader.
 
 ## Writing
 

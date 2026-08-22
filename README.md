@@ -847,6 +847,134 @@ validates them. `complexity` weighs `xs`/`s`/`small` as 1, `m`/`medium` as 2,
 `l`/`large` as 3, and `xl`/`extra-large` as 5; any other value carries no
 weight and is shown as written.
 
+### Named custom report views
+
+A named custom view is a second self-contained report generated from the same
+complete ledger. Every section of it — statistics, **Work next**, **Attention**,
+the evidence layer, the graph, the open-item drill-down, terminal history, and
+the swarm batches — describes one configured subset, so the file is honest to
+share as a scoped report. Excluded items are absent from the bytes rather than
+hidden by a stylesheet. The base report stays available and unchanged.
+
+Report configuration `report_version: 2` accepts every version 1 member and adds
+one more, `views`. A version 1 configuration keeps generating its base report
+unchanged, and a version 2 configuration with no view selected publishes the
+same base report from its inherited base members:
+
+```json
+{
+  "report_version": 2,
+  "repository": { "name": "Example repository" },
+  "title": "Ledger report",
+  "output": "../../ledger-report.html",
+  "fields": {
+    "area": "/priority_area",
+    "complexity": "/complexity",
+    "class": "/class",
+    "security": "/security"
+  },
+  "views": {
+    "security-blockers": {
+      "title": "Security blockers",
+      "output": "../../reports/security-blockers.html",
+      "filters": {
+        "readiness": ["blocked"],
+        "status": ["backlog", "in-progress"],
+        "kind": ["task"],
+        "fields": {
+          "class": ["bug"],
+          "security": ["high", "critical"]
+        }
+      }
+    }
+  }
+}
+```
+
+Generate one view by name:
+
+```sh
+wowbagger report --ledger <dir> --view <name> --as-of YYYY-MM-DD --json
+```
+
+One invocation generates one artifact; no flag generates them all. `--out <file>`
+overrides the selected output for that invocation, view or base alike, and the
+configured paths are still validated when it is present.
+
+A view name is a portable identifier matching `^[a-z][a-z0-9-]{0,63}$`. Names are
+case-sensitive and `views` holds at most 64 views. Each view takes exactly
+`title`, `output`, and `filters`. Unknown members fail closed.
+
+`filters` takes exactly `readiness`, `status`, `kind`, and `fields`, and at least
+one of `readiness`, `status`, `kind`, or `fields` must be present. The semantics
+are the drill-down's: **OR within one filter group; AND across groups**, so
+`readiness: ["blocked"]` with `class: ["bug"]` means blocked bugs. `readiness`
+takes `ready`, `blocked`, or `ineligible`; `status` takes `triage`, `backlog`,
+`in-progress`, `done`, `killed`, `archived`, or `deferred`; `kind` takes `task`
+or `epic`.
+
+A `fields` key must also be a configured report field. Each field filter is a
+non-empty array of unique JSON strings, finite numbers, or booleans, and matching
+preserves JSON scalar type and value: stringification is not equality, so a
+mapped `2` does not answer a filter for `"2"`. An item carrying no mapped value
+for a field matches no value selected for that field. No title-text inference,
+regular expression, arbitrary JSON pointer, or body search belongs in a view
+filter.
+
+Wowbagger validates the complete ledger and computes readiness against the
+complete ledger before it filters, so excluding a blocker never makes blocked
+work read as ready. What a view derives from its retained set does change:
+statistics, ranking leverage, epic enablement, evidence, attention, graph
+membership, and the swarm batches are all view-scoped, so the same item can
+report smaller numbers here than in the base report. That is why the artifact
+names its view and its fixed criteria at the top. A retained item that names an
+excluded dependency, parent, blocker, or related item still prints that item's
+number instead of a raw ULID, and the excluded item gets no row, no graph node,
+no history entry, and no hidden payload.
+
+Inside the file, the interactive facets and the graph status chips narrow the
+retained subset further and can never reveal an excluded item. **Clear filters**
+restores the complete custom-view subset, never the base ledger.
+
+The base output and every view output must be pairwise distinct after path
+resolution, and each must resolve outside the ledger under the same no-follow
+containment rule the base output already obeys. A colliding or contained output
+is `report-config-invalid` before anything is rendered, `--out` present or not.
+
+A named success adds exactly one member to the existing report result,
+`result.view`, and its `item_count` and `ready_count` describe the filtered
+subset. A base report's result gains no `view` member:
+
+```json
+{
+  "ok": true,
+  "command": "report",
+  "contract_version": 5,
+  "result": {
+    "report_version": 2,
+    "as_of": "2026-08-21",
+    "output": "/absolute/reports/security-blockers.html",
+    "item_count": 12,
+    "ready_count": 0,
+    "view": "security-blockers"
+  }
+}
+```
+
+`--view` requires `report_version: 2`. A missing or unknown name is
+`report-view-not-found` at exit 2 and leaves every existing output untouched. An
+invalid filter value, an unmapped `fields` key, and a colliding output are
+`report-config-invalid` at exit 2. An empty matched subset is not a failure: it
+publishes a valid report with zero items and explicit empty-state copy. Failed
+publication preserves the prior artifact, so never read an existing output as
+fresh. `wowbagger capabilities --json` advertises the whole surface at
+`result.operations.report`, so no consumer has to probe by generating a file.
+
+A custom view is scoped output and **not a security boundary**: it applies no
+redaction and no access control, and the artifact states plainly that it is a
+filtered subset of the named repository ledger. Automation reads the JSON result,
+never the generated HTML and never human output.
+
 This repository keeps its report configuration in
 `ledger/.wowbagger/report.json`. Generate the ignored local report with the
 current UTC date:

@@ -1,9 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { linkDirectory } from './support.js';
+
+function readGuidance(file) {
+  return readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+}
+
+// Installed guidance is hard-wrapped prose, so a documented claim is asserted
+// against its words rather than against the column it happens to break at.
+function collapse(text) {
+  return text.replace(/\s+/g, ' ');
+}
+
+function guidanceSurfaces() {
+  return [
+    ['README.md', readGuidance('README.md')],
+    ['docs/mutation-contract.md', readGuidance('docs/mutation-contract.md')],
+    ['skills/wowbagger/SKILL.md', readGuidance('skills/wowbagger/SKILL.md')],
+  ];
+}
+
+// The documented example is the one a consumer copies, so the guard parses the
+// fenced block itself rather than a hand-kept duplicate of it.
+function documentedViewConfig(readme) {
+  const block = /```json\n(\{[^`]*?"report_version": 2[^`]*?\})\n```/.exec(readme);
+  assert.ok(block, 'README must carry one complete version 2 configuration example');
+  return JSON.parse(block[1]);
+}
 
 async function withTemporaryLedger(callback) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-report-config-'));
@@ -616,4 +643,52 @@ test('lists configured view criteria as grouped facet keys', async () => {
     reportViewCriteria({ status: ['backlog'] }),
     [{ key: 'status', values: ['backlog'] }],
   );
+});
+
+// A consumer never reads this repository: it reads the installed README, the
+// installed contract, and the installed skill. The configuration example is
+// executed rather than trusted, so documentation drift fails here instead of in
+// a consumer's ledger.
+test('documents named custom report views in the shipped configuration guidance', async () => {
+  for (const [surface, text] of guidanceSurfaces()) {
+    const prose = collapse(text);
+    assert.match(prose, /report_version: 2/, surface);
+    assert.match(prose, /\bviews\b/, surface);
+    assert.match(prose, /security-blockers/, surface);
+    assert.match(prose, /OR within one filter group; AND across groups/, surface);
+  }
+
+  const readme = readGuidance('README.md');
+  const prose = collapse(readme);
+  assert.match(prose, /\^\[a-z\]\[a-z0-9-\]\{0,63\}\$/, 'view name pattern');
+  assert.match(prose, /at most 64 views/, 'view count bound');
+  assert.match(prose, /exactly `title`, `output`, and `filters`/, 'exact view members');
+  assert.match(prose, /[Uu]nknown members? fail closed/, 'unknown members fail closed');
+  assert.match(prose, /at least one of `readiness`, `status`, `kind`, or `fields`/, 'one group required');
+  assert.match(prose, /JSON scalar type/, 'typed mapped values');
+  assert.match(prose, /stringification is not equality/, 'typed mapped values');
+  assert.match(prose, /readiness against the complete ledger/, 'full-ledger readiness');
+  assert.match(prose, /pairwise distinct/, 'output collision rule');
+  assert.match(prose, /report-config-invalid/, 'collision refusal code');
+  assert.match(prose, /outside the ledger/, 'output containment');
+  assert.match(prose, /empty (matched )?subset/, 'empty subset success');
+  assert.match(prose, /[Vv]ersion 1 configuration [^.]*unchanged/, 'version 1 compatibility');
+  for (const section of [
+    'statistics', 'Work next', 'Attention', 'graph', 'drill-down', 'terminal history',
+  ]) {
+    assert.ok(readme.includes(section), `README must say ${section} describes the subset`);
+  }
+
+  const documented = documentedViewConfig(readme);
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, documented);
+    const { loadReportConfig } = await import('../src/report.js');
+
+    const config = await loadReportConfig(ledger, undefined, 'security-blockers');
+
+    assert.equal(config.reportVersion, 2);
+    assert.equal(config.view.name, 'security-blockers');
+    assert.equal(config.view.title, documented.views['security-blockers'].title);
+    assert.deepEqual(config.view.filters, documented.views['security-blockers'].filters);
+  });
 });

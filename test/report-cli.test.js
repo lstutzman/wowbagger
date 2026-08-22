@@ -1,10 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { runCli, withLedger } from './support.js';
 import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
 import { dynamicDescribe } from './adapter-contract-fixtures.js';
+
+function readGuidance(file) {
+  return readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+}
+
+// Installed guidance is hard-wrapped prose, so a documented claim is asserted
+// against its words rather than against the column it happens to break at.
+function collapse(text) {
+  return text.replace(/\s+/g, ' ');
+}
 
 const itemId = 'wb_01Q45X474NAAAAAAAAAAAAAAAA';
 const itemSource = [
@@ -238,6 +249,37 @@ test('renders the same named view bytes for the same ledger and as-of', async ()
     assert.equal(invoke().status, 0);
 
     assert.equal(await readFile(output, 'utf8'), first);
+  });
+});
+
+// A named artifact and the base artifact are two files a reader opens side by
+// side, so the two places a title lands — the browser tab and the masthead —
+// have to name which one is open. The view's own title is the generated
+// report's title; the base report in the same configuration keeps the
+// configured one.
+test('titles a named artifact with its view title and the base artifact with the configured title', async () => {
+  await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': viewConfig(securityBlockersView),
+  }, async (ledger) => {
+    const named = path.resolve(ledger, '..', 'reports', 'security-blockers.html');
+    const base = path.resolve(ledger, '..', 'report.html');
+
+    assert.equal(runCli(
+      'report', '--ledger', ledger, '--view', 'security-blockers', '--as-of', '2030-01-15', '--json',
+    ).status, 0);
+    assert.equal(runCli('report', '--ledger', ledger, '--as-of', '2030-01-15', '--json').status, 0);
+
+    const namedHtml = await readFile(named, 'utf8');
+    assert.match(namedHtml, /<title>Security bugs<\/title>/);
+    assert.match(namedHtml, /<h1>Security bugs<\/h1>/);
+    assert.doesNotMatch(namedHtml, /<title>Ledger report<\/title>/);
+    assert.doesNotMatch(namedHtml, /<h1>Ledger report<\/h1>/);
+
+    const baseHtml = await readFile(base, 'utf8');
+    assert.match(baseHtml, /<title>Ledger report<\/title>/);
+    assert.match(baseHtml, /<h1>Ledger report<\/h1>/);
+    assert.doesNotMatch(baseHtml, /Security bugs/);
   });
 });
 
@@ -499,4 +541,46 @@ test('report validates the ledger before reading report configuration', async ()
     assert.ok(Array.isArray(output.error.details.errors));
     assert.ok(output.error.details.errors.length > 0);
   });
+});
+
+// Named views are only reachable if the installed guidance states the flag, the
+// result member, the refusal, and the capability that advertises them. The
+// advertisement is compared against the bytes the core actually emits, so the
+// contract document cannot drift from the probe.
+test('documents named custom report views on the command line', () => {
+  const surfaces = [
+    ['README.md', readGuidance('README.md')],
+    ['docs/mutation-contract.md', readGuidance('docs/mutation-contract.md')],
+    ['skills/wowbagger/SKILL.md', readGuidance('skills/wowbagger/SKILL.md')],
+  ];
+  for (const [surface, text] of surfaces) {
+    assert.ok(
+      text.includes('report --ledger <dir> --view <name> --as-of YYYY-MM-DD --json'),
+      `${surface} must state the exact named view command`,
+    );
+  }
+
+  const [, contract] = surfaces[1];
+  assert.ok(
+    contract.includes(JSON.stringify(coreCapabilities().result.operations.report)),
+    'the contract must carry the exact advertised report operation',
+  );
+  assert.match(
+    collapse(contract),
+    /`inspect`, `list`, `create`, `transition`, `patch`, `report`, `work_claim`/,
+    'the contract must place report in the advertised order',
+  );
+
+  for (const [surface, text] of [surfaces[0], surfaces[2]]) {
+    const prose = collapse(text);
+    assert.match(prose, /--out <file>/, `${surface} must state the output override`);
+    assert.match(prose, /report-view-not-found/, `${surface} must state the unknown view refusal`);
+    assert.match(prose, /result\.view/, `${surface} must state the named view result member`);
+    assert.match(prose, /not a security boundary/, `${surface} must refuse to imply redaction`);
+  }
+  assert.match(
+    collapse(surfaces[2][1]),
+    /Do not parse the generated HTML/,
+    'the skill must send automation to the JSON result',
+  );
 });

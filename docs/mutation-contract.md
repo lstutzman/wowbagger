@@ -222,18 +222,24 @@ complete difference against published version 4 (`0.1.0-alpha.7`):
   (section 5.1). It enumerates a validated ledger as bounded item summaries
   under closed filters, one selected sort field, and cursor pagination. It adds
   the refusals `list-snapshot-changed` (exit 4) and `list-response-too-large`
-  (exit 2); and
+  (exit 2);
 - **the advertised list bounds.** `result.operations.list` and four new
   `result.limits` members carry the list contract's exact numbers (section 4).
   A version 4 consumer that validated `result.operations` or `result.limits` by
   exact members refuses the new members, which is the same fail-closed outcome
-  the version field already produces.
+  the version field already produces; and
+- **named custom report views.** `report` accepts an optional `--view <name>`
+  against report configuration `report_version: 2`, adds `result.view` to a
+  named success, adds the refusal `report-view-not-found` (exit 2), and is
+  advertised at `result.operations.report` (section 4). An invocation without
+  `--view` keeps its exact result members and its exact bytes under either
+  configuration version.
 
 Nothing else moves. `validate` and `ready` carry no version member and their
-bytes are unchanged. `inspect`, `create`, `transition`, `patch`, `mint-id`,
-`report`, and `capabilities` change only in the `contract_version` number: no
-root member, result member, issue member, error code, or exit meaning of an
-existing invocation changes.
+bytes are unchanged. `inspect`, `create`, `transition`, `patch`, `mint-id`, and
+`capabilities` change only in the `contract_version` number: no root member,
+result member, issue member, error code, or exit meaning of an existing
+invocation changes.
 
 A version 4 consumer fails closed against a version 5 core the same way: it
 reads `contract_version: 5` from `capabilities --json`, does not recognize it,
@@ -645,6 +651,7 @@ capability paths; all omitted paths retain their version 1 values:
 | `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
 | `result.operations.list` | `{"supported":true,"write_scope":"none","cas_scope":"none","query_version":1}` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
+| `result.operations.report` | `{"supported":true,"write_scope":"derived-output","config_versions":[1,2],"named_views":true}` |
 | `result.operations.work_claim.api_version` | `2` |
 | `result.limits.max_item_source_bytes` | `8388608` |
 | `result.limits.default_list_page_size` | `50` |
@@ -654,7 +661,7 @@ capability paths; all omitted paths retain their version 1 values:
 | `result.limits.cross_worktree_coordination` | `false` |
 
 `result.operations` advertises in the fixed order `inspect`, `list`, `create`,
-`transition`, `patch`, `work_claim`. `result.limits` advertises
+`transition`, `patch`, `report`, `work_claim`. `result.limits` advertises
 `max_item_source_bytes` first, then the four list bounds in the order above,
 then the version 1 booleans. `list` is read-only, so its `write_scope` and
 `cas_scope` are `none`, exactly like `inspect`.
@@ -673,6 +680,28 @@ does, the command refuses the page whole with `list-response-too-large` and the
 caller lowers `page_size`; neither bound silently rewrites the other, and a
 `list` response is never a partial page. A consumer with its own transport
 budget uses the lower of that budget and `max_list_response_bytes`.
+
+`result.operations.report` is how a consumer learns what the read-only report
+command accepts, so it never has to probe by generating an artifact.
+`write_scope: "derived-output"` states that the command writes one configured
+output path and no ledger item. `config_versions` lists the accepted
+`<ledger>/.wowbagger/report.json` versions: version 1 is unchanged, and
+`report_version: 2` adds a `views` object whose named members — for example
+`security-blockers` — each project the validated ledger through grouped filters
+with **OR within one filter group; AND across groups**. `named_views: true` says
+the core accepts a selection by name:
+
+~~~text
+wowbagger report --ledger <dir> --view <name> --as-of YYYY-MM-DD --json
+~~~
+
+A named success adds `result.view` and nothing else; a base report's result is
+unchanged. A selection that names no configured view, or any `--view` against a
+version 1 configuration, is refused with `report-view-not-found` at exit 2,
+`details.view` naming the requested name, and every existing output left as it
+was. The report request, the configuration, and the generated artifact are
+defined in [the README](../README.md#named-custom-report-views); this contract
+defines the advertisement.
 
 `result.limits.max_item_source_bytes` is the first member of `result.limits`,
 before `multi_item_atomicity`. It is the exact number of bytes the complete
