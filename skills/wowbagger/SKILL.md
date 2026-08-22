@@ -493,6 +493,7 @@ wowbagger claim capabilities --ledger <dir> --json
 wowbagger claim read|acquire|renew|release --ledger <dir> --input request.json --json
 wowbagger publish-claimed --ledger <dir> --input request.json --json [--auto-commit]
 wowbagger claim-verify --ledger <dir> --json
+wowbagger claim-sync --ledger <dir> --json
 wowbagger claim-merge-verify --ledger <dir> --base <ref> --head <ref> --json
 ```
 

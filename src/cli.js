@@ -22,7 +22,8 @@ import {
   verifyClaimJournal,
 } from './claim-publication.js';
 import { validateClaimRequest } from './claim-request.js';
-import { checkProspectiveMerge } from './claim-prospective.js';
+import { checkProspectiveMerge, parseReconcileLog } from './claim-prospective.js';
+import { selectCommittedAdoptions } from './claim-sync.js';
 import {
   claimStorePath,
   resolveGitCommonDir,
@@ -30,6 +31,7 @@ import {
   withClaimLock,
   writeClaimState,
 } from './claim-store.js';
+import { readGitTreeFile, readGitTreeLedger } from './git-reconciliation.js';
 import { finalizeFromRecoveryToken, withAutoCommit } from './git-autocommit.js';
 import { loadLedger } from './ledger.js';
 import {
@@ -47,6 +49,7 @@ import {
   inspectItem,
   inspectItemByNumber,
   patchItem,
+  revisionFor,
   transitionItem,
   validateCreateRequest,
   validatePatchRequest,
@@ -104,9 +107,9 @@ const COMMAND_SUMMARIES = {
   patch: "Patch an item's priority and relation lists, guarded the same way.",
   'mint-id': 'Mint a canonical item ID.',
   provision: 'Provision the work-claim namespace.',
-  claim: 'Work-claim lifecycle operations on the provisioned store.',
   'publish-claimed': 'Publish ledger results when its claim profile enables protected publication.',
-  'claim-verify': 'Reconcile pending and committed claim-protected publications.',
+  'claim-merge-verify': 'Validate a prospective Git merge tree against claim-journal semantics.',
+  'claim-sync': 'Import committed adoption evidence into the local claim journal.',
   'claim-adopt': 'Rule a committed out-of-protocol item revision legitimate.',
   'mutation-finalize': 'Complete the Git commit an auto-commit mutation could not establish.',
 };
@@ -127,6 +130,7 @@ const KNOWN_COMMANDS = new Set([
   'publish-claimed',
   'claim-verify',
   'claim-merge-verify',
+  'claim-sync',
   'claim-adopt',
   'mutation-finalize',
 ]);
@@ -516,6 +520,136 @@ export async function runCli(argumentsList, { scenario } = {}) {
           }),
       },
     });
+    return;
+  }
+
+  if (command === 'claim-sync') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeClaimInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    const ledgerDirectory = parsedOptions.options.ledger;
+    const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory);
+    const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
+    if (!gitCommonDir || !namespace) {
+      writeClaimEnvelope(claimStoreUnavailable(command,
+        gitCommonDir ? 'ledger-namespace-unbound' : 'git-directory-not-found'));
+      return;
+    }
+    const storePath = claimStorePath(gitCommonDir, namespace);
+    const journalPath = claimJournalPath(gitCommonDir, namespace);
+    try {
+      const tree = await readGitTreeLedger(ledgerDirectory, 'HEAD');
+      const log = await readGitTreeFile(
+        ledgerDirectory,
+        'HEAD',
+        `.wowbagger/reconcile-${namespace}.md`,
+      );
+      const committed = parseReconcileLog(log, namespace);
+      if (committed.error) {
+        writeClaimEnvelope({
+          exit: 2,
+          stdout: {
+            ok: false,
+            namespace: 'work-claim',
+            command,
+            contract_version: 1,
+            state: 'unchanged',
+            error: {
+              code: committed.error.code,
+              message: 'The committed adoption evidence is invalid.',
+              details: committed.error,
+            },
+          },
+        });
+        return;
+      }
+      const envelope = await withClaimLock(storePath, async () => {
+        const local = await replayClaimJournal(journalPath, namespace);
+        const selected = selectCommittedAdoptions({
+          namespace,
+          committedEntries: committed,
+          localEntries: local.entries,
+        });
+        if (!selected.ok) {
+          return {
+            exit: 2,
+            stdout: {
+              ok: false,
+              namespace: 'work-claim',
+              command,
+              contract_version: 1,
+              state: 'unchanged',
+              error: {
+                code: selected.error.code,
+                message: 'The committed adoption evidence conflicts with local claim state.',
+                details: selected.error,
+              },
+            },
+          };
+        }
+        for (const entry of selected.entries) {
+          const { seq, ...withoutSequence } = entry;
+          const itemPath = withoutSequence.item_path
+            ?? `items/${withoutSequence.item_id}.md`;
+          const bytes = tree.items.get(itemPath) ?? tree.items.get(`${withoutSequence.item_id}.md`);
+          if (!bytes || revisionFor(bytes) !== withoutSequence.to_revision) {
+            return {
+              exit: 2,
+              stdout: {
+                ok: false,
+                namespace: 'work-claim',
+                command,
+                contract_version: 1,
+                state: 'unchanged',
+                error: {
+                  code: 'adoption-revision-not-at-head',
+                  message: 'The committed adoption does not match candidate item bytes.',
+                  details: { item_id: withoutSequence.item_id, expected_revision: withoutSequence.to_revision },
+                },
+              },
+            };
+          }
+          await appendClaimEntry(journalPath, withoutSequence);
+        }
+        const replayed = await replayClaimJournal(journalPath, namespace);
+        await writeClaimState(storePath, replayed.state);
+        return {
+          exit: 0,
+          stdout: {
+            ok: true,
+            namespace: 'work-claim',
+            command,
+            contract_version: 1,
+            state: 'committed',
+            result: {
+              ledger_namespace: namespace,
+              imported_items: [...new Set(selected.entries.map((entry) => entry.item_id))],
+              imported_count: selected.entries.length,
+              already_present: selected.already_present,
+            },
+          },
+        };
+      });
+      writeClaimEnvelope(envelope);
+    } catch {
+      writeClaimEnvelope({
+        exit: 6,
+        stdout: {
+          ok: false,
+          namespace: 'work-claim',
+          command,
+          contract_version: 1,
+          state: 'unchanged',
+          error: {
+            code: 'claim-sync-unavailable',
+            message: 'Committed adoption evidence could not be synchronized.',
+            details: {},
+          },
+        },
+      });
+    }
     return;
   }
 
@@ -1026,6 +1160,7 @@ function parseContractOptions(command, argumentsList) {
           : command === 'claim-merge-verify'
             ? new Map([['--ledger', 'ledger'], ['--base', 'base'], ['--head', 'head']])
             : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
+              || command === 'claim-sync'
               ? new Map([['--ledger', 'ledger']])
             : command === 'mint-id'
               ? new Map([['--date', 'date']])
@@ -1530,6 +1665,9 @@ function usage(command) {
   }
   if (command === 'claim-merge-verify') {
     return 'Usage: wowbagger claim-merge-verify --ledger <dir> --base <ref> --head <ref> --json';
+  }
+  if (command === 'claim-sync') {
+    return 'Usage: wowbagger claim-sync --ledger <dir> --json';
   }
 
   if (command === 'mutation-finalize') {
