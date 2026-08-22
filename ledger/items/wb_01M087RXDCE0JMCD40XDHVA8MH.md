@@ -4,14 +4,19 @@ id: wb_01M087RXDCE0JMCD40XDHVA8MH
 number: 127
 title: "Add a CAS-fenced parent relation migration"
 kind: task
-status: triage
+status: backlog
 created: 2026-08-17
-updated: 2026-08-17
+updated: 2026-08-22
 provenance:
   source: "consumer-dogfood/propertycompass2"
   recorded_at: "2026-08-17T16:09:56Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-22
+    summary: "Accept item into backlog for maintainer triage."
+    rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
 ---
 Field feedback from PropertyCompass2 worktree 260816-191701 against core contract 3. Lee ruled epic #1414 terminal. Live child #1415 must stand alone, but both the legacy card and ledger item still retain #1414 as parent. `transition #1414 -> killed` returned exit 5 `atomic-scope-required` with blocker `child-disposition`. Contract 3 `patch` cannot change `parent` because `parent` is create-once. The consumer correctly kept both stores unchanged: no hand-edit and no delete/recreate workaround.
 
