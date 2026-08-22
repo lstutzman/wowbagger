@@ -5,7 +5,7 @@ number: 136
 title: "Preserve exact leading LF bytes in patch body replacement"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
