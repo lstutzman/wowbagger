@@ -5,9 +5,10 @@ number: 134
 title: "Guard unchanged mutation refusals against reconcile-log residue regression"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-22
 updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "propertycompass2-field-report-23"
   recorded_at: "2026-08-22T12:45:57.539Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-22
     summary: "Accept item into backlog for maintainer triage."
     rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete unchanged refusal residue regression coverage."
+    rationale: "Current preflight refusal leaves reconciliation bytes unchanged; focused regression test distinguishes it from durable publish refusal and peer findings."
 ---
 
 ## Problem
