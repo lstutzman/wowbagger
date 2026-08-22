@@ -249,6 +249,19 @@ test('filters every report section through one grouped view', async () => {
   });
 });
 
+// The artifact is titled by whatever produced it: a named view titles its own
+// report, and the base report keeps the configured ledger title.
+test('a named view titles the report it generates', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+  const config = viewConfig(groupedFilters);
+
+  const named = buildReportModel(groupedLedger(), config, '2026-08-14');
+  const base = buildReportModel(groupedLedger(), { ...config, view: null }, '2026-08-14');
+
+  assert.equal(named.title, 'Security blockers');
+  assert.equal(base.title, 'Example report');
+});
+
 test('an empty view succeeds with explicit empty sections', async () => {
   const { buildReportModel } = await import('../src/report.js');
 

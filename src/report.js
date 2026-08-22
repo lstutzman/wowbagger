@@ -127,7 +127,7 @@ export function buildReportModel(items, config, asOf) {
   return {
     reportVersion: config.reportVersion,
     repository: config.repository,
-    title: config.title,
+    title: view === null ? config.title : view.title,
     asOf,
     items: reportItems,
     terminalItems,
