@@ -5,9 +5,10 @@ number: 130
 title: "Expose native transition affordances per item"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-21
 updated: 2026-08-21
+completed: 2026-08-21
 provenance:
   source: "orca-ledger-workbench-contract-audit"
   recorded_at: "2026-08-21T17:27:09.989Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-21
     summary: "Accept native transition affordances as a P0 explicit-transition blocker."
     rationale: "The workbench cannot safely discover actions by copying lifecycle logic or probing a mutating command. Orca evidence confirms that UI events and host methods are separate surfaces; Wowbagger must return an observed, revision-bound affordance projection and retain final authority under lock."
+  - action: complete
+    date: 2026-08-21
+    summary: "Complete the core-owned transition affordance projection."
+    rationale: "Commits fd91051 and eb7fe4c add bounded inspect --workbench output, shared lifecycle definitions, complete observed issues/blockers, capability limits, four normative vectors, and differential coverage of all 17 task/epic edges including both no-decision edges. Task review and re-review are clean; focused current-Node and Node-20 gates each pass 76/76."
 ---
 
 ## Problem
