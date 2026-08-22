@@ -5,7 +5,7 @@ number: 132
 title: "Publish the Wowbagger machine contract for host-routed consumers"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
