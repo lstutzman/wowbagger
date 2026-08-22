@@ -5,14 +5,19 @@ number: 138
 title: "Validate prospective claim-journal semantics before merge"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
   source: "propertycompass2-feedback-20-corroboration"
   recorded_at: "2026-08-22T14:34:21.584Z"
 depends_on: []
-related: [wb_01KZBMBEZKPE7D15HKW9Q3GSZV, wb_01M057PY03G5AM0MMAKA5R9AT9, wb_01M07J8W5TS6PVKFZ1T4RTN184, wb_01M0MR2Y8GKNCTTVS9V5ZX8Q0N]
+related: [ wb_01KZBMBEZKPE7D15HKW9Q3GSZV, wb_01M057PY03G5AM0MMAKA5R9AT9, wb_01M07J8W5TS6PVKFZ1T4RTN184, wb_01M0MR2Y8GKNCTTVS9V5ZX8Q0N ]
+decisions:
+  - action: accept
+    date: 2026-08-22
+    summary: "Accept item into backlog for maintainer triage."
+    rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
 ---
 
 ## Problem
