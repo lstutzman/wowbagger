@@ -5,7 +5,7 @@ number: 134
 title: "Guard unchanged mutation refusals against reconcile-log residue regression"
 kind: task
 priority: 10
-status: triage
+status: backlog
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-22T12:45:57.539Z"
 depends_on: []
 related: [ wb_01M058P3KQDSD269YXN5B4KSAK, wb_01M057PTYZ18N6EE76AEW46E0R ]
+decisions:
+  - action: accept
+    date: 2026-08-22
+    summary: "Accept item into backlog for maintainer triage."
+    rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
 ---
 
 ## Problem
