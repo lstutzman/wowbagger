@@ -41,6 +41,37 @@ consolidation. The first tagged release inherits this file.
 
 ### Documentation
 
+- **`docs/host-contract.md` publishes the direct-core host boundary.** One
+  document now states what a UI plugin or other non-agent consumer needs and
+  what it must supply itself: the package resolution seam and the four-part
+  launch — Node.js 20 or later, an absolute Node executable, the absolute
+  `wowbagger.js`, an argument array, and `shell: false`; bounded stdin or a
+  host-created request file, never shell source and never inline unbounded argv
+  JSON; captured stdout and stderr; the owning-host path rule for a worktree, a
+  plain folder, direct SSH, and WSL, with no cross-runtime path guessing;
+  namespace-first response dispatch and the exit table; every advertised limit
+  with its exact value; the once-only dispatch sequence for a lost response; and
+  the seventeen packaged JSON Schemas by domain. It states that a missing
+  executable is a host-level result rather than malformed Wowbagger JSON, that
+  the host owns executable discovery, working directory, timeout, cancellation,
+  process-tree containment, stream caps, and routing, and that Wowbagger will
+  not add automatic transitions, mirrored ledger state, operation identity,
+  remote routing, or a daemon. The full `inspect` read is documented as
+  deliberately unbounded, with the reason. The README, the installed skill, and
+  `SPEC.md` section 10 point at it, and it ships in the npm package.
+- **The public version and lifecycle vocabulary agrees with the runtime.**
+  `SPEC.md` section 10 said core mutation contracts 1 and 2 were defined and
+  that the runtime emitted version 2; it now says 1 through 5 and version 5. The
+  mutation contract's status line said versions 1, 2, and 3 with the runtime on
+  3; it now says 1 through 5 and version 5. `deferred` has been a real status
+  since it shipped, but `SPEC.md` omitted it from the status field, the
+  lifecycle table, the transition table, the terminal-date invariants, the
+  decision-action list, and the terminal-decision table, and the mutation
+  contract omitted the `deferred` date from the lossless core view; all seven
+  now name it, along with the `resolve`, `defer`, and `undefer` decision actions
+  the validator has always accepted. No behaviour changed: these were prose
+  omissions, and the tests that guard them read the vocabularies from
+  `src/lifecycle.js` and `src/validate.js` rather than retyping them.
 - **Response loss is a named contract instead of folklore.** The mutation
   contract, the adapter contract, the README, and the installed skill now carry
   the same sequence for a mutation whose response never arrived: dispatch once,

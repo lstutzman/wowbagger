@@ -47,6 +47,7 @@
     "vendor",
     "schemas",
     "docs/adapter-contract.md",
+    "docs/host-contract.md",
     "docs/mutation-contract.md",
     "docs/work-claim-contract.md",
     "scripts/migrate-schema-2.js",

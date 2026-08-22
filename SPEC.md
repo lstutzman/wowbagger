@@ -101,7 +101,7 @@ The following frontmatter fields are common to schema versions 1 and 2.
 | id | Yes | Immutable primary identity using the canonical Wowbagger ULID form. |
 | title | Yes | Non-empty human-readable summary. |
 | kind | Yes | task or epic. |
-| status | Yes | triage, backlog, in-progress, done, killed, or archived. |
+| status | Yes | triage, backlog, in-progress, done, killed, archived, or deferred. |
 | created | Yes | ISO calendar date of the ID timestamp in UTC. |
 | updated | Yes | ISO calendar date of the latest durable item change. |
 | provenance | Yes | Mapping with source and recorded_at fields. |
@@ -114,6 +114,7 @@ The following frontmatter fields are common to schema versions 1 and 2.
 | completed | Conditional | ISO calendar date required only when status is done. |
 | killed | Conditional | ISO calendar date required only when status is killed. |
 | archived | Conditional | ISO calendar date required only when status is archived. |
+| deferred | Conditional | ISO calendar date required only when status is deferred. |
 | decisions | Conditional | Sequence of durable decision records, each with action, date, summary, and rationale. A terminal item requires a matching terminal decision; an epic completion also requires structured rollup evidence. |
 
 A non-empty ledger MUST use one schema version. A validator MUST reject every
@@ -178,6 +179,7 @@ fields and MUST reject duplicate YAML keys.
 | done | Work completed with a durable completion date. | No |
 | killed | Work was wrong, duplicate, or deliberately abandoned with a durable reason. | No |
 | archived | Judgment-free non-dispatch staleness state with a durable archive reason. | No |
+| deferred | Accepted work explicitly postponed with a durable defer date and reason, and undeferred back to backlog when it is wanted again. | No |
 
 The triage gate is mandatory: a triage item MUST NOT be scored, selected as
 ready, or implicitly promoted. Only an explicit lifecycle transition may accept
@@ -189,21 +191,24 @@ completion preconditions differ as shown below:
 | Item kind | From | Allowed targets | Required cleanup or evidence |
 |---|---|---|---|
 | task or epic | triage | backlog, killed | action: accept decision for backlog; action: kill decision and killed date for killed. |
-| task | backlog | in-progress, archived, killed | Archive or kill preconditions in section 6; matching terminal decision. |
+| task | backlog | in-progress, deferred, archived, killed | Archive, defer, or kill preconditions in section 6; matching terminal decision. |
 | task | in-progress | backlog, done, killed | Before done, schema 1 depends_on MUST be empty and every schema 2 dependency target MUST be done; done or kill date and matching terminal decision. |
-| epic | backlog | done, archived, killed | Before done, schema 1 depends_on MUST be empty and every schema 2 dependency target MUST be done; epic rollup preconditions below; archive or kill child-disposition preconditions in section 6; matching terminal decision. |
+| epic | backlog | done, deferred, archived, killed | Before done, schema 1 depends_on MUST be empty and every schema 2 dependency target MUST be done; epic rollup preconditions below; archive, defer, or kill child-disposition preconditions in section 6; matching terminal decision. |
+| task or epic | deferred | backlog | Clear deferred date and add an action: undefer decision. |
 | task or epic | archived | backlog | Clear archived date and add an action: restore decision. |
 | task or epic | done or killed | none | Create a new item if work is reconsidered or discovered. |
 
 For every transition, updated MUST be set to the transition date and MUST NOT
-be earlier than created. The active terminal date (completed, killed, or
-archived) MUST equal that transition date; a transition into a non-terminal
+be earlier than created. The active terminal date (completed, killed, archived,
+or deferred) MUST equal that transition date; a transition into a non-terminal
 status MUST clear every terminal date. Terminal-date invariants are strict:
 
-- done requires completed and forbids killed and archived;
-- killed requires killed and forbids completed and archived;
-- archived requires archived and forbids completed and killed;
-- triage, backlog, and in-progress forbid completed, killed, and archived.
+- done requires completed and forbids killed, archived, and deferred;
+- killed requires killed and forbids completed, archived, and deferred;
+- archived requires archived and forbids completed, killed, and deferred;
+- deferred requires deferred and forbids completed, killed, and archived;
+- triage, backlog, and in-progress forbid completed, killed, archived, and
+  deferred.
 
 In schema version 1, any task or epic MAY transition to done only when its
 depends_on list is already empty. A validator MUST reject every persisted
@@ -331,8 +336,8 @@ Validation MUST reject:
 
 Decisions are optional generally, but every record MUST contain:
 
-- action: one of accept, complete, kill, archive, restore,
-  replace-dependency, waive-dependency, reparent, or record;
+- action: one of accept, complete, resolve, kill, archive, restore, defer,
+  undefer, replace-dependency, waive-dependency, reparent, or record;
 - date: ISO calendar date;
 - summary: the decision in one sentence;
 - rationale: the evidence or trade-off that explains it.
@@ -345,9 +350,11 @@ item MUST contain at least one decision with the action and date in this table:
 | done | complete | completed |
 | killed | kill | killed |
 | archived | archive | archived |
+| deferred | defer | deferred |
 
 An unrelated or differently dated decision does not satisfy this requirement.
-Archive restoration MUST add an action: restore decision. Decisions MUST be
+Archive restoration MUST add an action: restore decision, and undeferring MUST
+add an action: undefer decision. Decisions MUST be
 retained across lifecycle transitions. The rollup field is required on the
 matching complete decision for an epic and MUST NOT appear on any other
 decision. Its sequence of id and status mappings is the durable evidence
@@ -440,16 +447,20 @@ invalid work.
 
 ## 10. Capability boundary and local mutation contract
 
-Core mutation contracts 1 and 2 are defined. The shipped runtime emits version
-2; version 1 remains the frozen compatibility definition. Neither version adds
-work-claim or revision metadata to Markdown, and ready does not resolve or
-exclude claims.
+Core mutation contracts 1 through 5 are defined. The shipped runtime emits
+version 5; versions 1 through 4 remain frozen compatibility definitions. No
+version adds work-claim or revision metadata to Markdown, and ready does not
+resolve or exclude claims.
 
 [docs/mutation-contract.md](docs/mutation-contract.md) specifies the
-implemented local backend for `capabilities`, inspect/revision, create,
+implemented local backend for `capabilities`, inspect/revision, the bounded
+`list` query, the bounded `inspect --workbench` affordance projection, create,
 lifecycle transition, and patch commands. Inspect parses, exposes, and hashes
 one raw byte buffer and returns a lossless base64 source alongside a normalized
-core view.
+core view. [docs/host-contract.md](docs/host-contract.md) publishes the
+direct-core host boundary for a non-agent consumer: package resolution, the
+shell-free process tuple, bounded transport, response dispatch, the advertised
+limits, and the packaged JSON Schemas.
 Create requires a caller-generated canonical ID and either publishes complete
 bytes with an atomic no-clobber primitive or fails unchanged. Revision is
 SHA-256 over exact item-file bytes; it is not added to frontmatter and YAML is
@@ -474,11 +485,11 @@ separate [work-claim contract](docs/work-claim-contract.md) and [ADR
 0004](docs/adr/0004-fenced-work-claim-protocol.md); it does not add claim state
 to schema version 1 or 2 Markdown.
 
-Contract version 2 accepts a uniformly schema-1 or uniformly schema-2 ledger
-and rejects a mixture. Schema version 2 uses the prerequisite satisfaction and
-retention rules in sections 5 through 7. Migrating this repository's live
-ledger is a separate quiesced operation and is not part of publishing the
-transport contract.
+Every contract version accepts a uniformly schema-1 or uniformly schema-2
+ledger and rejects a mixture. Schema version 2 uses the prerequisite
+satisfaction and retention rules in sections 5 through 7. Migrating this
+repository's live ledger is a separate quiesced operation and is not part of
+publishing the transport contract.
 
 The command contract distinguishes immutable-ID collision from an unrelated
 item or valid directory occupying the default creation path. It also defines a

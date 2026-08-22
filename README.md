@@ -1023,6 +1023,7 @@ they disagree with anything above:
 | [docs/mutation-contract.md](docs/mutation-contract.md) | Response domains and dispatch, capabilities, inspect, create, transition, patch, the extension declaration, the frontmatter ownership table, errors and recovery, and commit-per-mutation. |
 | [docs/work-claim-contract.md](docs/work-claim-contract.md) | Provisioning, claim CAS rules, claimed publication, reconciliation, revision adoption, and the difference between strict fenced and merge-coordinated backends. |
 | [docs/adapter-contract.md](docs/adapter-contract.md) | The harness adapter boundary: negotiation, forwarding, guards, approval, and honest outcome mapping. |
+| [docs/host-contract.md](docs/host-contract.md) | The direct-core host boundary: package resolution, the shell-free process tuple, bounded transport, owning-host paths, response dispatch, advertised limits, and the packaged JSON Schemas. |
 | [docs/openai-compatible-integration.md](docs/openai-compatible-integration.md) | What an OpenAI-compatible host can do today, and what a compatibility claim would require. |
 | [docs/schema-2-migration.md](docs/schema-2-migration.md) | The quiesced schema version 1 to 2 migration runbook. |
 | [skills/wowbagger/SKILL.md](skills/wowbagger/SKILL.md) | The shipped agent instructions. |

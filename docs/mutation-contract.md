@@ -1,7 +1,7 @@
 # Local mutation contract
 
-Status: versions 1, 2, and 3 are defined; the pre-alpha standalone
-local-filesystem runtime currently emits version 3.
+Status: versions 1 through 5 are defined; the pre-alpha standalone
+local-filesystem runtime currently emits version 5.
 
 This document defines the machine contract implemented by the local-filesystem
 mutation backend. It supplements [SPEC.md](../SPEC.md) and
@@ -10,7 +10,10 @@ mutation backend. It supplements [SPEC.md](../SPEC.md) and
 
 The executable supports `validate`, `ready`, and the commands below. Clients
 must still call `capabilities` and honor its advertised limits before assuming a
-backend can provide a particular write guarantee.
+backend can provide a particular write guarantee. A non-agent consumer that
+launches this executable directly reads
+[docs/host-contract.md](host-contract.md) for the package seam, the process
+tuple, and the packaged JSON Schemas.
 
 ## Contract versions
 
@@ -834,7 +837,7 @@ core contains only fields defined by supported item schema versions:
 - schema_version, id, title, kind, status, created, updated;
 - provenance.source and provenance.recorded_at;
 - depends_on and related;
-- optional parent, snoozed_until, completed, killed, archived;
+- optional parent, snoozed_until, completed, killed, archived, deferred;
 - optional number, the core-assigned item identity on schema version 2, and
   optional priority, the caller-supplied schema priority; and
 - decisions with only their defined action, date, summary, rationale, and

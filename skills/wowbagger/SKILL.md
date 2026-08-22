@@ -50,6 +50,13 @@ either pin to make a check pass.
 Run both commands once per session before the first ledger command, not before
 every command.
 
+You drive the core as an agent, through the commands below. A UI plugin or
+another non-agent consumer drives it as a process instead: absolute Node
+executable, absolute `wowbagger.js`, argument array, `shell: false`. If the
+user asks how to call wowbagger from their own program, point them at
+`docs/host-contract.md` in the wowbagger repository rather than describing a
+launch here.
+
 ## Reading
 
 These never modify anything. Prefer them.
