@@ -278,5 +278,5 @@ silently delete a lock based only on age.
   nonzero exit as an unchanged ledger.
 - Operating failures use closed phase and reason values; platform exception
   text and OS error codes do not enter the normative envelope.
-- Work claims, adapters, consumer policy, and PropertyCompass adoption remain
-  out of scope.
+- Work claims, adapters, consumer policy, and consumer adoption remain out of
+  scope.

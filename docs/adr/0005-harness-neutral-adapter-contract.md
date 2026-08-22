@@ -109,7 +109,7 @@ are not required to discover, invoke, or validate the standalone core.
 
 ## Non-goals
 
-- PropertyCompass adoption or any other consumer migration.
+- Consumer adoption or any other consumer migration.
 - Vendor-specific lifecycle logic in the core.
 - Work claims, policy ranking, automatic session persistence, or automatic
   Git authority.

@@ -760,7 +760,7 @@ consolidation. The first tagged release inherits this file.
   every read and every guarded mutation on that ledger, including ones that
   never touch the misplaced item, so the refusal has to say where the item
   belongs. The claim fence is not involved: `claim-verify` reports no finding
-  on such a ledger, refuting the PropertyCompass2 PR #2184 claim that a
+  on such a ledger, refuting an earlier consumer report that a
   root-misplaced item makes the fence report `stale-write-detected` with
   `actual_revision: null`. Fixtures pin both configuration orders — layout
   bound first, and layout bound after the item was already committed at the

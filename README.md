@@ -1201,8 +1201,8 @@ It is the durable work ledger beneath those systems.
   publication, Git reconciliation, and explicit revision adoption. It
   deliberately reports `safe_exclusive_dispatch: false`; direct writes and other
   uncoordinated paths remain bypasses.**
-- Treat any PropertyCompass adoption as a later, separately-scoped consumer
-  project. **Recorded as its own ledger item; not a wowbagger deliverable.**
+- Keep consumer-specific adoption and migration outside the core Wowbagger
+  project. **They are not Wowbagger deliverables.**
 
 ## License
 

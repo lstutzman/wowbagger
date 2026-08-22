@@ -1427,7 +1427,7 @@ unproven, and no count of passing conformance assertions changes that.
 
 This contract does not:
 
-- adopt Wowbagger in PropertyCompass or any other consumer repository;
+- adopt Wowbagger in a consumer repository;
 - add vendor-specific lifecycle logic to the core;
 - require an MCP server, daemon, hook, slash command, Gastown, or Beads;
 - define work claims, policy ranking, or hidden persistent agent memory;

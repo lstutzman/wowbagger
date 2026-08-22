@@ -5,11 +5,11 @@ Status: in progress
 ## Product boundary
 
 Wowbagger v0 stands on its own. It consumes only a configured Markdown ledger
-and its own documented contracts. It has no PropertyCompass runtime dependency,
-policy input, installation step, configuration, consumer migration, or release
-gate.
+and its own documented contracts. It has no external consumer runtime
+dependency, policy input, installation step, configuration, migration, or
+release gate.
 
-PropertyCompass experience may inform anonymized synthetic fixtures and general
+Prior consumer experience may inform anonymized synthetic fixtures and general
 requirements, but no consumer data, source paths, vocabulary, report branding,
 or backlog records enter this repository.
 
@@ -113,12 +113,12 @@ Exit criteria:
   future capabilities;
 - release validation uses only standalone synthetic fixtures.
 
-## Explicit deferral: PropertyCompass adoption
+## Explicit deferral: consumer adoption
 
-PropertyCompass adoption is a later, independent consumer decision. It starts
-only after a versioned Wowbagger release exists and a separate consumer
-adoption item selects that version and defines its migration evidence.
+Consumer adoption is a later, independent decision. It starts only after a
+versioned Wowbagger release exists and a separate consumer adoption item
+selects that version and defines its migration evidence.
 
-No current Wowbagger phase may modify PropertyCompass files, install an adapter
-there, move its policies, or migrate its backlog. Historical PropertyCompass
-material remains reference evidence in its own repository.
+No current Wowbagger phase may modify external consumer files, install an
+adapter there, move consumer policies, or migrate a consumer backlog.
+Historical consumer material remains reference evidence in its own repository.

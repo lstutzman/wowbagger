@@ -14,7 +14,7 @@ harness or consumer repository.
 Use modern Node.js ESM with Node 20 or later, the built-in `node:test` runner,
 and one runtime dependency: the current `yaml` npm package. The CLI is a thin
 Node entry point over small ESM modules. There is no TypeScript compiler,
-transpilation step, adapter, service, or PropertyCompass integration.
+transpilation step, adapter, service, or consumer-specific integration.
 
 `package-lock.json` records the resolved dependency graph, and `npm ci` is the
 reproducible installation command.

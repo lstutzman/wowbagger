@@ -6,7 +6,12 @@
 
 Add a deterministic `wowbagger report` command. It renders one validated ledger as one self-contained HTML file. A ledger-bound configuration maps repository-specific frontmatter into fixed report slots. The report remains derived output. It never becomes ledger authority.
 
-This design generalizes the useful parts of the PropertyCompass backlog report. It keeps the command-center layout, filters, grouping, detail modes, lazy Markdown bodies, history, and area-diverse parallel candidates. It removes PropertyCompass field names, branding, copy, and unsafe coordination claims from the implementation.
+This design generalizes the useful parts of a proven repository-specific
+backlog report. It keeps the command-center layout, filters, grouping, detail
+modes, lazy Markdown bodies, history, and area-diverse parallel candidates.
+It does not supply a reusable human report. A repository-specific HTML
+generator may hard-code its repository schema and presentation. Other ledgers
+cannot use it without copying and editing a large script.
 
 ## Problem
 
@@ -18,7 +23,9 @@ Wowbagger supplies machine-readable primitives:
 - claim commands coordinate work;
 - `claim-verify` reconciles publication.
 
-It does not supply a reusable human report. The PropertyCompass repository has a useful HTML generator, but that generator hard-codes its repository schema and presentation. Other ledgers cannot use it without copying and editing a large script.
+It does not supply a reusable human report. A repository-specific HTML
+generator may hard-code its repository schema and presentation. Other ledgers
+cannot use it without copying and editing a large script.
 
 A reusable report must preserve core lifecycle meaning. It must also let a repository map a small set of extension fields without turning configuration into executable code.
 
@@ -34,7 +41,7 @@ The first report implementation must:
 6. Produce one portable HTML file with no external runtime dependency.
 7. Refuse an invalid ledger before it changes the current report.
 8. Publish the report through atomic replace.
-9. Work at the current PropertyCompass scale of about 1,500 items.
+9. Work at a large-ledger scale, including ledgers with about 1,500 items.
 10. Stay readable and usable on desktop and narrow screens.
 
 ## Non-goals
@@ -137,8 +144,8 @@ Example:
 {
   "report_version": 1,
   "repository": {
-    "name": "Property Compass",
-    "logo": "../../../src/PropertyCompass.Web/wwwroot/logos/mark-colour.svg"
+    "name": "Example repository",
+    "logo": "./assets/logo.svg"
   },
   "title": "Prioritized Backlog",
   "output": "../../../docs/backlog-prioritization/prioritized-backlog.html",
@@ -334,8 +341,10 @@ The report must remain useful when JavaScript fails. The shell, title, generatio
 
 ## Markdown and content safety
 
-`src/report-markdown.js` owns a compact renderer derived from the proven PropertyCompass renderer. It supports the Markdown used by current item bodies:
+`src/report-markdown.js` owns a compact renderer derived from a proven
+repository-specific renderer. It supports the Markdown used by current item
 
+bodies:
 - headings;
 - paragraphs;
 - unordered and ordered lists;
@@ -500,7 +509,9 @@ Custom templates, CSS, and JavaScript would maximize flexibility. They would als
 
 ### Render every Markdown body before page load
 
-Eager rendering simplifies the browser script but expands the initial DOM at PropertyCompass scale. Lazy rendering keeps the initial document responsive.
+
+Eager rendering simplifies the browser script but expands the initial DOM at
+large-ledger scale. Lazy rendering keeps the initial document responsive.
 
 ### Infer collisions from mapped area
 
