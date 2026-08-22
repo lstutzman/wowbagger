@@ -5,7 +5,7 @@ number: 135
 title: "Return every tracked path changed by a managed mutation"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
