@@ -404,6 +404,8 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `provision` | work-claim | work-claim |
 | `claim capabilities/read/acquire/renew/release` | work-claim | work-claim |
 | `claim-verify` | work-claim | work-claim |
+| `claim-merge-verify` | work-claim | work-claim |
+| `claim-sync` | work-claim | work-claim |
 | `claim-adopt` | work-claim | work-claim |
 | `mutation-finalize` | work-claim | work-claim |
 | `claim verify` | ledger-publication, `command: "read"` | ledger-publication |

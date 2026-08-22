@@ -98,6 +98,8 @@
       "commands": [
         "provision",
         "claim-verify",
+        "claim-merge-verify",
+        "claim-sync",
         "claim-adopt",
         "claim capabilities",
         "claim read",
