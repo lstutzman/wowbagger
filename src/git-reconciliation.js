@@ -16,20 +16,24 @@ const GIT_ENVIRONMENT = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
 );
 
-export async function readGitHeadLedger(ledgerDirectory) {
+export function readGitHeadLedger(ledgerDirectory) {
+  return readGitTreeLedger(ledgerDirectory, 'HEAD');
+}
+
+export async function readGitTreeLedger(ledgerDirectory, treeish) {
   const { root, relativeLedger } = await resolveWorktreeLedger(ledgerDirectory);
   if (relativeLedger.startsWith(`..${path.sep}`) || path.isAbsolute(relativeLedger)) {
     throw new Error(`ledger is outside the git worktree: ${relativeLedger}`);
   }
   let commit;
   try {
-    commit = (await gitText(root, ['rev-parse', '--verify', 'HEAD'])).trim();
+    commit = (await gitText(root, ['rev-parse', '--verify', treeish])).trim();
   } catch (error) {
     if (error?.code === 128) return { commit: null, items: new Map(), root };
     throw error;
   }
   const gitLedger = toGitPath(relativeLedger);
-  const treeArguments = ['ls-tree', '-r', '-l', '-z', 'HEAD'];
+  const treeArguments = ['ls-tree', '-r', '-l', '-z', treeish];
   if (gitLedger !== '') treeArguments.push('--', gitLedger);
   const listing = await timePhase('head_tree_ms', () => gitBuffer(root, treeArguments));
   const prefix = gitLedger === '' ? '' : `${gitLedger}/`;
@@ -41,10 +45,6 @@ export async function readGitHeadLedger(ledgerDirectory) {
       && !entry.name.slice(prefix.length).startsWith('.wowbagger/')
       && entry.name.endsWith('.md')
   ));
-  // One `git cat-file --batch` process reads a whole chunk of item blobs.
-  // Reading each item with its own `git show` cost one process spawn per
-  // ledger item, and on a ledger of a thousand items those serial spawns,
-  // not parsing or validation, were the whole mutation wall time.
   const items = new Map();
   for (const chunk of chunkBySize(blobs, MAX_GIT_OUTPUT_BYTES)) {
     const contents = await timePhase('head_blob_ms', () => readBlobBatch(root, chunk));
@@ -55,6 +55,12 @@ export async function readGitHeadLedger(ledgerDirectory) {
     }
   }
   return { commit, items, root };
+}
+
+export async function readGitTreeFile(ledgerDirectory, treeish, relativePath) {
+  const { root, relativeLedger } = await resolveWorktreeLedger(ledgerDirectory);
+  const gitPath = toGitPath(path.join(relativeLedger, relativePath));
+  return gitBuffer(root, ['show', `${treeish}:${gitPath}`]);
 }
 
 // Which local ref carries the revision the journal expects. A finding may name

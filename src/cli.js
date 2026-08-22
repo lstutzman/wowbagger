@@ -22,6 +22,7 @@ import {
   verifyClaimJournal,
 } from './claim-publication.js';
 import { validateClaimRequest } from './claim-request.js';
+import { checkProspectiveMerge } from './claim-prospective.js';
 import {
   claimStorePath,
   resolveGitCommonDir,
@@ -125,6 +126,7 @@ const KNOWN_COMMANDS = new Set([
   'claim',
   'publish-claimed',
   'claim-verify',
+  'claim-merge-verify',
   'claim-adopt',
   'mutation-finalize',
 ]);
@@ -460,6 +462,60 @@ export async function runCli(argumentsList, { scenario } = {}) {
       gitCommonDir,
       namespace,
     }));
+    return;
+  }
+
+  if (command === 'claim-merge-verify') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeClaimInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    const ledgerDirectory = parsedOptions.options.ledger;
+    const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory);
+    const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
+    if (!gitCommonDir || !namespace) {
+      writeClaimEnvelope(claimStoreUnavailable(command,
+        gitCommonDir ? 'ledger-namespace-unbound' : 'git-directory-not-found'));
+      return;
+    }
+    let result;
+    try {
+      result = await checkProspectiveMerge({
+        ledgerDirectory,
+        namespace,
+        baseRef: parsedOptions.options.base,
+        headRef: parsedOptions.options.head,
+      });
+    } catch {
+      result = { ok: false, error: { code: 'prospective-merge-unavailable' } };
+    }
+    writeClaimEnvelope({
+      exit: result.ok ? 0 : 6,
+      stdout: {
+        ok: result.ok,
+        namespace: 'work-claim',
+        command,
+        contract_version: 1,
+        state: result.ok ? 'committed' : 'unchanged',
+        ...(result.ok
+          ? {
+            result: {
+              ledger_namespace: namespace,
+              base_ref: parsedOptions.options.base,
+              head_ref: parsedOptions.options.head,
+              candidate_tree: result.candidate,
+            },
+          }
+          : {
+            error: {
+              code: result.error.code,
+              message: 'The prospective merge is not semantically authorized.',
+              details: result.error,
+            },
+          }),
+      },
+    });
     return;
   }
 
@@ -967,8 +1023,10 @@ function parseContractOptions(command, argumentsList) {
         ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
         : command === 'mutation-finalize'
           ? new Map([['--ledger', 'ledger'], ['--recovery-token', 'recoveryToken']])
-          : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
-            ? new Map([['--ledger', 'ledger']])
+          : command === 'claim-merge-verify'
+            ? new Map([['--ledger', 'ledger'], ['--base', 'base'], ['--head', 'head']])
+            : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
+              ? new Map([['--ledger', 'ledger']])
             : command === 'mint-id'
               ? new Map([['--date', 'date']])
               : new Map();
@@ -1469,6 +1527,9 @@ function usage(command) {
   }
   if (command === 'claim-verify') {
     return 'Usage: wowbagger claim-verify --ledger <dir> --json';
+  }
+  if (command === 'claim-merge-verify') {
+    return 'Usage: wowbagger claim-merge-verify --ledger <dir> --base <ref> --head <ref> --json';
   }
 
   if (command === 'mutation-finalize') {

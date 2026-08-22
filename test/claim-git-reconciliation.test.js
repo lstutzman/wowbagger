@@ -14,7 +14,7 @@ import {
   replayClaimJournal,
 } from '../src/claim-journal.js';
 import { resolveGitCommonDir } from '../src/claim-store.js';
-import { readGitHeadLedger } from '../src/git-reconciliation.js';
+import { readGitHeadLedger, readGitTreeLedger } from '../src/git-reconciliation.js';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 const ITEM_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
@@ -883,4 +883,16 @@ test('Git HEAD reconciliation returns exact committed bytes for every item', asy
   for (const [file, source] of sources) {
     assert.equal(sha256(head.items.get(file)), sha256(source), file);
   }
+});
+
+test('Git tree reconciliation reads a candidate tree without changing HEAD', async () => {
+  const fixture = await repository();
+  const head = git(fixture.root, 'rev-parse', 'HEAD');
+  const tree = git(fixture.root, 'rev-parse', 'HEAD^{tree}');
+
+  const candidate = await readGitTreeLedger(fixture.ledger, tree);
+
+  assert.equal(candidate.commit, tree);
+  assert.equal(sha256(candidate.items.get('item.md')), sha256(fixture.before));
+  assert.equal(git(fixture.root, 'rev-parse', 'HEAD'), head);
 });

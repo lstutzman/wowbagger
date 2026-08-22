@@ -996,7 +996,31 @@ mutation paths. Their presence prevents a strict fenced capability. A
 merge-coordinated backend may still operate for cooperating writers, but it
 MUST report `safe_exclusive_dispatch: false`.
 
-## 8. Errors, exits, and recovery
+
+## 8. Prospective merge verification
+
+Before publishing a conflict-free merge of two cooperative branches, run:
+
+```sh
+wowbagger claim-merge-verify --ledger <dir> --base <ref> --head <ref> --json
+```
+
+The command evaluates the exact `git merge-tree --write-tree` candidate,
+including candidate ledger item bytes and the merged tracked reconciliation
+log. It does not append journal entries, write files, update refs, acquire
+locks, adopt revisions, or change either parent.
+
+Parent `claim-verify` results are insufficient: textual log merge can preserve a
+later adoption of revision R0 while candidate item bytes remain reviewed
+revision R1. The prospective command refuses that candidate with bounded JSON
+identifying item ID, actual and expected revisions, decisive sequence numbers,
+both parent commits, and candidate tree.
+
+Recovery is explicit. Restore the authorized bytes or publish a reviewed
+`claim-adopt` decision, then rerun both `claim-verify` and this prospective
+check. The command never reorders evidence or chooses an adoption.
+
+## 9. Errors, exits, and recovery
 
 Error envelopes contain exactly `ok: false`, namespace, command,
 `contract_version: 1`, state, and `error` with `code`, `message`, and `details`.
