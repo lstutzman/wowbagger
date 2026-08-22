@@ -78,6 +78,24 @@ test('a body patch replaces the body bytes and rewrites no other frontmatter byt
   });
 });
 
+test('body replacement preserves exact leading LF bytes', async () => {
+  for (const body of ['', '\n', '\n\n', '\n\n\n']) {
+    await withLedger({ [`${ITEM}.md`]: itemSource('Before\n') }, async (ledger) => {
+      const result = await runPatch(ledger, {
+        id: ITEM,
+        expected_revision: inspectRevision(ledger, ITEM),
+        date: '2030-01-22',
+        set: { body },
+      });
+
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      const published = await readFile(path.join(ledger, `${ITEM}.md`), 'utf8');
+      assert.equal(bodyRegion(published), body, JSON.stringify(body));
+      assert.equal(JSON.parse(result.stdout).result.item.body, body);
+    });
+  }
+});
+
 test('a body patch refuses null, because removing a body means the empty string', async () => {
   const before = itemSource('\nMirror body.\n');
   await withLedger({ [`${ITEM}.md`]: before }, async (ledger) => {
