@@ -5,9 +5,10 @@ number: 133
 title: "Stop branch-local claim publications globally deadlocking sibling worktrees"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-22
 updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "propertycompass2-field-report-22-23"
   recorded_at: "2026-08-22T12:45:57.539Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-22
     summary: "Accept item into backlog for maintainer triage."
     rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete target-scoped claim reconciliation implementation."
+    rationale: "Item #133 implementation, ownership recovery coverage, contract updates, and current/Node 20 gates pass."
 ---
 
 ## Problem
