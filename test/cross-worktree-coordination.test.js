@@ -9,7 +9,7 @@
 // asks for synchronization and names the owner holding the revision.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -200,6 +200,17 @@ test('a private publication still blocks a same-item mutation', async () => {
     fixture.siblingRoot,
     'inspect', '--ledger', fixture.siblingLedger, '--id', targetId, '--json',
   );
+  assert.equal(siblingInspected.exit, 0, JSON.stringify(siblingInspected.envelope));
+  const initialVerification = run(
+    fixture.siblingRoot,
+    'claim-verify',
+    '--ledger',
+    fixture.siblingLedger,
+    '--json',
+  );
+  assert.equal(initialVerification.exit, 6, JSON.stringify(initialVerification.envelope));
+  const reconcileLog = path.join(fixture.siblingLedger, '.wowbagger', `reconcile-${NAMESPACE}.md`);
+  const beforeLog = await readFile(reconcileLog, 'utf8');
   const blocked = run(
     fixture.siblingRoot,
     'patch', '--ledger', fixture.siblingLedger,
@@ -212,6 +223,7 @@ test('a private publication still blocks a same-item mutation', async () => {
     '--json',
   );
 
+  assert.equal(await readFile(reconcileLog, 'utf8'), beforeLog);
   assert.equal(blocked.exit, 6, JSON.stringify(blocked.envelope));
   assert.equal(blocked.envelope.error.details.findings[0].item_id, targetId);
 });
