@@ -5,7 +5,7 @@ number: 130
 title: "Expose native transition affordances per item"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
