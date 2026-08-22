@@ -4,9 +4,10 @@ id: wb_01M08PE2XJVTV4TZSWCQHR2ZWN
 number: 128
 title: "Add a CAS-fenced snooze mutation for migrated items"
 kind: task
-status: in-progress
+status: done
 created: 2026-08-17
 updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "consumer-dogfood/propertycompass2"
   recorded_at: "2026-08-17T20:26:01Z"
@@ -17,6 +18,10 @@ decisions:
     date: 2026-08-22
     summary: "Accept item into backlog for maintainer triage."
     rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete CAS-fenced item snooze mutation."
+    rationale: "Snooze sets and clears snoozed_until through an explicit CAS mutation, preserves item identity, and passes focused command tests."
 ---
 Field feedback from PropertyCompass2 against alpha.6 / core contract 3. The legacy backlog has future `snoozed_until: 9999-12-31` on #1013, #653, and #1272. All three existing schema-2 ledger mirrors omit `snoozed_until`. Alpha.6 declares `snoozed_until` create-once. `patch` cannot set or clear it, and the CLI has no snooze/unsnooze mutation. The consumer cannot repair this migrated drift without a hand-edit or deleting and recreating immutable item identity.
 
