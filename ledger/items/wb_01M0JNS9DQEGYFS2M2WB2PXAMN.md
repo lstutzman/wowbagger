@@ -5,7 +5,7 @@ number: 131
 title: "Define response-loss behavior for native transitions"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-21
 updated: 2026-08-21
 provenance:
