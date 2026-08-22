@@ -10,26 +10,33 @@ export const LIFECYCLE_STATUSES = Object.freeze([
   'archived', 'backlog', 'deferred', 'done', 'in-progress', 'killed', 'triage',
 ]);
 
+// The decision action each edge generates, keyed `kind:from:to`. It is one
+// module constant rather than a literal rebuilt per question, because
+// `allowedTargets` and the workbench projection ask this table once per
+// lifecycle target of one item. An allowed edge absent from it generates no
+// action and so requires no decision.
+const TRANSITION_ACTIONS = new Map([
+  ['task:triage:backlog', 'accept'],
+  ['epic:triage:backlog', 'accept'],
+  ['task:triage:killed', 'kill'],
+  ['epic:triage:killed', 'kill'],
+  ['task:backlog:deferred', 'defer'],
+  ['epic:backlog:deferred', 'defer'],
+  ['task:deferred:backlog', 'undefer'],
+  ['epic:deferred:backlog', 'undefer'],
+  ['task:backlog:archived', 'archive'],
+  ['task:backlog:killed', 'kill'],
+  ['task:in-progress:done', 'complete'],
+  ['task:in-progress:killed', 'kill'],
+  ['epic:backlog:done', 'complete'],
+  ['epic:backlog:archived', 'archive'],
+  ['epic:backlog:killed', 'kill'],
+  ['task:archived:backlog', 'restore'],
+  ['epic:archived:backlog', 'restore'],
+]);
+
 export function transitionEdge(kind, from, to) {
-  const action = {
-    'task:triage:backlog': 'accept',
-    'epic:triage:backlog': 'accept',
-    'task:triage:killed': 'kill',
-    'epic:triage:killed': 'kill',
-    'task:backlog:deferred': 'defer',
-    'epic:backlog:deferred': 'defer',
-    'task:deferred:backlog': 'undefer',
-    'epic:deferred:backlog': 'undefer',
-    'task:backlog:archived': 'archive',
-    'task:backlog:killed': 'kill',
-    'task:in-progress:done': 'complete',
-    'task:in-progress:killed': 'kill',
-    'epic:backlog:done': 'complete',
-    'epic:backlog:archived': 'archive',
-    'epic:backlog:killed': 'kill',
-    'task:archived:backlog': 'restore',
-    'epic:archived:backlog': 'restore',
-  }[`${kind}:${from}:${to}`] ?? null;
+  const action = TRANSITION_ACTIONS.get(`${kind}:${from}:${to}`) ?? null;
   const allowed = (from === 'triage' && (to === 'backlog' || to === 'killed'))
     || (from === 'backlog' && (
       (kind === 'task' && to === 'in-progress')

@@ -307,6 +307,7 @@ function compareText(left, right) {
 
 export async function loadReportConfig(ledgerDirectory, outputOverride, viewName = null) {
   const configPath = path.join(ledgerDirectory, '.wowbagger', 'report.json');
+  const configDirectory = path.dirname(configPath);
   let config;
 
   try {
@@ -372,14 +373,14 @@ export async function loadReportConfig(ledgerDirectory, outputOverride, viewName
   if (namesViews && views === null) {
     throw new ReportError('report-config-invalid', 'Report view configuration is invalid.');
   }
-  await assertDistinctReportOutputs(ledgerDirectory, path.dirname(configPath), config, views);
-  const view = selectReportView(views, viewName, path.dirname(configPath));
+  await assertDistinctReportOutputs(ledgerDirectory, configDirectory, config, views);
+  const view = selectReportView(views, viewName, configDirectory);
   // The selected report is the one this invocation publishes: the view's own
   // output when a view is named, the base output otherwise, and `--out` over
   // either. Configured paths were already contained above, so only an override
   // still needs the containment rule applied to it.
   const outputPath = outputOverride === undefined
-    ? (view === null ? path.resolve(path.dirname(configPath), config.output) : view.outputPath)
+    ? (view === null ? path.resolve(configDirectory, config.output) : view.outputPath)
     : path.resolve(process.cwd(), outputOverride);
   if (outputOverride !== undefined) {
     await assertReportOutputOutsideLedger(ledgerDirectory, outputPath);
@@ -390,7 +391,7 @@ export async function loadReportConfig(ledgerDirectory, outputOverride, viewName
       name: config.repository.name,
       logo: config.repository.logo === undefined
         ? null
-        : path.resolve(path.dirname(configPath), config.repository.logo),
+        : path.resolve(configDirectory, config.repository.logo),
     },
     title: config.title,
     outputPath,
