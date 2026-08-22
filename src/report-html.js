@@ -296,27 +296,40 @@ function observedValues(items, key) {
   return [...new Set(items.map((item) => facetValue(item, key)).filter((value) => value !== null))].sort();
 }
 
+const FACET_GROUP_LABELS = { readiness: 'Readiness', status: 'Status', kind: 'Kind' };
+
+// One filter vocabulary for the whole artifact. A fixed criterion a named view
+// was generated from names its dimension and its values exactly as the
+// interactive chip for that same dimension names them, so the reader reads one
+// language above the drill-down and inside it.
+function groupLabel(key) {
+  return FACET_GROUP_LABELS[key] ?? fieldLabel(key.slice(6));
+}
+
+function optionLabel(key, value) {
+  return key === 'readiness' ? READINESS_LABELS[value] : String(value);
+}
+
 // Readiness and kind are the schema's own closed vocabularies, so every value
 // is offered whether or not the open set currently holds one; a chip counting
 // zero is a fact about the ledger. Status and the mapped fields are open, so
 // only what the open cards actually carry is offered.
 function facetGroups(items, fieldNames) {
   const declared = [
-    { key: 'readiness', label: 'Readiness', values: ['ready', 'blocked', 'ineligible'] },
-    { key: 'status', label: 'Status', values: observedValues(items, 'status') },
-    { key: 'kind', label: 'Kind', values: ['task', 'epic'] },
+    { key: 'readiness', values: ['ready', 'blocked', 'ineligible'] },
+    { key: 'status', values: observedValues(items, 'status') },
+    { key: 'kind', values: ['task', 'epic'] },
     ...fieldNames.map((name) => ({
       key: `field:${name}`,
-      label: fieldLabel(name),
       values: observedValues(items, `field:${name}`),
     })),
   ];
   return declared.filter((group) => group.values.length > 0).map((group) => ({
     key: group.key,
-    label: group.label,
+    label: groupLabel(group.key),
     options: group.values.map((value) => ({
       value,
-      label: group.key === 'readiness' ? READINESS_LABELS[value] : value,
+      label: optionLabel(group.key, value),
       count: items.filter((item) => facetValue(item, group.key) === value).length,
     })),
   }));
@@ -330,6 +343,36 @@ function renderFacets(groups, total) {
   const head = `<div class="facets-head"><p id="result-count" class="result-count" role="status" aria-live="polite">Showing ${total} of ${total} ${total === 1 ? 'item' : 'items'}</p><button type="button" id="clear-facets">Clear filters</button></div>`;
   const chips = (group) => group.options.map((option) => `<label class="chip"><input type="checkbox" class="facet" data-group="${escapeHtml(group.key)}" value="${escapeHtml(option.value)}"><span class="chip-text">${escapeHtml(option.label)}</span> <span class="chip-count">${option.count}</span></label>`).join('');
   return `<section id="facets" class="facets panel" aria-label="Filter items">${head}${groups.map((group) => `<fieldset class="facet-group" data-group="${escapeHtml(group.key)}"><legend>${escapeHtml(group.label)}</legend><div class="chips">${chips(group)}</div></fieldset>`).join('')}</section>`;
+}
+
+// A named report is one file about one subset, so it says which subset in its
+// own voice: the view title, the stable name automation selected it by, and the
+// criteria the generator applied. A criterion is a fact about these bytes, not
+// a control over them - the reader cannot change what the file contains - so it
+// wears the chip vocabulary without an input inside it. The interactive chips
+// further down are the only controls, and they narrow this subset alone.
+function renderViewContext(view, repositoryName) {
+  if (view === null) {
+    return '';
+  }
+  const groups = view.criteria.map((criterion) => {
+    const chips = criterion.values
+      .map((value) => `<span class="chip chip-fixed">${escapeHtml(optionLabel(criterion.key, value))}</span>`)
+      .join('');
+    return `<div class="criteria-group"><p class="criteria-label">${escapeHtml(groupLabel(criterion.key))}</p><div class="chips">${chips}</div></div>`;
+  }).join('');
+  return `
+<section class="view-context" aria-label="Custom report view"><p class="eyebrow">Custom view</p><h2>${escapeHtml(view.title)}</h2><p class="view-name"><code>${escapeHtml(view.name)}</code></p><p class="muted">Filtered subset of ${escapeHtml(repositoryName)}. Interactive filters below can narrow this view further.</p><div class="criteria">${groups}</div></section>`;
+}
+
+// The artifact ships the rules it uses and no others, so a base report carries
+// no styling for a section it does not render. A fixed criterion keeps the chip
+// shape and drops the pointer: nothing here responds to a click.
+function viewContextStyleSource(view) {
+  if (view === null) {
+    return '';
+  }
+  return '.view-context{margin:0 0 22px;border:1px solid var(--line);border-left:3px solid var(--navy);border-radius:12px;background:var(--surface);box-shadow:var(--shadow);padding:18px}.view-context h2{margin:0;font-family:ui-serif,Georgia,serif;color:var(--navy);font-size:clamp(1.2rem,2.4vw,1.6rem);line-height:1.15}.view-context .view-name{margin:7px 0 0}.view-context code{border-radius:4px;background:#eeece6;padding:1px 5px;font-size:.85rem}.view-context .muted{margin:9px 0 0}.criteria{display:grid;gap:9px;margin-top:14px}.criteria-group{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.criteria-label{flex:none;width:104px;margin:0;color:var(--muted);font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.chip-fixed{background:#eef1f4;color:var(--navy);cursor:default}@media(max-width:480px){.criteria-group{align-items:flex-start;flex-direction:column;gap:5px}}';
 }
 
 function styleSource() {
@@ -414,8 +457,8 @@ export function renderReportHtml(model, { logoDataUrl = null, graphBundle } = {}
   const interactionRuntime = reportClientSource().replaceAll('</script', '<\\/script');
   const graphRuntime = graphClientSource(graph).replaceAll('</script', '<\\/script');
 
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><title>${escapeHtml(model.title)}</title><style>${styleSource()}${graphStyleSource()}.history-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}.controls .history-toggle input{min-width:0;flex:none;margin:0;padding:0}</style></head><body data-richness="standard"><main class="shell">
-<header class="masthead"><div class="identity">${logo}<div><p class="eyebrow">${escapeHtml(model.repository.name)}</p><h1>${escapeHtml(model.title)}</h1></div></div><div class="as-of">Ledger state<br><strong>${escapeHtml(model.asOf)}</strong></div></header>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><title>${escapeHtml(model.title)}</title><style>${styleSource()}${graphStyleSource()}.history-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}.controls .history-toggle input{min-width:0;flex:none;margin:0;padding:0}${viewContextStyleSource(model.view)}</style></head><body data-richness="standard"><main class="shell">
+<header class="masthead"><div class="identity">${logo}<div><p class="eyebrow">${escapeHtml(model.repository.name)}</p><h1>${escapeHtml(model.title)}</h1></div></div><div class="as-of">Ledger state<br><strong>${escapeHtml(model.asOf)}</strong></div></header>${renderViewContext(model.view, model.repository.name)}
 ${renderWorkNext(model.workNext, model.unknownClasses)}
 ${renderAttention(model.attention, model.itemNumbers)}
 ${renderEvidence(model.evidence, model.asOf)}

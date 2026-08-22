@@ -557,6 +557,106 @@ test('labels an excluded reference with its complete-ledger number', async () =>
   assert.doesNotMatch(html, new RegExp(excludedId));
 });
 
+// A named report is an artifact about a subset, so it says which subset in its
+// own voice: the view's title, the stable name automation selected it by, and
+// the criteria the generator applied. Those criteria are facts about the file
+// rather than controls over it, so they wear the report's chip vocabulary
+// without carrying an input a reader could toggle. A typed criterion prints the
+// value the configuration wrote, and the base report states none of this.
+test('identifies a named view and its fixed criteria', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const named = viewModel();
+  named.view.criteria = [
+    { key: 'readiness', values: ['blocked'] },
+    { key: 'status', values: ['backlog', 'in-progress'] },
+    { key: 'field:area', values: ['Core & CLI'] },
+    { key: 'field:security_tier', values: [2, true] },
+  ];
+  const html = renderReportHtml(named, options());
+  const context = html.slice(html.indexOf('<section class="view-context"'), html.indexOf('id="work-next"'));
+
+  assert.match(html, /<section class="view-context" aria-label="Custom report view">/);
+  assert.match(context, /<p class="eyebrow">Custom view<\/p>/);
+  assert.match(context, /<h2>Security blockers<\/h2>/);
+  assert.match(context, /<code>security-blockers<\/code>/);
+  assert.match(
+    context,
+    /Filtered subset of Example &lt;script&gt;\. Interactive filters below can narrow this view further\./,
+  );
+  assert.match(
+    context,
+    /<p class="criteria-label">Readiness<\/p><div class="chips"><span class="chip chip-fixed">Blocked<\/span><\/div>/,
+  );
+  assert.match(
+    context,
+    /<p class="criteria-label">Status<\/p><div class="chips"><span class="chip chip-fixed">backlog<\/span><span class="chip chip-fixed">in-progress<\/span><\/div>/,
+  );
+  assert.match(
+    context,
+    /<p class="criteria-label">Area<\/p><div class="chips"><span class="chip chip-fixed">Core &amp; CLI<\/span><\/div>/,
+  );
+  assert.match(
+    context,
+    /<p class="criteria-label">Security Tier<\/p><div class="chips"><span class="chip chip-fixed">2<\/span><span class="chip chip-fixed">true<\/span><\/div>/,
+  );
+  assert.doesNotMatch(context, /<input|<button|<label/);
+  assert.doesNotMatch(renderReportHtml(model(), options()), /view-context|Custom view|chip-fixed/);
+});
+
+// Client filters narrow a named view; they cannot widen it. The artifact holds
+// the retained cards and nothing else, so clearing every filter gives the
+// reader the whole custom view back and still names no excluded item - not in
+// a card, not in a chip, not in the graph payload.
+test('restores only the named view subset when the reader clears the filters', async () => {
+  const { renderReportHtml, reportClientSource } = await import('../src/report-html.js');
+  const html = renderReportHtml(viewModel(), options());
+  const facets = html.slice(html.indexOf('id="facets"'), html.indexOf('id="items"'));
+  const dom = reportDom({
+    items: [
+      {
+        id: 'item-2',
+        order: 0,
+        state: 'blocked',
+        status: 'backlog',
+        kind: 'task',
+        priority: 2,
+        created: '2026-08-01',
+        title: 'Retained blocked task',
+        fields: { area: 'core' },
+        search: '#2 retained blocked task',
+        body: '# Two',
+      },
+      {
+        id: 'item-3',
+        order: 1,
+        state: 'ready',
+        status: 'in-progress',
+        kind: 'task',
+        priority: 3,
+        created: '2026-08-02',
+        title: 'Retained ready task',
+        fields: { area: 'core' },
+        search: '#3 retained ready task',
+        body: '# Three',
+      },
+    ],
+  });
+  runReportClient(reportClientSource(), dom);
+
+  dom.select('readiness', 'ready');
+  dom.select('status', 'in-progress');
+
+  assert.deepEqual(dom.visible(), ['item-3']);
+
+  dom.clearFacets.dispatch('click');
+
+  assert.deepEqual(dom.visible(), ['item-2', 'item-3']);
+  assert.equal(dom.resultCount(), 'Showing 2 of 2 items');
+  assert.equal(dom.card(excludedId), null);
+  assert.doesNotMatch(facets, new RegExp(excludedId));
+  assert.doesNotMatch(html, new RegExp(excludedId));
+});
+
 test('says how much of a truncated attention list is not shown', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const surface = decisionSurface(renderReportHtml(model(), options()));
