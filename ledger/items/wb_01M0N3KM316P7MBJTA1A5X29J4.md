@@ -5,14 +5,19 @@ number: 139
 title: "Synchronize committed adoption rulings into fresh claim clones"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
   source: "propertycompass2-staging-5-field-report-2-pr-2250"
   recorded_at: "2026-08-22T16:07:11.478Z"
 depends_on: []
-related: [wb_01M07J8W5TS6PVKFZ1T4RTN184, wb_01M057PY03G5AM0MMAKA5R9AT9, wb_01M0MR2Y8GKNCTTVS9V5ZX8Q0N, wb_01M0MY9NE61SATX6EHFZS99WH0]
+related: [ wb_01M07J8W5TS6PVKFZ1T4RTN184, wb_01M057PY03G5AM0MMAKA5R9AT9, wb_01M0MR2Y8GKNCTTVS9V5ZX8Q0N, wb_01M0MY9NE61SATX6EHFZS99WH0 ]
+decisions:
+  - action: accept
+    date: 2026-08-22
+    summary: "Accept item into backlog for maintainer triage."
+    rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
 ---
 
 ## Problem
