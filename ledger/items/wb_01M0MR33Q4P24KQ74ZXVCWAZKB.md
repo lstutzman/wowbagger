@@ -5,7 +5,7 @@ number: 134
 title: "Guard unchanged mutation refusals against reconcile-log residue regression"
 kind: task
 priority: 10
-status: backlog
+status: in-progress
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
