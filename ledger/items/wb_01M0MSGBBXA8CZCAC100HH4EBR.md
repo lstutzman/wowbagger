@@ -5,14 +5,19 @@ number: 135
 title: "Return every tracked path changed by a managed mutation"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
   source: "propertycompass2-field-report-msg-fffb996b3be5"
   recorded_at: "2026-08-22T13:10:52.057Z"
 depends_on: []
-related: [wb_01M057PTYZ18N6EE76AEW46E0R, wb_01KZVSW885W9T05HSZK1GC0241, wb_01M0JNSCGBXZSJ447Z11PKTHZC]
+related: [ wb_01M057PTYZ18N6EE76AEW46E0R, wb_01KZVSW885W9T05HSZK1GC0241, wb_01M0JNSCGBXZSJ447Z11PKTHZC ]
+decisions:
+  - action: accept
+    date: 2026-08-22
+    summary: "Accept item into backlog for maintainer triage."
+    rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
 ---
 
 ## Problem
