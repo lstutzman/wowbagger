@@ -4,7 +4,7 @@ id: wb_01M08PE2XJVTV4TZSWCQHR2ZWN
 number: 128
 title: "Add a CAS-fenced snooze mutation for migrated items"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-08-17
 updated: 2026-08-22
 provenance:
