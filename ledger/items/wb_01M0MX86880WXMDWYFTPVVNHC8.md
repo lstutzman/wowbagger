@@ -5,9 +5,10 @@ number: 137
 title: "Provision declarations for existing consumer extension fields"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-22
 updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "propertycompass2-field-report-26"
   recorded_at: "2026-08-22T14:16:07.893Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-22
     summary: "Accept item into backlog for maintainer triage."
     rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete explicit extension declaration provisioning."
+    rationale: "Selected existing extension members now have explicit dry-run/apply validation, conflict refusal, deterministic declaration bytes, and managed mutation guidance."
 ---
 
 ## Problem
