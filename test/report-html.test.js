@@ -68,6 +68,17 @@ function model() {
     stats: { total: 2, open: 1, terminal: 1, ready: 1, blocked: 0, ineligible: 0 },
     swarm: null,
     swarmBatches: [],
+    // The complete-ledger label lookup the report keeps: every item the ledger
+    // numbers, including the ones this projection does not carry a row for.
+    itemNumbers: {
+      wb_hostile: 7,
+      wb_done: 8,
+      wb_dependency: 5,
+      wb_blocked: 12,
+      wb_old: 3,
+      wb_stuck: 10,
+    },
+    view: null,
     items: [{
       id: 'wb_hostile',
       number: 7,
@@ -505,6 +516,45 @@ test('names related items by number inside the drill-down detail', async () => {
   assert.match(detail, /<dt>Depends on<\/dt><dd>#8<\/dd>/);
   assert.match(detail, /<dt>Related<\/dt><dd>wb_missing<\/dd>/);
   assert.match(detail, /<li>Dependency is not done: #8<\/li>/);
+});
+
+// A view drops the item, never the reader's handle on it: an included item that
+// depends on an excluded one still names it by the number the complete ledger
+// gave it, and the excluded item contributes nothing else to the artifact.
+const excludedId = 'wb_01KZFFFFFFFFFFFFFFFFFFFFFF';
+
+function viewModel() {
+  const base = model();
+  return {
+    ...base,
+    itemNumbers: { ...base.itemNumbers, [excludedId]: 40 },
+    view: {
+      name: 'security-blockers',
+      title: 'Security blockers',
+      criteria: [{ key: 'field:area', values: ['Core & CLI'] }],
+    },
+    items: [{
+      ...base.items[0],
+      dependsOn: ['wb_done', excludedId],
+      readiness: {
+        state: 'blocked',
+        reasons: [
+          { code: 'dependency-unsatisfied', item_id: 'wb_done' },
+          { code: 'dependency-unsatisfied', item_id: excludedId },
+        ],
+      },
+    }],
+  };
+}
+
+test('labels an excluded reference with its complete-ledger number', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(viewModel(), options());
+  const detail = html.slice(html.indexOf('id="drilldown"'));
+
+  assert.match(detail, /<dt>Depends on<\/dt><dd>#8, #40<\/dd>/);
+  assert.match(detail, /<li>Dependency is not done: #40<\/li>/);
+  assert.doesNotMatch(html, new RegExp(excludedId));
 });
 
 test('says how much of a truncated attention list is not shown', async () => {

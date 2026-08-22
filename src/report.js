@@ -11,7 +11,7 @@ import {
   rankWorkNext,
 } from './report-sequencing.js';
 import { randomUUID } from 'node:crypto';
-import { normalizeReportViews } from './report-view.js';
+import { matchesReportView, normalizeReportViews, reportViewCriteria } from './report-view.js';
 
 const REPORT_FILE_SYSTEM = { mkdir, open, rename, rm };
 const LOGO_MIME_TYPES = new Map([
@@ -87,9 +87,19 @@ export function resolvePointer(value, pointer) {
   return current;
 }
 
+// Readiness is a fact about the complete ledger, so it is projected before any
+// view narrows the set: excluding a blocker can never promote the work it
+// holds. Every section below then derives from the one retained projection, so
+// the statistics, the ranking, the attention lists, and the graph can never
+// describe different populations.
 export function buildReportModel(items, config, asOf) {
+  const view = config.view ?? null;
   const readinessById = projectReadiness(items, asOf);
-  const projected = items.map((item) => projectItem(item, config.fields, readinessById.get(item.data.id)));
+  const allProjected = items.map((item) => projectItem(item, config.fields, readinessById.get(item.data.id)));
+  const projected = view === null
+    ? allProjected
+    : allProjected.filter((item) => matchesReportView(item, view.filters));
+  const retainedIds = new Set(projected.map((item) => item.id));
   const reportItems = projected
     .filter((item) => item.terminalDate === null)
     .sort(compareProjectedItems);
@@ -134,7 +144,8 @@ export function buildReportModel(items, config, asOf) {
       ineligible: reportItems.filter((item) => item.readiness.state === 'ineligible').length,
       triage: projected.filter((item) => item.status === 'triage').length,
       inProgress: projected.filter((item) => item.status === 'in-progress').length,
-      snoozed: items.filter((item) => item.data.snoozed_until > asOf).length,
+      snoozed: items.filter((item) => retainedIds.has(item.data.id)
+        && item.data.snoozed_until > asOf).length,
       done: terminalItems.filter((item) => item.status === 'done').length,
       killed: terminalItems.filter((item) => item.status === 'killed').length,
       deferred: terminalItems.filter((item) => item.status === 'deferred').length,
@@ -142,6 +153,15 @@ export function buildReportModel(items, config, asOf) {
     },
     swarm: config.swarm,
     swarmBatches,
+    view: view === null ? null : {
+      name: view.name,
+      title: view.title,
+      criteria: reportViewCriteria(view.filters),
+    },
+    // Labels only. An excluded item names itself here so an included item that
+    // depends on it still prints a number a reader can say out loud, and it
+    // carries nothing else the report could show.
+    itemNumbers: Object.fromEntries(allProjected.map((item) => [item.id, item.number])),
   };
 }
 

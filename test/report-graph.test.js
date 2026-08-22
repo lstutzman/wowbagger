@@ -150,6 +150,35 @@ test('drops a relation whose other end is not in the ledger', async () => {
   assert.deepEqual(graph.links, [{ source: readyId, target: blockedId, kind: 'depends-on' }]);
 });
 
+// A view cuts nodes out of the graph, and every edge that touched them goes
+// with them. What it never cuts is the reason a retained node is blocked: the
+// excluded prerequisite is still named, by the number the complete ledger gave
+// it, without becoming a node of its own.
+test('view graph drops excluded nodes and every incident link', async () => {
+  const viewConfig = {
+    ...fixtureConfig,
+    reportVersion: 2,
+    view: {
+      name: 'unfinished',
+      title: 'Unfinished work',
+      outputPath: '/tmp/unfinished.html',
+      filters: { readiness: ['blocked', 'ineligible'] },
+    },
+  };
+  const { buildReportModel } = await import('../src/report.js');
+  const { buildGraphModel } = await import('../src/report-graph.js');
+
+  const report = buildReportModel(fixtureItems(), viewConfig, '2026-08-14');
+  const graph = buildGraphModel(report);
+
+  assert.deepEqual(graph.nodes.map((node) => node.id).sort(), [blockedId, doneId, epicId].sort());
+  assert.deepEqual(graph.links, []);
+  assert.deepEqual(nodeFor(graph, blockedId).reasons, [
+    { code: 'dependency-unsatisfied', label: 'Dependency is not done: #1' },
+    { code: 'age', label: 'age 13d' },
+  ]);
+});
+
 const fixtureBundle = { manifest: { package: 'p', version: '1.2.3' }, source: 'window.ForceGraph3D=1;' };
 
 async function fixtureHtml(items = fixtureItems()) {

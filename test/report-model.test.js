@@ -163,3 +163,220 @@ test('orders ranked items before priority-only and unranked items', async () => 
     ['rank-one', 'rank-two-priority', 'rank-two-no-priority', 'priority-only', 'unranked'],
   );
 });
+
+// A named view is one grouped filter applied to the complete-ledger
+// projection: values inside a group are alternatives, and every named group
+// has to match. Whatever the filter drops is absent from every section the
+// report derives, not merely hidden inside one of them.
+function viewConfig(filters, overrides = {}) {
+  return {
+    reportVersion: 2,
+    repository: { name: 'Example', logo: null },
+    title: 'Example report',
+    outputPath: '/tmp/security.html',
+    fields: { area: '/area', class: '/class' },
+    swarm: null,
+    view: {
+      name: 'security-blockers',
+      title: 'Security blockers',
+      outputPath: '/tmp/security.html',
+      filters,
+    },
+    ...overrides,
+  };
+}
+
+const groupedFilters = {
+  readiness: ['ready', 'blocked'],
+  status: ['backlog'],
+  kind: ['task'],
+  fields: { area: ['api', 'auth'], class: ['bug'] },
+};
+
+function groupedLedger() {
+  return [
+    item('wb_api_bug', { number: 1, priority: 1, area: 'api', class: 'bug' }),
+    item('wb_auth_bug', {
+      number: 2,
+      priority: 2,
+      area: 'auth',
+      class: 'bug',
+      depends_on: ['wb_api_bug'],
+    }),
+    item('wb_docs_bug', { number: 3, priority: 3, area: 'docs', class: 'bug' }),
+    item('wb_api_chore', { number: 4, priority: 4, area: 'api', class: 'chore' }),
+    item('wb_api_started', { number: 5, status: 'in-progress', area: 'api', class: 'bug' }),
+    item('wb_api_triage', { number: 6, status: 'triage', area: 'api', class: 'bug' }),
+    item('wb_api_epic', { number: 7, kind: 'epic', area: 'api', class: 'bug' }),
+  ];
+}
+
+test('filters every report section through one grouped view', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+
+  const model = buildReportModel(groupedLedger(), viewConfig(groupedFilters), '2026-08-14');
+
+  assert.deepEqual(model.items.map(({ id }) => id), ['wb_api_bug', 'wb_auth_bug']);
+  assert.deepEqual(model.terminalItems, []);
+  assert.deepEqual(model.workNext.map(({ id }) => id), ['wb_api_bug']);
+  assert.deepEqual(model.attention.blocked.map(({ id }) => id), ['wb_auth_bug']);
+  assert.deepEqual(model.attention.aging.map(({ id }) => id), ['wb_api_bug', 'wb_auth_bug']);
+  assert.deepEqual(model.stats, {
+    total: 2,
+    open: 2,
+    terminal: 0,
+    ready: 1,
+    blocked: 1,
+    ineligible: 0,
+    triage: 0,
+    inProgress: 0,
+    snoozed: 0,
+    done: 0,
+    killed: 0,
+    deferred: 0,
+    archived: 0,
+  });
+  assert.deepEqual(model.view, {
+    name: 'security-blockers',
+    title: 'Security blockers',
+    criteria: [
+      { key: 'readiness', values: ['ready', 'blocked'] },
+      { key: 'status', values: ['backlog'] },
+      { key: 'kind', values: ['task'] },
+      { key: 'field:area', values: ['api', 'auth'] },
+      { key: 'field:class', values: ['bug'] },
+    ],
+  });
+});
+
+test('an empty view succeeds with explicit empty sections', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+
+  const model = buildReportModel(
+    groupedLedger(),
+    viewConfig({ fields: { area: ['nothing-matches-this'] } }),
+    '2026-08-14',
+  );
+
+  assert.deepEqual(model.items, []);
+  assert.deepEqual(model.terminalItems, []);
+  assert.deepEqual(model.workNext, []);
+  assert.deepEqual(model.swarmBatches, []);
+  assert.deepEqual(model.unknownClasses, []);
+  assert.deepEqual(model.attention.blocked, []);
+  assert.deepEqual(model.attention.aging, []);
+  assert.deepEqual(model.attention.stuck, []);
+  assert.equal(model.attention.blockedTotal, 0);
+  assert.equal(model.stats.total, 0);
+  assert.equal(model.stats.open, 0);
+  assert.equal(model.stats.terminal, 0);
+  assert.equal(model.evidence.throughput.total, 0);
+  assert.equal(model.evidence.cycleTime.sampleCount, 0);
+  assert.equal(model.evidence.forecast, null);
+  // The report still says which view produced nothing, and every ledger item
+  // keeps its number for any label that names it.
+  assert.equal(model.view.name, 'security-blockers');
+  assert.equal(Object.keys(model.itemNumbers).length, 7);
+});
+
+// Terminal work is filtered the same way open work is, so the flow and
+// forecast evidence describes the retained population rather than the ledger
+// the view was cut from.
+function historyLedger() {
+  const accept = (date) => [{ action: 'accept', date, summary: 'Accepted', rationale: 'Queued' }];
+  return [
+    item('wb_api_open', { number: 10, area: 'api', created: '2026-08-12' }),
+    item('wb_api_done_early', {
+      number: 11,
+      area: 'api',
+      status: 'done',
+      completed: '2026-08-10',
+      decisions: accept('2026-08-01'),
+    }),
+    item('wb_api_done_late', {
+      number: 12,
+      area: 'api',
+      status: 'done',
+      completed: '2026-08-12',
+      decisions: accept('2026-08-02'),
+    }),
+    item('wb_docs_done', {
+      number: 13,
+      area: 'docs',
+      status: 'done',
+      completed: '2026-08-11',
+      decisions: accept('2026-08-03'),
+    }),
+    item('wb_docs_open', { number: 14, area: 'docs', created: '2026-01-01' }),
+  ];
+}
+
+test('view statistics and evidence count only retained items', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+
+  const model = buildReportModel(
+    historyLedger(),
+    viewConfig({ fields: { area: ['api'] } }),
+    '2026-08-14',
+  );
+
+  assert.equal(model.stats.total, 3);
+  assert.equal(model.stats.open, 1);
+  assert.equal(model.stats.terminal, 2);
+  assert.equal(model.stats.done, 2);
+  assert.equal(model.evidence.throughput.total, 2);
+  assert.deepEqual(model.evidence.cycleTime.samples.map(({ number }) => number), [11, 12]);
+  assert.equal(
+    model.evidence.agingBuckets.reduce((total, bucket) => total + bucket.count, 0),
+    1,
+  );
+  assert.equal(model.evidence.forecast.remaining, 1);
+});
+
+test('view history contains only retained terminal items', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+
+  const model = buildReportModel(
+    historyLedger(),
+    viewConfig({ fields: { area: ['api'] } }),
+    '2026-08-14',
+  );
+
+  assert.deepEqual(
+    model.terminalItems.map(({ id }) => id),
+    ['wb_api_done_late', 'wb_api_done_early'],
+  );
+});
+
+// Readiness answers a question about the whole ledger. A view that hides the
+// dependency cannot change the answer in either direction: excluding a
+// satisfied prerequisite never blocks the work it released, and excluding an
+// unsatisfied one never releases the work it holds.
+test('view readiness stays a fact about the complete ledger', async () => {
+  const satisfied = 'wb_infra_done';
+  const unsatisfied = 'wb_infra_open';
+  const items = [
+    item(satisfied, { number: 20, area: 'infra', status: 'done', completed: '2026-08-05' }),
+    item(unsatisfied, { number: 21, area: 'infra' }),
+    item('wb_api_released', { number: 22, area: 'api', depends_on: [satisfied] }),
+    item('wb_api_held', { number: 23, area: 'api', depends_on: [unsatisfied] }),
+  ];
+  const { buildReportModel } = await import('../src/report.js');
+
+  const model = buildReportModel(items, viewConfig({ fields: { area: ['api'] } }), '2026-08-14');
+
+  assert.deepEqual(
+    model.items.map(({ id, readiness }) => [id, readiness]),
+    [
+      ['wb_api_held', {
+        state: 'blocked',
+        reasons: [{ code: 'dependency-unsatisfied', item_id: unsatisfied }],
+      }],
+      ['wb_api_released', { state: 'ready', reasons: [] }],
+    ],
+  );
+  assert.equal(model.stats.ready, 1);
+  assert.equal(model.stats.blocked, 1);
+  assert.equal(model.itemNumbers[satisfied], 20);
+  assert.equal(model.itemNumbers[unsatisfied], 21);
+});

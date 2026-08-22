@@ -54,26 +54,28 @@ function renderBadges(item) {
   return badges.join('');
 }
 
-function renderReasons(item, numbersById) {
+function renderReasons(item, itemNumbers) {
   if (item.readiness.reasons.length === 0) {
     return '<span class="muted">No blockers.</span>';
   }
   return `<ul class="reasons">${item.readiness.reasons.map((reason) => {
     const label = READINESS_REASON_LABELS[reason.code] ?? reason.code;
-    const related = reason.item_id === undefined ? '' : `: ${escapeHtml(handleFor(reason.item_id, numbersById))}`;
+    const related = reason.item_id === undefined ? '' : `: ${escapeHtml(handleFor(reason.item_id, itemNumbers))}`;
     return `<li>${escapeHtml(label)}${related}</li>`;
   }).join('')}</ul>`;
 }
 
-// An item the ledger knows is named by its number. An ID with no number is
-// either a schema-1 item or a dangling reference, and the raw ID is then the
-// only handle there is.
-function handleFor(id, numbersById) {
-  const number = numbersById.get(id);
-  return number === undefined || number === null ? id : `#${number}`;
+// An item the ledger numbers is named by that number, whether or not this
+// report carries a row for it: the complete-ledger lookup is what keeps a
+// filtered view from degrading an excluded reference to a raw ID. An ID with
+// no number is either a schema-1 item or a dangling reference, and the raw ID
+// is then the only handle there is.
+function handleFor(id, itemNumbers) {
+  const number = Object.prototype.hasOwnProperty.call(itemNumbers, id) ? itemNumbers[id] : null;
+  return number === null ? id : `#${number}`;
 }
 
-function renderRelations(item, numbersById) {
+function renderRelations(item, itemNumbers) {
   const rows = [
     ['Parent', item.parent === null ? [] : [item.parent]],
     ['Depends on', item.dependsOn],
@@ -82,7 +84,7 @@ function renderRelations(item, numbersById) {
   if (rows.length === 0) {
     return '<span class="muted">No relations.</span>';
   }
-  return `<dl class="relations">${rows.map(([label, values]) => `<dt>${label}</dt><dd>${values.map((value) => escapeHtml(handleFor(value, numbersById))).join(', ')}</dd>`).join('')}</dl>`;
+  return `<dl class="relations">${rows.map(([label, values]) => `<dt>${label}</dt><dd>${values.map((value) => escapeHtml(handleFor(value, itemNumbers))).join(', ')}</dd>`).join('')}</dl>`;
 }
 
 function renderDecisions(item) {
@@ -119,7 +121,7 @@ function itemAnchor(item) {
   return escapeHtml(`item-${item.number === null ? item.id : item.number}`);
 }
 
-function renderCard(item, index, numbersById) {
+function renderCard(item, index, itemNumbers) {
   const handle = item.number === null ? item.id : `#${item.number}`;
   const searchText = [handle, item.id, item.title, item.kind, item.status, ...Object.values(item.fields)]
     .join(' ')
@@ -129,8 +131,8 @@ function renderCard(item, index, numbersById) {
   return `<details class="card" id="${itemAnchor(item)}" data-item data-order="${index}" data-state="${escapeHtml(item.readiness.state)}" data-status="${escapeHtml(item.status)}" data-kind="${escapeHtml(item.kind)}" data-priority="${item.priority ?? ''}" data-created="${escapeHtml(item.created)}" data-title="${escapeHtml(item.title.toLocaleLowerCase('en-US'))}" data-fields="${escapeHtml(JSON.stringify(item.fields))}" data-search="${escapeHtml(searchText)}">
 <summary><span class="summary-main"><span class="handle">${escapeHtml(handle)}</span><span class="title">${escapeHtml(item.title)}</span></span><span class="badges">${renderBadges(item)}</span><span class="summary-context standard-only">${summaryContext(item)}</span>${summaryPreview === '' ? '' : `<span class="summary-preview detailed-only">${escapeHtml(summaryPreview)}</span>`}</summary>
 <div class="card-detail">
-<div class="basic-grid"><section><h3>Readiness</h3>${renderReasons(item, numbersById)}</section><section><h3>Dates</h3><p>Created ${escapeHtml(item.created)}<br>Updated ${escapeHtml(item.updated)}</p></section></div>
-<section class="standard-only"><h3>Relations</h3>${renderRelations(item, numbersById)}</section>
+<div class="basic-grid"><section><h3>Readiness</h3>${renderReasons(item, itemNumbers)}</section><section><h3>Dates</h3><p>Created ${escapeHtml(item.created)}<br>Updated ${escapeHtml(item.updated)}</p></section></div>
+<section class="standard-only"><h3>Relations</h3>${renderRelations(item, itemNumbers)}</section>
 <section class="standard-only"><h3>Latest decision</h3>${latestDecision === undefined ? '<span class="muted">No decisions.</span>' : renderDecisions({ decisions: [latestDecision] })}</section>
 <section class="body-excerpt standard-only"><h3>Body excerpt</h3><p>${escapeHtml(bodyExcerpt(item.body))}</p></section>
 <section class="detailed-only"><h3>Decision history</h3>${renderDecisions(item)}</section>
@@ -182,8 +184,8 @@ function attentionList(entries, scope, emptyMessage, detail) {
   return `<ul class="plain">${entries.map((entry) => `<li>${rowLink(entry, scope, (nameId, detailId) => `<span class="row-name" id="${nameId}"><span class="handle">${escapeHtml(numberHandle(entry))}</span> ${escapeHtml(entry.title)}</span><br><span class="muted" id="${detailId}">${detail(entry)}</span>`)}</li>`).join('')}</ul>`;
 }
 
-function renderAttention(attention) {
-  const blocked = attentionList(attention.blocked, 'blocked', 'Nothing blocked.', (entry) => `blocked by ${entry.blockers.map((blocker) => `${escapeHtml(numberHandle(blocker))}${blocker.status === null ? '' : ` (${escapeHtml(blocker.status)})`}`).join(', ')} · age ${entry.ageDays}d`);
+function renderAttention(attention, itemNumbers) {
+  const blocked = attentionList(attention.blocked, 'blocked', 'Nothing blocked.', (entry) => `blocked by ${entry.blockers.map((blocker) => `${escapeHtml(handleFor(blocker.id, itemNumbers))}${blocker.status === null ? '' : ` (${escapeHtml(blocker.status)})`}`).join(', ')} · age ${entry.ageDays}d`);
   const aging = attentionList(attention.aging, 'aging', 'No open items.', (entry) => `age ${entry.ageDays}d · ${escapeHtml(entry.status)} · ${escapeHtml(entry.state)}`);
   const stuck = attentionList(attention.stuck, 'stuck', 'Nothing started is past the historical 85th percentile.', (entry) => `${entry.elapsedDays}d since accept ${escapeHtml(entry.startedOn)} · p85 ${entry.thresholdDays}d`);
 
@@ -384,7 +386,6 @@ applyHistory();apply();`;
 
 export function renderReportHtml(model, { logoDataUrl = null, graphBundle } = {}) {
   const graph = buildGraphModel(model);
-  const numbersById = new Map([...model.items, ...model.terminalItems].map((item) => [item.id, item.number]));
   const fieldNames = [...new Set(model.items.flatMap((item) => Object.keys(item.fields)))].sort();
   const groupOptions = [
     ['none', 'No grouping'],
@@ -416,14 +417,14 @@ export function renderReportHtml(model, { logoDataUrl = null, graphBundle } = {}
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><title>${escapeHtml(model.title)}</title><style>${styleSource()}${graphStyleSource()}.history-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer}.controls .history-toggle input{min-width:0;flex:none;margin:0;padding:0}</style></head><body data-richness="standard"><main class="shell">
 <header class="masthead"><div class="identity">${logo}<div><p class="eyebrow">${escapeHtml(model.repository.name)}</p><h1>${escapeHtml(model.title)}</h1></div></div><div class="as-of">Ledger state<br><strong>${escapeHtml(model.asOf)}</strong></div></header>
 ${renderWorkNext(model.workNext, model.unknownClasses)}
-${renderAttention(model.attention)}
+${renderAttention(model.attention, model.itemNumbers)}
 ${renderEvidence(model.evidence, model.asOf)}
 ${graphSection(graph, graphBundle.manifest)}
 <section id="drilldown"><div class="section-heading"><div><p class="eyebrow">Drill-down</p><h2>Every item</h2></div><p class="muted">State counts and item detail below the decision surface.</p></div>
 <section class="stats" aria-label="Ledger summary">${stats.map(([label, value]) => `<div class="stat"><strong>${escapeHtml(value)}</strong><span>${label}</span></div>`).join('')}</section>
 <section class="controls panel" aria-label="Report controls"><label class="sr-only" for="search">Search items</label><input id="search" type="search" placeholder="Search ID, number, title, or mapped fields"><select id="group-by" aria-label="Group items">${groupOptions.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('')}</select><select id="sort-by" aria-label="Sort items">${sortOptions.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('')}</select><select id="richness" aria-label="Detail level"><option value="basic">Basic</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select><label class="history-toggle"><input id="show-history" type="checkbox" checked>Show history</label><button type="button" id="expand-all">Expand all</button><button type="button" id="collapse-all">Collapse all</button></section>
 ${renderFacets(facets, model.items.length)}
-<section><div class="section-heading"><div><p class="eyebrow">Current work</p><h2>Ledger items</h2></div><p class="muted">Priority, then created date, then immutable ID.</p></div><div id="items" class="items">${model.items.map((item, index) => renderCard(item, index, numbersById)).join('')}</div><p id="empty" class="empty" hidden>No items match these filters.</p></section>
+<section><div class="section-heading"><div><p class="eyebrow">Current work</p><h2>Ledger items</h2></div><p class="muted">Priority, then created date, then immutable ID.</p></div><div id="items" class="items">${model.items.map((item, index) => renderCard(item, index, model.itemNumbers)).join('')}</div><p id="empty" class="empty" hidden>No items match these filters.</p></section>
 ${renderSwarm(model.swarmBatches)}
 </section>
 <section id="history" class="panel"><div class="section-heading"><div><p class="eyebrow">History</p><h2>Terminal items</h2></div><p class="muted">Completed, killed, deferred, and archived.</p></div>${renderTerminalTable(model.terminalItems)}</section>

@@ -143,3 +143,49 @@ test('truncates each attention list and reports what it left out', () => {
   assert.equal(model.attention.aging.length, 10);
   assert.equal(model.attention.agingTotal, 13);
 });
+
+// A named view narrows who can appear on an attention list, never why an item
+// is there: the blocked row still names the blocker the complete ledger says
+// holds it, and carries none of that excluded item's content.
+test('view attention and work-next contain only retained items', () => {
+  const excluded = 'wb_docs_blocker';
+  const items = [
+    item(excluded, { number: 1, title: 'Docs blocker', status: 'triage', area: 'docs' }),
+    item('wb_api_ready', { number: 2, title: 'Api ready', priority: 1, area: 'api' }),
+    item('wb_api_blocked', {
+      number: 3,
+      title: 'Api blocked',
+      created: '2026-08-04',
+      area: 'api',
+      depends_on: [excluded],
+    }),
+    item('wb_docs_old', { number: 4, title: 'Docs old', created: '2026-01-01', area: 'docs' }),
+  ];
+  const view = {
+    name: 'api-only',
+    title: 'Api only',
+    outputPath: '/tmp/api.html',
+    filters: { fields: { area: ['api'] } },
+  };
+
+  const model = buildReportModel(items, config({ fields: { area: '/area' }, view }), '2026-08-14');
+
+  assert.deepEqual(model.workNext.map(({ id }) => id), ['wb_api_ready']);
+  assert.deepEqual(
+    model.attention.aging.map(({ id }) => id),
+    ['wb_api_ready', 'wb_api_blocked'],
+  );
+  assert.deepEqual(model.attention.blocked, [{
+    id: 'wb_api_blocked',
+    number: 3,
+    title: 'Api blocked',
+    ageDays: 10,
+    blockers: [{
+      code: 'dependency-unsatisfied',
+      id: excluded,
+      number: null,
+      title: null,
+      status: null,
+    }],
+  }]);
+});

@@ -57,10 +57,9 @@ export async function loadGraphBundle(overrides = {}) {
 // readiness from the core projection, leverage and age from the sequencing
 // layer, reasons from the same work-next entries the report prints.
 export function buildGraphModel(model) {
-  const numbersById = new Map([...model.items, ...model.terminalItems].map((item) => [item.id, item.number]));
   const workNextById = new Map(model.workNext.map((entry) => [entry.id, entry.reasons]));
   const nodes = [
-    ...model.items.map((item) => openNode(item, workNextById, numbersById)),
+    ...model.items.map((item) => openNode(item, workNextById, model.itemNumbers)),
     ...model.terminalItems.map((item) => terminalNode(item, model.asOf)),
   ];
   return {
@@ -88,7 +87,7 @@ function buildLinks(items, nodeIds) {
   return links;
 }
 
-function openNode(item, workNextById, numbersById) {
+function openNode(item, workNextById, itemNumbers) {
   return {
     id: item.id,
     handle: handleFor(item),
@@ -99,7 +98,7 @@ function openNode(item, workNextById, numbersById) {
     ageDays: item.sequencing.ageDays,
     leverage: item.sequencing.leverage.count,
     size: 1 + item.sequencing.leverage.count,
-    reasons: openReasons(item, workNextById, numbersById),
+    reasons: openReasons(item, workNextById, itemNumbers),
   };
 }
 
@@ -107,7 +106,7 @@ function openNode(item, workNextById, numbersById) {
 // report prints — so the two surfaces can never disagree about why an item is
 // recommended. An item that is not ready has no such entry, so it states what
 // holds it back instead, in the readiness vocabulary the report already uses.
-function openReasons(item, workNextById, numbersById) {
+function openReasons(item, workNextById, itemNumbers) {
   const ranked = workNextById.get(item.id);
   if (ranked !== undefined) {
     return ranked;
@@ -117,15 +116,17 @@ function openReasons(item, workNextById, numbersById) {
       code: reason.code,
       label: reason.item_id === undefined
         ? READINESS_REASON_LABELS[reason.code] ?? reason.code
-        : `${READINESS_REASON_LABELS[reason.code] ?? reason.code}: ${referenceHandle(reason.item_id, numbersById)}`,
+        : `${READINESS_REASON_LABELS[reason.code] ?? reason.code}: ${referenceHandle(reason.item_id, itemNumbers)}`,
     })),
     { code: 'age', label: `age ${item.sequencing.ageDays}d` },
   ];
 }
 
-function referenceHandle(id, numbersById) {
-  const number = numbersById.get(id);
-  return number === undefined || number === null ? id : `#${number}`;
+// The graph names a reference the way the report names it: by the number the
+// complete ledger gave it, whether or not this projection draws a node for it.
+function referenceHandle(id, itemNumbers) {
+  const number = Object.prototype.hasOwnProperty.call(itemNumbers, id) ? itemNumbers[id] : null;
+  return number === null ? id : `#${number}`;
 }
 
 // A terminal item is still a node: dropping it would erase the prerequisite
