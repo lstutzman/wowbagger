@@ -345,6 +345,16 @@ function renderFacets(groups, total) {
   return `<section id="facets" class="facets panel" aria-label="Filter items">${head}${groups.map((group) => `<fieldset class="facet-group" data-group="${escapeHtml(group.key)}"><legend>${escapeHtml(group.label)}</legend><div class="chips">${chips(group)}</div></fieldset>`).join('')}</section>`;
 }
 
+// An artifact a reader can narrow explains an empty list with the controls that
+// emptied it. A named view that matched nothing was narrowed by nobody, and no
+// control in the file brings an item back, so it states what is true of these
+// bytes — visibly, without waiting for scripting.
+function renderEmptyItems(model) {
+  return model.view === null || model.items.length > 0 || model.terminalItems.length > 0
+    ? `<p id="empty" class="empty" hidden>No items match these filters.</p>`
+    : `<p id="empty" class="empty">No ledger item matches this view's criteria.</p>`;
+}
+
 // A named report is one file about one subset, so it says which subset in its
 // own voice: the view title, the stable name automation selected it by, and the
 // criteria the generator applied. A criterion is a fact about these bytes, not
@@ -462,12 +472,12 @@ export function renderReportHtml(model, { logoDataUrl = null, graphBundle } = {}
 ${renderWorkNext(model.workNext, model.unknownClasses)}
 ${renderAttention(model.attention, model.itemNumbers)}
 ${renderEvidence(model.evidence, model.asOf)}
-${graphSection(graph, graphBundle.manifest)}
+${graphSection(graph, graphBundle.manifest, model.view)}
 <section id="drilldown"><div class="section-heading"><div><p class="eyebrow">Drill-down</p><h2>Every item</h2></div><p class="muted">State counts and item detail below the decision surface.</p></div>
 <section class="stats" aria-label="Ledger summary">${stats.map(([label, value]) => `<div class="stat"><strong>${escapeHtml(value)}</strong><span>${label}</span></div>`).join('')}</section>
 <section class="controls panel" aria-label="Report controls"><label class="sr-only" for="search">Search items</label><input id="search" type="search" placeholder="Search ID, number, title, or mapped fields"><select id="group-by" aria-label="Group items">${groupOptions.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('')}</select><select id="sort-by" aria-label="Sort items">${sortOptions.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('')}</select><select id="richness" aria-label="Detail level"><option value="basic">Basic</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select><label class="history-toggle"><input id="show-history" type="checkbox" checked>Show history</label><button type="button" id="expand-all">Expand all</button><button type="button" id="collapse-all">Collapse all</button></section>
 ${renderFacets(facets, model.items.length)}
-<section><div class="section-heading"><div><p class="eyebrow">Current work</p><h2>Ledger items</h2></div><p class="muted">Priority, then created date, then immutable ID.</p></div><div id="items" class="items">${model.items.map((item, index) => renderCard(item, index, model.itemNumbers)).join('')}</div><p id="empty" class="empty" hidden>No items match these filters.</p></section>
+<section><div class="section-heading"><div><p class="eyebrow">Current work</p><h2>Ledger items</h2></div><p class="muted">Priority, then created date, then immutable ID.</p></div><div id="items" class="items">${model.items.map((item, index) => renderCard(item, index, model.itemNumbers)).join('')}</div>${renderEmptyItems(model)}</section>
 ${renderSwarm(model.swarmBatches)}
 </section>
 <section id="history" class="panel"><div class="section-heading"><div><p class="eyebrow">History</p><h2>Terminal items</h2></div><p class="muted">Completed, killed, deferred, and archived.</p></div>${renderTerminalTable(model.terminalItems)}</section>

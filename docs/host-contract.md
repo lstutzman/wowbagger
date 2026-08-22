@@ -175,9 +175,9 @@ compare it with the core `contract_version`.
 | Exit | Condition |
 |---:|---|
 | 0 | successful command; a mutation is state `committed` |
-| 1 | a bare-result command found the ledger invalid |
+| 1 | a bare-result command found the ledger invalid, or `report` refused: an invalid ledger, an unreadable input, or a failed publication |
 | 2 | argument, request, lookup, or candidate/lifecycle/layout-precondition failure |
-| 3 | the complete configured ledger is invalid |
+| 3 | the complete configured ledger is invalid, for every command except `report` |
 | 4 | cooperative comparison, lock, identity, or default-path conflict |
 | 5 | the backend lacks the required capability or write scope |
 | 6 | an unexpected operating or post-publication recovery condition |

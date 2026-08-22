@@ -507,3 +507,19 @@ test('live report responses validate against their published schemas', async () 
     accepts('core-envelope.json', unknownResponse, 'a view-not-found refusal');
   });
 });
+
+// The report command answers an invalid ledger in the core domain at exit 1,
+// and its refusal names the validation errors under `details.errors` — the
+// member the runtime has always emitted. The schema is asserted against the
+// live bytes so the published shape cannot drift from them.
+test('a live invalid-ledger report refusal validates against its published schema', async () => {
+  await withLedger({ 'invalid.md': 'not frontmatter' }, async (ledger) => {
+    const refused = runCli('report', '--ledger', ledger, '--as-of', '2030-01-15', '--json');
+
+    assert.equal(refused.status, 1, refused.stderr);
+    const response = JSON.parse(refused.stdout);
+    assert.equal(response.error.code, 'ledger-invalid');
+    accepts('core-report-response.json', response, 'a live ledger-invalid report refusal');
+    accepts('core-envelope.json', response, 'a live ledger-invalid report refusal');
+  });
+});

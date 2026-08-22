@@ -231,6 +231,12 @@ test('succeeds with an empty named view subset', async () => {
     const html = await readFile(output, 'utf8');
     assert.doesNotMatch(html, /Retained security bug/);
     assert.doesNotMatch(html, /Excluded styling chore/);
+    // Nothing narrowed this artifact, so it must not send the reader to the
+    // filters or to the graph's status chips for items it does not hold.
+    assert.match(html, /No ledger item matches this view's criteria\./);
+    assert.match(html, /No ledger item matches this view's criteria, so the graph has nothing to draw\./);
+    assert.doesNotMatch(html, /No items match these filters\./);
+    assert.doesNotMatch(html, /No status is selected/);
   });
 });
 
@@ -393,7 +399,13 @@ test('report writes the configured HTML and one success envelope', async () => {
         ready_count: 1,
       },
     });
-    assert.match(await readFile(output, 'utf8'), /Ready report item/);
+    const html = await readFile(output, 'utf8');
+    assert.match(html, /Ready report item/);
+    // The base artifact holds items, so an empty list there is the reader's
+    // own filtering and says so.
+    assert.match(html, /No items match these filters\./);
+    assert.match(html, /No status is selected, so the graph is empty\./);
+    assert.doesNotMatch(html, /matches this view's criteria/);
   });
 });
 

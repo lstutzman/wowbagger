@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runCli, withLedger } from './support.js';
+
+const runner = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
 
 async function withTemporaryDirectory(callback) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-report-write-'));
@@ -269,4 +273,114 @@ test('preserves the selected report when a named view collides with the base out
   assert.equal(refusal.status, 2);
   assert.equal(refusal.code, 'report-config-invalid');
   assert.equal(refusal.output, sentinel);
+});
+
+// A failure before publication is a different fact from a failed publication,
+// and a caller can only act on the difference if the envelope carries it. These
+// two cases drive the CLI through the exact conditions that used to collapse
+// into a causeless `report-write-failed`.
+test('classifies an unresolvable output path as a read failure and publishes nothing', async () => {
+  await withLedger({
+    'wb_01Q45X474NEEEEEEEEEEEEEEEE.md': viewItem,
+    '.wowbagger/report.json': JSON.stringify({
+      report_version: 1,
+      repository: { name: 'Example repository' },
+      title: 'Ledger report',
+      output: '../../report.html',
+    }),
+  }, async (ledger) => {
+    const root = path.dirname(ledger);
+    const blocker = path.join(root, 'not-a-directory');
+    await writeFile(blocker, 'occupied', 'utf8');
+    const override = path.join(blocker, 'report.html');
+
+    const result = runCli(
+      'report', '--ledger', ledger, '--out', override, '--as-of', '2030-01-15', '--json',
+    );
+
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      ok: false,
+      command: 'report',
+      contract_version: 5,
+      error: {
+        code: 'report-read-failed',
+        message: 'A report input could not be read.',
+        details: { operation: 'resolve-output-path', path: override, cause: 'ENOTDIR' },
+      },
+    });
+    assert.equal(await readFile(blocker, 'utf8'), 'occupied');
+    await assert.rejects(readFile(path.join(root, 'report.html'), 'utf8'), { code: 'ENOENT' });
+  });
+});
+
+// An error no report path throws on purpose is only reachable through the
+// fixture scenario, so the catch-all classification is executed rather than
+// trusted. The cause is the error's own kind and nothing else: a message can
+// carry a path or a credential, so it never reaches the envelope.
+test('names a bounded cause for an unexpected report failure and publishes nothing', async () => {
+  await withLedger({
+    'wb_01Q45X474NEEEEEEEEEEEEEEEE.md': viewItem,
+    '.wowbagger/report.json': JSON.stringify({
+      report_version: 1,
+      repository: { name: 'Example repository' },
+      title: 'Ledger report',
+      output: '../../report.html',
+    }),
+  }, async (ledger) => {
+    const output = path.join(path.dirname(ledger), 'report.html');
+    await writeFile(output, sentinel, 'utf8');
+
+    const result = spawnSync(
+      process.execPath,
+      [runner, 'report', '--ledger', ledger, '--as-of', '2030-01-15', '--json'],
+      { encoding: 'utf8', env: { ...process.env, WOWBAGGER_TEST_SCENARIO: 'report-render-fails' } },
+    );
+
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      ok: false,
+      command: 'report',
+      contract_version: 5,
+      error: {
+        code: 'report-write-failed',
+        message: 'The report could not be published.',
+        details: { operation: 'publish-report', cause: 'TypeError' },
+      },
+    });
+    assert.equal(await readFile(output, 'utf8'), sentinel);
+    assert.deepEqual(
+      (await readdir(path.dirname(output))).filter((entry) => entry.endsWith('.tmp')),
+      [],
+    );
+  });
+});
+
+// A publication failure the runtime gave no code for still has to name a cause,
+// and the message is not it: a message carries the paths and values that made
+// the failure, and the envelope publishes the details verbatim.
+test('names the error kind, never its message, when a publication failure carries no code', async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const output = path.join(directory, 'report.html');
+    await writeFile(output, 'old report', 'utf8');
+    const { writeReportFile } = await import('../src/report.js');
+    let publicationError;
+
+    try {
+      await writeReportFile(output, 'new report', {
+        rename: async () => {
+          throw new Error(`injected failure for /secret/token-abc123 at ${output}`);
+        },
+      });
+    } catch (error) {
+      publicationError = error;
+    }
+
+    assert.equal(publicationError?.code, 'report-write-failed');
+    assert.deepEqual(publicationError?.details, { cause: 'Error' });
+    assert.equal(await readFile(output, 'utf8'), 'old report');
+    assert.deepEqual(await readdir(directory), ['report.html']);
+  });
 });

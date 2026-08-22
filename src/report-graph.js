@@ -239,12 +239,22 @@ function renderStatusFilter(nodes) {
   return `<div id="graph-filter" class="graph-filter"><fieldset class="facet-group" data-group="graph-status"><legend>Status</legend><div class="chips">${chips}</div></fieldset><div class="graph-filter-actions"><p id="graph-node-count" class="result-count" role="status" aria-live="polite">Showing ${nodes.length} of ${nodes.length} ${nodes.length === 1 ? 'node' : 'nodes'}</p><span class="graph-filter-buttons"><button type="button" id="graph-status-all">Select all</button><button type="button" id="graph-status-clear">Clear</button></span></div></div>`;
 }
 
-export function graphSection(model, manifest) {
+// The empty state has to name what emptied the graph. A reader who cleared
+// every status did that, and selecting one undoes it. A named view that matched
+// nothing was never narrowed by anybody, and there is no status for that reader
+// to select, so the artifact says so on its own without waiting for scripting.
+function renderGraphEmptyState(nodes, view) {
+  return view === null || nodes.length > 0
+    ? `<p id="graph-empty" hidden>No status is selected, so the graph is empty. Select a status above to draw that part of the ledger.</p>`
+    : `<p id="graph-empty">No ledger item matches this view's criteria, so the graph has nothing to draw.</p>`;
+}
+
+export function graphSection(model, manifest, view = null) {
   return `<section id="graph" class="panel"><div class="section-heading"><div><p class="eyebrow">Dependencies</p><h2>Ledger graph</h2></div><p class="muted">Every item as a node, sized by how much it unblocks. Edges run from a prerequisite or parent to the item it releases.</p></div>
 ${renderStatusFilter(model.nodes)}
 <div id="graph-stage"><div id="graph-canvas"></div><div id="graph-labels" aria-hidden="true"></div><aside id="graph-card" hidden></aside><p id="graph-hint">Drag to orbit · scroll to zoom · hover or click a node</p></div>
 <p id="graph-nowebgl" hidden>This browser has no WebGL, so the graph cannot draw. Nothing is lost: every node, its status, its age, and the reasons that place it are listed below, and the graph only adds the shape of the dependencies between them.</p>
-<p id="graph-empty" hidden>No status is selected, so the graph is empty. Select a status above to draw that part of the ledger.</p>
+${renderGraphEmptyState(model.nodes, view)}
 ${renderLegend()}
 ${renderRoster(model.nodes)}
 <p class="muted">Rendered by ${escapeHtml(manifest.package)} ${escapeHtml(manifest.version)}, vendored and checksummed in this repository and inlined here. This report fetches nothing.</p></section>`;

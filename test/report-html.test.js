@@ -1044,3 +1044,49 @@ test('lays ledger items out as full-width rows at every width', async () => {
   assert.equal(/\.card-grid\{([^}]*)\}/.exec(html)[1], 'display:grid;grid-template-columns:1fr;gap:12px');
   assert.doesNotMatch(html, /\.card\[open\]\{[^}]*grid-column/);
 });
+
+// An empty artifact and a narrowed one are different facts. A named view whose
+// criteria match nothing was never narrowed by the reader, so the two empty
+// states have to say which one happened: the artifact's own emptiness in the
+// named case, the reader's filters and status selection in the base case.
+function emptyViewModel() {
+  const base = viewModel();
+  return {
+    ...base,
+    stats: { total: 0, open: 0, terminal: 0, ready: 0, blocked: 0, ineligible: 0 },
+    items: [],
+    terminalItems: [],
+    workNext: [],
+    attention: {
+      blocked: [], aging: [], stuck: [], blockedTotal: 0, agingTotal: 0, stuckTotal: 0,
+    },
+  };
+}
+
+test('states that a named view matched nothing rather than blaming the reader', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(emptyViewModel(), options());
+
+  assert.match(
+    html,
+    /<p id="empty" class="empty">No ledger item matches this view's criteria\.<\/p>/,
+  );
+  assert.match(
+    html,
+    /<p id="graph-empty">No ledger item matches this view's criteria, so the graph has nothing to draw\.<\/p>/,
+  );
+  assert.doesNotMatch(html, /No items match these filters\./);
+  assert.doesNotMatch(html, /No status is selected/);
+});
+
+test('keeps the filter and status copy for a base report the reader can narrow', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.match(html, /<p id="empty" class="empty" hidden>No items match these filters\.<\/p>/);
+  assert.match(
+    html,
+    /<p id="graph-empty" hidden>No status is selected, so the graph is empty\. Select a status above to draw that part of the ledger\.<\/p>/,
+  );
+  assert.doesNotMatch(html, /matches this view's criteria/);
+});

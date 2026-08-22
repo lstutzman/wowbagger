@@ -34,6 +34,7 @@ import { loadLedger } from './ledger.js';
 import {
   assertReportOutputOutsideLedger,
   buildReportModel,
+  failureCause,
   loadReportConfig,
   readLogoDataUrl,
   writeReportFile,
@@ -73,6 +74,14 @@ import { inspectWorkbench } from './workbench.js';
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 5;
 const AUTO_COMMIT_COMMANDS = new Set(['create', 'transition', 'patch', 'publish-claimed']);
+// The report failures this command states. A code outside the set is an
+// unexpected condition, never a classification the command can pass through.
+const REPORT_FAILURE_CODES = new Set([
+  'report-config-invalid',
+  'report-view-not-found',
+  'report-read-failed',
+  'report-write-failed',
+]);
 
 const MAX_PUBLICATION_REQUEST_BYTES = 11 * 1024 * 1024;
 // A list query is a handful of scalars and short arrays. The bound exists so an
@@ -173,7 +182,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeInvalidRequest(command, parsedOptions.issues);
       return;
     }
-    await runReportCommand(parsedOptions.options);
+    await runReportCommand(parsedOptions.options, scenario);
     return;
   }
 
@@ -690,7 +699,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
-async function runReportCommand(options) {
+async function runReportCommand(options, scenario) {
   const ledger = await loadLedger(options.ledger);
   const validation = validateLedger(ledger);
   if (!validation.valid) {
@@ -705,7 +714,7 @@ async function runReportCommand(options) {
     const model = buildReportModel(ledger.items, config, options.asOf);
     const logoDataUrl = await readLogoDataUrl(config.repository.logo);
     const graphBundle = await loadGraphBundle();
-    const html = renderReportHtml(model, { logoDataUrl, graphBundle });
+    const html = renderedReport(model, { logoDataUrl, graphBundle }, scenario);
     await assertReportOutputOutsideLedger(options.ledger, config.outputPath);
     await writeReportFile(config.outputPath, html);
     process.stdout.write(`${JSON.stringify({
@@ -724,20 +733,39 @@ async function runReportCommand(options) {
       },
     })}\n`);
   } catch (error) {
-    const code = error?.code === 'report-config-invalid'
-      || error?.code === 'report-view-not-found'
-      || error?.code === 'report-read-failed'
-      || error?.code === 'report-write-failed'
-      ? error.code
-      : 'report-write-failed';
+    // A failure the report states keeps its own code and its own details. An
+    // error no report path throws on purpose is not a proven publication
+    // failure either, but nothing reached the output path, so it answers as a
+    // failed publication rather than as a success — and it names its kind, so
+    // the refusal is never causeless.
+    const stated = REPORT_FAILURE_CODES.has(error?.code);
+    const code = stated ? error.code : 'report-write-failed';
     // A named view that does not exist is a request refusal, not a failed
     // publication: nothing was rendered and nothing was replaced.
     const exit = code === 'report-config-invalid' || code === 'report-view-not-found' ? 2 : 1;
-    const details = code === 'report-config-invalid'
-      ? { issues: [issue('/configuration', code, error?.message ?? 'Report configuration is invalid.')] }
-      : error?.details ?? {};
+    const details = reportFailureDetails(code, stated, error);
     writeReportFailure(code, reportFailureMessage(code), details, exit);
   }
+}
+
+// The catch-all classification answers an error no report path throws on
+// purpose, so the fixture scenario is the only way to execute it. Every other
+// run renders normally.
+function renderedReport(model, renderOptions, scenario) {
+  if (scenario === 'report-render-fails') {
+    throw new TypeError('fixture report render failure');
+  }
+  return renderReportHtml(model, renderOptions);
+}
+
+function reportFailureDetails(code, stated, error) {
+  if (code === 'report-config-invalid') {
+    return { issues: [issue('/configuration', code, error?.message ?? 'Report configuration is invalid.')] };
+  }
+  if (stated) {
+    return error.details ?? {};
+  }
+  return { operation: 'publish-report', cause: failureCause(error) };
 }
 
 function reportFailureMessage(code) {

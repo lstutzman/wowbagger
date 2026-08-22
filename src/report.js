@@ -69,6 +69,19 @@ export class ReportError extends Error {
   }
 }
 
+// A failure cause travels as a short, stable token, never as the runtime's
+// message: a message carries paths, credentials, and run-specific values that
+// a machine-readable envelope must not republish, and it moves between Node
+// releases, so a consumer could not branch on it anyway. The error's own code
+// answers first, its kind second.
+const MAXIMUM_CAUSE_CHARACTERS = 64;
+
+export function failureCause(error) {
+  const code = typeof error?.code === 'string' && error.code.length > 0 ? error.code : null;
+  const kind = typeof error?.name === 'string' && error.name.length > 0 ? error.name : null;
+  return (code ?? kind ?? 'unknown').slice(0, MAXIMUM_CAUSE_CHARACTERS);
+}
+
 export function resolvePointer(value, pointer) {
   if (pointer === '') {
     return value;
@@ -258,11 +271,9 @@ export async function writeReportFile(outputPath, html, overrides = {}) {
     } catch (candidate) {
       cleanupError = candidate;
     }
-    const details = {
-      cause: error?.code ?? error?.message ?? String(error),
-    };
+    const details = { cause: failureCause(error) };
     if (cleanupError !== null) {
-      details.cleanup_cause = cleanupError?.code ?? cleanupError?.message ?? String(cleanupError);
+      details.cleanup_cause = failureCause(cleanupError);
       details.leftover_artifact = temporaryPath;
     }
     throw new ReportError('report-write-failed', 'Report publication failed.', details);
@@ -516,11 +527,40 @@ function isInside(parentPath, candidatePath) {
 
 // Returns the canonical physical path so callers comparing several configured
 // outputs judge the same identity the containment rule judged.
+//
+// Resolving a path is a read of the filesystem, and a read that fails is a
+// stated failure rather than a raw runtime error escaping into the command's
+// catch-all: the caller learns which resolution failed, for which path it
+// named, and the cause code the filesystem gave. Nothing is published either
+// way, so this is never a publication failure.
 export async function assertReportOutputOutsideLedger(ledgerDirectory, outputPath) {
-  const ledgerPath = await realpath(ledgerDirectory);
-  const resolvedOutputPath = await resolvePhysicalPath(outputPath);
+  const ledgerPath = await resolvedOrRefused(
+    () => realpath(ledgerDirectory),
+    'resolve-ledger-path',
+    ledgerDirectory,
+  );
+  const resolvedOutputPath = await resolvedOrRefused(
+    () => resolvePhysicalPath(outputPath),
+    'resolve-output-path',
+    outputPath,
+  );
   if (isInside(ledgerPath, resolvedOutputPath)) {
     throw new ReportError('report-config-invalid', 'Report output must be outside the ledger directory.');
   }
   return resolvedOutputPath;
+}
+
+// The path in the details is the one the caller configured or passed, never a
+// path the filesystem revealed while resolving it: a link target belongs to the
+// host, not to the answer.
+async function resolvedOrRefused(resolve, operation, targetPath) {
+  try {
+    return await resolve();
+  } catch (error) {
+    throw new ReportError('report-read-failed', 'A report path could not be resolved.', {
+      operation,
+      path: targetPath,
+      cause: failureCause(error),
+    });
+  }
 }

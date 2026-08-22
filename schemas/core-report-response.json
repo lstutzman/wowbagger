@@ -154,8 +154,9 @@
             "details": {
               "type": "object",
               "additionalProperties": false,
+              "description": "The report refusal names the validation errors under `errors`, which is the member this command has always emitted. The mutation commands name theirs `validation_errors`; the two are the same error objects under two published member names, and neither may be renamed without a contract version.",
               "properties": {
-                "validation_errors": {
+                "errors": {
                   "type": "array",
                   "minItems": 1,
                   "items": {
@@ -164,7 +165,7 @@
                 }
               },
               "required": [
-                "validation_errors"
+                "errors"
               ]
             }
           },

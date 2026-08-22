@@ -94,6 +94,14 @@ consolidation. The first tagged release inherits this file.
   the core's own exit-6 `write-outcome-unknown` and `post-commit-recovery-required`
   envelopes at the adapter's process-outcome seam, taking the adapter vector set
   to 212 assertions.
+- **The exit tables state where `report` actually lands.** Both contracts filed
+  exit 1 as a bare-result-only condition and exit 3 as every invalid ledger,
+  while `report` answers an invalid ledger, an unreadable input, and a failed
+  publication at exit 1. The mutation contract now carries an exit 1 row naming
+  those codes, lists `report-config-invalid` and `report-view-not-found` in its
+  exit 2 row, and scopes exit 3 to every command except `report`; the host
+  contract's exit 1 and exit 3 conditions say the same. Two guards assert the
+  rows against the codes the runtime emits.
 
 ### Changed
 
@@ -117,6 +125,39 @@ consolidation. The first tagged release inherits this file.
   selection draws an empty graph that says so. The legend, the WebGL-less
   roster, camera interaction, and the no-fetch contract are unchanged, and
   nothing here reads or writes the ledger.
+
+### Fixed
+
+- **A report failure before publication says so, and never arrives causeless.**
+  An output path the filesystem cannot resolve — a `--out` under a regular
+  file, an unreadable directory on the way to it — was a raw runtime error
+  escaping into the command's catch-all, answered as `report-write-failed` with
+  empty `details` even though nothing had been rendered or replaced. It is now
+  `report-read-failed` with `details.operation` naming which resolution failed,
+  `details.path` naming the path the caller configured or passed, and
+  `details.cause` naming the filesystem's own code. An error no report path
+  throws on purpose still answers `report-write-failed`, because nothing
+  reached the output path, but it now carries `{operation, cause}` instead of
+  `{}`. Every `details.cause` is a bounded token — an error code, or the
+  error's kind when the runtime gave no code — so a publication failure no
+  longer republishes a runtime message, and the paths, credentials, and
+  run-specific values a message carries stay out of the envelope. Atomic
+  publication is unchanged: a report already at the selected path survives
+  every one of these refusals.
+- **An empty named view stops blaming the reader.** A view whose criteria
+  matched nothing rendered the drill-down's `No items match these filters.` and
+  the graph's `No status is selected`, sending a reader to controls that could
+  not bring an item back. A named artifact with no items now states
+  `No ledger item matches this view's criteria.` and, in the graph, that it has
+  nothing to draw — visibly, without waiting for scripting. A report that holds
+  items keeps the filter and status copy, which is the honest answer when the
+  reader is the one who narrowed it, and the base report's bytes are unchanged.
+- **`core-report-response.json` named a member the report never emitted.** The
+  published `ledger-invalid` refusal required `details.validation_errors`,
+  which is the mutation commands' member name; `report` has always emitted
+  `details.errors`. A consumer validating a real refusal against the shipped
+  schema failed on the runtime's own bytes. The schema now states `errors`, and
+  a live invalid-ledger report run is validated against it.
 
 ## 0.1.0-alpha.7 - 2026-08-18
 

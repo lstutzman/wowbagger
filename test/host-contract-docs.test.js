@@ -200,3 +200,39 @@ test('the lifecycle vocabulary names deferred wherever it names the other status
   // mutation contract has to list it beside the other terminal dates.
   assert.match(flatMutationContract, /optional parent, snoozed_until, completed, killed, archived, deferred/);
 });
+
+// `report` is the one core command that answers an invalid ledger at exit 1
+// rather than at exit 3, and its read and publication failures land there too.
+// A contract that files exit 1 under bare results alone sends a host to parse a
+// `{valid, errors}` shape that never arrives.
+test('both contracts state every report refusal at the exit it actually uses', () => {
+  const exitRow = (contract, exit) => contract
+    .split('\n')
+    .find((line) => line.startsWith(`| ${exit} |`));
+
+  const mutationExitOne = exitRow(mutationContract, 1);
+  assert.ok(mutationExitOne, 'the mutation contract must carry an exit 1 row');
+  for (const code of ['ledger-invalid', 'report-read-failed', 'report-write-failed']) {
+    assert.ok(
+      mutationExitOne.includes(code),
+      `the mutation contract exit 1 row must name ${code}`,
+    );
+  }
+  assert.match(mutationExitOne, /report/, 'the mutation contract exit 1 row must name report');
+
+  const mutationExitTwo = exitRow(mutationContract, 2);
+  for (const code of ['report-config-invalid', 'report-view-not-found']) {
+    assert.ok(
+      mutationExitTwo.includes(code),
+      `the mutation contract exit 2 row must name ${code}`,
+    );
+  }
+
+  const hostExitOne = exitRow(hostContract, 1);
+  assert.ok(hostExitOne, 'the host contract must carry an exit 1 row');
+  assert.match(
+    hostExitOne,
+    /report/,
+    'the host contract must not file exit 1 as a bare-result-only condition',
+  );
+});

@@ -525,8 +525,9 @@ presence is reported separately as bounded recovery_artifacts.
 | Exit | Condition | Error codes |
 |---:|---|---|
 | 0 | Successful command; a mutation is state committed. | none |
-| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, item-source-too-large, items-directory-unavailable, list-response-too-large |
-| 3 | The complete configured ledger is invalid. | ledger-invalid |
+| 1 | A bare-result command found the ledger invalid, or `report` failed before or during publication. `report` answers an invalid ledger here rather than at exit 3. | bare result `{valid, errors}`, ledger-invalid (`report` only), report-read-failed, report-write-failed |
+| 2 | Argument, request, lookup, or candidate/lifecycle/layout-precondition failure. | invalid-request, item-not-found, transition-precondition-failed, patch-precondition-failed, candidate-invalid, item-source-too-large, items-directory-unavailable, list-response-too-large, report-config-invalid, report-view-not-found |
+| 3 | The complete configured ledger is invalid, for every command except `report`. | ledger-invalid |
 | 4 | Cooperative comparison, lock, identity, or default-path conflict. | revision-conflict, lock-held, id-collision, path-collision, auto-commit-preflight-failed, mutation-finalize-refused, list-snapshot-changed |
 | 5 | The backend lacks the required capability or write scope. | atomic-scope-required, capability-unavailable |
 | 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown, git-commit-failed, git-commit-outcome-unknown, post-commit-reconciliation-failed |
