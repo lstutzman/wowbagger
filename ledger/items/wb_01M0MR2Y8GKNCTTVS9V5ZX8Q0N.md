@@ -5,7 +5,7 @@ number: 133
 title: "Stop branch-local claim publications globally deadlocking sibling worktrees"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-22
 updated: 2026-08-22
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-22T12:45:57.539Z"
 depends_on: []
 related: [ wb_01M057PY03G5AM0MMAKA5R9AT9, wb_01M05ESRM258XEJJW7G15TXJ68 ]
+decisions:
+  - action: accept
+    date: 2026-08-22
+    summary: "Accept item into backlog for maintainer triage."
+    rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
 ---
 
 ## Problem
