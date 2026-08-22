@@ -50,10 +50,12 @@ import {
   createItem,
   inspectItem,
   inspectItemByNumber,
+  migrateParentItem,
   patchItem,
   revisionFor,
   transitionItem,
   validateCreateRequest,
+  validateParentMigrationRequest,
   validatePatchRequest,
   validateTransitionRequest,
 } from './mutation.js';
@@ -106,6 +108,7 @@ const COMMAND_SUMMARIES = {
   list: 'List a validated ledger as bounded, paginated item summaries.',
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
+  'parent-migrate': 'Move one live item to or from an epic with CAS fencing.',
   patch: "Patch an item's priority and relation lists, guarded the same way.",
   'extensions-provision': 'Declare explicitly selected existing extension members.',
   'mint-id': 'Mint a canonical item ID.',
@@ -123,9 +126,11 @@ const KNOWN_COMMANDS = new Set([
   'capabilities',
   'inspect',
   'list',
-  'extensions-provision',
+  'create',
   'transition',
+  'parent-migrate',
   'patch',
+  'extensions-provision',
   'mint-id',
   'provision',
   'claim',
@@ -447,6 +452,30 @@ export async function runCli(argumentsList, { scenario } = {}) {
         counts: proposal.counts,
       },
     })}\n`);
+    return;
+  }
+  if (command === 'parent-migrate') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeInvalidRequest(command, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    const issues = validateParentMigrationRequest(parsedRequest.value, parsedRequest.issues);
+    if (issues.length > 0) {
+      writeInvalidRequest(command, issues);
+      return;
+    }
+    writeMutation(command, await autoCommitted(command, parsedOptions.options, () => (
+      migrateParentItem(parsedOptions.options.ledger, parsedRequest.value, scenario)
+    ), scenario, null, parsedRequest.value.id));
     return;
   }
 
@@ -1250,6 +1279,7 @@ function parseContractOptions(command, argumentsList) {
     : command === 'report'
       ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out'], ['--view', 'view']])
       : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
+        || command === 'parent-migrate'
         || command === 'extensions-provision'
         || command === 'publish-claimed' || command === 'publication-read'
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
@@ -1791,6 +1821,9 @@ function usage(command) {
     return 'Usage: wowbagger list --ledger <dir> --input <json-file|-> --json';
   }
 
+  if (command === 'parent-migrate') {
+    return 'Usage: wowbagger parent-migrate --ledger <dir> --input <request.json> --json [--auto-commit]';
+  }
   if (command === 'extensions-provision') {
     return 'Usage: wowbagger extensions-provision --ledger <dir> --input <request.json> --json [--dry-run]';
   }

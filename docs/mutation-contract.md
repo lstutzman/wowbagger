@@ -400,7 +400,10 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `report` | core | core |
 | `create` | core | core, or ledger-mutation when the claim fence refuses |
 | `transition` | core | core, or ledger-mutation when the claim fence refuses |
+| `parent-migrate` | core | core, or ledger-mutation when the claim fence refuses |
+| `patch` | core | core, or ledger-mutation when the claim fence refuses |
 | `extensions-provision` | core | core |
+| `provision` | work-claim | work-claim |
 | `claim capabilities/read/acquire/renew/release` | work-claim | work-claim |
 | `claim-verify` | work-claim | work-claim |
 | `claim-merge-verify` | work-claim | work-claim |

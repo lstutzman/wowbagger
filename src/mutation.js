@@ -510,6 +510,17 @@ export async function transitionItem(ledgerDirectory, request, scenario) {
   ));
 }
 
+export async function migrateParentItem(ledgerDirectory, request, scenario) {
+  return withLegacyMutationFence(ledgerDirectory, request.id, 'patch-v1', (authorize, ledgerSnapshot) => (
+    mutateExistingItem(ledgerDirectory, request, scenario, {
+      name: 'parent-migrate',
+      lockIds: (target) => [target.data.id],
+      build: buildParentMigration,
+      authorize,
+    }, ledgerSnapshot)
+  ));
+}
+
 // The namespace-lock-held mutation strategy. A claimed publication runs inside
 // the namespace process lock for its whole length — journal replay, intent
 // fsync, this mutation, terminal append — and every other provisioned writer
@@ -905,6 +916,71 @@ export async function patchItem(ledgerDirectory, request, scenario) {
       authorize,
     }, ledgerSnapshot)
   ));
+}
+export function validateParentMigrationRequest(request, parseIssues = []) {
+  const issues = [...parseIssues];
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+    return [issue('', 'invalid-type', 'Request must be an object.')];
+  }
+  for (const member of ['id', 'expected_revision', 'expected_parent', 'parent', 'date']) {
+    if (!hasOwn(request, member)) issues.push(issue(`/${member}`, 'missing-member', `Required member ${member} is missing.`));
+  }
+  if (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id)) {
+    issues.push(issue('/id', 'invalid-value', 'Member id must be a canonical Wowbagger item ID.'));
+  }
+  if (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision)) {
+    issues.push(issue('/expected_revision', 'invalid-value', 'Member expected_revision must be a SHA-256 revision.'));
+  }
+  for (const member of ['expected_parent', 'parent']) {
+    if (request[member] !== null && (typeof request[member] !== 'string' || !ULID_PATTERN.test(request[member]))) {
+      issues.push(issue(`/${member}`, 'invalid-value', `Member ${member} must be null or a canonical Wowbagger item ID.`));
+    }
+  }
+  if (typeof request.date !== 'string' || !isCalendarDate(request.date)) {
+    issues.push(issue('/date', 'invalid-value', 'Member date must be an ISO calendar date.'));
+  }
+  return sortIssues(issues);
+}
+
+async function buildParentMigration(lockedTarget, ledger, request, scenario, root) {
+  const issues = [];
+  if (request.date < lockedTarget.data.created) {
+    issues.push(dateIssue('date-before-created', 'Migration date must not be earlier than created.', lockedTarget.data));
+  }
+  if (request.date < lockedTarget.data.updated) {
+    issues.push(dateIssue('date-before-updated', 'Migration date must not be earlier than updated.', lockedTarget.data));
+  }
+  const currentParent = lockedTarget.data.parent ?? null;
+  if (request.expected_parent !== currentParent) {
+    issues.push({ code: 'parent-revision-conflict', field: 'expected_parent', message: 'The current parent does not match expected_parent.', related_ids: [] });
+  }
+  if (request.parent === lockedTarget.data.id) {
+    issues.push({ code: 'invalid-parent', field: 'parent', message: 'An item cannot parent itself.', related_ids: [] });
+  }
+  if (request.parent !== null) {
+    const parent = ledger.items.find((item) => item.data.id === request.parent);
+    if (!parent || parent.data.kind !== 'epic') {
+      issues.push({ code: 'invalid-parent', field: 'parent', message: 'Parent must identify an existing epic.', related_ids: [request.parent] });
+    }
+  }
+  if (issues.length > 0) {
+    return { outcome: mutationError('parent-migration-precondition-failed', 'The parent migration failed its preconditions.', 'unchanged', 2, { id: lockedTarget.data.id, issues }) };
+  }
+  const successor = { ...lockedTarget.data, updated: request.date };
+  if (request.parent === null) delete successor.parent;
+  else successor.parent = request.parent;
+  const source = rewriteFrontmatter(lockedTarget.source, (document) => {
+    setRootScalar(document, 'updated', successor.updated);
+    if (request.parent === null) deleteRootFieldPreservingAliases(document, 'parent');
+    else if (document.has('parent')) setRootScalar(document, 'parent', request.parent);
+    else insertRootAfter(document, 'kind', 'parent', request.parent);
+  });
+  try {
+    failCandidateSerializationForTest(scenario);
+    return { successor, bytes: serializedMutationBytes(lockedTarget, source) };
+  } catch {
+    return { outcome: operationFailed(request.id, 'serialize-candidate', 'serialization-failed') };
+  }
 }
 
 async function buildPatch(lockedTarget, ledger, request, scenario, root) {

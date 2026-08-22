@@ -36,6 +36,7 @@
         "list",
         "create",
         "transition",
+        "parent-migrate",
         "patch",
         "extensions-provision",
         "mint-id",

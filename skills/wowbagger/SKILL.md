@@ -425,6 +425,17 @@ validates that every selected member exists across the complete ledger with the
 declared type; it never infers authority from one item. Commit the generated
 `.wowbagger/extensions.json` before the first `patch` that uses those members.
 
+To detach or reparent a live child without recreating its identity, use the
+CAS-fenced relation migration:
+
+```sh
+wowbagger parent-migrate --ledger <dir> --input relation.json --json [--auto-commit]
+```
+
+Request must carry `id`, `expected_revision`, `expected_parent`, `parent` (or
+`null`), and `date`. The complete ledger validates the old and new parent
+accounting before publication.
+
 Successful mutation responses also return `result.changed_paths`: the exact
 ledger-relative paths changed by that invocation. Use this set for manual
 staging; never broaden it to `git add <ledger>` and never treat it as proof of
