@@ -134,6 +134,9 @@ async function walkEveryResponseClass() {
     see('mint-id.invalid-request', run(root, 'mint-id', '--date', 'not-a-date', '--json'));
     see('report.success', run(root, 'report', '--ledger', ledger, '--as-of', '2026-08-16', '--json'));
     see('report.invalid-request', run(root, 'report', '--ledger', ledger, '--json'));
+    // This ledger configures no named views, so a selected name refuses in the
+    // core domain without touching the report it would have replaced.
+    see('report.view-not-found', run(root, 'report', '--ledger', ledger, '--view', 'security-blockers', '--as-of', '2026-08-16', '--json'));
     see('create.invalid-request', run(root, 'create', '--ledger', ledger, '--input', await requestFile(root, 'create-invalid.json', {}), '--json'));
     see('create.id-collision', run(root, 'create', '--ledger', ledger, '--input', await requestFile(root, 'create-collision.json', {
       id: ITEM_ID,

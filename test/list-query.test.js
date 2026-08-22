@@ -649,7 +649,7 @@ test('capabilities negotiates core contract version 5 and advertises the list bo
   // The list members join an existing envelope; nothing already advertised
   // moves or disappears.
   assert.deepEqual(Object.keys(envelope.result.operations), [
-    'inspect', 'list', 'create', 'transition', 'patch', 'work_claim',
+    'inspect', 'list', 'create', 'transition', 'patch', 'report', 'work_claim',
   ]);
   assert.deepEqual(Object.keys(envelope.result.limits), [
     'max_item_source_bytes',

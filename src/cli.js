@@ -663,7 +663,7 @@ async function runReportCommand(options) {
   }
 
   try {
-    const config = await loadReportConfig(options.ledger, options.out);
+    const config = await loadReportConfig(options.ledger, options.out, options.view ?? null);
     const model = buildReportModel(ledger.items, config, options.asOf);
     const logoDataUrl = await readLogoDataUrl(config.repository.logo);
     const graphBundle = await loadGraphBundle();
@@ -678,17 +678,23 @@ async function runReportCommand(options) {
         report_version: config.reportVersion,
         as_of: options.asOf,
         output: config.outputPath,
-        item_count: ledger.items.length,
-        ready_count: selectReady(ledger.items, options.asOf).length,
+        item_count: model.items.length + model.terminalItems.length,
+        ready_count: model.stats.ready,
+        // Only a named view says which one it is; a base report keeps the
+        // result members it has always carried.
+        ...(config.view === null ? {} : { view: config.view.name }),
       },
     })}\n`);
   } catch (error) {
     const code = error?.code === 'report-config-invalid'
+      || error?.code === 'report-view-not-found'
       || error?.code === 'report-read-failed'
       || error?.code === 'report-write-failed'
       ? error.code
       : 'report-write-failed';
-    const exit = code === 'report-config-invalid' ? 2 : 1;
+    // A named view that does not exist is a request refusal, not a failed
+    // publication: nothing was rendered and nothing was replaced.
+    const exit = code === 'report-config-invalid' || code === 'report-view-not-found' ? 2 : 1;
     const details = code === 'report-config-invalid'
       ? { issues: [issue('/configuration', code, error?.message ?? 'Report configuration is invalid.')] }
       : error?.details ?? {};
@@ -699,6 +705,9 @@ async function runReportCommand(options) {
 function reportFailureMessage(code) {
   if (code === 'report-config-invalid') {
     return 'The report configuration is invalid.';
+  }
+  if (code === 'report-view-not-found') {
+    return 'The requested report view was not found.';
   }
   if (code === 'report-read-failed') {
     return 'A report input could not be read.';
@@ -767,6 +776,15 @@ async function capabilities(ledger) {
           supported: true,
           write_scope: 'single-item',
           cas_scope: 'exact-byte-sha256',
+        },
+        // The report writes only derived output, never ledger state, so it
+        // carries no CAS scope. `config_versions` and `named_views` tell a
+        // consumer which report configurations this core accepts.
+        report: {
+          supported: true,
+          write_scope: 'derived-output',
+          config_versions: [1, 2],
+          named_views: true,
         },
         work_claim: resolveWorkClaimCapability({ gitCommonDir }),
       },
@@ -853,7 +871,7 @@ function parseContractOptions(command, argumentsList) {
   const valueFlags = command === 'inspect'
     ? new Map([['--ledger', 'ledger'], ['--id', 'id'], ['--number', 'number']])
     : command === 'report'
-      ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out']])
+      ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out'], ['--view', 'view']])
       : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
         || command === 'publish-claimed' || command === 'publication-read'
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
@@ -875,7 +893,7 @@ function parseContractOptions(command, argumentsList) {
   const optionalFlags = command === 'mint-id'
     ? new Set(['--date'])
     : command === 'report'
-      ? new Set(['--out'])
+      ? new Set(['--out', '--view'])
       : command === 'inspect'
         ? new Set(['--id', '--number'])
         : new Set();
@@ -1321,7 +1339,7 @@ function usage(command) {
   }
 
   if (command === 'report') {
-    return 'Usage: wowbagger report --ledger <dir> --as-of YYYY-MM-DD [--out <file>] --json';
+    return 'Usage: wowbagger report --ledger <dir> --as-of YYYY-MM-DD [--view <name>] [--out <file>] --json';
   }
 
   if (command === 'capabilities') {

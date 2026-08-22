@@ -32,6 +32,9 @@ const MAX_LIST_PAGE_SIZE = 200;
 const MAX_LIST_TITLE_CHARACTERS = 120;
 const MAX_LIST_RESPONSE_BYTES = 131072;
 const WORK_CLAIM_API_VERSION = 2;
+// The report configuration versions the contract requires this core to accept:
+// version 1 unchanged, version 2 naming views.
+const REPORT_CONFIG_VERSIONS = [1, 2];
 const CORE_ERROR_EXIT_CODES = new Map([
   ['invalid-request', 2],
   ['item-not-found', 2],
@@ -634,6 +637,12 @@ export function referenceCoreCapabilities() {
           supported: true,
           write_scope: 'single-item',
           cas_scope: 'exact-byte-sha256',
+        },
+        report: {
+          supported: true,
+          write_scope: 'derived-output',
+          config_versions: [...REPORT_CONFIG_VERSIONS],
+          named_views: true,
         },
         work_claim: {
           supported: false,
@@ -1387,7 +1396,9 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.backend.coordination_scope !== 'same-working-copy-cooperative-writers') {
     return 'result.backend';
   }
-  if (!hasExactKeys(result.operations, ['inspect', 'list', 'create', 'transition', 'patch', 'work_claim'])) {
+  if (!hasExactKeys(result.operations, [
+    'inspect', 'list', 'create', 'transition', 'patch', 'report', 'work_claim',
+  ])) {
     return 'result.operations';
   }
   if (!hasExactKeys(result.operations.inspect, ['supported', 'write_scope', 'cas_scope'])
@@ -1420,6 +1431,19 @@ function coreCapabilitiesSchemaIssue(value) {
     || result.operations.patch.write_scope !== 'single-item'
     || result.operations.patch.cas_scope !== 'exact-byte-sha256') {
     return 'result.operations.patch';
+  }
+  // The report publishes derived output only, so it carries no CAS scope. The advertised
+  // configuration versions and named-view support are what a consumer negotiates on, so a
+  // widened claim here is a protocol error rather than a tolerated extension.
+  const report = result.operations.report;
+  if (!hasExactKeys(report, ['supported', 'write_scope', 'config_versions', 'named_views'])
+    || report.supported !== true
+    || report.write_scope !== 'derived-output'
+    || !Array.isArray(report.config_versions)
+    || report.config_versions.length !== REPORT_CONFIG_VERSIONS.length
+    || REPORT_CONFIG_VERSIONS.some((version, index) => report.config_versions[index] !== version)
+    || report.named_views !== true) {
+    return 'result.operations.report';
   }
   // work_claim.supported is the one Git-environment-dependent member. Every other member is
   // a permanent advisory-claims invariant: claims never protect publication, never fence

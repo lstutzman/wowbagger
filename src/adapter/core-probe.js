@@ -6,7 +6,7 @@ import {
   MAX_LIST_RESPONSE_BYTES,
   MAX_LIST_TITLE_CHARACTERS,
 } from '../limits.js';
-import { hasExactMembers } from './schema-helpers.js';
+import { hasExactMembers, sameJson } from './schema-helpers.js';
 
 // The version 3 core command list, in the fixed advertising order (contract
 // section 3). `describe.js` also needs this order to validate the
@@ -19,6 +19,9 @@ export const CORE_CONTRACT_VERSION = 5;
 // item-source refusal that replaced publish-claimed's version 1 error for an
 // oversized candidate.
 export const WORK_CLAIM_API_VERSION = 2;
+// The report configuration versions this core accepts. Version 1 remains
+// supported unchanged; version 2 names views.
+export const REPORT_CONFIG_VERSIONS = Object.freeze([1, 2]);
 
 function refuse(error_code, detail) {
   return { ok: false, error_code, detail };
@@ -77,6 +80,20 @@ function patchOperationIssue(patch) {
   return null;
 }
 
+// The report writes derived output only, so it carries no CAS scope. Its
+// advertised configuration versions and named-view support are what a consumer
+// negotiates on, so an elevated claim here is a protocol error.
+function reportOperationIssue(report) {
+  if (!hasExactMembers(report, ['supported', 'write_scope', 'config_versions', 'named_views'])
+    || report.supported !== true
+    || report.write_scope !== 'derived-output'
+    || !sameJson(report.config_versions, REPORT_CONFIG_VERSIONS)
+    || report.named_views !== true) {
+    return 'result.operations.report';
+  }
+  return null;
+}
+
 // Every member except `supported` is a permanent advisory-claims invariant:
 // claims never protect publication, never fence writers, and must never
 // advertise safe exclusive dispatch.
@@ -108,7 +125,7 @@ function listOperationIssue(list) {
 }
 
 function operationsIssue(operations) {
-  if (!hasExactMembers(operations, ['inspect', 'list', 'create', 'transition', 'patch', 'work_claim'])) {
+  if (!hasExactMembers(operations, ['inspect', 'list', 'create', 'transition', 'patch', 'report', 'work_claim'])) {
     return 'result.operations';
   }
   return inspectOperationIssue(operations.inspect)
@@ -116,6 +133,7 @@ function operationsIssue(operations) {
     || createOperationIssue(operations.create)
     || transitionOperationIssue(operations.transition)
     || patchOperationIssue(operations.patch)
+    || reportOperationIssue(operations.report)
     || workClaimOperationIssue(operations.work_claim);
 }
 
@@ -240,6 +258,12 @@ export function coreCapabilities() {
         },
         transition: { supported: true, write_scope: 'single-item', cas_scope: 'exact-byte-sha256' },
         patch: { supported: true, write_scope: 'single-item', cas_scope: 'exact-byte-sha256' },
+        report: {
+          supported: true,
+          write_scope: 'derived-output',
+          config_versions: [...REPORT_CONFIG_VERSIONS],
+          named_views: true,
+        },
         work_claim: {
           supported: false,
           api_version: WORK_CLAIM_API_VERSION,

@@ -541,6 +541,28 @@ test('core capabilities probe is exact and cannot elevate adapter features', () 
     'core-contract-version-mismatch');
 });
 
+// The oracle states the report advertisement independently: it must accept the
+// contract's exact report operation and refuse a probe that widens it.
+test('core capabilities probe pins the report operation independently', () => {
+  assert.deepEqual(referenceCoreCapabilities().result.operations.report, {
+    supported: true,
+    write_scope: 'derived-output',
+    config_versions: [1, 2],
+    named_views: true,
+  });
+  for (const mutate of [
+    (value) => { delete value.result.operations.report; },
+    (value) => { value.result.operations.report.named_views = false; },
+    (value) => { value.result.operations.report.config_versions = [2]; },
+    (value) => { value.result.operations.report.write_scope = 'ledger-item'; },
+    (value) => { value.result.operations.report.extra = true; },
+  ]) {
+    const probe = referenceCoreCapabilities();
+    mutate(probe);
+    assert.equal(verifyCoreProbe(dynamicDescribe(), probe).error.code, 'core-protocol-error');
+  }
+});
+
 test('command entrypoint manifest paths and fixed args use safe package-relative syntax', () => {
   for (const executable of [
     '../bin/adapter', '/bin/adapter', 'C:/bin/adapter', '\\\\server\\adapter',

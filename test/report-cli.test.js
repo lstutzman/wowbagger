@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runCli, withLedger } from './support.js';
+import { coreCapabilities, verifyCoreProbe } from '../src/adapter/core-probe.js';
+import { dynamicDescribe } from './adapter-contract-fixtures.js';
 
 const itemId = 'wb_01Q45X474NAAAAAAAAAAAAAAAA';
 const itemSource = [
@@ -32,6 +34,299 @@ function reportConfig(output = '../../report.html') {
     output,
   });
 }
+
+// A named view is a second report generated from the same complete ledger, so
+// its fixture states both an item the criteria keep and one they drop: the only
+// honest proof that the artifact describes the subset is the excluded title's
+// absence from the bytes.
+function viewItemSource(id, title, extraLines = []) {
+  return [
+    '---',
+    'schema_version: 1',
+    `id: ${id}`,
+    `title: "${title}"`,
+    'kind: task',
+    'status: backlog',
+    'created: 2030-01-10',
+    'updated: 2030-01-10',
+    'provenance:',
+    '  source: "fixture/report"',
+    '  recorded_at: "2030-01-10T12:34:56.789Z"',
+    'depends_on: []',
+    'related: []',
+    ...extraLines,
+    '---',
+    '',
+    '# Body',
+  ].join('\n');
+}
+
+const securityBugId = 'wb_01Q45X474NCCCCCCCCCCCCCCCC';
+const choreId = 'wb_01Q45X474NDDDDDDDDDDDDDDDD';
+const viewLedger = {
+  [`${securityBugId}.md`]: viewItemSource(securityBugId, 'Retained security bug', [
+    'class: bug',
+    'security: high',
+  ]),
+  [`${choreId}.md`]: viewItemSource(choreId, 'Excluded styling chore', ['class: chore']),
+};
+
+function viewConfig(views) {
+  return JSON.stringify({
+    report_version: 2,
+    repository: { name: 'Example repository' },
+    title: 'Ledger report',
+    output: '../../report.html',
+    fields: { class: '/class', security: '/security' },
+    views,
+  });
+}
+
+const securityBlockersView = {
+  'security-blockers': {
+    title: 'Security bugs',
+    output: '../../reports/security-blockers.html',
+    filters: { kind: ['task'], fields: { class: ['bug'] } },
+  },
+};
+
+test('renders one selected named report view', async () => {
+  await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': viewConfig(securityBlockersView),
+  }, async (ledger) => {
+    const output = path.resolve(ledger, '..', 'reports', 'security-blockers.html');
+
+    const result = runCli(
+      'report', '--ledger', ledger, '--view', 'security-blockers', '--as-of', '2030-01-15', '--json',
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      ok: true,
+      command: 'report',
+      contract_version: 5,
+      result: {
+        report_version: 2,
+        as_of: '2030-01-15',
+        output,
+        item_count: 1,
+        ready_count: 1,
+        view: 'security-blockers',
+      },
+    });
+    const html = await readFile(output, 'utf8');
+    assert.match(html, /Retained security bug/);
+    assert.doesNotMatch(html, /Excluded styling chore/);
+  });
+});
+
+test('refuses an unknown report view by name', async () => {
+  await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': viewConfig(securityBlockersView),
+  }, async (ledger) => {
+    const result = runCli(
+      'report', '--ledger', ledger, '--view', 'performance', '--as-of', '2030-01-15', '--json',
+    );
+
+    assert.equal(result.status, 2);
+    assert.equal(result.stderr, '');
+    assert.deepEqual(JSON.parse(result.stdout), {
+      ok: false,
+      command: 'report',
+      contract_version: 5,
+      error: {
+        code: 'report-view-not-found',
+        message: 'The requested report view was not found.',
+        details: { view: 'performance' },
+      },
+    });
+  });
+});
+
+test('refuses a named view against version 1 report configuration', async () => {
+  await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': reportConfig(),
+  }, async (ledger) => {
+    const result = runCli(
+      'report', '--ledger', ledger, '--view', 'security-blockers', '--as-of', '2030-01-15', '--json',
+    );
+
+    assert.equal(result.status, 2);
+    assert.deepEqual(JSON.parse(result.stdout).error, {
+      code: 'report-view-not-found',
+      message: 'The requested report view was not found.',
+      details: { view: 'security-blockers' },
+    });
+  });
+});
+
+test('publishes a named view to an output override without touching the configured path', async () => {
+  await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': viewConfig(securityBlockersView),
+  }, async (ledger) => {
+    const override = path.resolve(ledger, '..', 'override.html');
+    const configured = path.resolve(ledger, '..', 'reports', 'security-blockers.html');
+
+    const result = runCli(
+      'report', '--ledger', ledger, '--view', 'security-blockers',
+      '--as-of', '2030-01-15', '--out', override, '--json',
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout).result, {
+      report_version: 2,
+      as_of: '2030-01-15',
+      output: override,
+      item_count: 1,
+      ready_count: 1,
+      view: 'security-blockers',
+    });
+    assert.match(await readFile(override, 'utf8'), /Retained security bug/);
+    await assert.rejects(readFile(configured, 'utf8'), { code: 'ENOENT' });
+  });
+});
+
+test('succeeds with an empty named view subset', async () => {
+  await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': viewConfig({
+      'unmatched-work': {
+        title: 'Unmatched work',
+        output: '../../reports/unmatched.html',
+        filters: { fields: { class: ['regression'] } },
+      },
+    }),
+  }, async (ledger) => {
+    const output = path.resolve(ledger, '..', 'reports', 'unmatched.html');
+
+    const result = runCli(
+      'report', '--ledger', ledger, '--view', 'unmatched-work', '--as-of', '2030-01-15', '--json',
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout).result, {
+      report_version: 2,
+      as_of: '2030-01-15',
+      output,
+      item_count: 0,
+      ready_count: 0,
+      view: 'unmatched-work',
+    });
+    const html = await readFile(output, 'utf8');
+    assert.doesNotMatch(html, /Retained security bug/);
+    assert.doesNotMatch(html, /Excluded styling chore/);
+  });
+});
+
+test('renders the same named view bytes for the same ledger and as-of', async () => {
+  await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': viewConfig(securityBlockersView),
+  }, async (ledger) => {
+    const output = path.resolve(ledger, '..', 'reports', 'security-blockers.html');
+    const invoke = () => runCli(
+      'report', '--ledger', ledger, '--view', 'security-blockers', '--as-of', '2030-01-15', '--json',
+    );
+
+    assert.equal(invoke().status, 0);
+    const first = await readFile(output, 'utf8');
+    assert.equal(invoke().status, 0);
+
+    assert.equal(await readFile(output, 'utf8'), first);
+  });
+});
+
+// The base report is the surface every existing consumer already reads. A
+// version 2 configuration only names views, so with no view selected it must
+// publish the same members and the same bytes a version 1 configuration does.
+test('keeps base report result members and bytes unchanged under configuration version 2', async () => {
+  const baseResult = async (config) => await withLedger({
+    ...viewLedger,
+    '.wowbagger/report.json': config,
+  }, async (ledger) => {
+    const output = path.resolve(ledger, '..', 'report.html');
+    const result = runCli('report', '--ledger', ledger, '--as-of', '2030-01-15', '--json');
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout).result;
+    return {
+      members: Object.keys(parsed),
+      counts: [parsed.item_count, parsed.ready_count],
+      html: (await readFile(output, 'utf8')).replaceAll(output, '<output>'),
+    };
+  });
+
+  const version1 = await baseResult(JSON.stringify({
+    report_version: 1,
+    repository: { name: 'Example repository' },
+    title: 'Ledger report',
+    output: '../../report.html',
+    fields: { class: '/class', security: '/security' },
+  }));
+  const version2 = await baseResult(viewConfig(securityBlockersView));
+
+  assert.deepEqual(version1.members, ['report_version', 'as_of', 'output', 'item_count', 'ready_count']);
+  assert.deepEqual(version2.members, version1.members);
+  assert.deepEqual(version2.counts, version1.counts);
+  assert.deepEqual(version1.counts, [2, 2]);
+  assert.equal(version2.html, version1.html);
+});
+
+test('report help states the named view flag', () => {
+  const result = runCli('report', '--help');
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /Usage: wowbagger report --ledger <dir> --as-of YYYY-MM-DD \[--view <name>] \[--out <file>] --json/,
+  );
+});
+
+// A consumer must learn that named views exist by asking, never by generating
+// an artifact and inspecting it.
+test('capabilities advertises named report view support', () => {
+  const result = runCli('capabilities', '--json');
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout).result.operations.report, {
+    supported: true,
+    write_scope: 'derived-output',
+    config_versions: [1, 2],
+    named_views: true,
+  });
+});
+
+// The adapter reads the same advertisement through its core probe, so the
+// engine's snapshot must carry the report operation and the probe must refuse a
+// core that claims named views it does not implement.
+test('the core probe carries the report operation and refuses an elevated one', () => {
+  const probe = coreCapabilities();
+
+  assert.deepEqual(probe.result.operations.report, {
+    supported: true,
+    write_scope: 'derived-output',
+    config_versions: [1, 2],
+    named_views: true,
+  });
+  assert.equal(verifyCoreProbe(dynamicDescribe(), probe).ok, true);
+  for (const mutate of [
+    (value) => { delete value.result.operations.report; },
+    (value) => { value.result.operations.report.named_views = 'yes'; },
+    (value) => { value.result.operations.report.config_versions = [1]; },
+    (value) => { value.result.operations.report.write_scope = 'single-item'; },
+    (value) => { value.result.operations.report.extra = true; },
+  ]) {
+    const elevated = coreCapabilities();
+    mutate(elevated);
+    const refusal = verifyCoreProbe(dynamicDescribe(), elevated);
+    assert.equal(refusal.ok, false);
+    assert.equal(refusal.error_code, 'core-protocol-error');
+  }
+});
 
 test('report writes the configured HTML and one success envelope', async () => {
   await withLedger({

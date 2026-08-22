@@ -455,6 +455,20 @@
       ]
     },
     {
+      "class": "report.view-not-found",
+      "domain": "core",
+      "command": "report",
+      "exit": 2,
+      "state": null,
+      "error_code": "report-view-not-found",
+      "root_members": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ]
+    },
+    {
       "class": "report.success",
       "domain": "core",
       "command": "report",
