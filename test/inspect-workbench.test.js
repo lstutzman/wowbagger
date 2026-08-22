@@ -16,6 +16,15 @@ const CORE_CONTRACT_VERSION = 5;
 const PROJECTION_VERSION = 1;
 const MAX_RESPONSE_BYTES = 65536;
 
+// Each terminal status requires its own date field and a decision naming the
+// matching action, so a fixture's status alone names the shape it needs.
+const TERMINAL_DECISIONS = {
+  archived: { field: 'archived', action: 'archive' },
+  deferred: { field: 'deferred', action: 'defer' },
+  done: { field: 'completed', action: 'complete' },
+  killed: { field: 'killed', action: 'kill' },
+};
+
 function item({
   id,
   number,
@@ -28,9 +37,10 @@ function item({
   updated = '2026-08-02',
   dependsOn = [],
   related = [],
-  completed,
+  terminal,
   body = 'Body.\n',
 }) {
+  const terminalState = terminal === undefined ? null : TERMINAL_DECISIONS[status];
   const lines = [
     '---',
     'schema_version: 2',
@@ -41,7 +51,7 @@ function item({
     `status: ${status}`,
     ...(priority === undefined ? [] : [`priority: ${priority}`]),
     ...(parent === undefined ? [] : [`parent: ${parent}`]),
-    ...(completed === undefined ? [] : [`completed: ${completed}`]),
+    ...(terminalState === null ? [] : [`${terminalState.field}: ${terminal}`]),
     `created: ${created}`,
     `updated: ${updated}`,
     'provenance:',
@@ -49,11 +59,11 @@ function item({
     '  recorded_at: "2026-08-01T00:00:00Z"',
     `depends_on: ${JSON.stringify(dependsOn)}`,
     `related: ${JSON.stringify(related)}`,
-    ...(completed === undefined ? ['decisions: []'] : [
+    ...(terminalState === null ? ['decisions: []'] : [
       'decisions:',
-      '  - action: complete',
-      `    date: ${completed}`,
-      '    summary: "Complete."',
+      `  - action: ${terminalState.action}`,
+      `    date: ${terminal}`,
+      '    summary: "Fixture decision."',
       '    rationale: "Fixture."',
     ]),
     '---',
@@ -72,12 +82,22 @@ const FIXTURE_SOURCES = {
 
 // The lifecycle fixture: an epic in backlog with one live dependency, one
 // nonterminal child, and one dependent task, beside one terminal task. Between
-// them they hold every observed refusal an option can carry.
+// them they hold every observed refusal an option can carry. Six more subjects
+// cover the origins the first five leave out — triage, deferred, and archived,
+// each for both kinds — so the accept, kill, undefer, and restore edges are
+// projected and swept like every other edge. They carry no relations, so they
+// change nothing the other lifecycle tests observe.
 const EPIC = 'wb_01KYZWAD00000000000000000A';
 const CHILD = 'wb_01KZ2EQ400000000000000000A';
 const DEPENDENT = 'wb_01KZ2EQ400000000000000000B';
 const LIVE = 'wb_01KZ513V00000000000000000A';
 const TERMINAL = 'wb_01KZ513V00000000000000000B';
+const TRIAGE_TASK = 'wb_01KZ513V00000000000000000C';
+const TRIAGE_EPIC = 'wb_01KZ513V00000000000000000D';
+const DEFERRED_TASK = 'wb_01KZ513V00000000000000000E';
+const DEFERRED_EPIC = 'wb_01KZ513V00000000000000000F';
+const ARCHIVED_TASK = 'wb_01KZ513V00000000000000000G';
+const ARCHIVED_EPIC = 'wb_01KZ513V00000000000000000H';
 
 const LIFECYCLE_SOURCES = {
   'epic.md': item({
@@ -93,7 +113,25 @@ const LIFECYCLE_SOURCES = {
     id: LIVE, number: 13, title: 'Live dependency', created: '2026-08-04', updated: '2026-08-04',
   }),
   'terminal.md': item({
-    id: TERMINAL, number: 14, title: 'Terminal task', status: 'done', created: '2026-08-04', updated: '2026-08-04', completed: '2026-08-04',
+    id: TERMINAL, number: 14, title: 'Terminal task', status: 'done', created: '2026-08-04', updated: '2026-08-04', terminal: '2026-08-04',
+  }),
+  'triage-task.md': item({
+    id: TRIAGE_TASK, number: 15, title: 'Task in triage', status: 'triage', created: '2026-08-04', updated: '2026-08-04',
+  }),
+  'triage-epic.md': item({
+    id: TRIAGE_EPIC, number: 16, title: 'Epic in triage', kind: 'epic', status: 'triage', created: '2026-08-04', updated: '2026-08-04',
+  }),
+  'deferred-task.md': item({
+    id: DEFERRED_TASK, number: 17, title: 'Deferred task', status: 'deferred', created: '2026-08-04', updated: '2026-08-04', terminal: '2026-08-04',
+  }),
+  'deferred-epic.md': item({
+    id: DEFERRED_EPIC, number: 18, title: 'Deferred epic', kind: 'epic', status: 'deferred', created: '2026-08-04', updated: '2026-08-04', terminal: '2026-08-04',
+  }),
+  'archived-task.md': item({
+    id: ARCHIVED_TASK, number: 19, title: 'Archived task', status: 'archived', created: '2026-08-04', updated: '2026-08-04', terminal: '2026-08-04',
+  }),
+  'archived-epic.md': item({
+    id: ARCHIVED_EPIC, number: 20, title: 'Archived epic', kind: 'epic', status: 'archived', created: '2026-08-04', updated: '2026-08-04', terminal: '2026-08-04',
   }),
 };
 
@@ -515,15 +553,52 @@ async function transitionTo(ledger, request) {
   return { result, envelope: JSON.parse(result.stdout) };
 }
 
+// The origins the lifecycle fixture holds, in one place: the normative
+// expectation and the differential sweep below must agree on which subjects
+// exist, and every lifecycle origin a projected item can sit in appears here.
+const LIFECYCLE_SUBJECTS = [
+  EPIC, CHILD, DEPENDENT, LIVE, TERMINAL,
+  TRIAGE_TASK, TRIAGE_EPIC, DEFERRED_TASK, DEFERRED_EPIC, ARCHIVED_TASK, ARCHIVED_EPIC,
+];
+
+// The three origin statuses the relation-carrying subjects above never reach.
+// Stated as literals so the accept, kill, undefer, and restore affordances are
+// readable here, not only derivable from the sweep's refusals.
+test('triage, deferred, and archived origins advertise their own edges', async () => {
+  const expected = new Map([
+    [TRIAGE_TASK, [['backlog', 'accept'], ['killed', 'kill']]],
+    [TRIAGE_EPIC, [['backlog', 'accept'], ['killed', 'kill']]],
+    [DEFERRED_TASK, [['backlog', 'undefer']]],
+    [DEFERRED_EPIC, [['backlog', 'undefer']]],
+    [ARCHIVED_TASK, [['backlog', 'restore']]],
+    [ARCHIVED_EPIC, [['backlog', 'restore']]],
+  ]);
+
+  for (const [subject, edges] of expected) {
+    const projected = await withLedger(LIFECYCLE_SOURCES, (ledger) => (
+      workbench(ledger, '--id', subject, '--workbench', '--as-of', '2026-08-22').envelope.result.workbench
+    ));
+
+    assert.deepEqual(projected.transition_options, edges.map(([toStatus, action]) => ({
+      to_status: toStatus,
+      action,
+      decision_required: true,
+      minimum_date: '2026-08-04',
+      enabled: true,
+      precondition_issues: EMPTY_COLLECTION,
+      blockers: EMPTY_COLLECTION,
+    })), subject);
+  }
+});
+
 // The acceptance criterion the affordance exists for: the projection and the
 // mutation share one lifecycle definition, so no advertised edge, action,
 // precondition, or blocker may differ from what `transition` actually does. The
 // sweep dispatches every real transition against a fresh ledger.
 test('every projected option matches what transition does with it', async () => {
-  const items = Object.values(LIFECYCLE_SOURCES).length;
-  assert.equal(items, 5);
+  assert.equal(Object.values(LIFECYCLE_SOURCES).length, LIFECYCLE_SUBJECTS.length);
 
-  for (const subject of [EPIC, CHILD, DEPENDENT, LIVE, TERMINAL]) {
+  for (const subject of LIFECYCLE_SUBJECTS) {
     const projected = await withLedger(LIFECYCLE_SOURCES, (ledger) => (
       workbench(ledger, '--id', subject, '--workbench', '--as-of', '2026-08-22').envelope.result.workbench
     ));
