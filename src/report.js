@@ -11,6 +11,7 @@ import {
   rankWorkNext,
 } from './report-sequencing.js';
 import { randomUUID } from 'node:crypto';
+import { normalizeReportViews } from './report-view.js';
 
 const REPORT_FILE_SYSTEM = { mkdir, open, rename, rm };
 const LOGO_MIME_TYPES = new Map([
@@ -22,6 +23,8 @@ const LOGO_MIME_TYPES = new Map([
 ]);
 
 const CONFIG_KEYS = new Set(['report_version', 'repository', 'title', 'output', 'fields', 'swarm']);
+const CONFIG_KEYS_VERSION_2 = new Set([...CONFIG_KEYS, 'views']);
+const REPORT_VERSIONS = new Set([1, 2]);
 const REPOSITORY_KEYS = new Set(['name', 'logo']);
 const FIELD_KEYS = new Set([
   'area',
@@ -282,7 +285,7 @@ function compareText(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-export async function loadReportConfig(ledgerDirectory, outputOverride) {
+export async function loadReportConfig(ledgerDirectory, outputOverride, viewName = null) {
   const configPath = path.join(ledgerDirectory, '.wowbagger', 'report.json');
   let config;
 
@@ -305,7 +308,7 @@ export async function loadReportConfig(ledgerDirectory, outputOverride) {
     throw new ReportError('report-config-invalid', 'Report configuration must be a JSON object.');
   }
   const configuredOutputIsValid = isNonEmptyString(config.output);
-  if (config.report_version !== 1
+  if (!REPORT_VERSIONS.has(config.report_version)
     || !isObject(config.repository)
     || !isNonEmptyString(config.repository.name)
     || !isNonEmptyString(config.title)
@@ -314,7 +317,8 @@ export async function loadReportConfig(ledgerDirectory, outputOverride) {
     || (outputOverride !== undefined && !isNonEmptyString(outputOverride))) {
     throw new ReportError('report-config-invalid', 'Report configuration has missing or invalid required values.');
   }
-  if (!hasOnlyKeys(config, CONFIG_KEYS)
+  const namesViews = config.report_version === 2;
+  if (!hasOnlyKeys(config, namesViews ? CONFIG_KEYS_VERSION_2 : CONFIG_KEYS)
     || !hasOnlyKeys(config.repository, REPOSITORY_KEYS)
     || (isObject(config.fields) && !hasOnlyKeys(config.fields, FIELD_KEYS))
     || (isObject(config.swarm) && !hasOnlyKeys(config.swarm, SWARM_KEYS))) {
@@ -342,10 +346,24 @@ export async function loadReportConfig(ledgerDirectory, outputOverride) {
       throw new ReportError('report-config-invalid', 'Report swarm configuration is invalid.');
     }
   }
+  // Version 2 exists to name views, so a version 2 configuration without a
+  // usable `views` object is invalid rather than a base-only report.
+  const views = namesViews ? normalizeReportViews(config.views, config.fields ?? {}) : null;
+  if (namesViews && views === null) {
+    throw new ReportError('report-config-invalid', 'Report view configuration is invalid.');
+  }
+  await assertDistinctReportOutputs(ledgerDirectory, path.dirname(configPath), config, views);
+  const view = selectReportView(views, viewName, path.dirname(configPath));
+  // The selected report is the one this invocation publishes: the view's own
+  // output when a view is named, the base output otherwise, and `--out` over
+  // either. Configured paths were already contained above, so only an override
+  // still needs the containment rule applied to it.
   const outputPath = outputOverride === undefined
-    ? path.resolve(path.dirname(configPath), config.output)
+    ? (view === null ? path.resolve(path.dirname(configPath), config.output) : view.outputPath)
     : path.resolve(process.cwd(), outputOverride);
-  await assertReportOutputOutsideLedger(ledgerDirectory, outputPath);
+  if (outputOverride !== undefined) {
+    await assertReportOutputOutsideLedger(ledgerDirectory, outputPath);
+  }
   return {
     reportVersion: config.report_version,
     repository: {
@@ -360,6 +378,54 @@ export async function loadReportConfig(ledgerDirectory, outputOverride) {
     swarm: config.swarm === undefined
       ? null
       : { eligibleComplexities: [...config.swarm.eligible_complexities] },
+    view,
+  };
+}
+
+// Every configured output is checked, and checked against every other, before a
+// view is selected: a `--out` override for this invocation never excuses a
+// configuration that would publish two reports over one file. Distinctness is
+// judged on the canonical physical path, so two spellings or a symlinked
+// directory cannot smuggle a collision past the comparison.
+async function assertDistinctReportOutputs(ledgerDirectory, configDirectory, config, views) {
+  const configuredOutputs = isNonEmptyString(config.output) ? [config.output] : [];
+  if (views !== null) {
+    configuredOutputs.push(...Object.values(views).map((view) => view.output));
+  }
+
+  const canonicalPaths = new Set();
+  for (const configuredOutput of configuredOutputs) {
+    const canonicalPath = await assertReportOutputOutsideLedger(
+      ledgerDirectory,
+      path.resolve(configDirectory, configuredOutput),
+    );
+    if (canonicalPaths.has(canonicalPath)) {
+      throw new ReportError('report-config-invalid', 'Report outputs must be distinct.');
+    }
+    canonicalPaths.add(canonicalPath);
+  }
+}
+
+// Selection happens after the complete configuration validates, so an unknown
+// name never masks a broken view definition. The own-property check matters:
+// a portable view name may collide with an inherited object member.
+function selectReportView(views, viewName, configDirectory) {
+  if (viewName === null || viewName === undefined) {
+    return null;
+  }
+  if (views === null || !Object.prototype.hasOwnProperty.call(views, viewName)) {
+    throw new ReportError(
+      'report-view-not-found',
+      'The requested report view was not found.',
+      { view: viewName },
+    );
+  }
+  const view = views[viewName];
+  return {
+    name: view.name,
+    title: view.title,
+    outputPath: path.resolve(configDirectory, view.output),
+    filters: view.filters,
   };
 }
 
@@ -427,10 +493,13 @@ function isInside(parentPath, candidatePath) {
       && !path.isAbsolute(relative));
 }
 
+// Returns the canonical physical path so callers comparing several configured
+// outputs judge the same identity the containment rule judged.
 export async function assertReportOutputOutsideLedger(ledgerDirectory, outputPath) {
   const ledgerPath = await realpath(ledgerDirectory);
   const resolvedOutputPath = await resolvePhysicalPath(outputPath);
   if (isInside(ledgerPath, resolvedOutputPath)) {
     throw new ReportError('report-config-invalid', 'Report output must be outside the ledger directory.');
   }
+  return resolvedOutputPath;
 }

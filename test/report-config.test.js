@@ -33,6 +33,26 @@ function validConfig(overrides = {}) {
   };
 }
 
+function validView(overrides = {}) {
+  return {
+    title: 'Security blockers',
+    output: '../../security.html',
+    filters: { kind: ['task'] },
+    ...overrides,
+  };
+}
+
+function viewConfig(views) {
+  return {
+    report_version: 2,
+    repository: { name: 'Example repository' },
+    title: 'Ledger report',
+    output: '../../ledger-report.html',
+    fields: { class: '/class', security: '/security' },
+    views,
+  };
+}
+
 test('rejects a missing report configuration', async () => {
   await withTemporaryLedger(async (ledger) => {
     const report = await import('../src/report.js').catch(() => ({}));
@@ -85,6 +105,7 @@ test('normalizes the minimum valid report configuration', async () => {
       outputPath: path.resolve(ledger, '..', 'ledger-report.html'),
       fields: {},
       swarm: null,
+      view: null,
     });
   });
 });
@@ -251,4 +272,348 @@ test('accepts class-of-service and due-date field mappings', async () => {
 
     assert.deepEqual(config.fields, { class: '/class', due: '/due' });
   });
+});
+
+test('normalizes a selected version 2 report view', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, {
+      report_version: 2,
+      repository: { name: 'Example' },
+      title: 'Base report',
+      output: '../../base.html',
+      fields: { area: '/area', class: '/class', security: '/security' },
+      views: {
+        'security-blockers': {
+          title: 'Security blockers',
+          output: '../../security.html',
+          filters: {
+            readiness: ['blocked'],
+            status: ['backlog', 'in-progress'],
+            kind: ['task'],
+            fields: { class: ['bug'], security: ['high', 'critical'] },
+          },
+        },
+      },
+    });
+    const { loadReportConfig } = await import('../src/report.js');
+
+    const config = await loadReportConfig(ledger, undefined, 'security-blockers');
+
+    assert.equal(config.reportVersion, 2);
+    assert.equal(config.outputPath, path.resolve(ledger, '..', 'security.html'));
+    assert.deepEqual(config.view, {
+      name: 'security-blockers',
+      title: 'Security blockers',
+      outputPath: path.resolve(ledger, '..', 'security.html'),
+      filters: {
+        readiness: ['blocked'],
+        status: ['backlog', 'in-progress'],
+        kind: ['task'],
+        fields: { class: ['bug'], security: ['high', 'critical'] },
+      },
+    });
+  });
+});
+
+test('keeps version 1 report configuration byte-compatible', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, validConfig({
+      fields: { area: '/area', complexity: '/complexity' },
+      swarm: { eligible_complexities: ['small'] },
+    }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    const config = await loadReportConfig(ledger);
+
+    assert.deepEqual(config, {
+      reportVersion: 1,
+      repository: { name: 'Example repository', logo: null },
+      title: 'Ledger report',
+      outputPath: path.resolve(ledger, '..', 'ledger-report.html'),
+      fields: { area: '/area', complexity: '/complexity' },
+      swarm: { eligibleComplexities: ['small'] },
+      view: null,
+    });
+  });
+});
+
+test('rejects named views under version 1 configuration', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, validConfig({
+      views: {
+        'security-blockers': {
+          title: 'Security blockers',
+          output: '../../security.html',
+          filters: { kind: ['task'] },
+        },
+      },
+    }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+  });
+});
+
+test('rejects malformed report view names and excess views', async () => {
+  const excessViews = Object.fromEntries(Array.from(
+    { length: 65 },
+    (_ignored, index) => [`view-${index}`, validView({ output: `../../view-${index}.html` })],
+  ));
+  const invalidViews = [
+    { 'Security-blockers': validView() },
+    { '1-security': validView() },
+    { '': validView() },
+    { security_blockers: validView() },
+    { [`s${'x'.repeat(64)}`]: validView() },
+    { '-security': validView() },
+    excessViews,
+  ];
+
+  for (const views of invalidViews) {
+    await withTemporaryLedger(async (ledger) => {
+      await writeConfig(ledger, viewConfig(views));
+      const { loadReportConfig } = await import('../src/report.js');
+
+      await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+    });
+  }
+});
+
+test('rejects empty duplicate or unknown built-in filter values', async () => {
+  const invalidFilters = [
+    {},
+    { kind: [] },
+    { kind: 'task' },
+    { kind: ['task', 'task'] },
+    { kind: ['story'] },
+    { readiness: ['done'] },
+    { readiness: [42] },
+    { status: ['shipped'] },
+    { status: ['backlog', 'backlog'] },
+  ];
+
+  for (const filters of invalidFilters) {
+    await withTemporaryLedger(async (ledger) => {
+      await writeConfig(ledger, viewConfig({ 'security-blockers': validView({ filters }) }));
+      const { loadReportConfig } = await import('../src/report.js');
+
+      await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+    });
+  }
+});
+
+test('rejects mapped-field filters whose field is not configured', async () => {
+  const invalidFilters = [
+    { fields: { area: ['core'] } },
+    { fields: { unexpected: ['value'] } },
+    { fields: {} },
+    { fields: [] },
+    { kind: ['task'], fields: { area: ['core'] } },
+  ];
+
+  for (const filters of invalidFilters) {
+    await withTemporaryLedger(async (ledger) => {
+      await writeConfig(ledger, viewConfig({ 'security-blockers': validView({ filters }) }));
+      const { loadReportConfig } = await import('../src/report.js');
+
+      await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+    });
+  }
+});
+
+test('rejects unknown view and filter members', async () => {
+  const invalidViews = [
+    { 'security-blockers': validView({ unexpected: true }) },
+    { 'security-blockers': validView({ filters: { kind: ['task'], unexpected: ['value'] } }) },
+    { 'security-blockers': validView({ filters: { title_contains: ['bug'] } }) },
+  ];
+
+  for (const views of invalidViews) {
+    await withTemporaryLedger(async (ledger) => {
+      await writeConfig(ledger, viewConfig(views));
+      const { loadReportConfig } = await import('../src/report.js');
+
+      await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+    });
+  }
+});
+
+test('preserves scalar types when matching mapped-field filter values', async () => {
+  const { matchesReportView } = await import('../src/report-view.js');
+  const filters = { fields: { security: [1, true, 'high'] } };
+  const itemWith = (fields) => ({
+    kind: 'task',
+    status: 'backlog',
+    readiness: { state: 'ready' },
+    fields,
+  });
+
+  assert.equal(matchesReportView(itemWith({ security: 1 }), filters), true);
+  assert.equal(matchesReportView(itemWith({ security: true }), filters), true);
+  assert.equal(matchesReportView(itemWith({ security: 'high' }), filters), true);
+  assert.equal(matchesReportView(itemWith({ security: '1' }), filters), false);
+  assert.equal(matchesReportView(itemWith({ security: 'true' }), filters), false);
+  assert.equal(matchesReportView(itemWith({}), filters), false);
+});
+
+test('matches grouped view filters with OR inside and AND across groups', async () => {
+  const { matchesReportView } = await import('../src/report-view.js');
+  const filters = {
+    readiness: ['blocked', 'ineligible'],
+    status: ['backlog'],
+    kind: ['task'],
+    fields: { class: ['bug'] },
+  };
+  const itemWith = (overrides = {}) => ({
+    kind: 'task',
+    status: 'backlog',
+    readiness: { state: 'blocked' },
+    fields: { class: 'bug' },
+    ...overrides,
+  });
+
+  assert.equal(matchesReportView(itemWith(), filters), true);
+  assert.equal(matchesReportView(itemWith({ readiness: { state: 'ineligible' } }), filters), true);
+  assert.equal(matchesReportView(itemWith({ readiness: { state: 'ready' } }), filters), false);
+  assert.equal(matchesReportView(itemWith({ status: 'in-progress' }), filters), false);
+  assert.equal(matchesReportView(itemWith({ kind: 'epic' }), filters), false);
+  assert.equal(matchesReportView(itemWith({ fields: { class: 'feature' } }), filters), false);
+  assert.equal(matchesReportView(itemWith({ kind: 'epic' }), { status: ['backlog'] }), true);
+});
+
+test('rejects a named view output inside the resolved ledger', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, viewConfig({
+      'security-blockers': validView({ output: '../security.html' }),
+    }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+  });
+
+  await withTemporaryLedger(async (ledger) => {
+    await linkDirectory(ledger, path.join(path.dirname(ledger), 'back-into-ledger'));
+    await writeConfig(ledger, viewConfig({
+      'security-blockers': validView({ output: '../../back-into-ledger/security.html' }),
+    }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+  });
+});
+
+test('rejects colliding base and named output paths', async () => {
+  const collidingViews = [
+    { 'security-blockers': validView({ output: '../../ledger-report.html' }) },
+    { 'security-blockers': validView({ output: './../../ledger-report.html' }) },
+    {
+      'security-blockers': validView({ output: '../../security.html' }),
+      'stale-bugs': validView({ output: '../../security.html' }),
+    },
+  ];
+
+  for (const views of collidingViews) {
+    await withTemporaryLedger(async (ledger) => {
+      await writeConfig(ledger, viewConfig(views));
+      const { loadReportConfig } = await import('../src/report.js');
+
+      await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+    });
+  }
+
+  await withTemporaryLedger(async (ledger) => {
+    await linkDirectory(path.dirname(ledger), path.join(path.dirname(ledger), 'alias'));
+    await writeConfig(ledger, viewConfig({
+      'security-blockers': validView({ output: '../../alias/ledger-report.html' }),
+    }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    await assert.rejects(loadReportConfig(ledger), { code: 'report-config-invalid' });
+  });
+});
+
+test('accepts an output override without ignoring configured path validation', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, viewConfig({ 'security-blockers': validView() }));
+    const overridePath = path.join(path.dirname(ledger), 'override.html');
+    const { loadReportConfig } = await import('../src/report.js');
+
+    const config = await loadReportConfig(ledger, overridePath, 'security-blockers');
+
+    assert.equal(config.outputPath, overridePath);
+    assert.equal(config.view.outputPath, path.resolve(ledger, '..', 'security.html'));
+  });
+
+  const invalidViews = [
+    { 'security-blockers': validView({ output: '../../ledger-report.html' }) },
+    { 'security-blockers': validView({ output: '../security.html' }) },
+  ];
+
+  for (const views of invalidViews) {
+    await withTemporaryLedger(async (ledger) => {
+      await writeConfig(ledger, viewConfig(views));
+      const overridePath = path.join(path.dirname(ledger), 'override.html');
+      const { loadReportConfig } = await import('../src/report.js');
+
+      await assert.rejects(
+        loadReportConfig(ledger, overridePath, 'security-blockers'),
+        { code: 'report-config-invalid' },
+      );
+    });
+  }
+});
+
+test('returns report-view-not-found for version 1 or an unknown name', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, validConfig());
+    const { loadReportConfig } = await import('../src/report.js');
+
+    await assert.rejects(loadReportConfig(ledger, undefined, 'security-blockers'), {
+      code: 'report-view-not-found',
+      details: { view: 'security-blockers' },
+    });
+  });
+
+  for (const viewName of ['stale-bugs', 'constructor']) {
+    await withTemporaryLedger(async (ledger) => {
+      await writeConfig(ledger, viewConfig({ 'security-blockers': validView() }));
+      const { loadReportConfig } = await import('../src/report.js');
+
+      await assert.rejects(loadReportConfig(ledger, undefined, viewName), {
+        code: 'report-view-not-found',
+        details: { view: viewName },
+      });
+    });
+  }
+
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, viewConfig({ 'security-blockers': validView({ filters: {} }) }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    await assert.rejects(loadReportConfig(ledger, undefined, 'stale-bugs'), {
+      code: 'report-config-invalid',
+    });
+  });
+});
+
+test('lists configured view criteria as grouped facet keys', async () => {
+  const { reportViewCriteria } = await import('../src/report-view.js');
+
+  assert.deepEqual(
+    reportViewCriteria({
+      kind: ['task'],
+      readiness: ['blocked', 'ineligible'],
+      fields: { class: ['bug'], security: ['high', 'critical'] },
+    }),
+    [
+      { key: 'readiness', values: ['blocked', 'ineligible'] },
+      { key: 'kind', values: ['task'] },
+      { key: 'field:class', values: ['bug'] },
+      { key: 'field:security', values: ['high', 'critical'] },
+    ],
+  );
+  assert.deepEqual(
+    reportViewCriteria({ status: ['backlog'] }),
+    [{ key: 'status', values: ['backlog'] }],
+  );
 });
