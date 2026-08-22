@@ -227,7 +227,14 @@ complete difference against published version 4 (`0.1.0-alpha.7`):
   `result.limits` members carry the list contract's exact numbers (section 4).
   A version 4 consumer that validated `result.operations` or `result.limits` by
   exact members refuses the new members, which is the same fail-closed outcome
-  the version field already produces; and
+  the version field already produces;
+- **the bounded workbench projection.** `inspect` accepts the opt-in flag pair
+  `--workbench --as-of YYYY-MM-DD` and answers with a bounded per-item lifecycle
+  affordance projection under `result.workbench` (section 5.2). It adds the
+  refusal `workbench-response-too-large` (exit 2) and the advertisement
+  `result.operations.inspect.workbench` with three new `result.limits` members
+  (section 4). An `inspect` invocation without `--workbench` keeps its exact
+  result members and its exact bytes; and
 - **named custom report views.** `report` accepts an optional `--view <name>`
   against report configuration `report_version: 2`, adds `result.view` to a
   named success, adds the refusal `report-view-not-found` (exit 2), and is
@@ -236,9 +243,10 @@ complete difference against published version 4 (`0.1.0-alpha.7`):
   configuration version.
 
 Nothing else moves. `validate` and `ready` carry no version member and their
-bytes are unchanged. `inspect`, `create`, `transition`, `patch`, `mint-id`, and
-`capabilities` change only in the `contract_version` number: no root member,
-result member, issue member, error code, or exit meaning of an existing
+bytes are unchanged. `create`, `transition`, `patch`, `mint-id`, and
+`capabilities` change only in the `contract_version` number, and an `inspect`
+invocation without `--workbench` changes only in that number too: no root
+member, result member, issue member, error code, or exit meaning of an existing
 invocation changes.
 
 A version 4 consumer fails closed against a version 5 core the same way: it
@@ -248,9 +256,11 @@ and stops.
 The bootstrap wire, adapter approval, instruction, handoff, and fixture-format
 versions are separate version domains and remain version 1. The adapter
 contract remains version 2 and the work-claim API remains version 2. The list
-query has its own version domain, `query_version`, which is `1`: a consumer
-negotiates the query shape through `result.operations.list.query_version`, not
-through the core contract version.
+query and the workbench projection each have their own version domain,
+`query_version` and `projection_version`, both `1`: a consumer negotiates them
+through `result.operations.list.query_version` and
+`result.operations.inspect.workbench.projection_version`, not through the core
+contract version.
 
 ## 1. Scope
 
@@ -304,6 +314,7 @@ The local commands are:
 ~~~text
 wowbagger capabilities --json
 wowbagger inspect --ledger <dir> --id <id> --json
+wowbagger inspect --ledger <dir> --id <id> --workbench --as-of YYYY-MM-DD --json
 wowbagger list --ledger <dir> --input <json-file|-> --json
 wowbagger create --ledger <dir> --input <json-file|-> --json [--auto-commit]
 wowbagger transition --ledger <dir> --input <json-file|-> --json [--auto-commit]
@@ -649,6 +660,7 @@ capability paths; all omitted paths retain their version 1 values:
 |---|---|
 | `contract_version` | `5` |
 | `result.backend.coordination_scope` | `"same-working-copy-cooperative-writers"` |
+| `result.operations.inspect.workbench` | `{"supported":true,"projection_version":1}` |
 | `result.operations.list` | `{"supported":true,"write_scope":"none","cas_scope":"none","query_version":1}` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
 | `result.operations.report` | `{"supported":true,"write_scope":"derived-output","config_versions":[1,2],"named_views":true}` |
@@ -658,13 +670,19 @@ capability paths; all omitted paths retain their version 1 values:
 | `result.limits.max_list_page_size` | `200` |
 | `result.limits.max_list_title_characters` | `120` |
 | `result.limits.max_list_response_bytes` | `131072` |
+| `result.limits.max_workbench_title_characters` | `120` |
+| `result.limits.max_workbench_collection_entries` | `50` |
+| `result.limits.max_workbench_response_bytes` | `65536` |
 | `result.limits.cross_worktree_coordination` | `false` |
 
 `result.operations` advertises in the fixed order `inspect`, `list`, `create`,
 `transition`, `patch`, `report`, `work_claim`. `result.limits` advertises
 `max_item_source_bytes` first, then the four list bounds in the order above,
-then the version 1 booleans. `list` is read-only, so its `write_scope` and
-`cas_scope` are `none`, exactly like `inspect`.
+then the three workbench bounds, then the version 1 booleans. `list` is
+read-only, so its `write_scope` and `cas_scope` are `none`, exactly like
+`inspect`. `inspect` keeps its version 1 members and gains the nested
+`workbench` member, which is how a consumer learns the opt-in affordance
+projection of section 5.2 exists and which projection shape it will receive.
 
 The four list bounds are exact numbers, not advice:
 
@@ -680,6 +698,24 @@ does, the command refuses the page whole with `list-response-too-large` and the
 caller lowers `page_size`; neither bound silently rewrites the other, and a
 `list` response is never a partial page. A consumer with its own transport
 budget uses the lower of that budget and `max_list_response_bytes`.
+
+The three workbench bounds are exact numbers on the same terms:
+
+- `max_workbench_title_characters` is the exact number of Unicode code points
+  the projected item title may carry before it is truncated and flagged;
+- `max_workbench_collection_entries` is the largest number of entries any one
+  variable-size workbench collection carries — the relation lists, an option's
+  precondition issues, an option's blockers, and the related IDs inside one
+  issue. A longer collection carries its first entries, its observed `total`,
+  and `truncated: true`; and
+- `max_workbench_response_bytes` bounds the complete workbench response,
+  envelope and trailing LF included.
+
+The entry bound keeps every projection this core can build well inside the
+response bound, so `max_workbench_response_bytes` is a promise rather than a
+knob: a workbench request carries no size to lower. A projection that would
+exceed it is refused whole with `workbench-response-too-large` at exit 2 rather
+than written short.
 
 `result.operations.report` is how a consumer learns what the read-only report
 command accepts, so it never has to probe by generating an artifact.
@@ -1000,6 +1036,178 @@ as transient interface state only; it never becomes a second ledger store.
 | 2 | `list-response-too-large` | the exact rows exceed `max_list_response_bytes` |
 | 3 | `ledger-invalid` | the complete configured ledger is invalid |
 | 4 | `list-snapshot-changed` | the cursor's snapshot or query binding moved |
+
+### 5.2 The bounded workbench projection
+
+A workbench shows a person which native lifecycle transitions an item can take
+before it asks for consent. `inspect` answers that read opt-in:
+
+~~~text
+wowbagger inspect --ledger <dir> (--id <id> | --number <n>) --workbench --as-of YYYY-MM-DD --json
+~~~
+
+`--workbench` requires `--as-of`, and `--as-of` is accepted only with
+`--workbench`: the projection reports readiness for an explicit date, so the
+date is part of the request rather than a default this core invents. An
+unpaired flag is an `invalid-request` issue at `/arguments`
+(`missing-argument` for the missing `--as-of`, `conflicting-argument` for the
+unpaired `--as-of`), and a date that is not an ISO calendar date is
+`invalid-value`. An invocation without `--workbench` is byte-identical to the
+lossless read of section 5: the two reads share one item resolution, and only
+the flagged one answers with a projection.
+
+The read changes no ledger item, lock, claim journal, reconciliation log, or Git
+state. It takes no lock: a lock would make a read look like a lease.
+
+`inspect --workbench` loads and validates the complete ledger and answers from
+that one snapshot. An invalid ledger returns `ledger-invalid`, exit 3, with
+`details.validation_errors` and nothing else. The lossless read attaches the
+resolved item to that refusal so an operator can read the bytes to repair; the
+workbench read cannot, because an affordance derived from a ledger this core has
+not judged would be a claim it cannot support. An unresolved selector is
+`item-not-found`, exit 2, with exactly the selector the caller used, as in
+section 5.
+
+#### The response
+
+~~~json
+{
+  "ok": true,
+  "command": "inspect",
+  "contract_version": 5,
+  "result": {
+    "workbench": {
+      "projection_version": 1,
+      "as_of": "2026-08-22",
+      "snapshot": { "revision": "sha256:<hex>", "item_count": 5 },
+      "observation": {
+        "authority": "observed-snapshot",
+        "rechecked_by": [
+          "revision", "lock", "claim-fence", "reconciliation", "candidate-validation"
+        ]
+      },
+      "item": {
+        "id": "wb_...",
+        "number": 10,
+        "title": "Epic awaiting disposition",
+        "title_truncated": false,
+        "kind": "epic",
+        "status": "backlog",
+        "priority": 1,
+        "parent": "wb_...",
+        "created": "2026-08-02",
+        "updated": "2026-08-05",
+        "revision": "sha256:<hex>",
+        "ready": false,
+        "depends_on": { "entries": ["wb_..."], "total": 1, "truncated": false },
+        "related": { "entries": [], "total": 0, "truncated": false }
+      },
+      "transition_options": [
+        {
+          "to_status": "done",
+          "action": "complete",
+          "decision_required": true,
+          "minimum_date": "2026-08-05",
+          "enabled": false,
+          "precondition_issues": {
+            "entries": [
+              {
+                "code": "live-dependencies",
+                "field": "depends_on",
+                "message": "Completion requires every depends_on target to be done.",
+                "related_ids": { "entries": ["wb_..."], "total": 1, "truncated": false }
+              }
+            ],
+            "total": 1,
+            "truncated": false
+          },
+          "blockers": { "entries": [], "total": 0, "truncated": false }
+        }
+      ]
+    }
+  }
+}
+~~~
+
+`result` carries exactly one member, `workbench`, and its members are in the
+order above. The projection is negotiated by `projection_version`, its own
+version domain, exactly as `list` is negotiated by `query_version`.
+
+`snapshot` is the same witness `list` returns: it covers every item's
+ledger-relative path and exact revision, so any item added, removed, renamed, or
+byte-modified changes it. It is in the response because an option's blockers and
+precondition issues are functions of the whole ledger, not of the one item, so
+the item revision alone would not name what was observed.
+
+`item` is a bounded summary: `number`, `priority`, and `parent` are present only
+when the item carries them, `title` is projected to
+`max_workbench_title_characters` with `title_truncated` saying whether it was
+cut, `depends_on` and `related` are bounded collections, and `ready` is the
+section 5.1 readiness state for `as_of`. The projection carries no item source
+and no body: those are the lossless read of section 5, and this response stays
+inside an advertised bound.
+
+`revision` is the exact revision of the item's own bytes, and it is what a caller
+sends as `transition`'s `expected_revision`.
+
+#### Transition options
+
+`transition_options` holds one option for every lifecycle target the section 8
+edge table allows out of this item's kind and status, in ascending status order.
+A target the table does not allow is absent, so `invalid-edge` never appears in a
+projected issue. A terminal item has no allowed target and its
+`transition_options` is `[]`.
+
+| Member | Meaning |
+|---|---|
+| `to_status` | the target status a `transition` request would name |
+| `action` | the generated decision action, or `null` for the two no-decision edges |
+| `decision_required` | whether the request must carry `decision.summary` and `decision.rationale` |
+| `minimum_date` | the earliest legal transition date, `max(created, updated)` |
+| `enabled` | whether the observed ledger refuses nothing for this target at `minimum_date` |
+| `precondition_issues` | the observed section 8 precondition issues, bounded |
+| `blockers` | the observed section 8 multi-item blockers, bounded |
+
+An option is evaluated at `minimum_date`, so neither date precondition can be
+what disables it: a caller reads `minimum_date` and sends that date or a later
+one. Issues and blockers use exactly the `transition` vocabulary — the same
+`code`, `field`, `message`, `item_id`, and ordering — so a consumer renders one
+set of refusal reasons. The one reshaped member is an issue's `related_ids`,
+which is a bounded collection here because that list grows with the ledger.
+
+`enabled` is `true` exactly when both bounded collections observed nothing:
+`precondition_issues.total` and `blockers.total` are `0`. A disabled option still
+names why, so a workbench can show a target and the reason it cannot be taken
+rather than hiding it.
+
+#### What the projection does not promise
+
+`observation` states the semantics in the response rather than leaving them to a
+reader of this contract. `authority: "observed-snapshot"` says the projection is
+one observation of the named snapshot: it is not a lease, not a reservation, and
+not a promise that the option remains executable after the returned revision.
+`rechecked_by` names what a later `transition` rechecks under lock — the exact
+revision, the cooperative lock, the claim fence, reconciliation, and complete
+candidate validation — in the refusal precedence of section 8. A transition
+dispatched against a returned option can still be refused by any of them, and
+that refusal is the authority.
+
+The affordance projection and `transition` share one implementation-level
+lifecycle definition (`src/lifecycle.js`): the edge table, the generated actions,
+the precondition issues, and the blockers have exactly one home, so an
+advertised option cannot drift from what the mutation does. A consumer therefore
+never reimplements the edge table, the date derivation, the decision
+requirement, or the blocker rules.
+
+#### Exit and error summary
+
+| Exit | Code | Condition |
+|---:|---|---|
+| 0 | none | the projection was answered and fits the response bound |
+| 2 | `invalid-request` | arguments, including the `--workbench`/`--as-of` pairing |
+| 2 | `item-not-found` | the selector resolved no item in a valid ledger |
+| 2 | `workbench-response-too-large` | the exact projection exceeds `max_workbench_response_bytes` |
+| 3 | `ledger-invalid` | the complete configured ledger is invalid |
 
 ## 6. Cooperative lock and snapshot protocol
 
@@ -2060,6 +2268,7 @@ patch.
 | item-source-too-large | id, size_bytes, limit_bytes |
 | list-response-too-large | max_list_response_bytes, response_bytes, page_size |
 | list-snapshot-changed | mismatch, cursor_snapshot_revision, current_snapshot_revision |
+| workbench-response-too-large | id, max_workbench_response_bytes, response_bytes |
 | revision-conflict | id, expected_revision, actual_revision |
 | lock-held | id, lock_path, owner, owner_diagnostic |
 | id-collision | id, path, actual_revision |
@@ -2198,6 +2407,14 @@ first page with its continuation cursor (`list-page`), a cursor whose bound
 snapshot moved (`list-stale-cursor`), an invalid ledger refused with no rows
 beside the error (`list-invalid-ledger`), and a maximum page whose exact rows
 exceed the advertised response bound (`list-response-too-large`).
+
+The `workbench` cases cover section 5.2 the same way: a task's four allowed
+edges with their generated actions and derived minimum date
+(`workbench-task-options`), an epic carrying both observed precondition issues
+and both observed disposition blockers (`workbench-epic-blocked`), a terminal
+item with no target at all (`workbench-terminal`), and an invalid ledger refused
+with no projection beside the error (`workbench-invalid-ledger`). Every one
+declares identical before and after ledger digests: the projection is a read.
 
 The runtime executes every vector as a black-box CLI test, including exact
 response bytes and the complete before/after ledger snapshot.

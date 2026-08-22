@@ -1,0 +1,118 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "contract_version": 5,
+  "result": {
+    "workbench": {
+      "projection_version": 1,
+      "as_of": "2026-08-22",
+      "snapshot": {
+        "revision": "sha256:b3e80153e077241b49c5273912be9e7ea62f11615e329ecb1a4cde6e1f8fbcf0",
+        "item_count": 1
+      },
+      "observation": {
+        "authority": "observed-snapshot",
+        "rechecked_by": [
+          "revision",
+          "lock",
+          "claim-fence",
+          "reconciliation",
+          "candidate-validation"
+        ]
+      },
+      "item": {
+        "id": "wb_01KYX9XP00000000000000000A",
+        "number": 1,
+        "title": "Bounded workbench task",
+        "title_truncated": false,
+        "kind": "task",
+        "status": "backlog",
+        "priority": 1,
+        "created": "2026-08-01",
+        "updated": "2026-08-02",
+        "revision": "sha256:9c81fd3e72ac8b2e6e101d55528f1562065a3b87021b98e6995297c556a98b4e",
+        "ready": true,
+        "depends_on": {
+          "entries": [],
+          "total": 0,
+          "truncated": false
+        },
+        "related": {
+          "entries": [],
+          "total": 0,
+          "truncated": false
+        }
+      },
+      "transition_options": [
+        {
+          "to_status": "archived",
+          "action": "archive",
+          "decision_required": true,
+          "minimum_date": "2026-08-02",
+          "enabled": true,
+          "precondition_issues": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          }
+        },
+        {
+          "to_status": "deferred",
+          "action": "defer",
+          "decision_required": true,
+          "minimum_date": "2026-08-02",
+          "enabled": true,
+          "precondition_issues": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          }
+        },
+        {
+          "to_status": "in-progress",
+          "action": null,
+          "decision_required": false,
+          "minimum_date": "2026-08-02",
+          "enabled": true,
+          "precondition_issues": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          }
+        },
+        {
+          "to_status": "killed",
+          "action": "kill",
+          "decision_required": true,
+          "minimum_date": "2026-08-02",
+          "enabled": true,
+          "precondition_issues": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          }
+        }
+      ]
+    }
+  }
+}

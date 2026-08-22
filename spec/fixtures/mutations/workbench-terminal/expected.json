@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "contract_version": 5,
+  "result": {
+    "workbench": {
+      "projection_version": 1,
+      "as_of": "2026-08-22",
+      "snapshot": {
+        "revision": "sha256:cd60798ee0616153fdc258b6330a6499fc6eabf5543f56fc957244e94f7e05df",
+        "item_count": 5
+      },
+      "observation": {
+        "authority": "observed-snapshot",
+        "rechecked_by": [
+          "revision",
+          "lock",
+          "claim-fence",
+          "reconciliation",
+          "candidate-validation"
+        ]
+      },
+      "item": {
+        "id": "wb_01KZ513V00000000000000000B",
+        "number": 14,
+        "title": "Terminal task",
+        "title_truncated": false,
+        "kind": "task",
+        "status": "done",
+        "created": "2026-08-04",
+        "updated": "2026-08-04",
+        "revision": "sha256:5b626f98aae150b2498c2e3070bd6199c3241239e005209b6ad237edbd6f22b0",
+        "ready": false,
+        "depends_on": {
+          "entries": [],
+          "total": 0,
+          "truncated": false
+        },
+        "related": {
+          "entries": [],
+          "total": 0,
+          "truncated": false
+        }
+      },
+      "transition_options": []
+    }
+  }
+}

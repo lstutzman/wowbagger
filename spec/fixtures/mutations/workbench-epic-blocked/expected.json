@@ -1,0 +1,166 @@
+{
+  "ok": true,
+  "command": "inspect",
+  "contract_version": 5,
+  "result": {
+    "workbench": {
+      "projection_version": 1,
+      "as_of": "2026-08-22",
+      "snapshot": {
+        "revision": "sha256:cd60798ee0616153fdc258b6330a6499fc6eabf5543f56fc957244e94f7e05df",
+        "item_count": 5
+      },
+      "observation": {
+        "authority": "observed-snapshot",
+        "rechecked_by": [
+          "revision",
+          "lock",
+          "claim-fence",
+          "reconciliation",
+          "candidate-validation"
+        ]
+      },
+      "item": {
+        "id": "wb_01KYZWAD00000000000000000A",
+        "number": 10,
+        "title": "Epic awaiting disposition",
+        "title_truncated": false,
+        "kind": "epic",
+        "status": "backlog",
+        "created": "2026-08-02",
+        "updated": "2026-08-05",
+        "revision": "sha256:a37655844d7954801c485640c111d6df74b2b35edc01d1b0040f0e280c35f0a2",
+        "ready": false,
+        "depends_on": {
+          "entries": [
+            "wb_01KZ513V00000000000000000A"
+          ],
+          "total": 1,
+          "truncated": false
+        },
+        "related": {
+          "entries": [],
+          "total": 0,
+          "truncated": false
+        }
+      },
+      "transition_options": [
+        {
+          "to_status": "archived",
+          "action": "archive",
+          "decision_required": true,
+          "minimum_date": "2026-08-05",
+          "enabled": false,
+          "precondition_issues": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [
+              {
+                "code": "child-disposition",
+                "item_id": "wb_01KZ2EQ400000000000000000A",
+                "field": "parent"
+              },
+              {
+                "code": "dependent-disposition",
+                "item_id": "wb_01KZ2EQ400000000000000000B",
+                "field": "depends_on"
+              }
+            ],
+            "total": 2,
+            "truncated": false
+          }
+        },
+        {
+          "to_status": "deferred",
+          "action": "defer",
+          "decision_required": true,
+          "minimum_date": "2026-08-05",
+          "enabled": true,
+          "precondition_issues": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          }
+        },
+        {
+          "to_status": "done",
+          "action": "complete",
+          "decision_required": true,
+          "minimum_date": "2026-08-05",
+          "enabled": false,
+          "precondition_issues": {
+            "entries": [
+              {
+                "code": "live-dependencies",
+                "field": "depends_on",
+                "message": "Completion requires every depends_on target to be done.",
+                "related_ids": {
+                  "entries": [
+                    "wb_01KZ513V00000000000000000A"
+                  ],
+                  "total": 1,
+                  "truncated": false
+                }
+              },
+              {
+                "code": "nonterminal-children",
+                "field": "parent",
+                "message": "Epic completion requires every direct child to be done or killed.",
+                "related_ids": {
+                  "entries": [
+                    "wb_01KZ2EQ400000000000000000A"
+                  ],
+                  "total": 1,
+                  "truncated": false
+                }
+              }
+            ],
+            "total": 2,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          }
+        },
+        {
+          "to_status": "killed",
+          "action": "kill",
+          "decision_required": true,
+          "minimum_date": "2026-08-05",
+          "enabled": false,
+          "precondition_issues": {
+            "entries": [],
+            "total": 0,
+            "truncated": false
+          },
+          "blockers": {
+            "entries": [
+              {
+                "code": "child-disposition",
+                "item_id": "wb_01KZ2EQ400000000000000000A",
+                "field": "parent"
+              },
+              {
+                "code": "dependent-disposition",
+                "item_id": "wb_01KZ2EQ400000000000000000B",
+                "field": "depends_on"
+              }
+            ],
+            "total": 2,
+            "truncated": false
+          }
+        }
+      ]
+    }
+  }
+}

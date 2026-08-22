@@ -6,7 +6,9 @@ import {
 } from './limits.js';
 import { JsonNumber, pointer, sortIssues } from './request.js';
 import { loadLedger } from './ledger.js';
+import { LIFECYCLE_STATUSES } from './lifecycle.js';
 import { revisionFor } from './mutation.js';
+import { projectText, snapshotWitness } from './projection.js';
 import { projectReadiness } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
@@ -15,7 +17,6 @@ import { isCalendarDate, validateLedger } from './validate.js';
 // already validates against.
 const SORT_FIELDS = ['created', 'id', 'number', 'priority', 'status', 'title', 'updated'];
 const SORT_DIRECTIONS = ['ascending', 'descending'];
-const FILTER_STATUSES = ['archived', 'backlog', 'deferred', 'done', 'in-progress', 'killed', 'triage'];
 const FILTER_KINDS = ['epic', 'task'];
 const QUERY_MEMBERS = ['query_version', 'as_of', 'filters', 'sort', 'page_size', 'cursor'];
 const FILTER_MEMBERS = ['status', 'kind', 'ready', 'number', 'title_contains'];
@@ -90,7 +91,7 @@ function validateFilters(filters, present, issues) {
     return;
   }
   closedMembers(filters, ['filters'], FILTER_MEMBERS, issues, 'Filter member');
-  validateVocabularyFilter(filters, 'status', FILTER_STATUSES, 'item statuses', issues);
+  validateVocabularyFilter(filters, 'status', LIFECYCLE_STATUSES, 'item statuses', issues);
   validateVocabularyFilter(filters, 'kind', FILTER_KINDS, 'item kinds', issues);
   if (hasOwn(filters, 'ready') && typeof filters.ready !== 'boolean') {
     issues.push(issue('/filters/ready', 'invalid-type', 'Filter member ready must be a boolean.'));
@@ -307,26 +308,12 @@ function isReady(entry, readiness) {
   return readiness.get(entry.data.id).state === 'ready';
 }
 
-// The snapshot witness identifies the exact ledger state the rows came from. It
-// covers every item's ledger-relative path and exact revision, so any item
-// added, removed, renamed, or byte-modified changes it.
-function snapshotWitness(items) {
-  const digest = items
-    .map((entry) => `${entry.path}\n${revisionFor(entry.bytes)}\n`)
-    .sort()
-    .join('');
-  return {
-    revision: revisionFor(Buffer.from(digest, 'utf8')),
-    item_count: items.length,
-  };
-}
-
 // A row carries identity, lifecycle, dates, the exact revision, and readiness.
 // It never carries the body or the item source: one item is read through
 // `inspect`.
 function listRow(entry, readiness) {
   const data = entry.data;
-  const title = projectTitle(data.title);
+  const title = projectText(data.title, MAX_LIST_TITLE_CHARACTERS);
   return {
     id: data.id,
     ...(Object.hasOwn(data, 'number') ? { number: data.number } : {}),
@@ -340,13 +327,6 @@ function listRow(entry, readiness) {
     revision: revisionFor(entry.bytes),
     ready: isReady(entry, readiness),
   };
-}
-
-function projectTitle(title) {
-  const characters = [...title];
-  return characters.length > MAX_LIST_TITLE_CHARACTERS
-    ? { text: characters.slice(0, MAX_LIST_TITLE_CHARACTERS).join(''), truncated: true }
-    : { text: title, truncated: false };
 }
 
 // One selected field decides the primary order; every order then ends in

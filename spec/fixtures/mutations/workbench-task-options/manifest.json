@@ -1,0 +1,45 @@
+{
+  "case": "workbench-task-lifecycle-options",
+  "argv": [
+    "inspect",
+    "--ledger",
+    "ledger",
+    "--id",
+    "wb_01KYX9XP00000000000000000A",
+    "--workbench",
+    "--as-of",
+    "2026-08-22",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "sha256": "sha256:9c81fd3e72ac8b2e6e101d55528f1562065a3b87021b98e6995297c556a98b4e"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "source_file": "ledger/wb_01KYX9XP00000000000000000A.md",
+          "sha256": "sha256:9c81fd3e72ac8b2e6e101d55528f1562065a3b87021b98e6995297c556a98b4e"
+        }
+      ]
+    }
+  }
+}

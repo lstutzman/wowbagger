@@ -31,6 +31,10 @@ const DEFAULT_LIST_PAGE_SIZE = 50;
 const MAX_LIST_PAGE_SIZE = 200;
 const MAX_LIST_TITLE_CHARACTERS = 120;
 const MAX_LIST_RESPONSE_BYTES = 131072;
+const WORKBENCH_PROJECTION_VERSION = 1;
+const MAX_WORKBENCH_TITLE_CHARACTERS = 120;
+const MAX_WORKBENCH_COLLECTION_ENTRIES = 50;
+const MAX_WORKBENCH_RESPONSE_BYTES = 65536;
 const WORK_CLAIM_API_VERSION = 2;
 // The report configuration versions the contract requires this core to accept:
 // version 1 unchanged, version 2 naming views.
@@ -614,7 +618,12 @@ export function referenceCoreCapabilities() {
         coordination_scope: 'same-working-copy-cooperative-writers',
       },
       operations: {
-        inspect: { supported: true, write_scope: 'none', cas_scope: 'none' },
+        inspect: {
+          supported: true,
+          write_scope: 'none',
+          cas_scope: 'none',
+          workbench: { supported: true, projection_version: WORKBENCH_PROJECTION_VERSION },
+        },
         list: {
           supported: true,
           write_scope: 'none',
@@ -665,6 +674,9 @@ export function referenceCoreCapabilities() {
         max_list_page_size: MAX_LIST_PAGE_SIZE,
         max_list_title_characters: MAX_LIST_TITLE_CHARACTERS,
         max_list_response_bytes: MAX_LIST_RESPONSE_BYTES,
+        max_workbench_title_characters: MAX_WORKBENCH_TITLE_CHARACTERS,
+        max_workbench_collection_entries: MAX_WORKBENCH_COLLECTION_ENTRIES,
+        max_workbench_response_bytes: MAX_WORKBENCH_RESPONSE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,
@@ -1401,10 +1413,19 @@ function coreCapabilitiesSchemaIssue(value) {
   ])) {
     return 'result.operations';
   }
-  if (!hasExactKeys(result.operations.inspect, ['supported', 'write_scope', 'cas_scope'])
-    || result.operations.inspect.supported !== true
-    || result.operations.inspect.write_scope !== 'none'
-    || result.operations.inspect.cas_scope !== 'none') return 'result.operations.inspect';
+  // The nested workbench claim is checked by exact keys too: a forwarded
+  // capability must not promise an affordance projection shape the core does
+  // not answer with.
+  const inspect = result.operations.inspect;
+  if (!hasExactKeys(inspect, ['supported', 'write_scope', 'cas_scope', 'workbench'])
+    || inspect.supported !== true
+    || inspect.write_scope !== 'none'
+    || inspect.cas_scope !== 'none'
+    || !hasExactKeys(inspect.workbench ?? {}, ['supported', 'projection_version'])
+    || inspect.workbench.supported !== true
+    || inspect.workbench.projection_version !== WORKBENCH_PROJECTION_VERSION) {
+    return 'result.operations.inspect';
+  }
   if (!hasExactKeys(result.operations.list, ['supported', 'write_scope', 'cas_scope', 'query_version'])
     || result.operations.list.supported !== true
     || result.operations.list.write_scope !== 'none'
@@ -1474,6 +1495,8 @@ function coreCapabilitiesSchemaIssue(value) {
     'max_item_source_bytes',
     'default_list_page_size', 'max_list_page_size', 'max_list_title_characters',
     'max_list_response_bytes',
+    'max_workbench_title_characters', 'max_workbench_collection_entries',
+    'max_workbench_response_bytes',
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection',
     'automatic_stale_lock_breaking',
@@ -1483,6 +1506,9 @@ function coreCapabilitiesSchemaIssue(value) {
     || limits.max_list_page_size !== MAX_LIST_PAGE_SIZE
     || limits.max_list_title_characters !== MAX_LIST_TITLE_CHARACTERS
     || limits.max_list_response_bytes !== MAX_LIST_RESPONSE_BYTES
+    || limits.max_workbench_title_characters !== MAX_WORKBENCH_TITLE_CHARACTERS
+    || limits.max_workbench_collection_entries !== MAX_WORKBENCH_COLLECTION_ENTRIES
+    || limits.max_workbench_response_bytes !== MAX_WORKBENCH_RESPONSE_BYTES
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
     || limits.cross_worktree_coordination !== false

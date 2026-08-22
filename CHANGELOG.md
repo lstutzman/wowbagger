@@ -180,6 +180,44 @@ consolidation. The first tagged release inherits this file.
 
 ### Added
 
+- **`inspect` answers a bounded per-item lifecycle affordance projection.**
+  `inspect --ledger <dir> (--id <id> | --number <n>) --workbench --as-of
+  YYYY-MM-DD --json` returns, from one complete validated ledger snapshot,
+  `result.workbench`: the projection version, the as-of date, the ledger
+  snapshot witness, an `observation` member, a bounded item summary, and one
+  `transition_options` entry for every lifecycle target the native edge table
+  allows out of that item's kind and status. Each option names its target
+  status, its generated decision action or `null`, whether a caller-supplied
+  summary and rationale are required, the minimum legal transition date
+  `max(created, updated)`, its observed enabled state, and the observed
+  precondition issues and multi-item blockers in the exact `transition`
+  vocabulary. A workbench can now show a person which transitions an item can
+  take without duplicating lifecycle logic and without submitting a mutating
+  probe.
+
+  The read is an observation, not a lease, and says so in the response:
+  `observation.authority` is `observed-snapshot` and `observation.rechecked_by`
+  names what a later `transition` rechecks under lock — revision, lock, claim
+  fence, reconciliation, and candidate validation. It writes no item, lock,
+  claim journal, reconciliation log, or Git state, and it takes no lock.
+  `transition` and the projection share one lifecycle definition
+  (`src/lifecycle.js`), and a differential guard dispatches every projected
+  option and every unadvertised target through the real mutation, so an
+  advertised affordance cannot drift from what the mutation does.
+
+  Every variable-size field is bounded and says what it left out: the projected
+  title, the relation lists, each option's issues and blockers, and the related
+  IDs inside an issue. `--workbench` requires `--as-of`, an unpaired `--as-of`
+  is refused rather than ignored, and an `inspect` invocation without
+  `--workbench` is byte-identical to before. `capabilities` advertises
+  `operations.inspect.workbench` and the three exact bounds
+  `max_workbench_title_characters`, `max_workbench_collection_entries`, and
+  `max_workbench_response_bytes`; the core contract version stays 5, and the
+  projection is negotiated by its own `projection_version`. An invalid ledger is
+  `ledger-invalid` at exit 3 with no projection attached, and a projection that
+  would exceed its response bound is refused whole with
+  `workbench-response-too-large` at exit 2.
+
 - **The conformance suite now measures real core outcomes end to end.** A new
   equivalence case, `16-core-outcome-e2e`, carries nine hand-authored scenarios
   that each run the direct real core in one isolated temporary workspace and,

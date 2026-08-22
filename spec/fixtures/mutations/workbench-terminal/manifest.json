@@ -1,0 +1,85 @@
+{
+  "case": "workbench-terminal-item-has-no-options",
+  "argv": [
+    "inspect",
+    "--ledger",
+    "ledger",
+    "--id",
+    "wb_01KZ513V00000000000000000B",
+    "--workbench",
+    "--as-of",
+    "2026-08-22",
+    "--json"
+  ],
+  "input": {
+    "transport": "none",
+    "path": null
+  },
+  "scenario": "normal",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "json_file": "expected.json",
+      "trailing_lf": true
+    },
+    "stderr": {
+      "exact": ""
+    },
+    "files": {
+      "before": [
+        {
+          "path": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "source_file": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "sha256": "sha256:a37655844d7954801c485640c111d6df74b2b35edc01d1b0040f0e280c35f0a2"
+        },
+        {
+          "path": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "source_file": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "sha256": "sha256:3369ee876f156367ea3b5fd2e1c441c09e978d74ca6c3ed8640e4bdd5e9613f9"
+        },
+        {
+          "path": "ledger/wb_01KZ2EQ400000000000000000B.md",
+          "source_file": "ledger/wb_01KZ2EQ400000000000000000B.md",
+          "sha256": "sha256:fb9c9b839dbd622e3d25a945f7684ff459209db3953c52053586396d2f397005"
+        },
+        {
+          "path": "ledger/wb_01KZ513V00000000000000000A.md",
+          "source_file": "ledger/wb_01KZ513V00000000000000000A.md",
+          "sha256": "sha256:b6bed94f5ee285601ae842cc8adc3e792b2992582b3e305dcf6fd0edd2805bd0"
+        },
+        {
+          "path": "ledger/wb_01KZ513V00000000000000000B.md",
+          "source_file": "ledger/wb_01KZ513V00000000000000000B.md",
+          "sha256": "sha256:5b626f98aae150b2498c2e3070bd6199c3241239e005209b6ad237edbd6f22b0"
+        }
+      ],
+      "after": [
+        {
+          "path": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "source_file": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "sha256": "sha256:a37655844d7954801c485640c111d6df74b2b35edc01d1b0040f0e280c35f0a2"
+        },
+        {
+          "path": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "source_file": "ledger/wb_01KZ2EQ400000000000000000A.md",
+          "sha256": "sha256:3369ee876f156367ea3b5fd2e1c441c09e978d74ca6c3ed8640e4bdd5e9613f9"
+        },
+        {
+          "path": "ledger/wb_01KZ2EQ400000000000000000B.md",
+          "source_file": "ledger/wb_01KZ2EQ400000000000000000B.md",
+          "sha256": "sha256:fb9c9b839dbd622e3d25a945f7684ff459209db3953c52053586396d2f397005"
+        },
+        {
+          "path": "ledger/wb_01KZ513V00000000000000000A.md",
+          "source_file": "ledger/wb_01KZ513V00000000000000000A.md",
+          "sha256": "sha256:b6bed94f5ee285601ae842cc8adc3e792b2992582b3e305dcf6fd0edd2805bd0"
+        },
+        {
+          "path": "ledger/wb_01KZ513V00000000000000000B.md",
+          "source_file": "ledger/wb_01KZ513V00000000000000000B.md",
+          "sha256": "sha256:5b626f98aae150b2498c2e3070bd6199c3241239e005209b6ad237edbd6f22b0"
+        }
+      ]
+    }
+  }
+}

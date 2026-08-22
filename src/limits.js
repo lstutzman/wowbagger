@@ -28,3 +28,23 @@ export const MAX_LIST_TITLE_CHARACTERS = 120;
 // command refuses and the caller lowers `page_size`. The two bounds are
 // independent on purpose: neither silently rewrites the other.
 export const MAX_LIST_RESPONSE_BYTES = 131072;
+
+// The bounded workbench projection's advertised numbers. `inspect --workbench`
+// is negotiated by its own projection version, exactly as `list` is negotiated
+// by its query version: a projection shape a consumer does not recognize is
+// refused by this number rather than by the core contract version.
+export const WORKBENCH_PROJECTION_VERSION = 1;
+// Titles are projected by Unicode code point, for the same reason `list`
+// projects them that way. The bound is the workbench's own: the two
+// projections answer different questions and neither rewrites the other.
+export const MAX_WORKBENCH_TITLE_CHARACTERS = 120;
+// The largest number of entries any one variable-size workbench collection
+// carries — relation lists, precondition issues, blockers, and the related IDs
+// inside an issue. A longer collection is truncated and says so, so the
+// projection stays bounded whatever the ledger holds.
+export const MAX_WORKBENCH_COLLECTION_ENTRIES = 50;
+// The whole workbench response, envelope and trailing LF included, must fit
+// this. The bounded collections above put the largest possible projection well
+// inside it; the check is the promise, not a page-size knob, and a response
+// over it is refused rather than written.
+export const MAX_WORKBENCH_RESPONSE_BYTES = 65536;

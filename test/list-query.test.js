@@ -647,7 +647,8 @@ test('capabilities negotiates core contract version 5 and advertises the list bo
   assert.equal(envelope.result.limits.max_list_response_bytes, MAX_RESPONSE_BYTES);
 
   // The list members join an existing envelope; nothing already advertised
-  // moves or disappears.
+  // moves or disappears. The workbench bounds joined the same envelope after
+  // the list bounds, under the same core contract version.
   assert.deepEqual(Object.keys(envelope.result.operations), [
     'inspect', 'list', 'create', 'transition', 'patch', 'report', 'work_claim',
   ]);
@@ -657,6 +658,9 @@ test('capabilities negotiates core contract version 5 and advertises the list bo
     'max_list_page_size',
     'max_list_title_characters',
     'max_list_response_bytes',
+    'max_workbench_title_characters',
+    'max_workbench_collection_entries',
+    'max_workbench_response_bytes',
     'multi_item_atomicity',
     'cross_clone_coordination',
     'cross_worktree_coordination',

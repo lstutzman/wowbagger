@@ -5,6 +5,10 @@ import {
   MAX_LIST_PAGE_SIZE,
   MAX_LIST_RESPONSE_BYTES,
   MAX_LIST_TITLE_CHARACTERS,
+  MAX_WORKBENCH_COLLECTION_ENTRIES,
+  MAX_WORKBENCH_RESPONSE_BYTES,
+  MAX_WORKBENCH_TITLE_CHARACTERS,
+  WORKBENCH_PROJECTION_VERSION,
 } from '../limits.js';
 import { hasExactMembers, sameJson } from './schema-helpers.js';
 
@@ -36,11 +40,17 @@ function backendIssue(backend) {
   return null;
 }
 
+// The workbench member is a nested feature claim, so it is checked by exact
+// members too: an adapter must not forward an `inspect` that claims a
+// projection shape this core does not answer with.
 function inspectOperationIssue(inspect) {
-  if (!hasExactMembers(inspect, ['supported', 'write_scope', 'cas_scope'])
+  if (!hasExactMembers(inspect, ['supported', 'write_scope', 'cas_scope', 'workbench'])
     || inspect.supported !== true
     || inspect.write_scope !== 'none'
-    || inspect.cas_scope !== 'none') {
+    || inspect.cas_scope !== 'none'
+    || !hasExactMembers(inspect.workbench ?? {}, ['supported', 'projection_version'])
+    || inspect.workbench.supported !== true
+    || inspect.workbench.projection_version !== WORKBENCH_PROJECTION_VERSION) {
     return 'result.operations.inspect';
   }
   return null;
@@ -154,6 +164,7 @@ function limitsIssue(limits) {
   if (!hasExactMembers(limits, [
     'max_item_source_bytes',
     'default_list_page_size', 'max_list_page_size', 'max_list_title_characters', 'max_list_response_bytes',
+    'max_workbench_title_characters', 'max_workbench_collection_entries', 'max_workbench_response_bytes',
     'multi_item_atomicity', 'cross_clone_coordination', 'cross_worktree_coordination',
     'cross_machine_coordination', 'noncooperating_writer_protection', 'automatic_stale_lock_breaking',
   ])
@@ -162,6 +173,9 @@ function limitsIssue(limits) {
     || limits.max_list_page_size !== MAX_LIST_PAGE_SIZE
     || limits.max_list_title_characters !== MAX_LIST_TITLE_CHARACTERS
     || limits.max_list_response_bytes !== MAX_LIST_RESPONSE_BYTES
+    || limits.max_workbench_title_characters !== MAX_WORKBENCH_TITLE_CHARACTERS
+    || limits.max_workbench_collection_entries !== MAX_WORKBENCH_COLLECTION_ENTRIES
+    || limits.max_workbench_response_bytes !== MAX_WORKBENCH_RESPONSE_BYTES
     || limits.multi_item_atomicity !== false
     || limits.cross_clone_coordination !== false
     || limits.cross_worktree_coordination !== false
@@ -242,7 +256,12 @@ export function coreCapabilities() {
     result: {
       backend: { name: 'local-filesystem', coordination_scope: 'same-working-copy-cooperative-writers' },
       operations: {
-        inspect: { supported: true, write_scope: 'none', cas_scope: 'none' },
+        inspect: {
+          supported: true,
+          write_scope: 'none',
+          cas_scope: 'none',
+          workbench: { supported: true, projection_version: WORKBENCH_PROJECTION_VERSION },
+        },
         list: {
           supported: true,
           write_scope: 'none',
@@ -285,6 +304,9 @@ export function coreCapabilities() {
         max_list_page_size: MAX_LIST_PAGE_SIZE,
         max_list_title_characters: MAX_LIST_TITLE_CHARACTERS,
         max_list_response_bytes: MAX_LIST_RESPONSE_BYTES,
+        max_workbench_title_characters: MAX_WORKBENCH_TITLE_CHARACTERS,
+        max_workbench_collection_entries: MAX_WORKBENCH_COLLECTION_ENTRIES,
+        max_workbench_response_bytes: MAX_WORKBENCH_RESPONSE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,

@@ -35,11 +35,11 @@
     },
     {
       "path": "expected-adapter-result.json",
-      "sha256": "sha256:b5be0a9522e4d0b9a0c300ce1b00033e2ae113a2d3809ee126109b3e62c25a77"
+      "sha256": "sha256:d701d80e118682fca76a3a9812ea785a39c38d892968a78e8fe1fd03a51a34f7"
     },
     {
       "path": "expected-core-stdout.jsonl",
-      "sha256": "sha256:ee82e58dbbd7e130b29582f87ebf3015fab9fadb145722b2b8a52a7ee543eb46"
+      "sha256": "sha256:7f2c4f4fe7511b39ac259f0ccdf0decc23a6d7d48030bd41176c5ab369b58486"
     },
     {
       "path": "invocation.json",

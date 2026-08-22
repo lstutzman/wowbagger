@@ -57,6 +57,10 @@ import {
   MAX_LIST_PAGE_SIZE,
   MAX_LIST_RESPONSE_BYTES,
   MAX_LIST_TITLE_CHARACTERS,
+  MAX_WORKBENCH_COLLECTION_ENTRIES,
+  MAX_WORKBENCH_RESPONSE_BYTES,
+  MAX_WORKBENCH_TITLE_CHARACTERS,
+  WORKBENCH_PROJECTION_VERSION,
 } from './limits.js';
 import { listLedger, validateListQuery } from './list.js';
 import { mintId } from './mint.js';
@@ -64,6 +68,7 @@ import { provisionNamespace, readNamespace } from './namespace.js';
 import { normalizeJsonValue, parseJsonRequest, sortIssues } from './request.js';
 import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
+import { inspectWorkbench } from './workbench.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 5;
@@ -179,20 +184,27 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
     const options = parsedOptions.options;
-    let result;
-    let selectorDetails;
+    let selector;
     if (options.number !== undefined) {
       const parsedNumber = Number(options.number);
       if (!Number.isSafeInteger(parsedNumber) || parsedNumber < 1) {
         writeInvalidRequest(command, [issue('/arguments', 'invalid-value', 'Argument --number must be a positive integer.')]);
         return;
       }
-      result = await inspectItemByNumber(options.ledger, parsedNumber);
-      selectorDetails = { number: parsedNumber };
+      selector = { number: parsedNumber };
     } else {
-      result = await inspectItem(options.ledger, options.id);
-      selectorDetails = { id: options.id };
+      selector = { id: options.id };
     }
+    // The two reads share one resolution and one pair of refusals. They differ
+    // in what a success carries and in what an invalid ledger may carry: the
+    // lossless snapshot is bytes the operator repairs around, while a workbench
+    // projection is a judgement about a ledger this core has not validated.
+    const workbenchRequested = options.workbench === true;
+    const result = workbenchRequested
+      ? await inspectWorkbench(options.ledger, selector, options.asOf)
+      : selector.id === undefined
+        ? await inspectItemByNumber(options.ledger, selector.number)
+        : await inspectItem(options.ledger, selector.id);
     if (result.validation) {
       process.stdout.write(`${JSON.stringify({
         ok: false,
@@ -210,7 +222,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       process.exitCode = 3;
       return;
     }
-    if (!result.item) {
+    if (workbenchRequested ? result.workbench === null : !result.item) {
       process.stdout.write(`${JSON.stringify({
         ok: false,
         command,
@@ -218,18 +230,44 @@ export async function runCli(argumentsList, { scenario } = {}) {
         error: {
           code: 'item-not-found',
           message: 'The requested item was not found.',
-          details: selectorDetails,
+          details: selector,
         },
       })}\n`);
       process.exitCode = 2;
       return;
     }
-    process.stdout.write(`${JSON.stringify({
+    const response = `${JSON.stringify({
       ok: true,
       command,
       contract_version: MUTATION_CONTRACT_VERSION,
-      result: { item: result.item },
-    })}\n`);
+      result: workbenchRequested ? { workbench: result.workbench } : { item: result.item },
+    })}\n`;
+    // The advertised bound is measured on the exact bytes this command would
+    // write, trailing LF included, and only for the bounded projection: the
+    // lossless read is bounded by the item source instead. Over the bound the
+    // projection is refused whole rather than written short.
+    if (workbenchRequested) {
+      const responseBytes = measuredWorkbenchBytes(response, scenario);
+      if (responseBytes > MAX_WORKBENCH_RESPONSE_BYTES) {
+        process.stdout.write(`${JSON.stringify({
+          ok: false,
+          command,
+          contract_version: MUTATION_CONTRACT_VERSION,
+          error: {
+            code: 'workbench-response-too-large',
+            message: 'The workbench projection does not fit the supported response byte limit.',
+            details: {
+              id: result.workbench.item.id,
+              max_workbench_response_bytes: MAX_WORKBENCH_RESPONSE_BYTES,
+              response_bytes: responseBytes,
+            },
+          },
+        })}\n`);
+        process.exitCode = 2;
+        return;
+      }
+    }
+    process.stdout.write(response);
     return;
   }
 
@@ -737,6 +775,18 @@ function writeListFailure(code, message, details, exit) {
   process.exitCode = exit;
 }
 
+// The workbench projection bounds every variable-size field it carries, so the
+// largest projection this core can build is well inside the advertised response
+// bound. The measurement is the promise rather than a page-size knob: a caller
+// has no size to lower, so exceeding it would be a defect in the projection.
+// The fixture scenario is the only way to reach the refusal, so the fail-closed
+// path is executed by a test instead of trusted.
+function measuredWorkbenchBytes(response, scenario) {
+  return scenario === 'workbench-response-exceeds-bound'
+    ? MAX_WORKBENCH_RESPONSE_BYTES + 1
+    : Buffer.byteLength(response, 'utf8');
+}
+
 async function capabilities(ledger) {
   const gitCommonDir = await resolveGitCommonDir(ledger ?? process.cwd());
   return {
@@ -749,10 +799,17 @@ async function capabilities(ledger) {
         coordination_scope: 'same-working-copy-cooperative-writers',
       },
       operations: {
+        // The workbench member is how a consumer learns the opt-in affordance
+        // projection exists and which projection shape it will receive, without
+        // probing a read that a version 4 consumer never sent.
         inspect: {
           supported: true,
           write_scope: 'none',
           cas_scope: 'none',
+          workbench: {
+            supported: true,
+            projection_version: WORKBENCH_PROJECTION_VERSION,
+          },
         },
         list: {
           supported: true,
@@ -800,6 +857,9 @@ async function capabilities(ledger) {
         max_list_page_size: MAX_LIST_PAGE_SIZE,
         max_list_title_characters: MAX_LIST_TITLE_CHARACTERS,
         max_list_response_bytes: MAX_LIST_RESPONSE_BYTES,
+        max_workbench_title_characters: MAX_WORKBENCH_TITLE_CHARACTERS,
+        max_workbench_collection_entries: MAX_WORKBENCH_COLLECTION_ENTRIES,
+        max_workbench_response_bytes: MAX_WORKBENCH_RESPONSE_BYTES,
         multi_item_atomicity: false,
         cross_clone_coordination: false,
         cross_worktree_coordination: false,
@@ -869,7 +929,7 @@ function parseContractOptions(command, argumentsList) {
   const issues = [];
   const seen = new Set();
   const valueFlags = command === 'inspect'
-    ? new Map([['--ledger', 'ledger'], ['--id', 'id'], ['--number', 'number']])
+    ? new Map([['--ledger', 'ledger'], ['--id', 'id'], ['--number', 'number'], ['--as-of', 'asOf']])
     : command === 'report'
       ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out'], ['--view', 'view']])
       : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
@@ -885,17 +945,19 @@ function parseContractOptions(command, argumentsList) {
               ? new Map([['--date', 'date']])
               : new Map();
   // Bare flags carry no value. `--auto-commit` is accepted only on the four
-  // commands whose Git finalization it folds in; every other command reports it
-  // as an unknown argument.
+  // commands whose Git finalization it folds in; `--workbench` only on the one
+  // read it changes. Every other command reports either as an unknown argument.
   const bareFlags = AUTO_COMMIT_COMMANDS.has(command)
     ? new Map([['--auto-commit', 'autoCommit']])
-    : new Map();
+    : command === 'inspect'
+      ? new Map([['--workbench', 'workbench']])
+      : new Map();
   const optionalFlags = command === 'mint-id'
     ? new Set(['--date'])
     : command === 'report'
       ? new Set(['--out', '--view'])
       : command === 'inspect'
-        ? new Set(['--id', '--number'])
+        ? new Set(['--id', '--number', '--as-of'])
         : new Set();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
@@ -948,6 +1010,18 @@ function parseContractOptions(command, argumentsList) {
       seen.has('--id') ? 'conflicting-argument' : 'missing-argument',
       'Exactly one of --id or --number is required.',
     ));
+  }
+  // The workbench projection is a point-in-time read, so the date is part of
+  // its grammar rather than a default this core invents. The coupling is
+  // refused in both directions: an unpaired `--as-of` would otherwise be
+  // silently ignored on a default inspect.
+  if (command === 'inspect' && seen.has('--workbench') !== seen.has('--as-of')) {
+    issues.push(seen.has('--workbench')
+      ? argumentIssue(-1, 'missing-argument', 'Argument --as-of is required with --workbench.')
+      : argumentIssue(-1, 'conflicting-argument', 'Argument --as-of is accepted only with --workbench.'));
+  } else if (command === 'inspect' && seen.has('--as-of')
+    && options.asOf !== undefined && !isCalendarDate(options.asOf)) {
+    issues.push(argumentIssue(-1, 'invalid-value', 'Argument --as-of must be an ISO calendar date.'));
   }
   if (!seen.has('--json')) {
     issues.push(argumentIssue(-1, 'missing-argument', 'Argument --json is required.'));
@@ -1370,7 +1444,7 @@ function usage(command) {
   }
 
   if (command === 'inspect') {
-    return 'Usage: wowbagger inspect --ledger <dir> (--id <id> | --number <n>) --json';
+    return 'Usage: wowbagger inspect --ledger <dir> (--id <id> | --number <n>) --json [--workbench --as-of YYYY-MM-DD]';
   }
 
   if (command === 'list') {
@@ -1473,6 +1547,22 @@ function commandHelp(command) {
       `${usage(command)}`,
       '',
       'Requires the ledger-specific claim capability claim_protected_publication: true.',
+      '',
+    ].join('\n');
+  }
+
+  if (command === 'inspect') {
+    return [
+      header,
+      '',
+      `${usage(command)}`,
+      '',
+      'Without --workbench the response is the lossless raw-byte item snapshot.',
+      '--workbench returns a bounded lifecycle projection for one item as of a date:',
+      'the item summary, and one transition option per allowed lifecycle target with',
+      'its generated action, decision requirement, minimum date, and observed state.',
+      'It requires --as-of, changes no ledger state, and is an observation, not a lease:',
+      'transition rechecks revision, lock, claim fence, reconciliation, and validity.',
       '',
     ].join('\n');
   }

@@ -1,0 +1,19 @@
+{
+  "ok": false,
+  "command": "inspect",
+  "contract_version": 5,
+  "error": {
+    "code": "ledger-invalid",
+    "message": "The configured ledger is invalid.",
+    "details": {
+      "validation_errors": [
+        {
+          "path": "ledger/wb_01KYZWAD00000000000000000A.md",
+          "field": "status",
+          "code": "unknown-status",
+          "message": "Status nonsense is not one of the schema version 2 statuses."
+        }
+      ]
+    }
+  }
+}
