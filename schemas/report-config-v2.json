@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/report-config-v2.json",
+  "title": "Report configuration, report_version 2",
+  "description": "The `<ledger>/.wowbagger/report.json` a version 2 report reads. Version 2 exists to name views, so `views` is required.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "report_version": {
+      "const": 2
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logo": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\.([Ss][Vv][Gg]|[Pp][Nn][Gg]|[Jj][Pp][Gg]|[Jj][Pp][Ee][Gg]|[Ww][Ee][Bb][Pp])$",
+          "description": "A configuration-relative image path with a supported extension."
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "output": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The configuration-relative artifact path. Required unless the invocation supplies --out."
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "class": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "due": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "rank": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "score": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "complexity": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "tier": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "mandate": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "severity": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "confidence": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "security": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "priority_base": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "priority_component": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "priority_impact": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "priority_leverage": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "priority_rationale": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
+        "completion_reference": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        }
+      },
+      "description": "RFC 6901 pointers from the item document to a mapped report field."
+    },
+    "swarm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "eligible_complexities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "description": "Requires fields.area and fields.complexity to be configured.",
+      "required": [
+        "eligible_complexities"
+      ]
+    },
+    "views": {
+      "type": "object",
+      "description": "Between 1 and 64 named views. A version 2 configuration without a usable view set is report-config-invalid.",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9-]{0,63}$": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "output": {
+              "type": "string",
+              "minLength": 1
+            },
+            "filters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "readiness": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "ready",
+                      "blocked",
+                      "ineligible"
+                    ]
+                  }
+                },
+                "status": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/status"
+                  }
+                },
+                "kind": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/kind"
+                  }
+                },
+                "fields": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "additionalProperties": false,
+                  "propertyNames": {
+                    "enum": [
+                      "area",
+                      "class",
+                      "due",
+                      "rank",
+                      "score",
+                      "complexity",
+                      "tier",
+                      "mandate",
+                      "severity",
+                      "confidence",
+                      "security",
+                      "priority_base",
+                      "priority_component",
+                      "priority_impact",
+                      "priority_leverage",
+                      "priority_rationale",
+                      "completion_reference"
+                    ]
+                  },
+                  "patternProperties": {
+                    "^.*$": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "description": "Values inside one group are alternatives; every present group must match."
+            }
+          },
+          "required": [
+            "title",
+            "output"
+          ]
+        }
+      }
+    }
+  },
+  "required": [
+    "report_version",
+    "repository",
+    "title",
+    "views"
+  ]
+}

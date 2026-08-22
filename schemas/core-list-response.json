@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-list-response.json",
+  "title": "list --json success response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "command",
+    "contract_version",
+    "result"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "command": {
+      "const": "list"
+    },
+    "contract_version": {
+      "const": 5
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query_version",
+        "as_of",
+        "snapshot",
+        "page",
+        "items"
+      ],
+      "properties": {
+        "query_version": {
+          "const": 1
+        },
+        "as_of": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "snapshot": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/snapshotWitness"
+        },
+        "page": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "size",
+            "offset",
+            "returned",
+            "matched",
+            "has_more",
+            "next_cursor"
+          ],
+          "properties": {
+            "size": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "returned": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "matched": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "has_more": {
+              "type": "boolean"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "title",
+              "title_truncated",
+              "kind",
+              "status",
+              "created",
+              "updated",
+              "revision",
+              "ready"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+              },
+              "number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "title": {
+                "type": "string"
+              },
+              "title_truncated": {
+                "type": "boolean"
+              },
+              "kind": {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/kind"
+              },
+              "status": {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/status"
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "created": {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+              },
+              "updated": {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+              },
+              "revision": {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+              },
+              "ready": {
+                "type": "boolean"
+              }
+            },
+            "description": "One bounded row. `number` and `priority` are present only when the item carries them; there is no source and no body."
+          }
+        }
+      }
+    }
+  }
+}

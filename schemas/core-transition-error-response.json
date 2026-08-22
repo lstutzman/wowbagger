@@ -1,0 +1,855 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-transition-error-response.json",
+  "title": "transition --json refusal responses",
+  "description": "Every documented `transition` refusal. Read `state` on every nonzero result: `unchanged` is a proven non-write, `unknown` establishes nothing, and `committed` means the item was written and something after publication failed.",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "invalid-request",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "invalid-request"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "issues": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/requestIssue"
+                  }
+                }
+              },
+              "required": [
+                "issues"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "item-not-found",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "item-not-found"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "ledger-invalid",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "ledger-invalid"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "validation_errors": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/validationError"
+                  }
+                }
+              },
+              "required": [
+                "validation_errors"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "revision-conflict",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "revision-conflict"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "expected_revision": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+                },
+                "actual_revision": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+                }
+              },
+              "required": [
+                "id",
+                "expected_revision",
+                "actual_revision"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "lock-held",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "lock-held"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "lock_path": {
+                  "type": "string"
+                },
+                "owner": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/lockOwner"
+                },
+                "owner_diagnostic": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "invalid-shape",
+                    "too-large",
+                    "invalid-json",
+                    "duplicate-key",
+                    null
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "lock_path",
+                "owner",
+                "owner_diagnostic"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "transition-precondition-failed",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "transition-precondition-failed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "issues": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/transitionIssue"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "issues"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "candidate-invalid",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "candidate-invalid"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "validation_errors": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/validationError"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "validation_errors"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "atomic-scope-required",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "atomic-scope-required"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "precondition_issues": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/transitionIssue"
+                  }
+                },
+                "blockers": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/transitionBlocker"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "precondition_issues",
+                "blockers"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "item-source-too-large",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "item-source-too-large"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "max_item_source_bytes": {
+                  "const": 8388608
+                },
+                "source_bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "capability-unavailable",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "capability-unavailable"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "capability": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "recovery_artifacts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/recoveryArtifact"
+                  }
+                },
+                "recovery_artifacts_truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "capability",
+                "reason"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unchanged"
+        }
+      }
+    },
+    {
+      "title": "operation-failed",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "operation-failed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "operation": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "recovery_artifacts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/recoveryArtifact"
+                  }
+                },
+                "recovery_artifacts_truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "operation",
+                "reason"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "enum": [
+            "unchanged",
+            "unknown"
+          ]
+        }
+      }
+    },
+    {
+      "title": "write-outcome-unknown",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "write-outcome-unknown"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "recovery_artifacts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/recoveryArtifact"
+                  }
+                },
+                "recovery_artifacts_truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "unknown"
+        }
+      }
+    },
+    {
+      "title": "post-commit-recovery-required",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "transition"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "post-commit-recovery-required"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "revision": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+                },
+                "recovery_artifacts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/recoveryArtifact"
+                  }
+                },
+                "recovery_artifacts_truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "revision"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        },
+        "state": {
+          "const": "committed"
+        }
+      }
+    }
+  ]
+}

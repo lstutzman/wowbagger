@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-capabilities-response.json",
+  "title": "capabilities --json success response",
+  "description": "The exact core capability envelope this contract version emits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "command",
+    "contract_version",
+    "result"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "command": {
+      "const": "capabilities"
+    },
+    "contract_version": {
+      "const": 5
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend",
+        "operations",
+        "durability",
+        "limits"
+      ],
+      "properties": {
+        "backend": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "coordination_scope"
+          ],
+          "properties": {
+            "name": {
+              "const": "local-filesystem"
+            },
+            "coordination_scope": {
+              "const": "same-working-copy-cooperative-writers"
+            }
+          }
+        },
+        "operations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inspect",
+            "list",
+            "create",
+            "transition",
+            "patch",
+            "report",
+            "work_claim"
+          ],
+          "properties": {
+            "inspect": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "supported",
+                "write_scope",
+                "cas_scope",
+                "workbench"
+              ],
+              "properties": {
+                "supported": {
+                  "const": true
+                },
+                "write_scope": {
+                  "const": "none"
+                },
+                "cas_scope": {
+                  "const": "none"
+                },
+                "workbench": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "supported",
+                    "projection_version"
+                  ],
+                  "properties": {
+                    "supported": {
+                      "const": true
+                    },
+                    "projection_version": {
+                      "const": 1
+                    }
+                  }
+                }
+              }
+            },
+            "list": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "supported",
+                "write_scope",
+                "cas_scope",
+                "query_version"
+              ],
+              "properties": {
+                "supported": {
+                  "const": true
+                },
+                "write_scope": {
+                  "const": "none"
+                },
+                "cas_scope": {
+                  "const": "none"
+                },
+                "query_version": {
+                  "const": 1
+                }
+              }
+            },
+            "create": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "supported",
+                "write_scope",
+                "cas_scope",
+                "publication_visibility",
+                "publication_probe"
+              ],
+              "properties": {
+                "supported": {
+                  "const": true
+                },
+                "write_scope": {
+                  "const": "single-item"
+                },
+                "cas_scope": {
+                  "const": "requested-id-lock"
+                },
+                "publication_visibility": {
+                  "const": "atomic-no-clobber-or-fail"
+                },
+                "publication_probe": {
+                  "const": "per-ledger-operation"
+                }
+              }
+            },
+            "transition": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "supported",
+                "write_scope",
+                "cas_scope"
+              ],
+              "properties": {
+                "supported": {
+                  "const": true
+                },
+                "write_scope": {
+                  "const": "single-item"
+                },
+                "cas_scope": {
+                  "const": "exact-byte-sha256"
+                }
+              }
+            },
+            "patch": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "supported",
+                "write_scope",
+                "cas_scope"
+              ],
+              "properties": {
+                "supported": {
+                  "const": true
+                },
+                "write_scope": {
+                  "const": "single-item"
+                },
+                "cas_scope": {
+                  "const": "exact-byte-sha256"
+                }
+              }
+            },
+            "report": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "supported",
+                "write_scope",
+                "config_versions",
+                "named_views"
+              ],
+              "properties": {
+                "supported": {
+                  "const": true
+                },
+                "write_scope": {
+                  "const": "derived-output"
+                },
+                "config_versions": {
+                  "const": [
+                    1,
+                    2
+                  ]
+                },
+                "named_views": {
+                  "const": true
+                }
+              }
+            },
+            "work_claim": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "supported",
+                "api_version",
+                "mode",
+                "claim_protected_publication",
+                "fencing_enforced_at",
+                "safe_exclusive_dispatch"
+              ],
+              "properties": {
+                "supported": {
+                  "type": "boolean"
+                },
+                "api_version": {
+                  "const": 2
+                },
+                "mode": {
+                  "const": "advisory"
+                },
+                "claim_protected_publication": {
+                  "const": false
+                },
+                "fencing_enforced_at": {
+                  "const": "none"
+                },
+                "safe_exclusive_dispatch": {
+                  "const": false
+                }
+              },
+              "description": "The core capability envelope reports the unbound default claim profile. `supported` states only whether a Git common directory is reachable; the merge-coordinated profile is read from `claim capabilities --ledger <dir>`, which is a work-claim domain response."
+            }
+          }
+        },
+        "durability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "temporary_file_sync",
+            "directory_sync",
+            "post_publication_verification",
+            "power_loss_guarantee"
+          ],
+          "properties": {
+            "temporary_file_sync": {
+              "const": "required-before-publication"
+            },
+            "directory_sync": {
+              "const": "best-effort-when-supported"
+            },
+            "post_publication_verification": {
+              "const": "exact-bytes-required"
+            },
+            "power_loss_guarantee": {
+              "const": "none"
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max_item_source_bytes",
+            "default_list_page_size",
+            "max_list_page_size",
+            "max_list_title_characters",
+            "max_list_response_bytes",
+            "max_workbench_title_characters",
+            "max_workbench_collection_entries",
+            "max_workbench_response_bytes",
+            "multi_item_atomicity",
+            "cross_clone_coordination",
+            "cross_worktree_coordination",
+            "cross_machine_coordination",
+            "noncooperating_writer_protection",
+            "automatic_stale_lock_breaking"
+          ],
+          "properties": {
+            "max_item_source_bytes": {
+              "const": 8388608
+            },
+            "default_list_page_size": {
+              "const": 50
+            },
+            "max_list_page_size": {
+              "const": 200
+            },
+            "max_list_title_characters": {
+              "const": 120
+            },
+            "max_list_response_bytes": {
+              "const": 131072
+            },
+            "max_workbench_title_characters": {
+              "const": 120
+            },
+            "max_workbench_collection_entries": {
+              "const": 50
+            },
+            "max_workbench_response_bytes": {
+              "const": 65536
+            },
+            "multi_item_atomicity": {
+              "const": false
+            },
+            "cross_clone_coordination": {
+              "const": false
+            },
+            "cross_worktree_coordination": {
+              "const": false
+            },
+            "cross_machine_coordination": {
+              "const": false
+            },
+            "noncooperating_writer_protection": {
+              "const": false
+            },
+            "automatic_stale_lock_breaking": {
+              "const": false
+            }
+          },
+          "description": "Every advertised semantic limit. A consumer reads these numbers here and never infers them from an adapter implementation."
+        }
+      }
+    }
+  }
+}

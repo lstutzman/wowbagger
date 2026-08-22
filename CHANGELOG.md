@@ -23,6 +23,22 @@ consolidation. The first tagged release inherits this file.
   through an explicit `"./*"` subpath. No command accepts, refuses, emits, or
   writes anything different.
 
+- **The machine contract ships as JSON Schema, not only as prose and fixtures.**
+  Seventeen JSON Schema 2020-12 documents under `schemas/` are published with
+  the package and resolvable as `wowbagger/schemas/<file>.json`, with
+  `schemas/index.json` naming each one's response domain and that domain's
+  version. They cover the core envelope and its four exact root shapes, the
+  capabilities envelope with every advertised limit as a constant, the two bare
+  results, the list query and its page and refusals, the default and workbench
+  inspect projections, the transition request, success, and every documented
+  refusal with its mutation state, the `ledger-mutation` fence refusals, report
+  configuration versions 1 and 2, and the report responses including a named
+  view. Every schema fixes its root members exactly and pins the version of its
+  own domain, so a core envelope refuses a namespaced refusal, a version 4
+  envelope, or an extra root member, and a version 1 report configuration
+  refuses a version 2 one. The validator is a test-only dependency; the runtime
+  still has exactly one dependency.
+
 ### Documentation
 
 - **Response loss is a named contract instead of folklore.** The mutation

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-transition-response.json",
+  "title": "transition --json success response",
+  "description": "A committed transition. `state: \"committed\"` means the intended final path was re-read and holds exactly the published bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "command",
+    "contract_version",
+    "state",
+    "result"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "command": {
+      "const": "transition"
+    },
+    "contract_version": {
+      "const": 5
+    },
+    "state": {
+      "const": "committed"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemSnapshot"
+        }
+      },
+      "required": [
+        "item"
+      ]
+    }
+  }
+}

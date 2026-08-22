@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-envelope.json",
+  "title": "Wowbagger core response envelope, contract version 5",
+  "description": "Every --json response of a core-domain command. The core domain is the one domain with no root namespace member: a response carrying `namespace` belongs to another domain and is rejected here. `validate` and `ready` are bare results outside the envelope rule and have their own schemas.",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "read success",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "result"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "command": {
+          "enum": [
+            "capabilities",
+            "inspect",
+            "list",
+            "mint-id",
+            "report"
+          ]
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "result": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "title": "read refusal",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "enum": [
+            "capabilities",
+            "inspect",
+            "list",
+            "mint-id",
+            "report"
+          ]
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/error"
+        }
+      }
+    },
+    {
+      "title": "mutation success",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "result"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "command": {
+          "enum": [
+            "create",
+            "transition",
+            "patch"
+          ]
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "state": {
+          "const": "committed"
+        },
+        "result": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "title": "mutation refusal",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "enum": [
+            "create",
+            "transition",
+            "patch"
+          ]
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "state": {
+          "enum": [
+            "unchanged",
+            "committed",
+            "unknown"
+          ]
+        },
+        "error": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/error"
+        }
+      }
+    }
+  ]
+}

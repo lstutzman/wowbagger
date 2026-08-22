@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-inspect-response.json",
+  "title": "inspect --json success response, the lossless read",
+  "description": "The default read. `result` carries exactly `item`; an invocation with `--workbench` answers a different result member and has its own schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "command",
+    "contract_version",
+    "result"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "command": {
+      "const": "inspect"
+    },
+    "contract_version": {
+      "const": 5
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemSnapshot"
+        }
+      },
+      "required": [
+        "item"
+      ]
+    }
+  }
+}

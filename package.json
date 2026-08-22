@@ -36,6 +36,7 @@
     "./launch": "./src/launch.js",
     "./wowbagger.js": "./bin/wowbagger.js",
     "./package.json": "./package.json",
+    "./schemas/*.json": "./schemas/*.json",
     "./*": "./*"
   },
   "files": [
@@ -44,6 +45,7 @@
     "skills",
     "adapters",
     "vendor",
+    "schemas",
     "docs/adapter-contract.md",
     "docs/mutation-contract.md",
     "docs/work-claim-contract.md",
@@ -62,5 +64,8 @@
   },
   "dependencies": {
     "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0"
   }
 }

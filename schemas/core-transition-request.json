@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-transition-request.json",
+  "title": "transition request",
+  "description": "The strict JSON request `transition` reads from bounded stdin or a host-created request file. It accepts exactly these members: the core derives action, decision date, rollup, and terminal dates, and refuses a decision on an edge that appends none.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+    },
+    "expected_revision": {
+      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+    },
+    "to_status": {
+      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/status"
+    },
+    "date": {
+      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "Required exactly when the edge appends evidence; rejected on an edge that appends none.",
+      "required": [
+        "summary",
+        "rationale"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "expected_revision",
+    "to_status",
+    "date"
+  ]
+}

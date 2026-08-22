@@ -1,0 +1,468 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/common.json",
+  "title": "Shared Wowbagger contract definitions",
+  "description": "Definitions reused by the published Wowbagger schemas. This file declares no root constraint; validate an instance against a domain schema, never against this one.",
+  "$defs": {
+    "itemId": {
+      "type": "string",
+      "description": "A canonical Wowbagger item ID: wb_ followed by a 26-character ULID.",
+      "pattern": "^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+    },
+    "revision": {
+      "type": "string",
+      "description": "An exact item or snapshot revision: SHA-256 over exact bytes, lowercase hexadecimal.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "isoDate": {
+      "type": "string",
+      "description": "An ISO calendar date, YYYY-MM-DD.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "instant": {
+      "type": "string",
+      "description": "A canonical RFC 3339 UTC instant with an uppercase T and Z and no numeric offset.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "archived",
+        "backlog",
+        "deferred",
+        "done",
+        "in-progress",
+        "killed",
+        "triage"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "task",
+        "epic"
+      ]
+    },
+    "validationError": {
+      "type": "object",
+      "description": "One machine-readable validation error. Every error carries path, field, code, and message; a misplaced item also carries expected_path and remediation.",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "field",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "field": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "expected_path": {
+          "type": "string"
+        },
+        "remediation": {
+          "type": "string"
+        }
+      }
+    },
+    "requestIssue": {
+      "type": "object",
+      "description": "One deterministic invalid-request issue. Exactly path, code, and message.",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "code",
+        "message"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "enum": [
+            "invalid-json",
+            "duplicate-key",
+            "missing-member",
+            "unknown-member",
+            "invalid-type",
+            "invalid-value",
+            "missing-argument",
+            "repeated-argument",
+            "unknown-argument",
+            "conflicting-argument"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "description": "A core error object. Exactly code, message, and details.",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "object"
+        }
+      }
+    },
+    "itemSnapshot": {
+      "type": "object",
+      "description": "The lossless item snapshot returned by inspect, create, transition, and patch.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "revision",
+        "source_encoding",
+        "source_media_type",
+        "source_base64",
+        "core",
+        "body"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+        },
+        "path": {
+          "type": "string"
+        },
+        "revision": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+        },
+        "source_encoding": {
+          "const": "base64"
+        },
+        "source_media_type": {
+          "const": "text/markdown; charset=utf-8"
+        },
+        "source_base64": {
+          "type": "string"
+        },
+        "core": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemCore"
+        },
+        "body": {
+          "type": "string"
+        }
+      }
+    },
+    "itemCore": {
+      "type": "object",
+      "description": "The normalized core view of one item. Consumer-owned extension members are not part of it.",
+      "required": [
+        "schema_version",
+        "id",
+        "title",
+        "kind",
+        "status",
+        "created",
+        "updated",
+        "provenance"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "id": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/kind"
+        },
+        "status": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/status"
+        },
+        "created": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "updated": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "parent": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+        },
+        "snoozed_until": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "completed": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "killed": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "archived": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "deferred": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+          }
+        },
+        "related": {
+          "type": "array",
+          "items": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "required": [
+            "source",
+            "recorded_at"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1
+            },
+            "recorded_at": {
+              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+            }
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/decision"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "action",
+        "date",
+        "summary",
+        "rationale"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "complete",
+            "resolve",
+            "kill",
+            "archive",
+            "restore",
+            "defer",
+            "undefer",
+            "replace-dependency",
+            "waive-dependency",
+            "reparent",
+            "record"
+          ]
+        },
+        "date": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rollup": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "status"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "done",
+                  "killed"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "snapshotWitness": {
+      "type": "object",
+      "description": "The ledger-snapshot witness: a digest over every item path and revision, with the whole validated item count.",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "item_count"
+      ],
+      "properties": {
+        "revision": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "transitionIssue": {
+      "type": "object",
+      "description": "One observed transition precondition issue. Only the two date codes carry item_created and item_updated.",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "field",
+        "message",
+        "related_ids"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "field": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "related_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+          }
+        },
+        "item_created": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        },
+        "item_updated": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+        }
+      }
+    },
+    "transitionBlocker": {
+      "type": "object",
+      "description": "One multi-item blocker the local backend cannot satisfy in a single-item write scope.",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "item_id",
+        "field"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "child-disposition",
+            "dependent-cleanup",
+            "dependent-disposition"
+          ]
+        },
+        "item_id": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+        },
+        "field": {
+          "type": "string"
+        }
+      }
+    },
+    "recoveryArtifact": {
+      "type": "object",
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "lockOwner": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "The parsed lock record of the writer holding the lock, or null when the record could not be read; owner_diagnostic then says why.",
+      "additionalProperties": false,
+      "required": [
+        "lock_version",
+        "item_id",
+        "operation",
+        "writer_id",
+        "started_at"
+      ],
+      "properties": {
+        "lock_version": {
+          "const": 1
+        },
+        "item_id": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "writer_id": {
+          "type": "string"
+        },
+        "started_at": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+        }
+      }
+    }
+  }
+}

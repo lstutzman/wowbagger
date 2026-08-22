@@ -1,0 +1,108 @@
+{
+  "schema_index_version": 1,
+  "description": "The published Wowbagger JSON Schemas. Each $id is a stable identifier, not a fetch URL: resolve a schema from the installed package as wowbagger/schemas/<file>. `domain` names the response domain the schema belongs to and `version` the version of that domain, which is not the distribution version.",
+  "schemas": [
+    {
+      "file": "bare-ready-result.json",
+      "domain": "bare-result",
+      "version": null,
+      "summary": "The bare ready success result."
+    },
+    {
+      "file": "bare-validation-result.json",
+      "domain": "bare-result",
+      "version": null,
+      "summary": "The bare validate result, also emitted by ready on an invalid ledger."
+    },
+    {
+      "file": "common.json",
+      "domain": "shared",
+      "version": null,
+      "summary": "Definitions reused by the schemas below. Not a validation target on its own."
+    },
+    {
+      "file": "core-capabilities-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "The capabilities envelope, including every advertised semantic limit."
+    },
+    {
+      "file": "core-envelope.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "Every core-domain --json response: the four exact root shapes, with no namespace member."
+    },
+    {
+      "file": "core-inspect-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "The default lossless inspect read."
+    },
+    {
+      "file": "core-inspect-workbench-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "The opt-in bounded workbench affordance projection, projection version 1."
+    },
+    {
+      "file": "core-list-error-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "Every documented list refusal."
+    },
+    {
+      "file": "core-list-query.json",
+      "domain": "core-list-query",
+      "version": 1,
+      "summary": "The strict list request, query version 1."
+    },
+    {
+      "file": "core-list-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "A bounded, paginated list page."
+    },
+    {
+      "file": "core-report-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "Report publication and refusal responses, including a named view."
+    },
+    {
+      "file": "core-transition-error-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "Every documented transition refusal, with its mutation state."
+    },
+    {
+      "file": "core-transition-request.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "The strict transition request."
+    },
+    {
+      "file": "core-transition-response.json",
+      "domain": "core",
+      "version": 5,
+      "summary": "A committed transition."
+    },
+    {
+      "file": "ledger-mutation-refusal.json",
+      "domain": "ledger-mutation",
+      "version": 1,
+      "summary": "Legacy-write fence refusals in the ledger-mutation namespace."
+    },
+    {
+      "file": "report-config-v1.json",
+      "domain": "report-config",
+      "version": 1,
+      "summary": "The report configuration file at report_version 1."
+    },
+    {
+      "file": "report-config-v2.json",
+      "domain": "report-config",
+      "version": 2,
+      "summary": "The report configuration file at report_version 2, which names views."
+    }
+  ]
+}

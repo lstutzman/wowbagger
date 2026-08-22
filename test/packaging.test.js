@@ -177,6 +177,13 @@ test('the npm tarball ships all public contracts with every adapter executable',
   for (const adapter of ['claude-code', 'codex', 'opencode']) {
     assert.ok(files.has(`adapters/${adapter}/entrypoint.js`), `${adapter} entrypoint must ship`);
   }
+  // A published schema a consumer cannot resolve from the installed package is
+  // prose, so the index and every file it names have to be in the tarball.
+  const index = JSON.parse(readFileSync(path.join(projectRoot, 'schemas', 'index.json'), 'utf8'));
+  assert.ok(files.has('schemas/index.json'), 'the schema index must ship');
+  for (const { file } of index.schemas) {
+    assert.ok(files.has(`schemas/${file}`), `schemas/${file} must ship`);
+  }
 });
 
 // A named view exists only in installed guidance: nothing in the artifact or the

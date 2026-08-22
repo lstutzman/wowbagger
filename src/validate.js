@@ -17,7 +17,10 @@ const TERMINAL_STATES = new Map([
   ['deferred', { field: 'deferred', action: 'defer' }],
 ]);
 const TERMINAL_DATE_FIELDS = ['completed', 'killed', 'archived', 'deferred'];
-const DECISION_ACTIONS = new Set([
+// The closed decision vocabulary. It is exported because the published JSON
+// Schema names the same actions, and a schema that offers an action this
+// validator refuses would tell a consumer to write an item the core rejects.
+export const DECISION_ACTIONS = new Set([
   'accept',
   'complete',
   'resolve',

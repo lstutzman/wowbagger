@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/ledger-mutation-refusal.json",
+  "title": "ledger-mutation fence refusals, namespace version 1",
+  "description": "The legacy-write fence domain. A provisioned ledger answers a legacy `create`, `transition`, or `patch` that the claim fence refuses in this domain, not in the core domain: the response carries a root `namespace`, its own `contract_version: 1`, and a `-v1` command member. Dispatch on `namespace` before reading any version field.",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "active-claim-write-refused",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "namespace": {
+          "const": "ledger-mutation"
+        },
+        "command": {
+          "enum": [
+            "transition-v1",
+            "patch-v1"
+          ]
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "state": {
+          "const": "unchanged"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "active-claim-write-refused"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ledger_namespace": {
+                  "type": "string",
+                  "pattern": "^wbns_[0-9a-f]{32}$"
+                },
+                "item_id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "observed_at": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+                },
+                "last_epoch": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "active": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": false,
+                  "required": [
+                    "owner_id",
+                    "epoch",
+                    "issued_at",
+                    "expires_at"
+                  ],
+                  "properties": {
+                    "owner_id": {
+                      "type": "string"
+                    },
+                    "epoch": {
+                      "type": "string",
+                      "pattern": "^[0-9]+$"
+                    },
+                    "issued_at": {
+                      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+                    },
+                    "expires_at": {
+                      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "ledger_namespace",
+                "item_id",
+                "observed_at"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    },
+    {
+      "title": "claimed-item-write-refused",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "namespace": {
+          "const": "ledger-mutation"
+        },
+        "command": {
+          "enum": [
+            "create-v1"
+          ]
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "state": {
+          "const": "unchanged"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "claimed-item-write-refused"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "ledger_namespace": {
+                  "type": "string",
+                  "pattern": "^wbns_[0-9a-f]{32}$"
+                },
+                "item_id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "observed_at": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+                },
+                "last_epoch": {
+                  "type": "string",
+                  "pattern": "^[0-9]+$"
+                },
+                "active": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": false,
+                  "required": [
+                    "owner_id",
+                    "epoch",
+                    "issued_at",
+                    "expires_at"
+                  ],
+                  "properties": {
+                    "owner_id": {
+                      "type": "string"
+                    },
+                    "epoch": {
+                      "type": "string",
+                      "pattern": "^[0-9]+$"
+                    },
+                    "issued_at": {
+                      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+                    },
+                    "expires_at": {
+                      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/instant"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "ledger_namespace",
+                "item_id",
+                "observed_at"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    },
+    {
+      "title": "claim-store-unavailable",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "namespace": {
+          "const": "ledger-mutation"
+        },
+        "command": {
+          "enum": [
+            "create-v1",
+            "transition-v1",
+            "patch-v1"
+          ]
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "state": {
+          "enum": [
+            "unchanged",
+            "unknown"
+          ]
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "claim-store-unavailable"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "reason": {
+                  "enum": [
+                    "claim-store-locked",
+                    "claim-store-unreadable",
+                    "git-verification-failed",
+                    "legacy-mutation-outcome-unknown",
+                    "legacy-mutation-record-failed",
+                    "publication-reconciliation-required"
+                  ]
+                }
+              },
+              "description": "The reason names the condition; additional diagnostic members accompany some reasons, for example `findings` for publication-reconciliation-required.",
+              "required": [
+                "reason"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    }
+  ]
+}

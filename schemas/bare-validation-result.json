@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/bare-validation-result.json",
+  "title": "validate --json result, and the ready refusal that reuses it",
+  "description": "A bare result: no envelope, no command member, and no version field. `validate --json` always emits this shape, and `ready --json` emits it, exit 1, when the ledger is invalid. It is deliberately outside the envelope rule for compatibility and will not be wrapped.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "valid",
+    "errors"
+  ],
+  "properties": {
+    "valid": {
+      "type": "boolean"
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/validationError"
+      }
+    }
+  }
+}

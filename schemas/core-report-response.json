@@ -1,0 +1,378 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-report-response.json",
+  "title": "report --json responses",
+  "description": "A successful publication names the configuration version it ran and, for a named view, the view it published. An invocation without `--view` carries no `view` member.",
+  "type": "object",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "result"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "command": {
+          "const": "report"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "report_version": {
+              "enum": [
+                1,
+                2
+              ]
+            },
+            "as_of": {
+              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+            },
+            "output": {
+              "type": "string",
+              "minLength": 1
+            },
+            "item_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ready_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "view": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,63}$",
+              "description": "Present only when --view named a configured view."
+            }
+          },
+          "required": [
+            "report_version",
+            "as_of",
+            "output",
+            "item_count",
+            "ready_count"
+          ]
+        }
+      },
+      "title": "publication"
+    },
+    {
+      "title": "invalid-request",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "report"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "invalid-request"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "issues": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/requestIssue"
+                  }
+                }
+              },
+              "required": [
+                "issues"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    },
+    {
+      "title": "ledger-invalid",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "report"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "ledger-invalid"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "validation_errors": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/validationError"
+                  }
+                }
+              },
+              "required": [
+                "validation_errors"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    },
+    {
+      "title": "report-config-invalid",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "report"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "report-config-invalid"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "issues": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "path",
+                      "code",
+                      "message"
+                    ],
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "const": "report-config-invalid"
+                      },
+                      "message": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "required": [
+                "issues"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    },
+    {
+      "title": "report-view-not-found",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "report"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "report-view-not-found"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    },
+    {
+      "title": "report-read-failed",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "report"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "report-read-failed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    },
+    {
+      "title": "report-write-failed",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "command",
+        "contract_version",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "command": {
+          "const": "report"
+        },
+        "contract_version": {
+          "const": 5
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "const": "report-write-failed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "details"
+          ]
+        }
+      }
+    }
+  ]
+}

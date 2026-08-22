@@ -1,0 +1,340 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/core-inspect-workbench-response.json",
+  "title": "inspect --workbench --json success response, projection version 1",
+  "description": "The opt-in bounded affordance projection. `result` carries exactly `workbench`. It is one observation of the named snapshot: not a lease, not a reservation, and not a promise that an option stays executable after the returned revision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "command",
+    "contract_version",
+    "result"
+  ],
+  "properties": {
+    "ok": {
+      "const": true
+    },
+    "command": {
+      "const": "inspect"
+    },
+    "contract_version": {
+      "const": 5
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workbench": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "projection_version": {
+              "const": 1
+            },
+            "as_of": {
+              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+            },
+            "snapshot": {
+              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/snapshotWitness"
+            },
+            "observation": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "authority": {
+                  "const": "observed-snapshot"
+                },
+                "rechecked_by": {
+                  "const": [
+                    "revision",
+                    "lock",
+                    "claim-fence",
+                    "reconciliation",
+                    "candidate-validation"
+                  ]
+                }
+              },
+              "required": [
+                "authority",
+                "rechecked_by"
+              ]
+            },
+            "item": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string"
+                },
+                "title_truncated": {
+                  "type": "boolean"
+                },
+                "kind": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/kind"
+                },
+                "status": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/status"
+                },
+                "priority": {
+                  "type": "integer"
+                },
+                "parent": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                },
+                "created": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+                },
+                "updated": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+                },
+                "revision": {
+                  "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+                },
+                "ready": {
+                  "type": "boolean"
+                },
+                "depends_on": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                      },
+                      "maxItems": 50
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "description": "Declared prerequisites, bounded.",
+                  "required": [
+                    "entries",
+                    "total",
+                    "truncated"
+                  ]
+                },
+                "related": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                      },
+                      "maxItems": 50
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "description": "Related items, bounded.",
+                  "required": [
+                    "entries",
+                    "total",
+                    "truncated"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "title_truncated",
+                "kind",
+                "status",
+                "created",
+                "updated",
+                "revision",
+                "ready",
+                "depends_on",
+                "related"
+              ]
+            },
+            "transition_options": {
+              "type": "array",
+              "description": "One option per allowed lifecycle target, in ascending status order. A terminal item has none.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "to_status": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/status"
+                  },
+                  "action": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "accept",
+                      "kill",
+                      "archive",
+                      "restore",
+                      "complete",
+                      "defer",
+                      "undefer",
+                      null
+                    ]
+                  },
+                  "decision_required": {
+                    "type": "boolean"
+                  },
+                  "minimum_date": {
+                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "precondition_issues": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "code": {
+                              "type": "string"
+                            },
+                            "field": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "related_ids": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "entries": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+                                  },
+                                  "maxItems": 50
+                                },
+                                "total": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "truncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "description": "The related item IDs the issue names, bounded.",
+                              "required": [
+                                "entries",
+                                "total",
+                                "truncated"
+                              ]
+                            },
+                            "item_created": {
+                              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+                            },
+                            "item_updated": {
+                              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+                            }
+                          },
+                          "description": "The transition vocabulary, with `related_ids` reshaped as a bounded collection because that list grows with the ledger.",
+                          "required": [
+                            "code",
+                            "field",
+                            "message",
+                            "related_ids"
+                          ]
+                        },
+                        "maxItems": 50
+                      },
+                      "total": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "truncated": {
+                        "type": "boolean"
+                      }
+                    },
+                    "description": "Observed section 8 precondition issues, bounded.",
+                    "required": [
+                      "entries",
+                      "total",
+                      "truncated"
+                    ]
+                  },
+                  "blockers": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "entries": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/transitionBlocker"
+                        },
+                        "maxItems": 50
+                      },
+                      "total": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "truncated": {
+                        "type": "boolean"
+                      }
+                    },
+                    "description": "Observed section 8 multi-item blockers, bounded.",
+                    "required": [
+                      "entries",
+                      "total",
+                      "truncated"
+                    ]
+                  }
+                },
+                "required": [
+                  "to_status",
+                  "action",
+                  "decision_required",
+                  "minimum_date",
+                  "enabled",
+                  "precondition_issues",
+                  "blockers"
+                ]
+              }
+            }
+          },
+          "required": [
+            "projection_version",
+            "as_of",
+            "snapshot",
+            "observation",
+            "item",
+            "transition_options"
+          ]
+        }
+      },
+      "required": [
+        "workbench"
+      ]
+    }
+  }
+}
