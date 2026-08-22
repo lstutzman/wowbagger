@@ -5,9 +5,10 @@ number: 131
 title: "Define response-loss behavior for native transitions"
 kind: task
 priority: 10
-status: in-progress
+status: done
 created: 2026-08-21
 updated: 2026-08-21
+completed: 2026-08-21
 provenance:
   source: "orca-ledger-workbench-contract-audit"
   recorded_at: "2026-08-21T17:27:09.989Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-21
     summary: "Accept the narrowed response-loss contract at P1."
     rationale: "Remote process observation can disappear after a native transition dispatch, but permanent no-automatic-transition policy removes the need for operation IDs in the first release. The accepted scope stabilizes honest unknown outcomes and mandates once-only dispatch, no replay, invalidation, reconnect, and re-read."
+  - action: complete
+    date: 2026-08-21
+    summary: "Complete the once-only response-loss contract."
+    rationale: "Commit aa68007 documents and guards one dispatch, no replay, revision invalidation, reconnect, and re-read across the mutation contract, adapter contract, README, installed skill, and adapter process-outcome fixtures without adding operation state or changing response domains. Task review is clean; focused current-Node and Node-20 gates each pass 46/46."
 ---
 
 ## Problem
