@@ -37,6 +37,7 @@
         "create",
         "transition",
         "patch",
+        "extensions-provision",
         "mint-id",
         "report"
       ],

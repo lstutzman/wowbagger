@@ -412,6 +412,19 @@ what each finding's `remediation` string says (it names the path), run
 `claim-verify` until it exits 0, then repeat the refused command. Never hand-
 edit a ledger file to get past it.
 
+For migrated ledgers, run the explicit extension declaration workflow before
+managed corrections:
+
+```sh
+wowbagger extensions-provision --ledger <dir> --input declaration.json --json --dry-run
+wowbagger extensions-provision --ledger <dir> --input declaration.json --json
+```
+
+The request must name each member and one supported type explicitly. The core
+validates that every selected member exists across the complete ledger with the
+declared type; it never infers authority from one item. Commit the generated
+`.wowbagger/extensions.json` before the first `patch` that uses those members.
+
 Successful mutation responses also return `result.changed_paths`: the exact
 ledger-relative paths changed by that invocation. Use this set for manual
 staging; never broaden it to `git add <ledger>` and never treat it as proof of

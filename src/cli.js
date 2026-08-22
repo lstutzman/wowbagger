@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { open } from 'node:fs/promises';
+import { mkdir, open, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,8 +21,10 @@ import {
   validatePublicationRequest,
   verifyClaimJournal,
 } from './claim-publication.js';
+import { loadExtensionDeclaration } from './extensions.js';
 import { validateClaimRequest } from './claim-request.js';
 import { checkProspectiveMerge, parseReconcileLog } from './claim-prospective.js';
+import { proposeExtensionDeclaration } from './extension-provision.js';
 import { selectCommittedAdoptions } from './claim-sync.js';
 import {
   claimStorePath,
@@ -105,8 +107,8 @@ const COMMAND_SUMMARIES = {
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
   patch: "Patch an item's priority and relation lists, guarded the same way.",
+  'extensions-provision': 'Declare explicitly selected existing extension members.',
   'mint-id': 'Mint a canonical item ID.',
-  provision: 'Provision the work-claim namespace.',
   'publish-claimed': 'Publish ledger results when its claim profile enables protected publication.',
   'claim-merge-verify': 'Validate a prospective Git merge tree against claim-journal semantics.',
   'claim-sync': 'Import committed adoption evidence into the local claim journal.',
@@ -121,7 +123,7 @@ const KNOWN_COMMANDS = new Set([
   'capabilities',
   'inspect',
   'list',
-  'create',
+  'extensions-provision',
   'transition',
   'patch',
   'mint-id',
@@ -348,6 +350,103 @@ export async function runCli(argumentsList, { scenario } = {}) {
       return;
     }
     process.stdout.write(response);
+    return;
+  }
+
+  if (command === 'extensions-provision') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeInvalidRequest(command, [issue('/input', 'invalid-value', 'Request input could not be read.')]);
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    if (parsedRequest.issues.length > 0) {
+      writeInvalidRequest(command, parsedRequest.issues);
+      return;
+    }
+    const proposal = proposeExtensionDeclaration({
+      ledger: await loadLedger(parsedOptions.options.ledger),
+      members: parsedRequest.value?.members,
+    });
+    if (!proposal.ok) {
+      process.stdout.write(`${JSON.stringify({
+        ok: false,
+        command,
+        contract_version: MUTATION_CONTRACT_VERSION,
+        state: 'unchanged',
+        error: {
+          code: proposal.error.code,
+          message: 'The extension declaration request is invalid.',
+          details: proposal.error,
+        },
+      })}\n`);
+      process.exitCode = 2;
+      return;
+    }
+    const output = path.join(path.resolve(parsedOptions.options.ledger), '.wowbagger', 'extensions.json');
+    if (parsedOptions.options.dryRun) {
+      process.stdout.write(`${JSON.stringify({
+        ok: true,
+        command,
+        contract_version: MUTATION_CONTRACT_VERSION,
+        result: {
+          dry_run: true,
+          output: '.wowbagger/extensions.json',
+          source: proposal.source,
+          members: proposal.declaration.members,
+          counts: proposal.counts,
+        },
+      })}\n`);
+      return;
+    }
+    const existing = await loadExtensionDeclaration(parsedOptions.options.ledger);
+    if (existing.declared) {
+      const same = existing.declaration
+        && JSON.stringify(existing.declaration) === JSON.stringify(proposal.declaration);
+      if (!same) {
+        process.stdout.write(`${JSON.stringify({
+          ok: false,
+          command,
+          contract_version: MUTATION_CONTRACT_VERSION,
+          state: 'unchanged',
+          error: {
+            code: 'extension-declaration-conflict',
+            message: 'The ledger already carries a different extension declaration.',
+            details: { output: '.wowbagger/extensions.json' },
+          },
+        })}\n`);
+        process.exitCode = 4;
+        return;
+      }
+    } else {
+      await mkdir(path.dirname(output), { recursive: true });
+      const handle = await open(output, 'wx');
+      try {
+        await handle.writeFile(proposal.source, 'utf8');
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    }
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      command,
+      contract_version: MUTATION_CONTRACT_VERSION,
+      state: 'committed',
+      result: {
+        output: '.wowbagger/extensions.json',
+        source: proposal.source,
+        members: proposal.declaration.members,
+        counts: proposal.counts,
+      },
+    })}\n`);
     return;
   }
 
@@ -1151,6 +1250,7 @@ function parseContractOptions(command, argumentsList) {
     : command === 'report'
       ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out'], ['--view', 'view']])
       : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
+        || command === 'extensions-provision'
         || command === 'publish-claimed' || command === 'publication-read'
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
         || command === 'claim-release' || command === 'claim-adopt'
@@ -1167,12 +1267,13 @@ function parseContractOptions(command, argumentsList) {
               : new Map();
   // Bare flags carry no value. `--auto-commit` is accepted only on the four
   // commands whose Git finalization it folds in; `--workbench` only on the one
-  // read it changes. Every other command reports either as an unknown argument.
   const bareFlags = AUTO_COMMIT_COMMANDS.has(command)
     ? new Map([['--auto-commit', 'autoCommit']])
-    : command === 'inspect'
-      ? new Map([['--workbench', 'workbench']])
-      : new Map();
+    : command === 'extensions-provision'
+      ? new Map([['--dry-run', 'dryRun']])
+      : command === 'inspect'
+        ? new Map([['--workbench', 'workbench']])
+        : new Map();
   const optionalFlags = command === 'mint-id'
     ? new Set(['--date'])
     : command === 'report'
@@ -1690,6 +1791,9 @@ function usage(command) {
     return 'Usage: wowbagger list --ledger <dir> --input <json-file|-> --json';
   }
 
+  if (command === 'extensions-provision') {
+    return 'Usage: wowbagger extensions-provision --ledger <dir> --input <request.json> --json [--dry-run]';
+  }
   if (command === 'create') {
     return 'Usage: wowbagger create --ledger <dir> --input <json-file|-> --json [--auto-commit]';
   }
