@@ -31,6 +31,13 @@
   "bin": {
     "wowbagger": "bin/wowbagger.js"
   },
+  "exports": {
+    ".": "./src/launch.js",
+    "./launch": "./src/launch.js",
+    "./wowbagger.js": "./bin/wowbagger.js",
+    "./package.json": "./package.json",
+    "./*": "./*"
+  },
   "files": [
     "bin",
     "src",

@@ -7,6 +7,22 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- **A published launch seam for a host that cannot run a shell.** The package
+  now declares `exports`, and its main entry `wowbagger` exposes
+  `CORE_SCRIPT_PATH`, `MINIMUM_NODE_MAJOR`, and `resolveCoreLaunch(argv)`, which
+  returns the exact process tuple a direct-core host needs: an absolute Node
+  executable, an argument array whose first element is the absolute
+  `bin/wowbagger.js`, and `shell: false`. A host that resolves its own runtime
+  gets `resolveCoreLaunch(argv, { nodeExecutable })`, and a relative or bare
+  executable name is refused rather than left for PATH to answer. The script
+  path is also resolvable on its own as `wowbagger/wowbagger.js` for a host that
+  wants the path without importing anything. Deep imports that already worked —
+  `wowbagger/src/limits.js` and every other published path — keep resolving
+  through an explicit `"./*"` subpath. No command accepts, refuses, emits, or
+  writes anything different.
+
 ### Documentation
 
 - **Response loss is a named contract instead of folklore.** The mutation
