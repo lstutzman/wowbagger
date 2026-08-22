@@ -5,9 +5,10 @@ number: 139
 title: "Synchronize committed adoption rulings into fresh claim clones"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-22
 updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "propertycompass2-staging-5-field-report-2-pr-2250"
   recorded_at: "2026-08-22T16:07:11.478Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-22
     summary: "Accept item into backlog for maintainer triage."
     rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete committed adoption synchronization."
+    rationale: "Explicit claim-sync imports validated committed adoption evidence idempotently, preserves item bytes, and claim-sync smoke plus focused tests pass."
 ---
 
 ## Problem
