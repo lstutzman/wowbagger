@@ -163,6 +163,23 @@ test('an unrelated private branch publication does not block another item mutati
   assert.match(finding.owner_commit, /^[0-9a-f]{40}$/);
 });
 
+test('an abandoned private publication reports unavailable ownership', async () => {
+  const fixture = await twoWorktreeRepository();
+  const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add abandoned branch item');
+  git(fixture.root, 'branch', 'abandoned-owner');
+  git(fixture.root, 'reset', '--hard', 'HEAD^');
+  git(fixture.root, 'branch', '-D', 'abandoned-owner');
+
+  const verified = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === writtenId);
+  assert.equal(finding.owner_unavailable, true);
+  assert.match(finding.remediation, /cannot be established from reachable refs/);
+});
+
 test('a private publication still blocks a same-item mutation', async () => {
   const fixture = await twoWorktreeRepository();
   const targetId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
