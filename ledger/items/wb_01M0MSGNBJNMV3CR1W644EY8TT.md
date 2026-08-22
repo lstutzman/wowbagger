@@ -5,9 +5,10 @@ number: 136
 title: "Preserve exact leading LF bytes in patch body replacement"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-22
 updated: 2026-08-22
+completed: 2026-08-22
 provenance:
   source: "propertycompass2-field-report-msg-fffb996b3be5"
   recorded_at: "2026-08-22T13:10:52.057Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-22
     summary: "Accept item into backlog for maintainer triage."
     rationale: "The reported scope is recorded; backlog acceptance makes it eligible for scheduling and implementation."
+  - action: complete
+    date: 2026-08-22
+    summary: "Complete exact patch body byte coverage."
+    rationale: "Replacement LF matrix and append byte tests prove exact body bytes, frontmatter preservation, and no separator regression across current behavior."
 ---
 
 ## Problem
