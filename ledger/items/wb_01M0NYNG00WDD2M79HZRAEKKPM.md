@@ -5,9 +5,10 @@ number: 141
 title: "Smoke-test Claude plugin loading"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-23
 updated: 2026-08-23
+completed: 2026-08-23
 provenance:
   source: "claude-plugin-submission"
   recorded_at: "2026-08-23T12:00:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-23
     summary: "Accept the Claude plugin smoke-test evidence into the backlog."
     rationale: "The plugin, installer discovery, valid core checks, refusal paths, and isolated explicit mutation path have been exercised without mutating the repository ledger."
+  - action: complete
+    date: 2026-08-23
+    summary: "Complete Claude plugin loading and mutation smoke tests."
+    rationale: "Valid plugin loading returned alpha.8/contract 5 with a valid empty queue; missing-core, wrong-version, and wrong-contract refusals were verified; an isolated explicit create mutation validated successfully; repository ledger remained untouched."
 ---
 
 Exercise the plugin as Claude Code loads it from this repository.
