@@ -24,3 +24,10 @@ Acceptance criteria:
 - Describe local Git/Markdown ledger access and the explicit mutation boundary.
 - Make missing or incompatible core guidance actionable without weakening version checks.
 - Keep plugin metadata, skill pins, README, and release tag references synchronized.
+
+
+Implementation outcome (2026-08-23):
+- Added exact Node.js 20+, core 0.1.0-alpha.8, and contract_version 5 setup guidance to README.md and skills/wowbagger/SKILL.md.
+- Documented separate-core operation and absence of bundled MCP, hooks, remote service, and background process.
+- Verification passed: Claude marketplace validation, core version/capability check, ledger validation, and diff whitespace check.
+- Commit: da7bd31.
