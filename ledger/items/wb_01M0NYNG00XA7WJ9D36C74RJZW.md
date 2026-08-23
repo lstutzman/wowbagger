@@ -5,7 +5,7 @@ number: 144
 title: "Adopt Wowbagger image on GitHub and npm"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-23
 updated: 2026-08-23
 provenance:
