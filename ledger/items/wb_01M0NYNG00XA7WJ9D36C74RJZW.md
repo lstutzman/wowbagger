@@ -11,7 +11,7 @@ updated: 2026-08-23
 provenance:
   source: "brand-asset-adoption"
   recorded_at: "2026-08-23T12:00:00Z"
-depends_on: [wb_01M0NYNG00MVXRSQFD7E182YBA]
+depends_on: [ wb_01M0NYNG00MVXRSQFD7E182YBA ]
 related: []
 ---
 
@@ -27,3 +27,11 @@ Acceptance criteria:
 - Verify the README renders correctly on GitHub and the npm package page after publication.
 - Preserve the 1024px square asset and its <=500 KB size target.
 - Do not regenerate or replace the accepted v5 image.
+
+
+Implementation outcome (2026-08-23):
+- Added the accepted v5 asset to the README branding area with accessible alt text and a stable GitHub raw URL.
+- Added `assets/` to the npm package file set.
+- Published the README and all five image candidates in `wowbagger@0.1.0-alpha.9`.
+- Verified GitHub main README contains the image, npm tarball contains `package/README.md` and `package/assets/wowbagger-v5-typing-cats-circuit-staff.jpg`, and the asset remains 1024x1024 at 328658 bytes.
+- Release: `v0.1.0-alpha.9`, commit `da49db6`; image adoption commit `7dc823a`.
