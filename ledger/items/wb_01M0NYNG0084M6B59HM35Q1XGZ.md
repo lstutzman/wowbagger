@@ -5,7 +5,7 @@ number: 145
 title: "Refresh marketing prose across npm and GitHub"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-23
 updated: 2026-08-23
 provenance:
