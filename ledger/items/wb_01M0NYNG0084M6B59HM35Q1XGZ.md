@@ -5,7 +5,7 @@ number: 145
 title: "Refresh marketing prose across npm and GitHub"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-23
 updated: 2026-08-23
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-23T12:00:00Z"
 depends_on: [ wb_01M0NYNG00XA7WJ9D36C74RJZW ]
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-23
+    summary: "Accept the refreshed agent-first marketing prose."
+    rationale: "The public copy now reflects current contract 5 behavior, report enhancements, agent TL;DR, agentic safety boundaries, and the requested Douglas Adams inspiration."
 ---
 
 Audit and improve Wowbagger's product-facing prose across npm, GitHub, and Claude plugin surfaces. Make the public explanation reflect the current shipped feature set instead of the older minimal-ledger story.
