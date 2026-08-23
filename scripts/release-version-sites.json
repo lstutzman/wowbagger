@@ -171,6 +171,51 @@
       "classification": "retained",
       "occurrences": 1,
       "applies_to_version": "0.1.0-alpha.6"
+    },
+    {
+      "file": "README.md",
+      "kind": "anchored-text",
+      "anchor": "require {version}",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "README.md",
+      "kind": "anchored-text",
+      "anchor": "npm install -g wowbagger@{version}   # exact plugin-matched release",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "skills/wowbagger/SKILL.md",
+      "kind": "anchored-text",
+      "anchor": "npm install -g wowbagger@{version}",
+      "classification": "mutable",
+      "occurrences": 1
+    },
+    {
+      "file": "ledger/items/wb_01M0NYNG00QCA6E7BRDP6QHMNS.md",
+      "kind": "anchored-text",
+      "anchor": "required core {version}, and contract_version 5.",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.8"
+    },
+    {
+      "file": "ledger/items/wb_01M0NYNG00QCA6E7BRDP6QHMNS.md",
+      "kind": "anchored-text",
+      "anchor": "core {version}, and contract_version 5 setup guidance",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.8"
+    },
+    {
+      "file": "ledger/items/wb_01M0NYNG00WDD2M79HZRAEKKPM.md",
+      "kind": "anchored-text",
+      "anchor": "version {version}, contract 5, valid true",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.8"
     }
   ]
 }
