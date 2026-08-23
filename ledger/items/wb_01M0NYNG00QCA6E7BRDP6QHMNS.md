@@ -5,9 +5,10 @@ number: 140
 title: "Add Claude plugin core setup guidance"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-23
 updated: 2026-08-23
+completed: 2026-08-23
 provenance:
   source: "claude-plugin-submission"
   recorded_at: "2026-08-23T12:00:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-23
     summary: "Accept the Claude plugin setup guidance into the backlog."
     rationale: "The core setup boundary and exact alpha.8/contract 5 checks are now documented and verified."
+  - action: complete
+    date: 2026-08-23
+    summary: "Complete the Claude plugin core setup guidance."
+    rationale: "README and the installed Wowbagger skill now give exact Node.js, distribution, contract, installation, verification, and separate-core guidance. Validation passed."
 ---
 
 Add explicit onboarding for the Claude plugin's separately installed Wowbagger core.
