@@ -7,6 +7,24 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Added
+
+- **A public Wowbagger brand asset.** The repository now carries an optimized
+  1024px image of Bowerick Wowbagger directing robotic agent cats at consoles
+  with a circuit-lit shepherd's staff. The asset is included in the npm
+  package for README and GitHub presentation.
+
+### Changed
+
+- **Public product prose now describes the current engine.** README, npm
+  metadata, Claude plugin metadata, marketplace metadata, and the installed
+  skill now explain report sequencing dashboards, named views, facets, graph
+  filtering, guarded CAS mutations, claims, fencing, reconciliation, and the
+  separation between core and host responsibilities.
+- **Agent onboarding is explicit.** The README and skill include a concise
+  agent TL;DR, exact core setup checks, the separate plugin/skills installer
+  routes, and the response-loss rule.
+
 ## 0.1.0-alpha.8 - 2026-08-23
 
 ### Added
