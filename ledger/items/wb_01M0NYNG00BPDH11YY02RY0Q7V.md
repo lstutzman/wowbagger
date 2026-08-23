@@ -5,7 +5,7 @@ number: 142
 title: "Submit Wowbagger to Claude plugin directory"
 kind: task
 priority: 3
-status: triage
+status: backlog
 created: 2026-08-23
 updated: 2026-08-23
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-23T12:00:00Z"
 depends_on: [ wb_01M0NYNG00WDD2M79HZRAEKKPM ]
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-23
+    summary: "Accept the submitted Claude plugin directory work for review."
+    rationale: "The public repository was submitted through Claude Console with Claude Code selected. The form confirmed submission for review; marketplace acceptance remains pending."
 ---
 
 Submit the public Wowbagger GitHub repository to Anthropic's Claude plugin directory after setup guidance and smoke testing pass.
