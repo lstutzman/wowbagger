@@ -14,5 +14,8 @@
     "coordination",
     "markdown",
     "git"
+  ],
+  "skills": [
+    "./skills/wowbagger"
   ]
 }

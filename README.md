@@ -65,19 +65,42 @@ wowbagger --version         # 0.1.0-alpha.8
 wowbagger capabilities --json
 ```
 
-In Claude Code, add the plugin:
+In Claude Code, install the managed plugin:
+
+```sh
+claude plugins install wowbagger
+```
+
+Or, from inside a Claude Code session:
+
+```
+/plugin install wowbagger
+```
+
+This route is available after Wowbagger is listed in Claude Code's official
+marketplace. Until then, or when installing a fork or unreleased revision, use
+the direct repository marketplace:
 
 ```
 /plugin marketplace add lstutzman/wowbagger
 /plugin install wowbagger@wowbagger
 ```
 
-The plugin drives the installed core rather than bundling one, so a mismatch is
-detectable instead of silent. Its skill reads `wowbagger --version` and
-`capabilities`; it requires the same distribution version as the plugin and core
-`contract_version: 5`. It refuses an absent or incompatible core. It will not
-fall back to editing ledger files by hand, because that would bypass validation
-and atomic publication.
+For Codex and other agents, install the editable skill with `skills`:
+
+```sh
+npx skills@latest add lstutzman/wowbagger --skill wowbagger
+```
+
+Choose one route. Do not install both the managed Claude plugin and the
+editable skill, or the skill will be loaded twice.
+
+The plugin and `skills` installer drive the separately installed core rather
+than bundling one, so a mismatch is detectable instead of silent. The skill
+reads `wowbagger --version` and `capabilities`; it requires the same
+distribution version as the plugin and core `contract_version: 5`. It refuses
+an absent or incompatible core. It will not fall back to editing ledger files
+by hand, because that would bypass validation and atomic publication.
 
 ### Set the ledger up before the first item
 
