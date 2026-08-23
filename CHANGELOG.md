@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.9 - 2026-08-23
+
 ### Added
 
 - **A public Wowbagger brand asset.** The repository now carries an optimized
