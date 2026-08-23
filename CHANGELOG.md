@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.8 - 2026-08-23
+
 ### Added
 
 - **A published launch seam for a host that cannot run a shell.** The package
