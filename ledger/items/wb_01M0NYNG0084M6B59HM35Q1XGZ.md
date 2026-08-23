@@ -57,3 +57,10 @@ Hitchhiker's Guide theme requirement:
 - Work the iconic phrase "Don't Panic!" into the public marketing prose as a restrained thematic hook for agent safety and recoverable workflow.
 - Tie the phrase to concrete Wowbagger guarantees rather than using it as empty decoration: validate first, inspect before mutation, trust exact revisions, never replay a lost write, and verify the result.
 - Keep the reference clearly an homage, avoid implying endorsement or affiliation, and preserve Wowbagger's own product identity.
+
+
+Douglas Adams reference requirement:
+- Include a respectful reference to https://douglasadams.com/creations/hhgg.html in the public marketing prose.
+- Work in the personal framing: "The books that helped shape my childhood."
+- Keep the statement clearly as Lee's personal inspiration, not an official Douglas Adams or Hitchhiker's Guide endorsement, partnership, or affiliation.
+- Connect the reference to the product's themes of curiosity, absurdity, resilience, and staying calm while coordinating difficult work.
