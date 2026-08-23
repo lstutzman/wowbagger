@@ -5,7 +5,7 @@ number: 140
 title: "Add Claude plugin core setup guidance"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-23
 updated: 2026-08-23
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-23T12:00:00Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-23
+    summary: "Accept the Claude plugin setup guidance into the backlog."
+    rationale: "The core setup boundary and exact alpha.8/contract 5 checks are now documented and verified."
 ---
 
 Add explicit onboarding for the Claude plugin's separately installed Wowbagger core.
