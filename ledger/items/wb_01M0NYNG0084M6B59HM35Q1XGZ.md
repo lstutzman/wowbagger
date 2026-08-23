@@ -51,3 +51,9 @@ Agentic engine optimization requirement:
 - Distinguish guarantees owned by the Wowbagger core from responsibilities left to the harness, plugin, host, and human operator.
 - Remove prose that implies autonomous dispatch, exclusive locking, silent retries, or hosted state when the current engine does not provide those guarantees.
 - Make the agent workflow and its safety boundaries easy to understand without overstating autonomy.
+
+
+Hitchhiker's Guide theme requirement:
+- Work the iconic phrase "Don't Panic!" into the public marketing prose as a restrained thematic hook for agent safety and recoverable workflow.
+- Tie the phrase to concrete Wowbagger guarantees rather than using it as empty decoration: validate first, inspect before mutation, trust exact revisions, never replay a lost write, and verify the result.
+- Keep the reference clearly an homage, avoid implying endorsement or affiliation, and preserve Wowbagger's own product identity.
