@@ -11,7 +11,7 @@ updated: 2026-08-23
 provenance:
   source: "marketing-prose-audit"
   recorded_at: "2026-08-23T12:00:00Z"
-depends_on: [wb_01M0NYNG00XA7WJ9D36C74RJZW]
+depends_on: [ wb_01M0NYNG00XA7WJ9D36C74RJZW ]
 related: []
 ---
 
@@ -31,3 +31,23 @@ Acceptance criteria:
 - Preserve the separate Wowbagger core, plugin, and skills installer installation model.
 - Validate all changed manifests, links, version references, package contents, and README rendering surfaces.
 - Record changed files and verification results in the item outcome.
+
+
+Agent TL;DR requirement:
+- Add a prominent, concise "TL;DR for agents" section to the public README/prose.
+- State what Wowbagger is, when an agent should use it, and that the core is the authority for ledger validation, ready selection, inspection, and mutation.
+- Include the first-session checks: `wowbagger --version`, `wowbagger capabilities --json`, and the required distribution/contract versions.
+- Give the safe read path (`validate`, `ready`, `inspect`) and the guarded write rule: inspect immediately before mutation, send the expected revision, never hand-edit ledger files, and verify after writes.
+- Explain the number-versus-ULID distinction and the response-loss rule in agent-operable language.
+- Keep the section copy-pasteable, short enough to scan during a live agent session, and consistent with `skills/wowbagger/SKILL.md`.
+
+Additional acceptance criterion:
+- A fresh agent can follow the TL;DR to perform a safe read and understand the required guarded mutation sequence without reading the full marketing page first.
+
+
+Agentic engine optimization requirement:
+- Treat the marketing audit as an agentic-engineering audit, not only copy editing.
+- Explain how Wowbagger reduces agent failure modes: deterministic ready selection, explicit inspect-before-write CAS, atomic Git publication, claims and fencing, reconciliation after response loss, bounded machine envelopes, and capability negotiation.
+- Distinguish guarantees owned by the Wowbagger core from responsibilities left to the harness, plugin, host, and human operator.
+- Remove prose that implies autonomous dispatch, exclusive locking, silent retries, or hosted state when the current engine does not provide those guarantees.
+- Make the agent workflow and its safety boundaries easy to understand without overstating autonomy.
