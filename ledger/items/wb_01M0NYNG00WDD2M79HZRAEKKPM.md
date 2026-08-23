@@ -11,7 +11,7 @@ updated: 2026-08-23
 provenance:
   source: "claude-plugin-submission"
   recorded_at: "2026-08-23T12:00:00Z"
-depends_on: [wb_01M0NYNG00QCA6E7BRDP6QHMNS]
+depends_on: [ wb_01M0NYNG00QCA6E7BRDP6QHMNS ]
 related: []
 ---
 
@@ -23,3 +23,12 @@ Acceptance criteria:
 - Exercise the skill against this repository's ledger.
 - Verify clear behavior for a missing core, wrong core version, wrong contract version, valid ledger, empty ready queue, read-only inspection, and an explicit mutation path.
 - Record exact commands, observed results, and any submission-blocking defects.
+
+
+Implementation outcome (2026-08-23):
+- `claude plugin validate .` passed the marketplace manifest; the plugin manifest passed with the existing root CLAUDE.md warning.
+- Valid local Claude smoke test returned version 0.1.0-alpha.8, contract 5, valid true, and ready count 0 with no repository mutation.
+- Missing-core guidance stopped before ledger commands and gave the exact install/remediation path.
+- Wrong distribution version and wrong contract version each stopped before ledger commands and reported the installed and required pins.
+- Explicit mutation smoke test created and validated an isolated temporary item, then the scratch ledger was removed.
+- Skills installer discovery found exactly one `wowbagger` skill.
