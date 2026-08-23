@@ -29,3 +29,11 @@ Installer contract:
 - Direct repository marketplace installation remains the fallback for forks, unreleased revisions, and pre-acceptance testing.
 - Codex and other agents use `npx skills@latest add lstutzman/wowbagger --skill wowbagger`.
 - The managed plugin and editable skill routes are exclusive; documentation must warn users not to install both.
+
+
+Submission outcome (2026-08-23):
+- Submitted the public repository through Claude Console's plugin-directory form: https://platform.claude.com/plugins/submit
+- Repository submitted: https://github.com/lstutzman/wowbagger
+- Plugin name: Wowbagger; platform selected: Claude Code; license: MIT.
+- Console confirmation: "Plugin submitted for review." The submissions page shows a new submission from just now.
+- Current state: awaiting Anthropic review and marketplace inclusion. Do not mark complete until acceptance is confirmed or returned findings are recorded.
