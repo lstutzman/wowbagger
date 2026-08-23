@@ -1,6 +1,6 @@
 ---
 name: wowbagger
-description: Use when coordinating work through a wowbagger ledger — reading the ready queue, inspecting or filing an item, generating an HTML ledger report, transitioning one through its lifecycle, taking a work claim, or publishing claimed work. Triggers on "ready queue", "ledger report", "backlog report", "what should I work on", "file a ledger item", "close this item", "claim this work", "publish claimed work", or any mention of a wowbagger ledger. Not for general backlog talk where no wowbagger ledger exists.
+description: Use when coordinating work through a Wowbagger ledger — reading deterministic ready work, inspecting lossless revisions, generating HTML reports and named views, filing or mutating items, taking a work claim, or publishing claimed work. Triggers on "ready queue", "ledger report", "report view", "backlog report", "what should I work on", "file a ledger item", "close this item", "claim this work", "publish claimed work", or any mention of a Wowbagger ledger. Not for general backlog talk where no Wowbagger ledger exists.
 ---
 
 # Wowbagger

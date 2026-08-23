@@ -2,6 +2,16 @@
 
 **The backlog may be infinite. The next item should not be ambiguous.**
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/lstutzman/wowbagger/main/assets/wowbagger-v5-typing-cats-circuit-staff.jpg" alt="Bowerick Wowbagger directing robotic agent cats typing at consoles with a circuit-lit shepherd's staff">
+</p>
+
+**Don't Panic!** The books that helped shape my childhood taught me to meet
+absurd systems with curiosity, humor, and a reliable way to find the next
+step. [Douglas Adams's Hitchhiker's Guide creations](https://douglasadams.com/creations/hhgg.html)
+are part of that inspiration; Wowbagger is an independent work, not an
+official or affiliated project.
+
 Wowbagger is a work ledger for coding agents. Every backlog item is one
 Markdown file in your repository; every lifecycle change is a reviewable Git
 diff. There is no database, no hosted service, and no private agent memory to
@@ -31,17 +41,25 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > older build — but `@next` is the documented install and the explicit
 > statement that you accept a prerelease.
 >
-> **What is proved.** The core validates a Markdown ledger, selects a
-> deterministic ready queue, renders a self-contained HTML report, and
-> implements guarded `inspect`, `create`, `transition`, and `patch`, plus
-> `mint-id`, `capabilities`, `provision`, the `claim` lifecycle,
-> `publish-claimed`, `claim-verify`, and `claim-adopt`. The core contract
-> version is **3**. Three adapter packages ship — Claude Code, Codex, and
-> OpenCode — on one shared engine at adapter contract version 2. Only the Claude
-> Code adapter declares a `supported` platform, Darwin, from a native run of all
-> 212 conformance assertions across all 16 cases. Every other adapter and
-> platform declaration is `unverified`; do not infer support because the CLI
-> starts.
+> **What is proved.** Contract version **5** validates the complete Markdown
+> ledger, selects a deterministic ready queue, exposes bounded `list` and
+> lossless `inspect` projections, and publishes guarded `create`, `transition`,
+> `patch`, `parent-migrate`, and `snooze` mutations. Mutations use exact-byte
+> compare-and-swap, atomic no-clobber publication, and explicit reconciliation
+> when a response is lost. Claims, fencing, adoption, prospective merge
+> verification, and publication finalization coordinate cooperating writers
+> without pretending to be an exclusive dispatch lock.
+>
+> `report` is a self-contained sequencing dashboard: **Work next**, **Attention**,
+> facet filters, inline evidence, terminal history, area-diverse batches, and a
+> 3D dependency graph. Version 2 report configurations add named custom views
+> whose statistics, readiness, attention, evidence, graph, and drill-down all
+> describe one filtered subset. Reports remain derived output, not mirrored
+> ledger state.
+>
+> The core ships Claude Code, Codex, and OpenCode adapter packages on one shared
+> engine. Read `capabilities --json` before relying on a target-specific claim;
+> platform support is evidence-based, not inferred from whether a CLI starts.
 >
 > **What is not a lock.** A work claim is not an exclusive dispatch lease. On a
 > provisioned Git-backed ledger, claims coordinate cooperating agents through a
@@ -52,6 +70,31 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > `mode: "merge-coordinated"` and `safe_exclusive_dispatch: false`. Direct
 > filesystem writes, hostile processes, other clones, and non-claim-aware tools
 > still bypass the protocol.
+
+## TL;DR for agents
+
+Wowbagger is the core authority for a Git-native work ledger. Use it instead
+of editing ledger Markdown by hand.
+
+```sh
+wowbagger --version                 # require 0.1.0-alpha.8
+wowbagger capabilities --json       # require contract_version: 5
+wowbagger validate --ledger ledger --json
+wowbagger ready --ledger ledger --as-of YYYY-MM-DD --json
+wowbagger inspect --ledger ledger --number N --json
+```
+
+For a write, inspect immediately before dispatch, send the returned exact-byte
+revision as the compare-and-swap witness, use the explicit core mutation, and
+validate again. Commit each provisioned-ledger mutation before the next one.
+Never replay a lost write: reconnect, re-read current state, and treat the
+outcome as unknown until the core or a human resolves it. Numbers are the
+human-facing item identity; `wb_...` ULIDs are internal identities.
+
+The core owns validation, ready selection, projections, lifecycle, CAS,
+publication, claims, fencing, and reconciliation. The harness or host owns
+dispatch, process safety, routing, and human approval. Claims coordinate
+cooperating writers; they are not exclusive locks.
 
 ## Start here
 

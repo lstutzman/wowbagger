@@ -1,6 +1,6 @@
 {
   "name": "wowbagger",
-  "description": "Coordinate work across agents through a plain-Markdown, Git-native ledger. Read-only by default; every mutation is an explicit, reviewable file change.",
+  "description": "Help coding agents coordinate a Git-native ledger with deterministic ready queues, guarded CAS mutations, claims, fencing, and self-contained HTML reports. Read-only by default; every mutation is explicit and reviewable.",
   "version": "0.1.0-alpha.8",
   "author": {
     "name": "Lee Stutzman"
@@ -12,6 +12,9 @@
     "ledger",
     "backlog",
     "coordination",
+    "agent",
+    "reports",
+    "work-claims",
     "markdown",
     "git"
   ],
