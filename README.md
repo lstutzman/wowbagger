@@ -55,14 +55,14 @@ agent to use those guarantees instead of hand-editing your Markdown.
 
 ## Start here
 
-Install the core CLI, then verify it:
+Install the core CLI, then verify it. The core requires Node.js 20 or later:
 
 ```sh
-npm install -g wowbagger@next   # public npm registry
+npm install -g wowbagger@0.1.0-alpha.8   # exact plugin-matched release
 # or, from this release's Git tag:
 # npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.8
 wowbagger --version         # 0.1.0-alpha.8
-wowbagger capabilities --json
+wowbagger capabilities --json              # must report contract_version: 5
 ```
 
 In Claude Code, install the managed plugin:
@@ -101,6 +101,9 @@ reads `wowbagger --version` and `capabilities`; it requires the same
 distribution version as the plugin and core `contract_version: 5`. It refuses
 an absent or incompatible core. It will not fall back to editing ledger files
 by hand, because that would bypass validation and atomic publication.
+
+Neither installer adds an MCP server, remote service, hook, or background
+process. The plugin and skill operate on the ledger through the installed core.
 
 ### Set the ledger up before the first item
 

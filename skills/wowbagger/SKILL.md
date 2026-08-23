@@ -9,6 +9,19 @@ A work ledger that is plain Markdown in Git. Every item is a file; every change
 is a reviewable diff. The core is read-only unless you explicitly ask it to
 publish something.
 
+## Setup
+
+Install the core separately before using this skill:
+
+```sh
+npm install -g wowbagger@0.1.0-alpha.8
+```
+
+The core requires Node.js 20 or later. This plugin ships only agent
+instructions; it does not bundle the core, an MCP server, a remote service, a
+hook, or a background process. It operates on the ledger and its Git working
+copy through the core's validated CLI.
+
 ## Before anything else: check the core
 
 This skill does **not** bundle the wowbagger core. It drives an installed one,
