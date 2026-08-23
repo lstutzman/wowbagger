@@ -5,7 +5,7 @@ number: 141
 title: "Smoke-test Claude plugin loading"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-23
 updated: 2026-08-23
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-23T12:00:00Z"
 depends_on: [ wb_01M0NYNG00QCA6E7BRDP6QHMNS ]
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-23
+    summary: "Accept the Claude plugin smoke-test evidence into the backlog."
+    rationale: "The plugin, installer discovery, valid core checks, refusal paths, and isolated explicit mutation path have been exercised without mutating the repository ledger."
 ---
 
 Exercise the plugin as Claude Code loads it from this repository.
