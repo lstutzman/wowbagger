@@ -5,9 +5,10 @@ number: 144
 title: "Adopt Wowbagger image on GitHub and npm"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-23
 updated: 2026-08-23
+completed: 2026-08-23
 provenance:
   source: "brand-asset-adoption"
   recorded_at: "2026-08-23T12:00:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-23
     summary: "Accept the published image adoption work."
     rationale: "The accepted v5 asset is now in the shared README surface and the alpha9 npm package, with GitHub and tarball verification complete."
+  - action: complete
+    date: 2026-08-23
+    summary: "Complete image adoption on GitHub and npm."
+    rationale: "The accepted image is visible from the pushed GitHub README and included in the published alpha9 README/package tarball. Asset dimensions, size, and package paths were verified."
 ---
 
 Adopt the accepted v5 robotic typing-agent Wowbagger image on the GitHub repository page and npm package page. The repository README is the shared presentation surface; npm renders the published README.
