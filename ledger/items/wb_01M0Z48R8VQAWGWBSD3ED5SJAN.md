@@ -5,7 +5,7 @@ number: 162
 title: "DX: list/read request contracts are rejection-only discoverable; snapshot cursors die under concurrent writers"
 kind: task
 priority: 3
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
