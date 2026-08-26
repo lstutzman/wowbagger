@@ -5,7 +5,7 @@ number: 161
 title: "Stress finding: ready and validate emit bare envelopes, breaking dispatch-by-envelope"
 kind: task
 priority: 3
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
@@ -15,6 +15,11 @@ depends_on: []
 related: []
 tags:
   - "stress-run-2026-08-26"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept exploratory stress defect"
+    rationale: "Reproduced against the repository source during the 257-item concurrent lifecycle run; actionable fix belongs in wowbagger."
 ---
 
 ## Problem
