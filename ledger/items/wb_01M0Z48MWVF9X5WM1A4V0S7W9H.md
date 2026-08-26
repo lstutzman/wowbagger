@@ -5,7 +5,7 @@ number: 158
 title: "Stress finding: parent-migrate answers as patch-v1/contract_version 1 with inconsistent exit codes and doubled issues"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
