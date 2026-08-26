@@ -5,9 +5,10 @@ number: 161
 title: "Stress finding: ready and validate emit bare envelopes, breaking dispatch-by-envelope"
 kind: task
 priority: 3
-status: backlog
+status: killed
 created: 2026-08-26
 updated: 2026-08-26
+killed: 2026-08-26
 provenance:
   source: "stress-run/2026-08-26/stress-run/waveA"
   recorded_at: "2026-08-26T13:31:02.970Z"
@@ -20,6 +21,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept exploratory stress defect"
     rationale: "Reproduced against the repository source during the 257-item concurrent lifecycle run; actionable fix belongs in wowbagger."
+  - action: kill
+    date: 2026-08-26
+    summary: "Close: bare ready and validate results are intentional"
+    rationale: "The core contract and adapter fixtures pin validate and ready as bare legacy result domains; changing them would be a breaking contract change, not a bug fix."
 ---
 
 ## Problem
