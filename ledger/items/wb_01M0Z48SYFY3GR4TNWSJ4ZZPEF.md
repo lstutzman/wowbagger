@@ -5,7 +5,7 @@ number: 164
 title: "Friction: provision leaves the reconcile log uncommitted and does not say so"
 kind: task
 priority: 3
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
