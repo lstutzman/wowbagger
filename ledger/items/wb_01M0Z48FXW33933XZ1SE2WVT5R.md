@@ -5,7 +5,7 @@ number: 152
 title: "Stress finding: reconciliation block is clone-global, contradicting the contract's item-scoped wording"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
