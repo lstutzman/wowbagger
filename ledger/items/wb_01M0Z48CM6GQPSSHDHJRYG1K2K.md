@@ -5,7 +5,7 @@ number: 148
 title: "Stress finding: refused mutation writes a tracked file while claiming state \"unchanged\"; retry then blames that self-written file"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
