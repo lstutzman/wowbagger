@@ -5,7 +5,7 @@ number: 154
 title: "Stress finding: auto-commit-preflight-failed buckets four causes with opposite retry semantics behind one code"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
