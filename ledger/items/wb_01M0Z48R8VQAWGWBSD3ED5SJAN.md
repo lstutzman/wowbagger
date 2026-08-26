@@ -5,9 +5,10 @@ number: 162
 title: "DX: list/read request contracts are rejection-only discoverable; snapshot cursors die under concurrent writers"
 kind: task
 priority: 3
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "stress-run/2026-08-26/stress-run/waveA"
   recorded_at: "2026-08-26T13:31:03.837Z"
@@ -20,6 +21,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept exploratory stress defect"
     rationale: "Reproduced against the repository source during the 257-item concurrent lifecycle run; actionable fix belongs in wowbagger."
+  - action: complete
+    date: 2026-08-26
+    summary: "Fix defect and verify the corrected behavior."
+    rationale: "The implementation now satisfies the reported contract and the current and Node 20 regression suites pass."
 ---
 
 ## Problem
