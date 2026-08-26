@@ -5,7 +5,7 @@ number: 146
 title: "Stress finding: sibling git worktrees fence each other ledger-wide; reconciliation is repo-scoped while files are branch-scoped"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
