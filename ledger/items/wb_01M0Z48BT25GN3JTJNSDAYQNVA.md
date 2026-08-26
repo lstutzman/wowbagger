@@ -5,7 +5,7 @@ number: 147
 title: "Stress finding: fresh clone is permanently dirty — committed reconcile-log export vs empty journal kills --auto-commit forever"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
