@@ -12,7 +12,7 @@ provenance:
   source: "exploratory-stress/2026-08-26/phase2-claim-log"
   recorded_at: "2026-08-26T22:55:00.000Z"
 depends_on: []
-related: [wb_01M0Z48CM6GQPSSHDHJRYG1K2K, wb_01M0XNVN002WFNRD85Q1SSF5FK]
+related: [ wb_01M0Z48CM6GQPSSHDHJRYG1K2K, wb_01M0XNVN002WFNRD85Q1SSF5FK, wb_01M0XNVN00NMH176S1BHVM0HHR ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "design"
