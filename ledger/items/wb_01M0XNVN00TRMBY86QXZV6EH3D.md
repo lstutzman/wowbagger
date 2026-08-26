@@ -12,7 +12,7 @@ provenance:
   source: "exploratory-stress/2026-08-26/phase2-terminal-date"
   recorded_at: "2026-08-26T22:52:00.000Z"
 depends_on: []
-related: [wb_01M0XNVN002WFNRD85Q1SSF5FK]
+related: [ wb_01M0XNVN002WFNRD85Q1SSF5FK ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "documentation"
@@ -43,7 +43,7 @@ Zero item bytes changed and the ledger remained valid. The identical patch with 
 
 ## Derived rule and source
 
-`SPEC.md:201-207` requires transition `updated` and the active lifecycle date (`completed`, `killed`, `archived`, or `deferred`) to equal the transition date. `src/validate.js:906-915` enforces that equality as a standing whole-ledger invariant regardless of the verb producing candidate bytes. Patch sets `updated = request.date` (`docs/mutation-contract.md:2150`) while lifecycle dates are transition-owned (`:2151`); §9's date floor (`:1911`) rejects earlier dates. `src/mutation.js:1067` for snooze and `:1002` for parent-migrate likewise set `updated = request.date` without moving lifecycle dates. Later dates invalidate the candidate, earlier dates fail the request floor, so equality is the only legal value.
+`SPEC.md:201-207` requires transition `updated` and the active lifecycle date (`completed`, `killed`, `archived`, or `deferred`) to equal the transition date. `src/validate.js:906-915` enforces that equality as a standing whole-ledger invariant regardless of the verb producing candidate bytes. Patch sets `updated = request.date` (`docs/mutation-contract.md:2150`) while lifecycle dates are transition-owned (`:2151`); §9's date floor (`:1911`) rejects earlier dates. `src/mutation.js:1067` for snooze and `:1001` for parent-migrate likewise set `updated = request.date` without moving lifecycle dates. Later dates invalidate the candidate, earlier dates fail the request floor, so equality is the only legal value.
 
 This response is through the contracted candidate-validation channel: section 8 precedence at `docs/mutation-contract.md:1822-1830` makes the complete-ledger validator the final authority, and section 10 at `:2290` defines `candidate-invalid` details as `id` plus `validation_errors`. Exit 2 and the error shape are correct. The diagnostic pointing at `completed` instead of request `date` is a recoverability/diagnosability gap, not a contract violation.
 
