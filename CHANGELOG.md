@@ -7,6 +7,33 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- **Cross-worktree reconciliation is target-scoped.** An unrelated item
+  mutation no longer refuses because another worktree has a committed revision.
+  When synchronization is required, the finding names the owning reference.
+- **Fresh clones recover committed claim history.** Reconciliation hydrates an
+  empty local claim journal from the committed reconciliation log, while
+  lock-free claim reads project that history without writing. Invalid or
+  over-capacity committed sequences fail closed.
+- **Auto-commit recovery handles refusal and no-op paths.** Refused preflight
+  checks no longer rewrite the tracked reconciliation log. The first
+  post-provision create works, byte-identical mutations commit only their log,
+  and `mutation-finalize` accepts the corresponding log-only recovery after
+  `HEAD` advances.
+- **Parent migration and snooze expose their guarded write contracts.**
+  Both commands support auto-commit, report their own response domains, return
+  a single unchanged invalid-request envelope, and report stale parent
+  witnesses as conflicts.
+- **Create reserves the `extensions` request container.** Item data must name
+  extension members directly so patch and extension declarations can address
+  them.
+- **Auto-commit preflight reports retryability explicitly.** Only a held
+  auto-commit mutex is retryable.
+- **CLI and release metadata stay discoverable and complete.** Help describes
+  claim verification and list requests, and the release-site manifest covers
+  historical version records.
+
 ## 0.1.0-alpha.9 - 2026-08-23
 
 ### Added
