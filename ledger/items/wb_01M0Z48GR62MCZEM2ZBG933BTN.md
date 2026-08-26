@@ -5,9 +5,10 @@ number: 153
 title: "Stress finding: cloning forks the claim coordinator while keeping one namespace identity"
 kind: task
 priority: 1
-status: backlog
+status: killed
 created: 2026-08-26
 updated: 2026-08-26
+killed: 2026-08-26
 provenance:
   source: "stress-run/2026-08-26/stress-run/waveC"
   recorded_at: "2026-08-26T13:30:56.136Z"
@@ -20,6 +21,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept exploratory stress defect"
     rationale: "Reproduced against the repository source during the 257-item concurrent lifecycle run; actionable fix belongs in wowbagger."
+  - action: kill
+    date: 2026-08-26
+    summary: "Close: clone coordination is explicitly unsupported"
+    rationale: "The capability and contract explicitly set cross_clone_coordination to false; independent clones have separate journals by design. Improve documentation only if desired, not a defect fix."
 ---
 
 ## Problem
