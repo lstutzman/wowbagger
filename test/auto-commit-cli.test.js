@@ -1,7 +1,7 @@
 // The --auto-commit argument surface.
 //
 // This file exercises the flag through the real CLI only. It proves the flag is
-// accepted exactly once on the four named commands, refused everywhere else,
+// accepted exactly once on every supported mutation command, refused elsewhere,
 // and that an invocation without the flag keeps its exact stdout, exit, files,
 // index, and HEAD.
 import assert from 'node:assert/strict';
@@ -95,6 +95,43 @@ test('--auto-commit is accepted once on create, transition, patch, and publish-c
   assert.equal(accepted.exit, 5);
 });
 
+test('parent-migrate accepts --auto-commit on the documented surface', async () => {
+  const fixture = await checkout();
+  const request = await requestFile(fixture.base, 'parent-migrate.json', {
+    id: ITEM_ID,
+    expected_revision: sha256(ITEM_SOURCE),
+    expected_parent: null,
+    parent: null,
+    date: '2026-08-17',
+  });
+  const result = run(
+    fixture.root,
+    'parent-migrate', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  );
+
+  assert.equal(result.exit, 5);
+  assert.equal(result.envelope.error.code, 'capability-unavailable');
+  assert.equal(result.envelope.state, 'unchanged');
+});
+
+test('snooze accepts --auto-commit on the documented surface', async () => {
+  const fixture = await checkout();
+  const request = await requestFile(fixture.base, 'snooze.json', {
+    id: ITEM_ID,
+    expected_revision: sha256(ITEM_SOURCE),
+    snoozed_until: null,
+    date: '2026-08-17',
+  });
+  const result = run(
+    fixture.root,
+    'snooze', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  );
+
+  assert.equal(result.exit, 5);
+  assert.equal(result.envelope.error.code, 'capability-unavailable');
+  assert.equal(result.envelope.state, 'unchanged');
+});
+
 test('--auto-commit is repeated-argument on a second occurrence', async () => {
   const fixture = await checkout();
   const request = await requestFile(fixture.base, 'transition.json', transitionRequest());
@@ -151,4 +188,33 @@ test('an invocation without --auto-commit keeps its exact stdout, exit, files, i
   );
   const onDisk = await readFile(path.join(fixture.ledger, 'items', `${ITEM_ID}.md`), 'utf8');
   assert.match(onDisk, /status: in-progress/);
+});
+
+test('the first auto-commit works after provisioning and committing the namespace', async () => {
+  const fixture = await checkout();
+  const provisioned = run(fixture.root, 'provision', '--ledger', fixture.ledger, '--json');
+  assert.equal(provisioned.exit, 0, provisioned.stdout);
+  git(fixture.root, 'add', 'ledger/.wowbagger/namespace');
+  git(fixture.root, 'commit', '-qm', 'Commit provisioned namespace');
+
+  const id = 'wb_01KZBMBEZKPE7D15HKW9Q3GT01';
+  const request = await requestFile(fixture.base, 'first-auto-create.json', {
+    id,
+    item: {
+      title: 'First auto-commit item',
+      kind: 'task',
+      provenance: { source: 'test/auto-commit-cli', recorded_at: '2026-08-17T00:00:00Z' },
+      depends_on: [],
+    },
+    body: 'First auto-commit\n',
+  });
+
+  const result = run(
+    fixture.root,
+    'create', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  );
+
+  assert.equal(result.exit, 0, result.stdout);
+  assert.equal(result.envelope.result.git_commit !== undefined, true);
+  assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
 });

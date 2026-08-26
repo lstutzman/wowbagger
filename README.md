@@ -86,10 +86,12 @@ wowbagger inspect --ledger ledger --number N --json
 
 For a write, inspect immediately before dispatch, send the returned exact-byte
 revision as the compare-and-swap witness, use the explicit core mutation, and
-validate again. Commit each provisioned-ledger mutation before the next one.
-Never replay a lost write: reconnect, re-read current state, and treat the
-outcome as unknown until the core or a human resolves it. Numbers are the
-human-facing item identity; `wb_...` ULIDs are internal identities.
+validate again. On a provisioned ledger, commit each `create`, `transition`,
+`parent-migrate`, `snooze`, `patch`, or `publish-claimed` mutation before the
+next mutating command. Never replay a lost write: reconnect, re-read current
+state, and treat the outcome as unknown until the core or a human resolves it.
+Numbers are the human-facing item identity; `wb_...` ULIDs are internal
+identities.
 
 The core owns validation, ready selection, projections, lifecycle, CAS,
 publication, claims, fencing, and reconciliation. The harness or host owns

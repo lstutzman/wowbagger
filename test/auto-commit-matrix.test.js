@@ -267,6 +267,39 @@ test('an active-claim refusal answers in the ledger-mutation domain and creates 
   assertNoCommit(fixture, before);
 });
 
+test('parent-migrate fence refusals identify the parent-migrate command', async () => {
+  const fixture = await twoItems();
+  const acquire = await requestFile(fixture, 'parent-acquire.json', {
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  });
+  const acquired = run(fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger, '--input', acquire, '--json');
+  assert.equal(acquired.exit, 0, acquired.stdout);
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-qm', 'Commit parent claim');
+
+  const request = await requestFile(fixture, 'parent-migrate.json', {
+    id: ITEM_ID,
+    expected_revision: sha256(fixture.sources.get(ITEM_ID)),
+    expected_parent: null,
+    parent: null,
+    date: '2026-08-17',
+  });
+  const result = run(
+    fixture.root,
+    'parent-migrate', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  );
+
+  assert.equal(result.exit, 4, result.stdout);
+  assert.equal(result.envelope.namespace, 'ledger-mutation');
+  assert.equal(result.envelope.command, 'parent-migrate-v1');
+  assert.equal(result.envelope.contract_version, 1);
+  assert.equal(result.envelope.error.code, 'active-claim-write-refused');
+});
+
 test('an unreconciled prior mutation refuses in the preflight and creates no commit', async () => {
   const fixture = await twoItems();
   const first = await requestFile(fixture, 'first.json', transitionRequest(fixture));
@@ -288,6 +321,25 @@ test('an unreconciled prior mutation refuses in the preflight and creates no com
   assert.ok(result.envelope.error.details.findings.length > 0);
   assert.equal(await ledgerFile(fixture, `items/${SECOND_ITEM_ID}.md`), fixture.sources.get(SECOND_ITEM_ID));
   assertNoCommit(fixture, before);
+});
+
+test('an unreconciled preflight refusal leaves the reconciliation log unchanged', async () => {
+  const fixture = await twoItems();
+  const first = await requestFile(fixture, 'residue-first.json', transitionRequest(fixture));
+  const transitioned = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', first, '--json');
+  assert.equal(transitioned.exit, 0, transitioned.stdout);
+  git(fixture.root, 'add', '.');
+  git(fixture.root, 'commit', '-qm', 'Commit residue setup');
+  git(fixture.root, 'revert', '--no-edit', 'HEAD');
+  const before = await ledgerFile(fixture, fixture.logPath);
+  const second = await requestFile(fixture, 'residue-second.json', patchRequest(fixture, SECOND_ITEM_ID));
+
+  const result = run(fixture.root, 'patch', '--ledger', fixture.ledger, '--input', second, '--json', '--auto-commit');
+
+  assert.equal(result.exit, 4, result.stdout);
+  assert.equal(result.envelope.error.details.reason, 'claim-state-unreconciled');
+  assert.equal(await ledgerFile(fixture, fixture.logPath), before);
+  assert.equal(git(fixture.root, 'status', '--porcelain', '--', 'ledger'), '');
 });
 
 test('a refused publish-claimed leaves its documented log residue uncommitted', async () => {
@@ -349,7 +401,7 @@ test('a held auto-commit mutex refuses before the mutation', async () => {
   const result = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit');
 
   assert.equal(result.exit, 4, result.stdout);
-  assert.equal(result.envelope.error.details.reason, 'mutex-held');
+  assert.equal(result.envelope.error.details.retryable, true);
   assert.equal(await ledgerFile(fixture, `items/${ITEM_ID}.md`), fixture.sources.get(ITEM_ID));
   assertNoCommit(fixture, before);
 });

@@ -1346,6 +1346,12 @@ Create accepts exactly:
 | item extension members | No | Permitted schema extensions. |
 | body | Yes | JSON string; empty and LF-leading strings are distinct and valid. |
 
+The member name `extensions` is reserved for the `patch` request container.
+Create refuses `item.extensions`; extension members must be named directly on
+the item, such as `item.tags` or `item.tier`. This prevents a nested mapping
+from becoming an extension value that `patch` and the declaration workflow
+cannot address.
+
 If a file named by `--input` cannot be read before a request ID is known,
 create or transition returns `invalid-request` with one `invalid-value` issue at
 `/input`, the stable message `Request input could not be read.`, and mutation
@@ -2154,8 +2160,8 @@ interpreting the refusal.
 | `body` (the region after the frontmatter, not a member) | Consumer-editable through `patch` | `set.body` replaces the whole body; `""` empties it. `set.body_append` appends without a merge; the two are mutually exclusive in one request. |
 | `kind` | Create-once | Create fixes it. `patch` refuses it. |
 | `provenance` | Create-once | Create writes it. Every later verb preserves it byte for byte. |
-| `parent` | Create-once | Create writes it. No verb moves an item between epics. |
-| `snoozed_until` | Create-once | Create writes it. No verb changes it. |
+| `parent` | Create-once, migratable through `parent-migrate` | Create writes it; `parent-migrate` moves it with a compare-and-swap witness. |
+| `snoozed_until` | Create-once, mutable through `snooze` | Create writes it; `snooze` sets or clears it with a compare-and-swap witness. |
 | declared extension members (`tags`, `tier`, a consumer's own identifier fields) | Consumer-owned, patchable through `set.extensions` | `set.extensions.<member>` replaces the member whole; `null` removes it. Patchable only where `<ledger>/.wowbagger/extensions.json` declares the member and its value type, and only where the item does not write it with a YAML anchor or alias. |
 | undeclared extension members | Consumer-owned, not patchable | Supplied at create, preserved byte for byte by every verb, and otherwise a reviewable hand-edit. A ledger with no extension declaration has no patchable extension member at all. |
 
@@ -2497,8 +2503,8 @@ claim-fenced mutation refusals and the bare `validate` and `ready` results.
 
 A ledger becomes provisioned when `provision` binds a namespace to the
 repository and `claim capabilities` reports `mode: "merge-coordinated"`. On
-such a ledger, `create`, `transition`, and `patch` run inside the claim
-coordinator described by the [work-claim
+such a ledger, `create`, `transition`, `parent-migrate`, `snooze`, and `patch`
+run inside the claim coordinator described by the [work-claim
 contract](work-claim-contract.md).
 
 ### The rule
@@ -2508,8 +2514,8 @@ contract](work-claim-contract.md).
 The coordinator records every authorized mutation in the durable journal and
 validates the recorded revisions against Git `HEAD`, not against working-tree
 bytes. An uncommitted mutation is therefore an unreconciled mutation, and the
-next `create`, `transition`, or `patch` refuses rather than writing on top of
-work that is not yet durable.
+next `create`, `transition`, `parent-migrate`, `snooze`, or `patch` refuses
+rather than writing on top of work that is not yet durable.
 
 The loop that works:
 
@@ -2628,22 +2634,32 @@ by sending the flag, not by reading a version.
 
 Only the paths this invocation owns:
 
-| Command | Commit set |
-|---|---|
 | `create` | the created item |
 | `transition` | the changed item and one `<ledger>/.wowbagger/reconcile-<namespace>.md` |
-| `patch` | the changed item and the same one reconciliation log |
-| `publish-claimed` | the published item and the same one reconciliation log |
+| `parent-migrate` | the changed item and one reconciliation log |
+| `snooze` | the changed item and one reconciliation log |
+| `patch` | the changed item and one reconciliation log |
+| `publish-claimed` | the published item and one reconciliation log |
 
-`create` is journal-silent by design, so its commit set has no log. For the
-other three the log must already carry this invocation's terminal entry before
-it may be staged; if it does not, the invocation reports `git-commit-failed`
-with `reason: "log-unavailable"` rather than making an item-only commit.
+The item path appears in the set only when the successor bytes differ from the
+item bytes at `HEAD`. A byte-identical `parent-migrate`, `snooze`, or `patch`
+still records its decision in the reconciliation log, so its auto-commit set
+contains the log alone.
+
+`create` is journal-silent by design, so its commit set has no log. The
+pre-mutation and post-mutation verification steps do not materialize an empty
+log for `create`; this lets the first auto-commit run after namespace
+provisioning commit the created item without an extra metadata ceremony. For
+the other commands, the log must already carry this invocation's terminal
+entry before it may be staged; if it does not, the invocation reports
+`git-commit-failed` with `reason: "log-unavailable"`.
 
 Commit subjects are fixed:
 
     wowbagger: create item #N
     wowbagger: transition item #N
+    wowbagger: parent-migrate item #N
+    wowbagger: snooze item #N
     wowbagger: patch item #N
     wowbagger: publish claimed item #N
 
@@ -2678,6 +2694,11 @@ staging, or commit occurs. `details.reason` is one of `staged-paths-present`,
 `ledger-not-clean`, `identity-unavailable`, `unborn-head`, `mutex-held`,
 `claim-state-unreconciled`, or `git-unavailable`.
 
+Every `auto-commit-preflight-failed` refusal also carries
+`details.retryable`. It is `true` only for `details.reason: "mutex-held"`;
+all other preflight reasons are `false`. Clients must branch on this boolean,
+not infer retryability from the generic error code or message.
+
 The rule is deliberately strict rather than preserving foreign staged work in a
 temporary index. Reconciliation excludes `.wowbagger/` from the Git item
 surface, and a dirty reconciliation log does not itself refuse a mutation, so a
@@ -2703,6 +2724,11 @@ not fall back to manual mode.
    remove is reported there, is never staged, and never counts as foreign ledger
    dirt: refusing on it would make an already-published item impossible to
    commit.
+
+When a successful mutation produces item bytes identical to `HEAD`, the item
+path is omitted from `commit_paths`; the journal log remains the only changed
+path. This avoids reporting a staged-path mismatch for a valid audit-only
+mutation and keeps `mutation-finalize` idempotent after an advanced `HEAD`.
 
 On success the response keeps its original domain and adds three members to
 `result`: `git_commit`, `commit_paths`, and `claim_verified: true`. A successful

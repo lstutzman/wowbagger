@@ -6,6 +6,9 @@ import {
   appendClaimEntry,
   claimJournalPath,
   claimReconcileLogPath,
+  isProjectedJournalEntry,
+  parseReconcileLog,
+  replayClaimEntries,
   replayClaimJournal,
   writeReconcileLog,
 } from './claim-journal.js';
@@ -13,7 +16,7 @@ import { advanceClockFloor, readBack } from './claim-operations.js';
 import { claimStorePath, withClaimLock, writeClaimState } from './claim-store.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
-import { findRevisionOwner, readGitHeadLedger } from './git-reconciliation.js';
+import { findRevisionOwner, readGitHeadLedger, readGitTreeFile } from './git-reconciliation.js';
 import { publishClaimedCandidate, revisionFor } from './mutation.js';
 import { validateLedger } from './validate.js';
 
@@ -185,6 +188,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           replayed,
           physicalNow: new Date().toISOString(),
           targetItemId: request.item_id,
+          writeLogOnUnsafe: false,
         });
       } catch (error) {
         if (error?.code !== 'CLOCK_FLOOR_PERSISTENCE_FAILED') throw error;
@@ -272,6 +276,74 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
   }
 }
 
+export async function hydrateClaimJournalFromHead({
+  ledgerDirectory,
+  gitCommonDir,
+  namespace,
+  replayed,
+  persist = true,
+}) {
+  if (replayed.entries.length > 0) return replayed;
+  let log;
+  try {
+    log = await readGitTreeFile(
+      ledgerDirectory,
+      'HEAD',
+      `.wowbagger/reconcile-${namespace}.md`,
+    );
+  } catch (error) {
+    if (error?.code === 128) return replayed;
+    throw error;
+  }
+  const committed = parseReconcileLog(log, namespace);
+  if (committed.error) throw hydrationError(committed.error.reason);
+  if (committed.length === 0) return replayed;
+  const bySequence = new Map();
+  for (const entry of committed) {
+    if (!Number.isSafeInteger(entry.seq) || entry.seq < 1 || bySequence.has(entry.seq)) {
+      throw hydrationError('non-contiguous-sequence');
+    }
+    bySequence.set(entry.seq, entry);
+  }
+  const maxSequence = Math.max(...bySequence.keys());
+  const fallbackTime = committed
+    .map((entry) => entry.observed_at ?? entry.physical_now)
+    .find((value) => typeof value === 'string')
+    ?? '1970-01-01T00:00:00.000Z';
+  const hydratedEntries = [];
+  for (let sequence = 1; sequence <= maxSequence; sequence += 1) {
+    const entry = bySequence.get(sequence);
+    if (entry) {
+      const { seq, ...withoutSequence } = entry;
+      hydratedEntries.push(withoutSequence);
+    } else {
+      hydratedEntries.push({
+        type: 'clock',
+        now: fallbackTime,
+        floor: fallbackTime,
+      });
+    }
+  }
+  if (!persist) {
+    return {
+      state: replayClaimEntries(hydratedEntries, namespace),
+      entries: hydratedEntries,
+    };
+  }
+  const journalPath = claimJournalPath(gitCommonDir, namespace);
+  for (const entry of hydratedEntries) {
+    await appendClaimEntry(journalPath, entry);
+  }
+  return replayClaimJournal(journalPath, namespace);
+}
+
+function hydrationError(reason) {
+  const error = new Error('The committed reconciliation log is invalid.');
+  error.code = 'CLAIM_JOURNAL_INVALID';
+  error.reason = reason;
+  return error;
+}
+
 export async function reconcileClaimJournal({
   ledgerDirectory,
   gitCommonDir,
@@ -279,9 +351,17 @@ export async function reconcileClaimJournal({
   replayed,
   physicalNow,
   targetItemId = null,
+  writeLogOnUnsafe = true,
+  writeLogWhenEmpty = true,
 }) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
+  replayed = await hydrateClaimJournalFromHead({
+    ledgerDirectory,
+    gitCommonDir,
+    namespace,
+    replayed,
+  });
   const ledger = await loadLedger(path.resolve(ledgerDirectory));
   const items = new Map(ledger.items.map((item) => [item.data.id, item]));
   const terminalKeys = new Set(replayed.entries
@@ -599,11 +679,23 @@ export async function reconcileClaimJournal({
     });
   }
 
-  await writeReconcileLog(
-    claimReconcileLogPath(path.resolve(ledgerDirectory), namespace),
-    namespace,
-    entries,
-  );
+  const unsafe = findings.some((finding) => (
+    finding.code !== 'pending-intent-resolved' && blocksTarget(finding, targetItemId)
+  ));
+  const logPath = claimReconcileLogPath(path.resolve(ledgerDirectory), namespace);
+  let logExists = true;
+  try {
+    await access(logPath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    logExists = false;
+  }
+  // An unsafe reconciliation and a log with nothing to project both leave the
+  // working tree alone unless the caller asks for the write, so a refusal never
+  // has to answer for a tracked artifact it did not intend to change.
+  const writesLog = (writeLogWhenEmpty || logExists || entries.some(isProjectedJournalEntry))
+    && (writeLogOnUnsafe || !unsafe);
+  if (writesLog) await writeReconcileLog(logPath, namespace, entries);
   try {
     await writeClaimState(storePath, replayed.state);
   } catch {
@@ -623,15 +715,12 @@ export async function reconcileClaimJournal({
     ledger,
     observedAt,
     state: replayed.state,
-    unsafe: findings.some((finding) => (
-      finding.code !== 'pending-intent-resolved' && blocksTarget(finding, targetItemId)
-    )),
+    unsafe,
   };
 }
 
 // An item's authorized revision is whatever the journal last ruled legitimate:
 // a committed claimed publication, a legacy mutation, or an operator adoption.
-// Adoption is the only one of the three that changes no item byte.
 function authorizingEntries(entries, itemId) {
   return entries.filter((entry) => (
     entry.item_id === itemId
@@ -682,6 +771,18 @@ async function reconciliationDiagnosis({
   workingTreeChanged,
 }) {
   const pathLabel = expectedPath ?? 'the item path';
+  if (headRevision !== null && actualRevision === headRevision
+    && headRevision !== expectedRevision) {
+    const owner = await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
+    if (owner.owner_ref) {
+      return {
+        reason: 'worktree-synchronization-required',
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        ...owner,
+        remediation: `WAIT for owner ${owner.owner_ref} to publish ${owner.owner_commit}, then synchronize this worktree and run claim-verify.`,
+      };
+    }
+  }
   if (!workingTreeChanged && headRevision !== expectedRevision) {
     return {
       reason: 'git-finalization-required',
@@ -771,6 +872,8 @@ export async function verifyClaimJournal({
   gitCommonDir,
   namespace,
   targetItemId = null,
+  writeLogOnUnsafe = true,
+  writeLogWhenEmpty = true,
 }) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
@@ -783,6 +886,8 @@ export async function verifyClaimJournal({
         replayed: await replayClaimJournal(journalPath, namespace),
         physicalNow: new Date().toISOString(),
         targetItemId,
+        writeLogWhenEmpty,
+        writeLogOnUnsafe,
       });
       return {
         exit: reconciled.unsafe ? 6 : 0,

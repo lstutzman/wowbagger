@@ -15,12 +15,18 @@ import { reconcileClaimJournal } from './claim-publication.js';
 import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './claim-store.js';
 import { readNamespace } from './namespace.js';
 
-export async function withLegacyMutationFence(ledgerDirectory, itemId, command, write) {
+export async function withLegacyMutationFence(
+  ledgerDirectory,
+  itemId,
+  command,
+  write,
+  { responseCommand = command } = {},
+) {
   let gitCommonDir;
   try {
     gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory, { failClosed: true });
   } catch {
-    return claimStoreUnavailable(command, 'git-verification-failed');
+    return claimStoreUnavailable(responseCommand, 'git-verification-failed');
   }
   const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
   const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
@@ -39,9 +45,11 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         replayed,
         physicalNow: new Date().toISOString(),
         targetItemId: itemId,
+        writeLogOnUnsafe: false,
+        writeLogWhenEmpty: command !== 'create-v1',
       });
       if (reconciled.unsafe) {
-        return claimStoreUnavailable(command, 'publication-reconciliation-required', {
+        return claimStoreUnavailable(responseCommand, 'publication-reconciliation-required', {
           findings: reconciled.findings,
         });
       }
@@ -55,7 +63,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
       const mustRefuse = command === 'create-v1'
         ? record.last_epoch !== '0'
         : record.active !== null && observedAt < record.active.expires_at;
-      if (mustRefuse) return legacyRefusal(command, namespace, itemId, observedAt, record);
+      if (mustRefuse) return legacyRefusal(responseCommand, namespace, itemId, observedAt, record);
 
       const authorize = async (expectedRevision, candidateRevision, itemPath) => {
         const attemptId = randomUUID();
@@ -108,7 +116,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         outcome = await write(authorize, reconciled.ledger);
       } catch (error) {
         if (intent) {
-          return claimStoreUnavailable(command, 'legacy-mutation-outcome-unknown', {
+          return claimStoreUnavailable(responseCommand, 'legacy-mutation-outcome-unknown', {
             attempt_id: intent.attempt_id,
             candidate_revision: intent.candidate_revision,
           }, 'unknown');
@@ -125,7 +133,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
           ? outcome.item?.revision
           : outcome.error?.details?.revision;
         if (committedRevision !== intent.candidate_revision) {
-          return claimStoreUnavailable(command, 'legacy-mutation-outcome-unknown', {
+          return claimStoreUnavailable(responseCommand, 'legacy-mutation-outcome-unknown', {
             attempt_id: intent.attempt_id,
             candidate_revision: intent.candidate_revision,
           }, 'unknown');
@@ -142,7 +150,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
             item_path: intent.item_path,
           }));
         } catch {
-          return claimStoreUnavailable(command, 'legacy-mutation-record-failed', {
+          return claimStoreUnavailable(responseCommand, 'legacy-mutation-record-failed', {
             attempt_id: intent.attempt_id,
             committed_revision: committedRevision,
           }, 'unknown');
@@ -158,7 +166,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
             observed_at: observedAt,
           }));
         } catch {
-          return claimStoreUnavailable(command, 'legacy-mutation-record-failed');
+          return claimStoreUnavailable(responseCommand, 'legacy-mutation-record-failed');
         }
       }
       try {
@@ -182,7 +190,7 @@ export async function withLegacyMutationFence(ledgerDirectory, itemId, command, 
         : outcome;
     });
   } catch (error) {
-    return claimStoreUnavailable(command, error?.code === 'CLAIM_LOCK_HELD'
+    return claimStoreUnavailable(responseCommand, error?.code === 'CLAIM_LOCK_HELD'
       ? 'claim-store-locked'
       : 'claim-store-unreadable', {}, intent ? 'unknown' : 'unchanged');
   }

@@ -216,6 +216,38 @@
       "classification": "retained",
       "occurrences": 1,
       "applies_to_version": "0.1.0-alpha.8"
+    },
+    {
+      "file": "ledger/items/wb_01M0NYNG0084M6B59HM35Q1XGZ.md",
+      "kind": "anchored-text",
+      "anchor": "Published the resulting public prose and image adoption in `{version}` / `v0.1.0-alpha.9`.",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.9"
+    },
+    {
+      "file": "ledger/items/wb_01M0NYNG0084M6B59HM35Q1XGZ.md",
+      "kind": "anchored-text",
+      "anchor": "Published the resulting public prose and image adoption in `0.1.0-alpha.9` / `v{version}`.",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.9"
+    },
+    {
+      "file": "ledger/items/wb_01M0NYNG00XA7WJ9D36C74RJZW.md",
+      "kind": "anchored-text",
+      "anchor": "Published the README and all five image candidates in `wowbagger@{version}`.",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.9"
+    },
+    {
+      "file": "ledger/items/wb_01M0NYNG00XA7WJ9D36C74RJZW.md",
+      "kind": "anchored-text",
+      "anchor": "Release: `v{version}`, commit `da49db6`; image adoption commit `7dc823a`.",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.9"
     }
   ]
 }

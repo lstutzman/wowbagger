@@ -16,6 +16,7 @@ import {
   git,
   itemSource,
   ledgerFile,
+  patchRequest,
   provisionedLedger,
   requestFile,
   run,
@@ -25,6 +26,10 @@ import {
 
 async function twoItems() {
   return provisionedLedger({ items: [[ITEM_ID, 1], [SECOND_ITEM_ID, 2]] });
+}
+
+function decodeToken(token) {
+  return JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
 }
 
 // A pre-commit hook that refuses is the cheapest honest way to reach
@@ -106,6 +111,57 @@ test('mutation-finalize is idempotent after an intervening claim-verify', async 
   assert.equal(again.exit, 0, again.stdout);
   assert.equal(again.envelope.result.git_commit, first.envelope.result.git_commit);
   assert.equal(git(fixture.root, 'log', '--format=%H'), commits);
+});
+
+test('mutation-finalize recovers a byte-identical mutation after its commit lands', async () => {
+  const fixture = await twoItems();
+  const firstRequest = await requestFile(fixture, 'first-patch.json', patchRequest(fixture));
+  const first = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', firstRequest, '--json', '--auto-commit',
+  );
+  assert.equal(first.exit, 0, first.stdout);
+
+  const repeatedRequest = await requestFile(fixture, 'repeated-patch.json', {
+    id: ITEM_ID,
+    expected_revision: first.envelope.result.item.revision,
+    date: '2026-08-17',
+    set: { priority: 40 },
+  });
+  const token = await refusedByHook(fixture, [
+    'patch', '--ledger', fixture.ledger, '--input', repeatedRequest, '--json', '--auto-commit',
+  ]);
+  git(fixture.root, 'commit', '-qm', 'wowbagger: patch item #1');
+  const committed = git(fixture.root, 'rev-parse', 'HEAD');
+
+  const recovered = run(
+    fixture.root,
+    'mutation-finalize', '--ledger', fixture.ledger, '--recovery-token', token, '--json',
+  );
+
+  assert.equal(recovered.exit, 0, recovered.stdout);
+  assert.equal(recovered.envelope.result.git_commit, git(fixture.root, 'rev-parse', 'HEAD'));
+  assert.equal(recovered.envelope.result.git_commit, committed);
+  assert.deepEqual(recovered.envelope.result.commit_paths, [fixture.logPath]);
+  assert.equal(recovered.envelope.result.claim_verified, true);
+});
+
+test('mutation-finalize rejects an item-only token for a journal-owned mutation', async () => {
+  const fixture = await twoItems();
+  const token = await transitionRefused(fixture);
+  const payload = decodeToken(token);
+  payload.commit_set = payload.commit_set.filter((entry) => entry.path === `items/${ITEM_ID}.md`);
+  const tampered = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  git(fixture.root, 'commit', '-qm', 'wowbagger: transition item #1');
+
+  const result = run(
+    fixture.root,
+    'mutation-finalize', '--ledger', fixture.ledger, '--recovery-token', tampered, '--json',
+  );
+
+  assert.equal(result.exit, 4, result.stdout);
+  assert.equal(result.envelope.error.details.reason, 'commit-set-mismatch');
+  assert.equal(git(fixture.root, 'rev-parse', 'HEAD^'), fixture.head);
 });
 
 test('a changed item refuses mutation-finalize without any Git mutation', async () => {

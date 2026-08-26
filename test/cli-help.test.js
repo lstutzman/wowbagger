@@ -149,3 +149,14 @@ test('help and version are untouched by machine JSON surfaces', () => {
   const version = runCli('--version');
   assert.equal(version.stdout, `${distributionVersion}\n`);
 });
+
+test('help documents claim verification and list query members', () => {
+  const global = runCli('--help');
+  const list = runCli('list', '--help');
+
+  assert.ok(global.stdout.includes('claim-verify'));
+  assert.match(list.stdout, /query_version/);
+  assert.match(list.stdout, /page_size/);
+  assert.match(list.stdout, /cursor/);
+  assert.match(list.stdout, /sort/);
+});

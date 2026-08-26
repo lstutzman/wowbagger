@@ -88,10 +88,10 @@ carries one operating rule that binds every caller:
 
 A merge-coordinated backend validates recorded revisions against Git `HEAD`,
 never against working-tree bytes. An uncommitted mutation is an unreconciled
-mutation. The next `create`, `transition`, `patch`, or `publish-claimed`
-therefore refuses with exit 6 `claim-store-unavailable` and
-`details.reason: "publication-reconciliation-required"` rather than writing on
-top of work that is not yet durable.
+mutation. The next `create`, `transition`, `parent-migrate`, `snooze`, `patch`,
+or `publish-claimed` therefore refuses with exit 6 `claim-store-unavailable`
+and `details.reason: "publication-reconciliation-required"` rather than
+writing on top of work that is not yet durable.
 
 `claim-verify` is the reconciliation procedure for that refusal. The loop is
 write, commit, `claim-verify`, next write. Section 6 defines `claim-verify`,
@@ -122,6 +122,15 @@ and the provisioned namespace, creates the exact commit if it is absent, then
 runs `claim-verify`. Repeating it creates no second commit. [Mutation
 contract](mutation-contract.md) section 13 defines the flag, its strict
 preflight, its commit sets, its failure envelopes, and this command.
+
+When a provisioned ledger is opened in a fresh Git clone, the local claim
+journal may not exist even though `HEAD` carries a committed reconciliation
+log. The first reconciliation hydrates the local journal from that committed
+projection, preserving its sequence gaps with non-projected clock entries. A
+lock-free claim read projects the same committed evidence in memory without
+writing the journal. This makes committed claim and publication history visible
+without inventing new authority; later writes still require the clone's own
+Git history to finalize them.
 
 ## 2. Ledger namespace and identity
 
@@ -880,13 +889,15 @@ not a claim finding, and a caller MUST NOT treat it as one. It is the honest
 statement that a clean claim answer is not a clear road, and the caller must
 repair validation before the next mutation will run.
 
-A clean verification returns exit 0 and `state: "committed"`. Findings named
-`pending-intent-resolved` are clean recovery. Any
-`legacy-mutation-outcome-unknown`, `publication-outcome-unknown`,
-`revision-regression`, or `stale-write-detected` finding returns exit 6 and
-`state: "unknown"`. A caller MUST stop publication work and inspect those
-findings. Repeating verification MUST NOT duplicate a publication
-finalization.
+A clean verification returns exit 0 and `state: "committed"`. This state
+describes durable coordinator reconciliation, not Git finalization of every
+publication; callers must inspect each `result.publications` row's
+`git_finalized` and `git_commit`. Findings named `pending-intent-resolved` are
+clean recovery. Any `legacy-mutation-outcome-unknown`,
+`publication-outcome-unknown`, `revision-regression`, or `stale-write-detected`
+finding returns exit 6 and `state: "unknown"`. A caller MUST stop publication
+work and inspect those findings. Repeating verification MUST NOT duplicate a
+publication finalization.
 
 Every finding that blocks a mutation MUST carry a `remediation` string, and
 that string MUST name both the action to take and `claim-verify`. It MUST also

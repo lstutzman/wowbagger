@@ -232,7 +232,9 @@ wowbagger patch      --ledger <dir> --input request.json --json
   with a `patch` that brings the successor under the bound.
 - `create` starts an empty ledger on schema version 2 and returns the selected
   version at `result.item.core.schema_version`. A non-empty schema-version-1
-  ledger stays on version 1 until its complete ledger is migrated.
+  ledger stays on version 1 until its complete ledger is migrated. The create
+  request name `extensions` is reserved for the patch container; name extension
+  members directly on `item`.
 - `transition` changes **one** item. If the change would require touching a
   dependent or a child, it refuses. That refusal is correct — make it a
   reviewable multi-file Git change instead of forcing it.
@@ -461,9 +463,9 @@ commit at the end. Tell the user that before starting a batch.
 ### Or use --auto-commit and let one invocation do it
 
 On a provisioned ledger, `--auto-commit` performs that whole loop inside one
-invocation. It is accepted on `create`, `transition`, `patch`, and
-`publish-claimed`, once each, and only with the flag present — there is no
-setting that turns it on for you.
+invocation. It is accepted on `create`, `transition`, `parent-migrate`, `snooze`,
+`patch`, and `publish-claimed`, once each, and only with the flag present — there
+is no setting that turns it on for you.
 
 ```sh
 wowbagger transition --ledger <dir> --input next.json --json --auto-commit

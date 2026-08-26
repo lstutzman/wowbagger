@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { parseLedgerItemSource } from './ledger.js';
+import { parseReconcileLog } from './claim-journal.js';
 import { readGitTreeFile, readGitTreeLedger } from './git-reconciliation.js';
 import { revisionFor } from './mutation.js';
 
@@ -67,34 +68,6 @@ export function checkProspectiveLedger({ namespace, items, entries, parents, can
     };
   }
   return { ok: true };
-}
-
-export function parseReconcileLog(bytes, namespace) {
-  const lines = bytes.toString('utf8').split('\n');
-  const start = lines.indexOf('```jsonl');
-  if (start < 0) return [];
-  const end = lines.indexOf('```', start + 1);
-  if (end < 0) return { error: { code: 'ambiguous-journal', reason: 'unterminated-jsonl-block' } };
-  const entries = [];
-  for (const line of lines.slice(start + 1, end)) {
-    if (line.trim() === '') continue;
-    try {
-      const entry = JSON.parse(line);
-      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-        return { error: { code: 'ambiguous-journal', reason: 'entry-not-object' } };
-      }
-      entries.push(entry);
-    } catch {
-      return { error: { code: 'ambiguous-journal', reason: 'entry-not-json' } };
-    }
-  }
-  const namespaceIssue = entries.find((entry) => {
-    const entryNamespace = entry.ledger_namespace
-      ?? entry.request?.ledger_namespace
-      ?? entry.fence?.ledger_namespace;
-    return entryNamespace !== undefined && entryNamespace !== namespace;
-  });
-  return entries;
 }
 
 export async function checkProspectiveMerge({ ledgerDirectory, namespace, baseRef, headRef }) {

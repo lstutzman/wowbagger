@@ -69,6 +69,12 @@ export async function readGitTreeFile(ledgerDirectory, treeish, relativePath) {
 export async function findRevisionOwner(ledgerDirectory, itemPath, expectedRevision) {
   const { root, relativeLedger } = await resolveWorktreeLedger(ledgerDirectory);
   const gitPath = toGitPath(path.join(relativeLedger, itemPath));
+  let currentRef = null;
+  try {
+    currentRef = (await gitText(root, ['symbolic-ref', '-q', 'HEAD'])).trim() || null;
+  } catch {
+    // A detached HEAD has no current branch to classify as a local owner.
+  }
   for (const commit of gitLines(await gitText(root, ['rev-list', '--all', '--', gitPath]))) {
     let bytes;
     try {
@@ -78,12 +84,14 @@ export async function findRevisionOwner(ledgerDirectory, itemPath, expectedRevis
       continue;
     }
     if (revisionFor(bytes) !== expectedRevision) continue;
-    const [ownerRef] = gitLines(await gitText(root, [
+    const refs = gitLines(await gitText(root, [
       'for-each-ref',
       '--contains',
       commit,
       '--format=%(refname)',
     ])).sort();
+    if (currentRef !== null && refs.includes(currentRef)) return { owner_unavailable: true };
+    const [ownerRef] = refs;
     return ownerRef ? { owner_ref: ownerRef, owner_commit: commit } : { owner_unavailable: true };
   }
   return { owner_unavailable: true };

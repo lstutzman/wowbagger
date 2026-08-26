@@ -8,12 +8,14 @@ import {
   appendClaimEntry,
   claimJournalPath,
   claimReconcileLogPath,
+  parseReconcileLog,
   replayClaimJournal,
   writeReconcileLog,
 } from './claim-journal.js';
 import { claimAcquire, claimRead, claimRelease, claimRenew } from './claim-operations.js';
 import {
   adoptItemRevision,
+  hydrateClaimJournalFromHead,
   publishClaimed,
   reconcileClaimJournal,
   readPublicationOutcome,
@@ -23,7 +25,7 @@ import {
 } from './claim-publication.js';
 import { loadExtensionDeclaration } from './extensions.js';
 import { validateClaimRequest } from './claim-request.js';
-import { checkProspectiveMerge, parseReconcileLog } from './claim-prospective.js';
+import { checkProspectiveMerge } from './claim-prospective.js';
 import { proposeExtensionDeclaration } from './extension-provision.js';
 import { selectCommittedAdoptions } from './claim-sync.js';
 import {
@@ -83,7 +85,14 @@ import { inspectWorkbench } from './workbench.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 5;
-const AUTO_COMMIT_COMMANDS = new Set(['create', 'transition', 'patch', 'publish-claimed']);
+const AUTO_COMMIT_COMMANDS = new Set([
+  'create',
+  'transition',
+  'parent-migrate',
+  'snooze',
+  'patch',
+  'publish-claimed',
+]);
 // The report failures this command states. A code outside the set is an
 // unexpected condition, never a classification the command can pass through.
 const REPORT_FAILURE_CODES = new Set([
@@ -120,6 +129,9 @@ const COMMAND_SUMMARIES = {
   'claim-sync': 'Import committed adoption evidence into the local claim journal.',
   'claim-adopt': 'Rule a committed out-of-protocol item revision legitimate.',
   'mutation-finalize': 'Complete the Git commit an auto-commit mutation could not establish.',
+  provision: 'Provision a Git-backed work-claim namespace.',
+  claim: 'Read and coordinate work claims for one ledger.',
+  'claim-verify': 'Reconcile the durable claim journal with ledger bytes and Git.',
 };
 
 const KNOWN_COMMANDS = new Set([
@@ -1451,6 +1463,7 @@ function writeInvalidRequest(command, issues) {
     ok: false,
     command,
     contract_version: MUTATION_CONTRACT_VERSION,
+    ...(command === 'parent-migrate' || command === 'snooze' ? { state: 'unchanged' } : {}),
     error: outcome.error,
   })}\n`);
   process.exitCode = outcome.exit;
@@ -1623,7 +1636,15 @@ async function runClaimCommand(claimCommand, argumentsList) {
   const operation = CLAIM_OPERATIONS[claimCommand];
   if (claimCommand === 'read') {
     try {
-      const replayed = await replayClaimJournal(journalPath, namespace);
+      // The lock-free read never writes: it projects committed evidence in
+      // memory so an unhydrated worktree still answers with the real claim.
+      const replayed = await hydrateClaimJournalFromHead({
+        ledgerDirectory: parsedOptions.options.ledger,
+        gitCommonDir,
+        namespace,
+        replayed: await replayClaimJournal(journalPath, namespace),
+        persist: false,
+      });
       writeClaimEnvelope(operation(replayed.state, request, new Date().toISOString()).envelope);
     } catch {
       writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-unreadable'));
@@ -1648,6 +1669,7 @@ async function runClaimCommand(claimCommand, argumentsList) {
           replayed,
           physicalNow,
           targetItemId: request.item_id,
+          writeLogOnUnsafe: false,
         });
       } catch (error) {
         throw taggedFailure(
@@ -1973,6 +1995,20 @@ function commandHelp(command) {
       'its generated action, decision requirement, minimum date, and observed state.',
       'It requires --as-of, changes no ledger state, and is an observation, not a lease:',
       'transition rechecks revision, lock, claim fence, reconciliation, and validity.',
+      '',
+    ].join('\n');
+  }
+
+  if (command === 'list') {
+    return [
+      header,
+      '',
+      `${usage(command)}`,
+      '',
+      'Request JSON members: query_version, as_of, filters, sort, page_size, and cursor.',
+      'sort is {field, direction}; direction is ascending or descending.',
+      'Use the returned page.next_cursor as cursor to resume a stable snapshot.',
+      'A changed snapshot returns list-snapshot-changed; restart without cursor.',
       '',
     ].join('\n');
   }

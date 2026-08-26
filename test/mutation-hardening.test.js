@@ -52,6 +52,37 @@ test('create serializes nested and non-plain extension keys without changing the
   });
 });
 
+test('create rejects the reserved extensions container key', async () => {
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'reserved-extensions.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: 'wb_01Q45X474N28T5CY4GNF6YY4HM',
+      item: {
+        title: 'Reject the patch container as item data',
+        kind: 'task',
+        provenance: {
+          source: 'test/mutation-hardening',
+          recorded_at: '2030-01-10T12:34:56.789Z',
+        },
+        depends_on: [],
+        extensions: { tier: 'gold' },
+      },
+      body: '',
+    }));
+
+    const result = runCli('create', '--ledger', ledger, '--input', requestPath, '--json');
+    const output = JSON.parse(result.stdout);
+
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(output.error.code, 'invalid-request');
+    assert.deepEqual(output.error.details.issues, [{
+      path: '/item/extensions',
+      code: 'invalid-value',
+      message: 'Item member extensions is controlled by Wowbagger.',
+    }]);
+  });
+});
+
 test('create retains an extension JSON number without JavaScript precision coercion', async () => {
   await withLedger({}, async (ledger) => {
     const requestPath = path.join(path.dirname(ledger), 'request.json');

@@ -23,3 +23,24 @@ test('snooze sets and clears a migrated item snooze date with CAS', async () => 
     assert.equal(JSON.parse(snoozed.stdout).result.item.core.snoozed_until, '2099-12-31');
   });
 });
+
+test('snooze invalid requests report missing members once with unchanged state', async () => {
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'invalid-snooze.json');
+    await writeFile(requestPath, '{}');
+
+    const result = runCli('snooze', '--ledger', ledger, '--input', requestPath, '--json');
+    assert.equal(result.status, 2, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.state, 'unchanged');
+    assert.deepEqual(
+      envelope.error.details.issues.map((issue) => [issue.path, issue.code]),
+      [
+        ['/date', 'missing-member'],
+        ['/expected_revision', 'missing-member'],
+        ['/id', 'missing-member'],
+        ['/snoozed_until', 'missing-member'],
+      ],
+    );
+  });
+});

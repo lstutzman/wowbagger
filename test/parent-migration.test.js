@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { withLedger, runCli } from './support.js';
@@ -33,5 +33,59 @@ test('parent-migrate detaches a live child with a CAS witness', async () => {
     assert.equal(result.result.item.core.parent, undefined);
     const source = await readFile(path.join(ledger, `${CHILD}.md`), 'utf8');
     assert.doesNotMatch(source, /^parent:/m);
+  });
+});
+
+test('parent-migrate invalid requests report missing members once with unchanged state', async () => {
+  await withLedger({}, async (ledger) => {
+    const requestPath = path.join(path.dirname(ledger), 'invalid-parent-migrate.json');
+    await writeFile(requestPath, '{}');
+
+    const result = runCli('parent-migrate', '--ledger', ledger, '--input', requestPath, '--json');
+    assert.equal(result.status, 2, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.state, 'unchanged');
+    assert.deepEqual(
+      envelope.error.details.issues.map((issue) => [issue.path, issue.code]),
+      [
+        ['/date', 'missing-member'],
+        ['/expected_parent', 'missing-member'],
+        ['/expected_revision', 'missing-member'],
+        ['/id', 'missing-member'],
+        ['/parent', 'missing-member'],
+      ],
+    );
+  });
+});
+
+test('parent-migrate reports the actual parent on a stale parent witness', async () => {
+  await withLedger({
+    [`${EPIC}.md`]: item(EPIC, 'epic'),
+    [`${CHILD}.md`]: item(CHILD, 'task', EPIC),
+  }, async (ledger) => {
+    const inspected = runCli('inspect', '--ledger', ledger, '--id', CHILD, '--json');
+    assert.equal(inspected.status, 0, inspected.stderr);
+    const revision = JSON.parse(inspected.stdout).result.item.revision;
+    const requestPath = path.join(path.dirname(ledger), 'stale-parent.json');
+    await writeFile(requestPath, JSON.stringify({
+      id: CHILD,
+      expected_revision: revision,
+      expected_parent: null,
+      parent: null,
+      date: '2030-01-21',
+    }));
+
+    const result = runCli('parent-migrate', '--ledger', ledger, '--input', requestPath, '--json');
+    assert.equal(result.status, 4, result.stderr);
+    const envelope = JSON.parse(result.stdout);
+    assert.equal(envelope.error.code, 'parent-migration-precondition-failed');
+    assert.equal(envelope.error.details.expected_parent, null);
+    assert.equal(envelope.error.details.actual_parent, EPIC);
+    assert.deepEqual(envelope.error.details.issues, [{
+      code: 'parent-revision-conflict',
+      field: 'expected_parent',
+      message: 'The current parent does not match expected_parent.',
+      related_ids: [],
+    }]);
   });
 });

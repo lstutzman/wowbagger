@@ -50,6 +50,8 @@ const GIT_ENVIRONMENT = Object.fromEntries(
 const COMMIT_SUBJECT_VERBS = {
   create: 'create',
   transition: 'transition',
+  'parent-migrate': 'parent-migrate',
+  snooze: 'snooze',
   patch: 'patch',
   'publish-claimed': 'publish claimed',
 };
@@ -144,7 +146,14 @@ async function finalize({
   // every one of the four mutations already refuses it with ledger-invalid and
   // state unchanged, and duplicating that would add a branch no fixture can
   // distinguish from the mutation's own refusal.
-  const verified = await verifyClaimJournal({ ledgerDirectory, gitCommonDir, namespace, targetItemId });
+  const verified = await verifyClaimJournal({
+    ledgerDirectory,
+    gitCommonDir,
+    namespace,
+    targetItemId,
+    writeLogOnUnsafe: false,
+    writeLogWhenEmpty: false,
+  });
   if (verified.exit !== 0 || verified.stdout.ok !== true) {
     return shape.preflightFailed('claim-state-unreconciled', {
       claim_verify_code: verified.stdout.error?.code ?? null,
@@ -194,8 +203,11 @@ async function finalize({
     });
   }
   published.revision = identity.revision;
-
-  const commitSet = [published.path, ...(journalOwned ? [logPath] : [])].sort(compareText);
+  const itemChanged = await itemDiffersFromHead(root, prefix, published.path, published.revision);
+  const commitSet = [
+    ...(itemChanged ? [published.path] : []),
+    ...(journalOwned ? [logPath] : []),
+  ].sort(compareText);
   const subject = commitSubject(command, published.number, published.id);
   const witness = journalOwned ? shape.terminalWitness(outcome, published) : null;
   const context = {
@@ -271,6 +283,7 @@ async function finalize({
     gitCommonDir,
     namespace,
     targetItemId: published.id,
+    writeLogWhenEmpty: journalOwned,
   });
   const reconciliation = reconciliationFailureReason(reconciled, commit.commit, context.operationId, published.id);
   if (reconciliation) {
@@ -509,6 +522,13 @@ async function locateItem(ledgerDirectory, itemId) {
   };
 }
 
+// An auto-commit republishing the bytes HEAD already carries has no item change
+// to stage, so the item joins the commit set only when it actually differs.
+async function itemDiffersFromHead(root, prefix, itemPath, publishedRevision) {
+  const observed = await git(root, ['show', `HEAD:${prefix}${itemPath}`]);
+  return observed.code !== 0 || revisionFor(observed.stdout) !== publishedRevision;
+}
+
 // The one test-only seam in this module: it pauses between item publication and
 // staging so a fixture can prove that a late foreign change, a moved HEAD, or a
 // held index becomes a named failure instead of being absorbed into the commit.
@@ -633,7 +653,7 @@ function coreShape(command) {
     identityDetails: (identity) => ({ id: identity.id }),
     operationId: () => null,
     preflightFailed: (reason, details) => coreError('auto-commit-preflight-failed',
-      'Auto-commit refused before the mutation ran.', 'unchanged', 4, { reason, ...details }),
+      'Auto-commit refused before the mutation ran.', 'unchanged', 4, preflightDetails(reason, details)),
     publishedIdentity: (outcome) => (outcome.ok === true
       ? { id: outcome.item.id, revision: outcome.item.revision }
       : { id: outcome.error.details.id, revision: outcome.error.details.revision ?? null }),
@@ -658,6 +678,12 @@ function coreShape(command) {
 
 function coreError(code, message, state, exit, details) {
   return { ok: false, exit, state, error: { code, message, details } };
+}
+
+// Both shapes report the same preflight refusal. A held mutex is the one reason
+// the identical request can succeed later, so it is the only retryable one.
+function preflightDetails(reason, details) {
+  return { reason, retryable: reason === 'mutex-held', ...details };
 }
 
 // Every envelope this shape builds keeps the claimed-publication domain and its
@@ -697,7 +723,7 @@ function publicationShape(operationId) {
     }),
     operationId: (outcome) => outcome.stdout.operation_id ?? null,
     preflightFailed: (reason, details) => error('auto-commit-preflight-failed',
-      'Auto-commit refused before the mutation ran.', 'unchanged', 4, { reason, ...details }),
+      'Auto-commit refused before the mutation ran.', 'unchanged', 4, preflightDetails(reason, details)),
     publishedIdentity: (outcome) => ({
       id: outcome.stdout.result?.item_id ?? outcome.stdout.error?.details?.item_id,
       revision: outcome.stdout.result?.committed_revision ?? null,
@@ -820,27 +846,42 @@ async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, 
   } catch {
     return finalizeRefused('item-not-readable', {});
   }
-  const commitSet = [derived.path, ...(journalOwned ? [logPath] : [])].sort(compareText);
-  const tokenPaths = payload.commit_set.map((entry) => entry.path);
   const subject = commitSubject(payload.command, derived.number, derived.id);
+  const digests = new Map(payload.commit_set.map((entry) => [entry.path, entry.sha256]));
+  digests.set(derived.path, payload.published_revision);
+  const head = await headOid(root);
+  if (head === null) return finalizeRefused('unborn-head', {});
+  const headUnchanged = head === payload.pre_commit_head;
+
+  const tokenPaths = payload.commit_set.map((entry) => entry.path);
+  let commitSet;
+  if (headUnchanged) {
+    const itemChanged = await itemDiffersFromHead(root, prefix, derived.path, payload.published_revision);
+    commitSet = [
+      ...(itemChanged ? [derived.path] : []),
+      ...(journalOwned ? [logPath] : []),
+    ].sort(compareText);
+  } else {
+    commitSet = [...tokenPaths].sort(compareText);
+  }
+  const allowedCommitSets = journalOwned
+    ? [[logPath], [derived.path, logPath]]
+    : [[derived.path]];
+  const tokenMatchesMutation = allowedCommitSets.some((allowed) => sameSet(tokenPaths, allowed));
   if (payload.item_path !== derived.path
-    || !sameSet(tokenPaths, commitSet)
+    || !tokenMatchesMutation
+    || (headUnchanged && !sameSet(tokenPaths, commitSet))
     || payload.message !== subject) {
     return finalizeRefused('commit-set-mismatch', {
       expected_path: derived.path,
       commit_paths: commitSet,
     });
   }
-
-  const digests = new Map(payload.commit_set.map((entry) => [entry.path, entry.sha256]));
-  digests.set(derived.path, payload.published_revision);
   const gitPaths = commitSet.map((entry) => `${prefix}${entry}`);
-  const head = await headOid(root);
-  if (head === null) return finalizeRefused('unborn-head', {});
 
   // The commit may already exist: a lost response is the same condition as a
   // failed commit, and both recover through this one command.
-  if (head !== payload.pre_commit_head) {
+  if (!headUnchanged) {
     const verification = await verifyCommit(
       root, head, payload.pre_commit_head, subject, gitPaths, digests, prefix, witness,
     );

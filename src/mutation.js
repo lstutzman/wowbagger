@@ -57,6 +57,7 @@ const CONTROLLED_ITEM_FIELDS = new Set([
   'related',
   'decisions',
   'body',
+  'extensions',
 ]);
 // Everything the core view owns. Extension-node identity preserves only
 // fields outside this set; core-owned values are compared through coreView.
@@ -167,7 +168,7 @@ export function validateCreateRequest(request, parseIssues = []) {
   }
   const controlled = new Set([
     'schema_version', 'id', 'status', 'created', 'updated', 'completed',
-    'killed', 'archived', 'deferred', 'decisions', 'body', 'number',
+    'killed', 'archived', 'deferred', 'decisions', 'body', 'number', 'extensions',
   ]);
   for (const field of Object.keys(item)) {
     if (controlled.has(field)) {
@@ -518,7 +519,7 @@ export async function migrateParentItem(ledgerDirectory, request, scenario) {
       build: buildParentMigration,
       authorize,
     }, ledgerSnapshot)
-  ));
+  ), { responseCommand: 'parent-migrate-v1' });
 }
 
 export async function snoozeItem(ledgerDirectory, request, scenario) {
@@ -529,7 +530,7 @@ export async function snoozeItem(ledgerDirectory, request, scenario) {
       build: buildSnooze,
       authorize,
     }, ledgerSnapshot)
-  ));
+  ), { responseCommand: 'snooze-v1' });
 }
 
 // The namespace-lock-held mutation strategy. A claimed publication runs inside
@@ -936,18 +937,23 @@ export function validateParentMigrationRequest(request, parseIssues = []) {
   for (const member of ['id', 'expected_revision', 'expected_parent', 'parent', 'date']) {
     if (!hasOwn(request, member)) issues.push(issue(`/${member}`, 'missing-member', `Required member ${member} is missing.`));
   }
-  if (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id)) {
+  if (hasOwn(request, 'id')
+    && (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id))) {
     issues.push(issue('/id', 'invalid-value', 'Member id must be a canonical Wowbagger item ID.'));
   }
-  if (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision)) {
+  if (hasOwn(request, 'expected_revision')
+    && (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision))) {
     issues.push(issue('/expected_revision', 'invalid-value', 'Member expected_revision must be a SHA-256 revision.'));
   }
   for (const member of ['expected_parent', 'parent']) {
-    if (request[member] !== null && (typeof request[member] !== 'string' || !ULID_PATTERN.test(request[member]))) {
+    if (hasOwn(request, member)
+      && request[member] !== null
+      && (typeof request[member] !== 'string' || !ULID_PATTERN.test(request[member]))) {
       issues.push(issue(`/${member}`, 'invalid-value', `Member ${member} must be null or a canonical Wowbagger item ID.`));
     }
   }
-  if (typeof request.date !== 'string' || !isCalendarDate(request.date)) {
+  if (hasOwn(request, 'date')
+    && (typeof request.date !== 'string' || !isCalendarDate(request.date))) {
     issues.push(issue('/date', 'invalid-value', 'Member date must be an ISO calendar date.'));
   }
   return sortIssues(issues);
@@ -961,9 +967,24 @@ async function buildParentMigration(lockedTarget, ledger, request, scenario, roo
   if (request.date < lockedTarget.data.updated) {
     issues.push(dateIssue('date-before-updated', 'Migration date must not be earlier than updated.', lockedTarget.data));
   }
+  if (issues.length > 0) {
+    return { outcome: parentMigrationRefusal(2, { id: lockedTarget.data.id, issues }) };
+  }
   const currentParent = lockedTarget.data.parent ?? null;
   if (request.expected_parent !== currentParent) {
-    issues.push({ code: 'parent-revision-conflict', field: 'expected_parent', message: 'The current parent does not match expected_parent.', related_ids: [] });
+    return {
+      outcome: parentMigrationRefusal(4, {
+        id: lockedTarget.data.id,
+        expected_parent: request.expected_parent,
+        actual_parent: currentParent,
+        issues: [{
+          code: 'parent-revision-conflict',
+          field: 'expected_parent',
+          message: 'The current parent does not match expected_parent.',
+          related_ids: [],
+        }],
+      }),
+    };
   }
   if (request.parent === lockedTarget.data.id) {
     issues.push({ code: 'invalid-parent', field: 'parent', message: 'An item cannot parent itself.', related_ids: [] });
@@ -975,7 +996,7 @@ async function buildParentMigration(lockedTarget, ledger, request, scenario, roo
     }
   }
   if (issues.length > 0) {
-    return { outcome: mutationError('parent-migration-precondition-failed', 'The parent migration failed its preconditions.', 'unchanged', 2, { id: lockedTarget.data.id, issues }) };
+    return { outcome: parentMigrationRefusal(2, { id: lockedTarget.data.id, issues }) };
   }
   const successor = { ...lockedTarget.data, updated: request.date };
   if (request.parent === null) delete successor.parent;
@@ -993,6 +1014,19 @@ async function buildParentMigration(lockedTarget, ledger, request, scenario, roo
     return { outcome: operationFailed(request.id, 'serialize-candidate', 'serialization-failed') };
   }
 }
+
+// One refusal answers every parent-migration precondition. The exit separates a
+// stated conflict with the observed parent from the other precondition failures.
+function parentMigrationRefusal(exit, details) {
+  return mutationError(
+    'parent-migration-precondition-failed',
+    'The parent migration failed its preconditions.',
+    'unchanged',
+    exit,
+    details,
+  );
+}
+
 export function validateSnoozeRequest(request, parseIssues = []) {
   const issues = [...parseIssues];
   if (request === null || typeof request !== 'object' || Array.isArray(request)) {
@@ -1001,14 +1035,18 @@ export function validateSnoozeRequest(request, parseIssues = []) {
   for (const member of ['id', 'expected_revision', 'snoozed_until', 'date']) {
     if (!hasOwn(request, member)) issues.push(issue(`/${member}`, 'missing-member', `Required member ${member} is missing.`));
   }
-  if (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id)) {
+  if (hasOwn(request, 'id')
+    && (typeof request.id !== 'string' || !ULID_PATTERN.test(request.id))) {
     issues.push(issue('/id', 'invalid-value', 'Member id must be a canonical Wowbagger item ID.'));
   }
-  if (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision)) {
+  if (hasOwn(request, 'expected_revision')
+    && (typeof request.expected_revision !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(request.expected_revision))) {
     issues.push(issue('/expected_revision', 'invalid-value', 'Member expected_revision must be a SHA-256 revision.'));
   }
   for (const member of ['snoozed_until', 'date']) {
-    if (request[member] !== null && (typeof request[member] !== 'string' || !isCalendarDate(request[member]))) {
+    if (hasOwn(request, member)
+      && request[member] !== null
+      && (typeof request[member] !== 'string' || !isCalendarDate(request[member]))) {
       issues.push(issue(`/${member}`, 'invalid-value', `Member ${member} must be null or an ISO calendar date.`));
     }
   }

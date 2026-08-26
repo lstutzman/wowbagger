@@ -1,9 +1,9 @@
-// The four commands' own commit sets and subjects.
+// The supported commands' own commit sets and subjects.
 //
-// create commits the item alone; transition, patch, and publish-claimed commit
-// the item plus exactly one reconciliation log. Claimed publication also proves
-// that the internal claim-verify ran before the envelope returned: its
-// finalization row names the commit this invocation created.
+// create commits the item alone; transition, parent-migrate, snooze, patch, and
+// publish-claimed commit the changed item plus exactly one reconciliation log.
+// Claimed publication also proves that the internal claim-verify ran before
+// the envelope returned: its finalization row names the commit it created.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -57,6 +57,74 @@ test('patch --auto-commit commits the item and its log with the patch subject', 
     [fixture.logPath, `items/${ITEM_ID}.md`],
   );
   assert.match(await ledgerFile(fixture, `items/${ITEM_ID}.md`), /priority: 40/);
+  assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
+});
+
+test('parent-migrate --auto-commit commits the item and reconciliation log', async () => {
+  const fixture = await provisionedLedger();
+  const request = await requestFile(fixture, 'parent-migrate.json', {
+    id: ITEM_ID,
+    expected_revision: sha256(fixture.sources.get(ITEM_ID)),
+    expected_parent: null,
+    parent: null,
+    date: '2026-08-17',
+  });
+
+  const result = run(
+    fixture.root,
+    'parent-migrate', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  );
+
+  assert.equal(result.exit, 0, result.stdout);
+  assert.equal(git(fixture.root, 'log', '-1', '--format=%s'), 'wowbagger: parent-migrate item #1');
+  assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath, `items/${ITEM_ID}.md`]);
+  assert.match(await ledgerFile(fixture, `items/${ITEM_ID}.md`), /updated: 2026-08-17/);
+  assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
+});
+
+test('snooze --auto-commit commits the item and reconciliation log', async () => {
+  const fixture = await provisionedLedger();
+  const request = await requestFile(fixture, 'snooze.json', {
+    id: ITEM_ID,
+    expected_revision: sha256(fixture.sources.get(ITEM_ID)),
+    snoozed_until: '2026-08-18',
+    date: '2026-08-17',
+  });
+
+  const result = run(
+    fixture.root,
+    'snooze', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  );
+
+  assert.equal(result.exit, 0, result.stdout);
+  assert.equal(git(fixture.root, 'log', '-1', '--format=%s'), 'wowbagger: snooze item #1');
+  assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath, `items/${ITEM_ID}.md`]);
+  assert.match(await ledgerFile(fixture, `items/${ITEM_ID}.md`), /snoozed_until: 2026-08-18/);
+  assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
+});
+
+test('a byte-identical patch commits only its reconciliation log', async () => {
+  const fixture = await provisionedLedger();
+  const first = await requestFile(fixture, 'first-patch.json', patchRequest(fixture));
+  const initial = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', first, '--json', '--auto-commit',
+  );
+  assert.equal(initial.exit, 0, initial.stdout);
+
+  const repeated = await requestFile(fixture, 'repeated-patch.json', {
+    id: ITEM_ID,
+    expected_revision: initial.envelope.result.item.revision,
+    date: '2026-08-17',
+    set: { priority: 40 },
+  });
+  const result = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', repeated, '--json', '--auto-commit',
+  );
+
+  assert.equal(result.exit, 0, result.stdout);
+  assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath]);
   assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
 });
 

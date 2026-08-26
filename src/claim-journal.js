@@ -25,6 +25,11 @@ const JOURNAL_ENTRY_TYPES = new Set([
 // of it so a mutation that changes nothing leaves the working tree unchanged.
 const UNPROJECTED_ENTRY_TYPES = new Set(['clock', 'publish-finalization']);
 
+// The one place that answers whether the reconciliation log carries an entry.
+export function isProjectedJournalEntry(entry) {
+  return !UNPROJECTED_ENTRY_TYPES.has(entry.type);
+}
+
 export function claimJournalPath(commonDir, namespace) {
   return path.join(commonDir, 'wowbagger', namespace, 'journal.ndjson');
 }
@@ -66,6 +71,10 @@ export async function assertClaimJournalCapacity(journalPath, plannedEntries) {
 
 export async function replayClaimJournal(journalPath, namespace) {
   const entries = await readJournalEntries(journalPath, namespace);
+  return { state: replayClaimEntries(entries, namespace), entries };
+}
+
+export function replayClaimEntries(entries, namespace) {
   let state = emptyClaimState(namespace);
   const operations = { acquire: claimAcquire, release: claimRelease, renew: claimRenew };
   for (const entry of entries) {
@@ -75,11 +84,11 @@ export async function replayClaimJournal(journalPath, namespace) {
       state = operations[entry.command](state, entry.request, entry.physical_now).state;
     }
   }
-  return { state, entries };
+  return state;
 }
 
 export async function writeReconcileLog(logPath, namespace, entries) {
-  const mergeableEntries = entries.filter((entry) => !UNPROJECTED_ENTRY_TYPES.has(entry.type));
+  const mergeableEntries = entries.filter(isProjectedJournalEntry);
   const content = [
     `# Wowbagger reconciliation log \`${namespace}\``,
     '',
@@ -100,6 +109,37 @@ export async function writeReconcileLog(logPath, namespace, entries) {
   } finally {
     await handle.close();
   }
+}
+
+export function parseReconcileLog(source, namespace) {
+  const lines = source.toString('utf8').split('\n');
+  const start = lines.indexOf('```jsonl');
+  if (start < 0) return [];
+  const end = lines.indexOf('```', start + 1);
+  if (end < 0) return { error: { code: 'ambiguous-journal', reason: 'unterminated-jsonl-block' } };
+  const entries = [];
+  for (const line of lines.slice(start + 1, end)) {
+    if (line.trim() === '') continue;
+    try {
+      const entry = JSON.parse(line);
+      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+        return { error: { code: 'ambiguous-journal', reason: 'entry-not-object' } };
+      }
+      if (Object.hasOwn(entry, 'seq') && !validSequence(entry.seq)) {
+        return { error: { code: 'ambiguous-journal', reason: 'sequence-out-of-range' } };
+      }
+      const entryNamespace = entry.ledger_namespace
+        ?? entry.request?.ledger_namespace
+        ?? entry.fence?.ledger_namespace;
+      if (entryNamespace !== undefined && entryNamespace !== namespace) {
+        return { error: { code: 'ambiguous-journal', reason: 'namespace-mismatch' } };
+      }
+      entries.push(entry);
+    } catch {
+      return { error: { code: 'ambiguous-journal', reason: 'entry-not-json' } };
+    }
+  }
+  return entries;
 }
 
 // O_NOFOLLOW is undefined on win32, so the no-follow guarantee falls back to
@@ -218,6 +258,13 @@ function journalInvalid(reason) {
   error.code = 'CLAIM_JOURNAL_INVALID';
   error.reason = reason;
   return error;
+}
+
+// A committed sequence outside the journal's own capacity names no reachable
+// journal position, so it fails closed here rather than reaching hydration,
+// which would otherwise fill every absent position below it.
+function validSequence(seq) {
+  return Number.isSafeInteger(seq) && seq >= 1 && seq <= MAX_JOURNAL_ENTRIES;
 }
 
 function validJournalEntry(entry, namespace) {

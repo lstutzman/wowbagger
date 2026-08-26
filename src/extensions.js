@@ -47,6 +47,7 @@ export const RESERVED_EXTENSION_MEMBERS = Object.freeze([
   'body',
   'number',
   'priority',
+  'extensions',
 ]);
 
 const RESERVED = new Set(RESERVED_EXTENSION_MEMBERS);
