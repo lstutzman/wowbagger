@@ -5,7 +5,7 @@ number: 159
 title: "Stress finding: create accepts a draft key named \"extensions\" and serializes a zombie nested map invisible to patch and extensions-provision"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
