@@ -12,7 +12,7 @@ provenance:
   source: "exploratory-stress/2026-08-26/phase2-c2"
   recorded_at: "2026-08-26T22:50:00.000Z"
 depends_on: []
-related: [wb_01M0MR2Y8GKNCTTVS9V5ZX8Q0N, wb_01M0Z48AYMPJWSA7YHFWK1SKBA, wb_01M0Z48FXW33933XZ1SE2WVT5R]
+related: [ wb_01M0MR2Y8GKNCTTVS9V5ZX8Q0N, wb_01M0Z48AYMPJWSA7YHFWK1SKBA, wb_01M0Z48FXW33933XZ1SE2WVT5R ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "defect"
@@ -69,7 +69,7 @@ Reachability alone flips the false unauthorized classification to correct synchr
 
 ## Root cause
 
-`blocksTarget` correctly tolerates unrelated findings only when the reason is `worktree-synchronization-required`. `reconciliationDiagnosis` cannot reach that reason for a file-present, uncommitted sibling state: owner lookup finds no commit; `workingTreeChanged` compares c2 actual to the journal expectation and is true; the owner-unavailable synchronization branch requires `actualRevision === null`; fallthrough returns `unauthorized-revision`. See pinned source `src/claim-publication.js:568-577,616-618,749-752,769-812`, `src/git-reconciliation.js:69-96`, `src/git-autocommit.js:152-161`, and work-claim contract section 3.1 and lines 368-372.
+`blocksTarget` correctly tolerates unrelated findings only when the reason is `worktree-synchronization-required`. `reconciliationDiagnosis` cannot reach that reason for a file-present, uncommitted sibling state: owner lookup finds no commit; `workingTreeChanged` compares c2 actual to the journal expectation and is true; the owner-unavailable synchronization branch requires `actualRevision === null`; fallthrough returns `unauthorized-revision`. See pinned source `src/claim-publication.js:565-577,611-618,749-752,765-812`, `src/git-reconciliation.js:69-96`, `src/git-autocommit.js:152-161`, and work-claim contract section 3.1 and lines 368-372.
 
 The caller already computes `authorizedRevisions` one frame up and includes legacy intent predecessors. In this sibling-ahead case, c2's actual `bbcae102...` is in that set. A genuine out-of-protocol edit is not. The classifier does not receive the discriminator it needs.
 
