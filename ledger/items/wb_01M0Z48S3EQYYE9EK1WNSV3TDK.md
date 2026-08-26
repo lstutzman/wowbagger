@@ -5,9 +5,10 @@ number: 163
 title: "Stress finding: claim-merge-verify sees nothing when two forks of one namespace mutate the same items"
 kind: task
 priority: 3
-status: backlog
+status: killed
 created: 2026-08-26
 updated: 2026-08-26
+killed: 2026-08-26
 provenance:
   source: "stress-run/2026-08-26/stress-run/waveC"
   recorded_at: "2026-08-26T13:31:04.689Z"
@@ -20,6 +21,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept exploratory stress defect"
     rationale: "Reproduced against the repository source during the 257-item concurrent lifecycle run; actionable fix belongs in wowbagger."
+  - action: kill
+    date: 2026-08-26
+    summary: "Close: prospective merge command was used pairwise"
+    rationale: "claim-merge-verify verifies one base/head prospective merge. Comparing two sibling heads requires invoking it with those two refs; no three-way sibling comparison contract exists."
 ---
 
 ## Problem
