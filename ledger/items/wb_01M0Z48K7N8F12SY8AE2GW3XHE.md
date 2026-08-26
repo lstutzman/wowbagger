@@ -5,9 +5,10 @@ number: 156
 title: "Stress finding: read-only claim-verify overloads the response-loss state tokens (unknown/committed)"
 kind: task
 priority: 2
-status: backlog
+status: killed
 created: 2026-08-26
 updated: 2026-08-26
+killed: 2026-08-26
 provenance:
   source: "stress-run/2026-08-26/stress-run/waveB+C"
   recorded_at: "2026-08-26T13:30:58.679Z"
@@ -20,6 +21,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept exploratory stress defect"
     rationale: "Reproduced against the repository source during the 257-item concurrent lifecycle run; actionable fix belongs in wowbagger."
+  - action: kill
+    date: 2026-08-26
+    summary: "Close: claim-verify state semantics are documented"
+    rationale: "The work-claim contract explicitly distinguishes durable reconciliation state from Git finalization and defines unknown for unsafe findings. No source defect established."
 ---
 
 ## Problem
