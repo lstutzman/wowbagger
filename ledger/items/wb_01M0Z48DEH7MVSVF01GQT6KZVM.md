@@ -5,7 +5,7 @@ number: 149
 title: "Stress finding: parent-migrate/snooze cannot carry their own journal entries — flagless verbs desync reconcile log from HEAD permanently"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
