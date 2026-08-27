@@ -619,8 +619,11 @@ Read `error.details.findings[0].reason` and act on the named item:
 - `worktree-synchronization-required` — another worktree wrote the item. If the
   finding names `owner_ref` and `owner_commit`, WAIT for that owner to publish,
   then synchronize this checkout and run `claim-verify`. If it carries
-  `owner_unavailable: true`, inspect reachable or dangling commits and use
-  explicit restore or `claim-adopt`; never merge unrelated live work.
+  `owner_unavailable: true`, follow its `remediation`: a revision that is not
+  yet reachable means WAIT for the owning worktree to commit, then synchronize;
+  only ownership that cannot be established from reachable refs calls for
+  inspecting reachable or dangling commits with explicit restore or
+  `claim-adopt`. Never merge unrelated live work.
 - `unauthorized-revision` — the item changed outside the protocol. Two remedies
   are explicit: **restore** the authorized revision and run `claim-verify` to
   discard the edit, or **adopt** the committed revision and run `claim-verify`

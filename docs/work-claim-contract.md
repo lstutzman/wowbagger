@@ -373,7 +373,7 @@ Each refusal carries a `reason` that separates the cases:
 | `reason` | Cause | Remedy |
 |---|---|---|
 | `git-finalization-required` | this worktree wrote the item and has not committed it | commit here, then `claim-verify` |
-| `worktree-synchronization-required` | another worktree wrote the item | wait for the owner named by `owner_ref`/`owner_commit`, then synchronize this checkout and run `claim-verify`; if `owner_unavailable` is true, inspect reachable or dangling commits and use explicit restore/adopt authority |
+| `worktree-synchronization-required` | another worktree wrote the item | wait for the owner named by `owner_ref`/`owner_commit`, then synchronize this checkout and run `claim-verify`; if `owner_unavailable` is true, follow the finding's `remediation` (section 3.2 step 4) |
 | `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision and discard the edit, then `claim-verify`; or adopt the committed revision and keep the edit, then `claim-verify` (section 3.3) |
 
 Ownership on the current symbolic ref is never reported as a foreign worktree
@@ -394,9 +394,13 @@ branch already owns.
    carries `owner_unavailable: true`.
 3. If an owner is named, WAIT for that owner to publish the commit, then
    synchronize this checkout to it. Do not merge unrelated live work.
-4. If ownership is unavailable, inspect reachable or dangling commits. Restore
-   the exact authorized bytes or use explicit `claim-adopt` authority after
-   review. Do not copy peer working-tree bytes.
+4. If ownership is unavailable, the `remediation` string separates two cases.
+   When it says the expected revision is not yet reachable, the owning
+   worktree has not committed it yet: wait as in step 3, then synchronize.
+   When it says ownership cannot be established from reachable refs, inspect
+   reachable or dangling commits. Restore the exact authorized bytes or use
+   explicit `claim-adopt` authority after review. Do not copy peer
+   working-tree bytes.
 5. Run `claim-verify --ledger <dir> --json` in the blocked worktree and require
    exit 0.
 6. Resume the affected item.
