@@ -5,7 +5,7 @@ number: 165
 title: "Classify uncommitted sibling revisions as synchronization-required without weakening unauthorized edits"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
