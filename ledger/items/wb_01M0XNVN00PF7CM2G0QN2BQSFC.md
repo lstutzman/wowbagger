@@ -5,7 +5,7 @@ number: 171
 title: "Define retryability for cross-worktree auto-commit contention"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
