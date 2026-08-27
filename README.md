@@ -652,10 +652,12 @@ change is an addition. And **extension members are patchable only where the
 ledger declares them** — see [Set the ledger up before the first
 item](#set-the-ledger-up-before-the-first-item).
 
-Which members you own at all is a three-way split — core-owned,
-consumer-editable through `patch`, and create-once — stated member by member in
-the mutation contract's **frontmatter ownership** table. Read the table; do not
-send a patch and interpret the refusal.
+Which members you own at all is a four-way split — core-owned,
+consumer-editable through `patch`, mutable through a dedicated command, and
+create-once — stated member by member in the mutation contract's
+**frontmatter ownership** table. Use `parent-migrate` to repoint an existing
+item to or from an epic, and `snooze` to set or clear `snoozed_until`. Read the
+table; do not send a patch and interpret the refusal.
 
 ### An epic's progress is derived, never stored
 

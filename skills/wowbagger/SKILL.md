@@ -305,17 +305,21 @@ and `number` is refused because it is immutable identity.
   a second item, and it cannot touch status or provenance.
 
 **Which fields are yours.** Do not discover this by sending a patch and reading
-the refusal — every frontmatter member is in exactly one of three classes:
+the refusal — every frontmatter member is in exactly one of four classes:
 
-- **Core-owned**, never yours: `schema_version`, `id`, `number`, `status`,
-  `created`, `updated`, the terminal dates (`completed`, `killed`, `archived`,
-  `deferred`), and `decisions`. `transition` writes these; nothing else does.
+- **Core-owned**, never directly editable: `schema_version`, `id`, `number`,
+  `status`, `created`, `updated`, the terminal dates (`completed`, `killed`,
+  `archived`, `deferred`), and `decisions`. The core derives these through
+  lifecycle and mutation commands; `patch` cannot name them.
 - **Consumer-editable through `patch`**: `title`, `priority`, `depends_on`,
   `related`, the body, and every extension member the ledger declares.
-- **Create-once**: `kind`, `provenance`, `parent`, `snoozed_until`. Set at
-  `create` and fixed after. `kind` is refused deliberately — a task-to-epic
-  flip changes which parent and children rules apply and which lifecycle edges
-  are allowed, so it needs its own verb, not a wider `set`.
+- **Dedicated mutations**: use `parent-migrate` to repoint an existing item to
+  an epic or detach it, and use `snooze` to set or clear `snoozed_until`. Both
+  use exact-revision compare-and-swap and accept `--auto-commit`.
+- **Create-once**: `kind` and `provenance`. `kind` is refused deliberately — a
+  task-to-epic flip changes which parent and children rules apply and which
+  lifecycle edges are allowed, so it needs its own future verb, not a wider
+  `set`. Provenance remains byte-identical after create.
 
 **Extension members are patchable only where the ledger declares them.**
 `tags`, `tier`, and a consumer's own identifier fields are consumer-owned. Send

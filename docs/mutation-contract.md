@@ -81,8 +81,9 @@ complete difference against published version 2 (`0.1.0-alpha.4`):
 - **the patchable title.** `title` joins the patchable set as a non-empty
   schema string that replaces the current title whole (section 9), and section
   9 gains the frontmatter ownership table that states, member by member, which
-  members are core-owned, which are consumer-editable through `patch`, and
-  which are create-once. The version stays 3 by the same argument the relations
+  members are core-owned, which are consumer-editable through `patch`, which
+  move through a dedicated command, and which are create-once. The version
+  stays 3 by the same argument the relations
   and body deltas used: this widens the patch request schema, and adds, removes,
   and renames no response envelope member. **Version 3 is published, so state
   the consequence plainly: a consumer probing for title-patch support cannot
@@ -2237,8 +2238,8 @@ that parses as something else is caught before publication, not after.
 
 ### Frontmatter ownership
 
-Every frontmatter member belongs to exactly one of three classes, and this
-table is the whole boundary. A consumer reads it instead of sending a patch and
+Every frontmatter member belongs to exactly one of four classes, and this table
+is the whole boundary. A consumer reads it instead of sending a patch and
 interpreting the refusal.
 
 | Member | Class | How it changes |
@@ -2248,7 +2249,7 @@ interpreting the refusal.
 | `number` | Core-owned | Create assigns it on schema version 2. It is the item handle and never moves. |
 | `status` | Core-owned | `transition` only, along an allowed lifecycle edge. |
 | `created` | Core-owned | Create derives it from the UTC date the ID encodes. |
-| `updated` | Core-owned | Every `transition` and `patch` sets it to `request.date`. |
+| `updated` | Core-owned | Every `transition`, `parent-migrate`, `snooze`, and `patch` sets it to `request.date`. |
 | `completed` | Core-owned | `transition` writes it on completion and clears it on any other edge. |
 | `killed` | Core-owned | `transition` writes it on a kill and clears it on any other edge. |
 | `archived` | Core-owned | `transition` writes it on an archive and clears it on any other edge. |
@@ -2261,8 +2262,8 @@ interpreting the refusal.
 | `body` (the region after the frontmatter, not a member) | Consumer-editable through `patch` | `set.body` replaces the whole body; `""` empties it. `set.body_append` appends without a merge; the two are mutually exclusive in one request. |
 | `kind` | Create-once | Create fixes it. `patch` refuses it. |
 | `provenance` | Create-once | Create writes it. Every later verb preserves it byte for byte. |
-| `parent` | Create-once, migratable through `parent-migrate` | Create writes it; `parent-migrate` moves it with a compare-and-swap witness. |
-| `snoozed_until` | Create-once, mutable through `snooze` | Create writes it; `snooze` sets or clears it with a compare-and-swap witness. |
+| `parent` | Dedicated mutation through `parent-migrate` | Create may set it; `parent-migrate` repoints the existing item to an epic or detaches it with compare-and-swap witnesses. |
+| `snoozed_until` | Dedicated mutation through `snooze` | Create may set it; `snooze` sets or clears it with a compare-and-swap witness. |
 | declared extension members (`tags`, `tier`, a consumer's own identifier fields) | Consumer-owned, patchable through `set.extensions` | `set.extensions.<member>` replaces the member whole; `null` removes it. Patchable only where `<ledger>/.wowbagger/extensions.json` declares the member and its value type, and only where the item does not write it with a YAML anchor or alias. |
 | undeclared extension members | Consumer-owned, not patchable | Supplied at create, preserved byte for byte by every verb, and otherwise a reviewable hand-edit. A ledger with no extension declaration has no patchable extension member at all. |
 

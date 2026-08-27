@@ -49,7 +49,11 @@ const CORE_OWNED = [
 // frontmatter member, so it has no row of its own. The two extension rows
 // below carry it.
 const PATCHABLE = ['title', 'priority', 'depends_on', 'related', 'body'];
-const CREATE_ONCE = ['kind', 'provenance', 'parent', 'snoozed_until'];
+const CREATE_ONCE = ['kind', 'provenance'];
+const DEDICATED_MUTATIONS = [
+  ['parent', 'parent-migrate'],
+  ['snoozed_until', 'snooze'],
+];
 
 test('the ownership table gives every core-owned member a row that says so', () => {
   for (const member of CORE_OWNED) {
@@ -73,6 +77,15 @@ test('the ownership table gives every create-once member a row that says so', ()
     const row = ownership.split('\n').find((line) => line.startsWith(`| \`${member}\``));
     assert.ok(row, `the table must carry a row for ${member}`);
     assert.match(row, /Create-once/, `${member} must be marked create-once`);
+  }
+});
+
+test('the ownership table gives dedicated mutation members their verbs', () => {
+  for (const [member, command] of DEDICATED_MUTATIONS) {
+    const row = ownership.split('\n').find((line) => line.startsWith(`| \`${member}\``));
+    assert.ok(row, `the table must carry a row for ${member}`);
+    assert.match(row, /Dedicated mutation/, `${member} must not be marked create-once`);
+    assert.match(row, new RegExp(`\\b${command}\\b`), `${member} must name ${command}`);
   }
 });
 
@@ -173,10 +186,11 @@ test('the contract states that the declaration authorizes a write and never desc
   );
 });
 
-test('the installed skill teaches the same three-way boundary', () => {
+test('the installed skill teaches the same four-way boundary', () => {
   const writing = subsection(skill, '### Patch edits fields, never lifecycle', 'the installed skill');
   assert.match(writing, phrase('Core-owned'), 'the skill must name the core-owned class');
   assert.match(writing, phrase('Create-once'), 'the skill must name the create-once class');
+  assert.match(writing, phrase('Dedicated mutations'), 'the skill must name the dedicated-mutation class');
   assert.match(
     writing,
     phrase('Extension members are patchable only where the ledger declares them.'),
