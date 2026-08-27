@@ -2766,12 +2766,14 @@ Before the mutation runs, the invocation takes a per-working-tree mutex and
 requires all of:
 
 - No path staged anywhere in the repository.
-- No dirty path under the ledger: tracked, untracked, or partially staged.
+- No dirty path under the ledger except the current namespace reconciliation
+  log for a command that owns and commits that log.
 - A Git identity Git can resolve without committing.
 - A `HEAD` that exists. A detached `HEAD` is supported, because a commit works
   from one; an unborn `HEAD` refuses.
-- A clean internal `claim-verify`, which is also what makes an unreconciled
-  prior mutation refuse before `publish-claimed`.
+- An internal `claim-verify` with no findings blocking the target item, which
+  is also what makes an unreconciled prior mutation refuse before
+  `publish-claimed`.
 
 Unstaged and untracked paths **outside** the ledger are allowed and stay
 byte-identical; they are never staged. Any other failure returns exit 4
@@ -2781,15 +2783,20 @@ staging, or commit occurs. `details.reason` is one of `staged-paths-present`,
 `claim-state-unreconciled`, or `git-unavailable`.
 
 Every `auto-commit-preflight-failed` refusal also carries
-`details.retryable`. It is `true` only for `details.reason: "mutex-held"`;
-all other preflight reasons are `false`. Clients must branch on this boolean,
-not infer retryability from the generic error code or message.
+`details.retryable`. `mutex-held` is retryable inside one working tree.
+`claim-state-unreconciled` also carries optional `claim_verify_code`,
+`claim_verify_reason`, and bounded `findings`; `claim-store-locked` is
+retryable, while persistent reconciliation is not retryable. Every other
+preflight reason is not retryable. Clients branch on this boolean and the
+underlying verification reason, never on the generic message.
 
-The rule is deliberately strict rather than preserving foreign staged work in a
-temporary index. Reconciliation excludes `.wowbagger/` from the Git item
-surface, and a dirty reconciliation log does not itself refuse a mutation, so a
-broad add would silently commit foreign ledger work. Refusing is the cheaper
-correct answer.
+The rule is deliberately strict rather than preserving foreign staged work in
+a temporary index. A journal-owning auto-commit validates and rebuilds the
+dirty derived reconciliation log from the authoritative journal, then commits
+it with the mutation. `create` still refuses a dirty reconciliation log because
+it does not own that path. Every other dirty ledger path refuses. Claim refusal
+evidence is never suppressed: both the authoritative journal and its projected
+log retain the decision before a later command rebuilds or commits the log.
 
 A flagged invocation on an advisory or non-provisioned ledger returns exit 5
 `capability-unavailable` with `state: "unchanged"` before the mutation. It does
@@ -2819,9 +2826,10 @@ mutation and keeps `mutation-finalize` idempotent after an advanced `HEAD`.
 On success the response keeps its original domain and adds three members to
 `result`: `git_commit`, `commit_paths`, and `claim_verified: true`. A successful
 invocation does not return until an internal `claim-verify` exits 0 with no
-findings and a valid ledger. For `publish-claimed` the same `claim-verify` must
-also report `git_finalized: true` and the new commit in the publication's
-finalization row.
+findings blocking the target item and a valid ledger. Nonblocking findings
+remain available to `claim-verify`; the success envelope does not duplicate
+them. For `publish-claimed`, the same verification must also report
+`git_finalized: true` and the new commit in the publication's finalization row.
 
 ### The commit-failed contract
 
@@ -2855,7 +2863,10 @@ it match.
 
 A commit that is established while reconciliation then refuses is exit 6
 `post-commit-reconciliation-failed` with `state: "committed"`. It carries
-`git_commit`, `commit_paths`, and the `findings`. The commit stands.
+`git_commit`, `commit_paths`, and optional `claim_verify_code`,
+`claim_verify_reason`, and bounded `findings` from the failed verification. The
+commit stands; callers inspect the preserved cause and never replay the
+mutation.
 
 No failure envelope contains raw hook output, signing output, an absolute path,
 an environment value, or platform exception text. A bounded human diagnostic may

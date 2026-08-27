@@ -376,6 +376,7 @@ Each refusal carries a `reason` that separates the cases:
 1. Stop writing the affected item in the blocked worktree. Unrelated item
    mutations may proceed when the finding is only
    `worktree-synchronization-required`.
+
 2. Read the finding. It names the item path and expected revision. When Git can
    prove ownership, it also names `owner_ref` and `owner_commit`; otherwise it
    carries `owner_unavailable: true`.
@@ -387,6 +388,11 @@ Each refusal carries a `reason` that separates the cases:
 5. Run `claim-verify --ledger <dir> --json` in the blocked worktree and require
    exit 0.
 6. Resume the affected item.
+
+Auto-commit applies this target scope both before and after its Git commit. A
+successful mutation requires a valid ledger and no findings blocking the target
+item, not a globally empty findings list. Nonblocking findings remain available
+to `claim-verify`, where a caller that names no target still sees every finding.
 
 `claim-verify` in the writing worktree finalizes that worktree's own state; it
 does not make a sibling checkout able to see the item. Synchronization or
