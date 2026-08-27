@@ -1299,11 +1299,11 @@ A writer creates the lock file exclusively as valid UTF-8 JSON no larger than
 ~~~
 
 writer_id is an opaque ASCII string of 1 through 128 characters. operation is
-create, transition, or patch — the three operations that take per-ID locks.
-`publish-claimed` writes no lock file, so no lock file names it and a reader
-never has to classify one. The remaining values must match their schema and
-lock path. Metadata contains no credentials, user name, host name, or command
-arguments.
+create, transition, parent-migrate, snooze, or patch — the operations that
+take per-ID locks. `publish-claimed` writes no lock file, so no lock file
+names it and a reader never has to classify one. The remaining values must
+match their schema and lock path. Metadata contains no credentials, user name,
+host name, or command arguments.
 
 A reader reads at most 4097 bytes. A lock larger than 4096 bytes, invalid UTF-8,
 duplicate-key JSON, invalid JSON, unknown members, or invalid field values is

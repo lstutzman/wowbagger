@@ -455,9 +455,10 @@ resolve or exclude claims.
 [docs/mutation-contract.md](docs/mutation-contract.md) specifies the
 implemented local backend for `capabilities`, inspect/revision, the bounded
 `list` query, the bounded `inspect --workbench` affordance projection, create,
-lifecycle transition, and patch commands. Inspect parses, exposes, and hashes
-one raw byte buffer and returns a lossless base64 source alongside a normalized
-core view. [docs/host-contract.md](docs/host-contract.md) publishes the
+lifecycle transition, parent migration, snooze, and patch commands. Inspect
+parses, exposes, and hashes one raw byte buffer and returns a lossless base64
+source alongside a normalized core view.
+[docs/host-contract.md](docs/host-contract.md) publishes the
 direct-core host boundary for a non-agent consumer: package resolution, the
 shell-free process tuple, bounded transport, response dispatch, the advertised
 limits, and the packaged JSON Schemas.
