@@ -611,6 +611,7 @@ export async function reconcileClaimJournal({
     const diagnosis = await reconciliationDiagnosis({
       ledgerDirectory,
       actualRevision,
+      authorizedRevisions,
       expectedPath,
       expectedRevision,
       headRevision,
@@ -765,6 +766,7 @@ async function revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevi
 async function reconciliationDiagnosis({
   ledgerDirectory,
   actualRevision,
+  authorizedRevisions,
   expectedPath,
   expectedRevision,
   headRevision,
@@ -799,6 +801,14 @@ async function reconciliationDiagnosis({
       remediation: owner.owner_ref
         ? `WAIT for owner ${owner.owner_ref} to publish ${owner.owner_commit}, then synchronize this worktree and run claim-verify.`
         : `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
+    };
+  }
+  if (authorizedRevisions.has(actualRevision)) {
+    return {
+      reason: 'worktree-synchronization-required',
+      ...(expectedPath ? { expected_path: expectedPath } : {}),
+      owner_unavailable: true,
+      remediation: `Ownership of ${pathLabel} revision ${expectedRevision} is not yet reachable; wait for the owning worktree to commit, then synchronize this worktree and run claim-verify.`,
     };
   }
   // Two remedies, both named, in the order that makes the cost obvious. The

@@ -369,3 +369,92 @@ test('an existing stale sibling revision does not block an unrelated patch', asy
   assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
   assert.match(finding.owner_commit, /^[0-9a-f]{40}$/);
 });
+
+test('an uncommitted in-protocol sibling revision does not block an unrelated patch', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const privatePatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-uncommitted-private.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(privatePatch.exit, 0, JSON.stringify(privatePatch.envelope));
+
+  const second = run(fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-past-uncommitted-sibling.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+  const verified = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_unavailable, true);
+});
+
+test('an unknown sibling revision remains unauthorized and blocks unrelated work', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const privatePatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-authorized-private.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(privatePatch.exit, 0, JSON.stringify(privatePatch.envelope));
+  const siblingSeed = path.join(fixture.siblingLedger, 'item.md');
+  await writeFile(
+    siblingSeed,
+    (await readFile(siblingSeed, 'utf8')).replace('title: "Seed"', 'title: "Unauthorized"'),
+  );
+
+  const second = run(fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', secondId, '--json');
+  assert.equal(second.exit, 0, JSON.stringify(second.envelope));
+  const unrelated = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-past-unauthorized-sibling.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+
+  assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
+});
