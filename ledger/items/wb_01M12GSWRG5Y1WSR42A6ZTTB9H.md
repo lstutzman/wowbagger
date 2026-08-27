@@ -5,7 +5,7 @@ number: 177
 title: "Keep detached HEAD ownership regressions blocking"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-27
 updated: 2026-08-27
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-27T21:00:00Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-27
+    summary: "Accept the release-blocking detached-HEAD classifier regression."
+    rationale: "The release review proved that current ownership depends on a symbolic branch, allowing a detached checkout that contains the expected revision to misclassify a restored predecessor as advisory synchronization. Alpha.11 must preserve the #173 safety guarantee on the documented detached-HEAD path."
 ---
 ## Problem
 
