@@ -1,0 +1,27 @@
+---
+schema_version: 2
+id: wb_01M126WCM6B8VKMZD2N6FN7EWK
+number: 173
+title: "Block same-branch working-tree regressions when HEAD owns the expected revision"
+kind: task
+priority: 1
+status: triage
+created: 2026-08-27
+updated: 2026-08-27
+provenance:
+  source: "no-mistakes/01M1249TW28C6FVTWBGJQYXVZ9/review"
+  recorded_at: "2026-08-27T18:20:00Z"
+depends_on: []
+related: []
+---
+## Problem
+
+When the current branch contains the latest authorized revision at HEAD but the working tree is restored to earlier authorized bytes, reconciliation can misclassify the regression as `worktree-synchronization-required`. That downgrades a same-branch blocking condition to an advisory sibling window.
+
+## Acceptance criteria
+
+- A RED regression reproduces latest authorized bytes at current HEAD plus an uncommitted restore to earlier authorized bytes.
+- `claim-verify` and an unrelated mutation classify the regression as `unauthorized-revision` and block; neither reports `worktree-synchronization-required`.
+- The legitimate uncommitted sibling predecessor window and unknown-edit blocking remain unchanged.
+- Reproduce the release-audit README loop separately. If its overstatement derives from this classifier gap, correct it here; otherwise land a separate docs-only correction without changing runtime behavior.
+- Current Node, Node 20, adapter conformance, and actual ledger validation pass.
