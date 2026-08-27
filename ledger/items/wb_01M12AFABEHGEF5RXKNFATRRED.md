@@ -5,7 +5,7 @@ number: 175
 title: "Preserve claim verification diagnostics in mutation-finalize recovery"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-27
 updated: 2026-08-27
 provenance:
