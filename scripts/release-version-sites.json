@@ -248,6 +248,70 @@
       "classification": "retained",
       "occurrences": 1,
       "applies_to_version": "0.1.0-alpha.9"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN002WFNRD85Q1SSF5FK.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN00TRMBY86QXZV6EH3D.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN00X4ZRSGEZ9DWH3D0A.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN00ZP72GP7PA44B5JS1.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN00PFRFXKTRC7D8CM63.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN00NMH176S1BHVM0HHR.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN00PF7CM2G0QN2BQSFC.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "ledger/items/wb_01M0XNVN00ABNA2SZ7WHM0FRX7.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 3,
+      "applies_to_version": "0.1.0-alpha.10"
     }
   ]
 }
