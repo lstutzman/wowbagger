@@ -137,6 +137,30 @@ test('journal-owning auto-commit rebuilds prior claim-generated log dirt', async
   assert.equal(git(fixture.root, 'status', '--porcelain', '--', 'ledger'), '');
 });
 
+test('derived-log recovery still refuses a foreign dirty ledger item', async () => {
+  const fixture = await twoItems();
+  const acquire = await requestFile(fixture, 'acquire-with-foreign-dirt.json', {
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  });
+  const acquired = run(fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger, '--input', acquire, '--json');
+  assert.equal(acquired.exit, 0, acquired.stdout);
+  await writeFile(
+    path.join(fixture.ledger, 'items', `${SECOND_ITEM_ID}.md`),
+    itemSource(SECOND_ITEM_ID, { number: 2, title: 'Foreign dirty item' }),
+  );
+  const request = await requestFile(fixture, 'transition-with-foreign-dirt.json', transitionRequest(fixture));
+
+  const result = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit');
+
+  assert.equal(result.exit, 4, result.stdout);
+  assert.equal(result.envelope.error.details.reason, 'ledger-not-clean');
+  assert.deepEqual(result.envelope.error.details.dirty_paths, [`items/${SECOND_ITEM_ID}.md`]);
+});
+
 test('journal-owning auto-commit rebuilds a tampered derived log', async () => {
   const fixture = await twoItems();
   await writeFile(path.join(fixture.ledger, fixture.logPath), 'tampered\n');
@@ -335,7 +359,7 @@ test('parent-migrate fence refusals identify the parent-migrate command', async 
   assert.equal(result.envelope.error.code, 'active-claim-write-refused');
 });
 
-test('an unreconciled prior mutation refuses in the preflight and creates no commit', async () => {
+test('a same-branch reverted authorized revision remains blocking', async () => {
   const fixture = await twoItems();
   const first = await requestFile(fixture, 'first.json', transitionRequest(fixture));
   const transitioned = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', first, '--json');
@@ -354,6 +378,7 @@ test('an unreconciled prior mutation refuses in the preflight and creates no com
   assert.equal(result.envelope.error.code, 'auto-commit-preflight-failed');
   assert.equal(result.envelope.error.details.reason, 'claim-state-unreconciled');
   assert.equal(result.envelope.error.details.retryable, false);
+  assert.equal(result.envelope.error.details.findings[0].reason, 'unauthorized-revision');
   assert.ok(result.envelope.error.details.findings.length > 0);
   assert.equal(await ledgerFile(fixture, `items/${SECOND_ITEM_ID}.md`), fixture.sources.get(SECOND_ITEM_ID));
   assertNoCommit(fixture, before);

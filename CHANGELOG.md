@@ -7,6 +7,32 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- **Uncommitted sibling revisions keep target-scoped reconciliation safe.**
+  Previously authorized predecessor bytes now identify an in-protocol sibling
+  window without turning genuine hand edits or same-branch regressions into
+  nonblocking findings.
+- **Journal-owning auto-commit rebuilds its derived reconciliation log.** Claim
+  decisions may dirty that tracked projection; patch, transition,
+  parent-migrate, snooze, and publish-claimed now validate and commit the rebuilt
+  log while every foreign dirty ledger path and create still refuse.
+- **Claim-verification failures preserve their cause.** Preflight and
+  post-commit errors carry the underlying claim verification code and reason;
+  claim-store lock contention is retryable while persistent reconciliation is
+  not.
+- **Auto-commit uses target scope before and after committing.** Unrelated
+  synchronization findings no longer turn a successfully committed mutation
+  into a reported post-commit failure; target-blocking findings remain fatal and
+  visible through claim-verify.
+
+### Changed
+
+- **Parent migration and snooze now have complete contract guidance.** The
+  contract and installed skill document their requests, CAS and date rules,
+  response domains, auto-commit behavior, and legacy journal fence-family
+  semantics. Parent-migrate help no longer invents a live-item restriction.
+
 ## 0.1.0-alpha.9 - 2026-08-23
 
 ### Added

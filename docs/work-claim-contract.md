@@ -371,6 +371,13 @@ Each refusal carries a `reason` that separates the cases:
 | `worktree-synchronization-required` | another worktree wrote the item | wait for the owner named by `owner_ref`/`owner_commit`, then synchronize this checkout and run `claim-verify`; if `owner_unavailable` is true, inspect reachable or dangling commits and use explicit restore/adopt authority |
 | `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision and discard the edit, then `claim-verify`; or adopt the committed revision and keep the edit, then `claim-verify` (section 3.3) |
 
+Ownership on the current symbolic ref is never reported as a foreign worktree
+owner. If the expected revision is already reachable from the current branch,
+a same-branch regression cannot be repaired by waiting for another worktree;
+it remains `unauthorized-revision` and blocks unrelated mutations. This
+distinguishes a real sibling's uncommitted successor from history the current
+branch already owns.
+
 ### 3.2 Recovering from a foreign-writer block
 
 1. Stop writing the affected item in the blocked worktree. Unrelated item

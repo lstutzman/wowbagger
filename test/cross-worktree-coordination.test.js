@@ -510,3 +510,47 @@ test('post-commit verification ignores an unrelated synchronization finding', as
   assert.equal(finding.reason, 'worktree-synchronization-required');
   assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
 });
+
+test('auto-commit still blocks a synchronization finding on its own target', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const privatePatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-private-target.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(privatePatch.exit, 0, JSON.stringify(privatePatch.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Commit the private target item');
+
+  const sibling = run(
+    fixture.siblingRoot,
+    'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const head = git(fixture.siblingRoot, 'rev-parse', 'HEAD');
+  const blocked = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'auto-commit-target.json',
+      seedId,
+      sibling.envelope.result.item.revision,
+    ),
+    '--json',
+    '--auto-commit',
+  );
+
+  assert.equal(blocked.exit, 4, JSON.stringify(blocked.envelope));
+  assert.equal(blocked.envelope.error.code, 'auto-commit-preflight-failed');
+  assert.equal(blocked.envelope.error.details.reason, 'claim-state-unreconciled');
+  assert.equal(blocked.envelope.error.details.findings[0].reason, 'worktree-synchronization-required');
+  assert.equal(git(fixture.siblingRoot, 'rev-parse', 'HEAD'), head);
+});
