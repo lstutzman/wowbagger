@@ -15,6 +15,8 @@ consolidation. The first tagged release inherits this file.
   nonblocking findings.
   Restoring earlier authorized bytes in the same working tree remains
   `unauthorized-revision` when the current branch owns the expected revision.
+  Detached `HEAD` uses its reachable history for the same current-owner guard,
+  so it cannot turn that regression into advisory sibling synchronization.
   When Git proves that a sibling ref owns the expected revision, the finding
   retains that `owner_ref` and `owner_commit` instead of reporting the owner as
   unavailable.
@@ -54,6 +56,10 @@ consolidation. The first tagged release inherits this file.
   lock still refuses every concurrent mutation, but the refusal currently
   reports `owner: null` with `owner_diagnostic: "invalid-shape"`. Item #174
   tracks restoring those owner details; mutual exclusion is unaffected.
+- **Ownership classification still needs one consolidated topology audit.**
+  Items #173, #176, and #177 close every case identified so far. Item #178
+  remains open to audit the topology as one matrix because each point fix
+  revealed an adjacent gap.
 
 ## 0.1.0-alpha.10 - 2026-08-26
 
