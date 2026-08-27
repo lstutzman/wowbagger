@@ -5,9 +5,10 @@ number: 166
 title: "Document terminal-item date equality for patch, snooze, and parent-migrate"
 kind: task
 priority: 3
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-terminal-date"
   recorded_at: "2026-08-26T22:52:00.000Z"
@@ -21,6 +22,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept the terminal-date documentation gap."
     rationale: "The campaign proved patch, snooze, and parent-migrate share an undocumented equality-only date constraint on lifecycle-dated items."
+  - action: complete
+    date: 2026-08-26
+    summary: "Documented terminal-item date equality for patch, snooze, and parent-migrate."
+    rationale: "The contract and installed skill changes landed in 0a85483. Documentation contract tests passed within the complete 1726-test suite on current Node and Node 20."
 ---
 ## Documentation gap — code is correct
 
