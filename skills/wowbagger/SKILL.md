@@ -418,13 +418,17 @@ wowbagger claim-verify --ledger <dir> --json
 wowbagger transition --ledger <dir> --input next.json --json
 ```
 
-The claim store validates every recorded mutation against Git `HEAD`, never
-against working-tree bytes — that is what makes a mutation durable rather than
-a local edit. So an uncommitted mutation blocks the next one. Skip the commit
-and the next `create`, `transition`, `parent-migrate`, `snooze`, `patch`, or
-`publish-claimed` returns exit 6 `claim-store-unavailable` with
-`details.reason: "publication-reconciliation-required"`. `state` is
-`unchanged`, so nothing was written.
+The claim store reconciles every recorded mutation with Git `HEAD` and the
+working tree. It refuses the next mutation when it finds an
+`unauthorized-revision`, requires Git finalization, or requires synchronization
+for the target item. A synchronization finding on an unrelated item remains
+visible to `claim-verify` but does not block that command.
+
+One exact window is nonblocking: an existing item's latest authorized
+working-tree bytes with an earlier authorized revision at `HEAD`. That
+authorized predecessor/successor window produces no finding, so another
+mutation can run before the first is committed. Do not mistake acceptance for
+durability. Commit each mutation anyway, then run `claim-verify`.
 
 **`claim-verify` is the reconciliation procedure for that refusal.** Do not go
 looking for another verb; there is none. Read `details.findings`, do exactly
@@ -675,8 +679,9 @@ Use the claimed write path as one complete loop:
    revision, the candidate bytes and digest, and the active claim fence. Never
    retry with only the operation ID; retry the complete request.
 8. Commit the item change, or merge the worker commit into the coordinating
-   branch. Do this now, not at the end of a batch — the next mutating command
-   refuses while this one is uncommitted.
+   branch. Do this now, not at the end of a batch. Acceptance of another command
+   does not prove this mutation is durable, and a blocking finding still
+   refuses that command.
 9. Run `claim-verify` after the commit or merge. It finalizes the Git outcome,
    repairs response-loss cases, and reports later revision drift. Require exit
    0 before the next mutating command; exit 6 means findings remain, so act on
@@ -704,7 +709,8 @@ response envelopes, refusal precedence, and recovery rules.
 7. On a provisioned ledger, commit the ledger change now:
    `git add <dir> && git commit`.
 8. On a provisioned ledger, run `claim-verify --ledger <dir> --json` and
-   require exit 0 before the next `create`, `transition`, or `patch`.
+   require exit 0 before the next `create`, `transition`, `parent-migrate`,
+   `snooze`, `patch`, or `publish-claimed`.
 
 Write, commit, `claim-verify`, next write. The unclaimed loop obeys the same
 rule as the claimed one, because both run through the same coordinator. Steps 7

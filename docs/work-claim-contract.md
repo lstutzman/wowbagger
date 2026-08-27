@@ -86,20 +86,25 @@ carries one operating rule that binds every caller:
 
 **Commit each mutation to Git before running the next mutating command.**
 
-A merge-coordinated backend validates recorded revisions against Git `HEAD`,
-never against working-tree bytes. An uncommitted mutation is an unreconciled
-mutation. The next `create`, `transition`, `parent-migrate`, `snooze`, `patch`,
-or `publish-claimed` therefore refuses with exit 6 `claim-store-unavailable`
-and `details.reason: "publication-reconciliation-required"` rather than
-writing on top of work that is not yet durable.
+A merge-coordinated backend reconciles recorded revisions with Git `HEAD` and
+the working tree. It refuses the next mutation when it finds an
+`unauthorized-revision`, requires Git finalization, or requires synchronization
+for the target item. A `worktree-synchronization-required` finding on an
+unrelated item remains visible without blocking the command.
 
-`claim-verify` is the reconciliation procedure for that refusal. The loop is
-write, commit, `claim-verify`, next write. Section 6 defines `claim-verify`,
-section 7 defines the refusal the legacy write paths emit, and section 8
-defines the error envelope. The [mutation
+An existing item's latest authorized working-tree bytes and an earlier
+authorized revision at `HEAD` form an authorized predecessor/successor window.
+That window produces no finding, so another mutation can run before the first
+one is committed. Acceptance is not finalization: callers still follow write,
+commit, `claim-verify`, next write.
+
+`claim-verify` is the reconciliation procedure for every refusal. Section 6
+defines `claim-verify`, section 7 defines the refusal the legacy write paths
+emit, and section 8 defines the error envelope. The [mutation
 contract](mutation-contract.md) section 12 states the same rule for
-`create`, `transition`, and `patch` callers, together with the
-considered-and-rejected alternative of validating against working-tree bytes.
+`create`, `transition`, `parent-migrate`, `snooze`, and `patch` callers,
+together with the considered-and-rejected alternative of validating only
+against working-tree bytes.
 
 The optional `--auto-commit` flag performs that whole loop inside one
 invocation on a provisioned ledger: it runs the pre-mutation `claim-verify`,
@@ -827,18 +832,21 @@ recovers an owner only when the OS reports the PID absent.
 
 That reconciliation is unconditional. It is not conditioned on an unresolved
 `publish-intent`, because the commit-per-mutation invariant (section 1) binds
-`publish-claimed` exactly as it binds `create`, `transition`, and `patch`, and
-an uncommitted legacy mutation leaves no publish-intent behind. When
-reconciliation produces any blocking finding, `publish-claimed` MUST refuse
-with exit 6 `claim-store-unavailable`,
+`publish-claimed` exactly as it binds `create`, `transition`, `parent-migrate`,
+`snooze`, and `patch`, and an uncommitted legacy mutation leaves no
+publish-intent behind. When reconciliation produces any blocking finding,
+`publish-claimed` MUST refuse with exit 6 `claim-store-unavailable`,
 `details.reason: "publication-reconciliation-required"`, and
 `details.findings` set to those findings. `state` MUST be `unchanged`: the
 refused publication wrote no item byte. Reconciliation itself still writes —
 a clock entry, the terminals it resolved, and the finalizations it observed —
-because those record what was already true, never a new item revision. This is
-the identical refusal section 7 defines for a legacy write, so one uncommitted
-mutation blocks every mutating command alike, and one `claim-verify` clears
-them all.
+because those record what was already true, never a new item revision.
+
+This is the identical refusal section 7 defines for a legacy write. The
+authorized predecessor/successor window from section 1 produces no blocking
+finding, so not every uncommitted mutation refuses the next command. When
+blocking findings do exist, `claim-verify` is the one reconciliation procedure
+for all of them.
 
 That refusal also outranks step 5. The numbered precedence orders a backend
 that judges a candidate against an authoritative ledger; a merge-coordinated
@@ -972,9 +980,9 @@ without a second ledger write.
 
 Every refusal in this section answers in the `ledger-mutation` namespace with
 `contract_version: 1` and `command: "<core command>-v1"`, even though the caller
-invoked the core `create`, `transition`, or `patch` command. This is a pinned
-version 1 consumer surface; it is not the core mutation envelope and MUST NOT be
-re-wrapped in one.
+invoked the core `create`, `transition`, `parent-migrate`, `snooze`, or `patch`
+command. This is a pinned version 1 consumer surface; it is not the core
+mutation envelope and MUST NOT be re-wrapped in one.
 
 For a fenced or merge-coordinated capability, legacy transition MUST check the
 active claim under the same namespace lock and return exit 4

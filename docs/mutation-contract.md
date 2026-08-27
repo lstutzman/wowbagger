@@ -420,7 +420,8 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 **Exact root members**
 
 A core response has exactly `ok`, `command`, `contract_version`, and one of
-`result` or `error`; `create`, `transition`, and `patch` add `state`. A
+`result` or `error`; `create`, `transition`, `parent-migrate`, `snooze`, and
+`patch` add `state`. A
 claim-domain response has exactly `ok`, `namespace`, `command`,
 `contract_version`, `state`, and one of `result` or `error`; a `claim
 capabilities` response omits `state`, and a claimed-publication response adds
@@ -428,8 +429,9 @@ capabilities` response omits `state`, and a claimed-publication response adds
 Successful mutation responses may carry `result.changed_paths`. It is the
 complete deterministic ledger-relative set whose bytes this invocation changed
 in the working tree. It does not mean Git committed those paths. `create`
-returns only its item path; `transition`, `patch`, and `publish-claimed` return
-their item path plus the tracked reconciliation log when that log changed.
+returns only its item path; `transition`, `parent-migrate`, `snooze`, `patch`,
+and `publish-claimed` return their item path plus the tracked reconciliation
+log when that log changed.
 `--auto-commit` additionally returns `commit_paths` and `git_commit`; its
 `changed_paths` equals the committed set.
 `operation_id` once schema validation has accepted it. No expected envelope has
@@ -445,7 +447,8 @@ them would break every existing reader for no gain a consumer can use, because
 neither command mutates and neither participates in version negotiation. They
 stay bare, and step 3 of the rule is how a consumer recognizes them.
 
-A claim-fenced refusal to `create`, `transition`, or `patch` answers in the
+A claim-fenced refusal to `create`, `transition`, `parent-migrate`, `snooze`,
+or `patch` answers in the
 ledger-mutation domain with `command: "<command>-v1"` and
 `contract_version: 1`. This is not envelope drift: it is the work-claim
 contract answering, because a merge-coordinated backend refused the write
@@ -480,7 +483,7 @@ A successful read-only command has exactly:
 }
 ~~~
 
-A successful create, transition, or patch adds state:
+A successful create, transition, parent migration, snooze, or patch adds state:
 
 ~~~json
 {
@@ -507,7 +510,8 @@ A read-only error has exactly:
 }
 ~~~
 
-Every create, transition, or patch error has a state member:
+Every create, transition, parent-migrate, snooze, or patch error has a state
+member:
 
 ~~~json
 {
@@ -549,7 +553,7 @@ presence is reported separately as bounded recovery_artifacts.
 | 6 | An unexpected operating or post-publication recovery condition. | operation-failed, post-commit-recovery-required, write-outcome-unknown, git-commit-failed, git-commit-outcome-unknown, post-commit-reconciliation-failed |
 
 Only exit 0 is normal completion. A client must inspect mutation state on every
-nonzero create, transition, or patch result.
+nonzero create, transition, parent-migrate, snooze, or patch result.
 
 ## 3. Deterministic invalid-request issues
 
@@ -762,7 +766,8 @@ defines the advertisement.
 `result.limits.max_item_source_bytes` is the first member of `result.limits`,
 before `multi_item_atomicity`. It is the exact number of bytes the complete
 serialized item source may occupy, and it applies to successor bytes accepted
-by `create`, `transition`, `patch`, and `publish-claimed`. It does not claim a
+by `create`, `transition`, `parent-migrate`, `snooze`, `patch`, and
+`publish-claimed`. It does not claim a
 raw request limit and it does not claim an `inspect` output limit; the
 serialized `publish-claimed` request keeps its own separate transport bound.
 
@@ -892,8 +897,8 @@ snapshot the successful item shape above defines, for the item the request
 selected. It is present when the request resolves an item and no validation
 error names that item's path. It is absent when nothing resolves, and absent
 when the resolved item is itself faulted, because that item's own frontmatter
-or placement is what validation rejects. A create, transition, or patch
-ledger-invalid refusal never carries it.
+or placement is what validation rejects. A create, transition, parent-migrate,
+snooze, or patch ledger-invalid refusal never carries it.
 
 This keeps the section 5 rule intact — inspect loads and validates the complete
 ledger, and every member of the attached snapshot comes from the one raw byte
@@ -2399,9 +2404,9 @@ on code, mutation state, and documented details.
 
 ### The bounded item source
 
-`create`, `transition`, and `patch` each measure the complete serialized
-successor before validating it as a ledger candidate. A successor larger than
-`result.limits.max_item_source_bytes` returns:
+`create`, `transition`, `parent-migrate`, `snooze`, and `patch` each measure
+the complete serialized successor before validating it as a ledger candidate.
+A successor larger than `result.limits.max_item_source_bytes` returns:
 
 - code `item-source-too-large`;
 - message `The proposed item source exceeds the supported byte limit.`;
@@ -2601,10 +2606,17 @@ contract](work-claim-contract.md).
 **Commit each mutation to Git before running the next mutating command.**
 
 The coordinator records every authorized mutation in the durable journal and
-validates the recorded revisions against Git `HEAD`, not against working-tree
-bytes. An uncommitted mutation is therefore an unreconciled mutation, and the
-next `create`, `transition`, `parent-migrate`, `snooze`, or `patch` refuses
-rather than writing on top of work that is not yet durable.
+reconciles those records with Git `HEAD` and working-tree bytes. It refuses the
+next mutation when reconciliation finds an `unauthorized-revision`, requires
+Git finalization, or requires synchronization for the target item. A
+`worktree-synchronization-required` finding on an unrelated item remains
+visible without blocking that mutation.
+
+An existing item's latest authorized working-tree bytes and an earlier
+authorized revision at `HEAD` form an authorized predecessor/successor window.
+That window produces no finding, so another mutation can run before the first
+one is committed. The later command's acceptance does not prove durability;
+the operating rule remains write, commit, `claim-verify`, next write.
 
 The loop that works:
 
@@ -2621,10 +2633,11 @@ refusals below name it by design.
 
 ### The refusal
 
-An uncommitted prior mutation makes the next mutating command return exit 6.
-The refusal answers in the ledger-mutation domain, not the core domain, because
-the claim coordinator refused before the core mutation ran. Section 2 states
-that rule; `namespace` is what a consumer reads to recognize it.
+A blocking reconciliation finding makes the next mutating command return exit
+6. The refusal answers in the ledger-mutation domain, not the core domain,
+because the claim coordinator refused before the core mutation ran. Section 2
+states that rule; `namespace` is what a consumer reads to recognize it. The
+example below is an authorized new item that is still absent from `HEAD`.
 
 ~~~json
 {
@@ -2659,8 +2672,11 @@ that rule; `namespace` is what a consumer reads to recognize it.
 `details.findings`. Every finding that blocks a mutation carries a
 `remediation` string, and every such string names both the path to act on and
 `claim-verify`. `actual_revision: null` with `observed_surface: "git-head"`
-means the authorized revision is not in `HEAD` at all, which is what an
-uncommitted mutation looks like.
+means the authorized item is absent from `HEAD`, so Git finalization is
+required. Not every uncommitted mutation produces this refusal: an existing
+item whose working tree has the latest authorized bytes while `HEAD` has an
+earlier authorized revision is the nonblocking predecessor/successor window
+defined above.
 
 `spec/fixtures/mutation-refusals/uncommitted-prior-mutation/manifest.json` is
 the normative envelope for this refusal.
@@ -2841,8 +2857,9 @@ Exit 6, `state: "committed"`, code `git-commit-failed`, message
 still describes item publication as section 2 defines it. It does not claim Git
 finalization.
 
-`create`, `transition`, and `patch` keep the core domain: no `namespace`, the
-original command name, and the core `contract_version`. `ledger-mutation` is
+`create`, `transition`, `parent-migrate`, `snooze`, and `patch` keep the core
+domain: no `namespace`, the original command name, and the core
+`contract_version`. `ledger-mutation` is
 not used, because that domain means the fence refused before the core mutation
 ran. `publish-claimed` keeps `namespace: "ledger-publication"`,
 `command: "publish-claimed"`, its legacy envelope marker, and its top-level

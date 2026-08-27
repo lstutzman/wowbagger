@@ -413,6 +413,41 @@ test('an uncommitted in-protocol sibling revision does not block an unrelated pa
   assert.equal(finding.owner_unavailable, true);
 });
 
+test('an authorized predecessor at HEAD does not block the next mutation', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const requestPath = path.join(fixture.root, 'transition-before-commit.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: seedId,
+    expected_revision: inspected.envelope.result.item.revision,
+    to_status: 'in-progress',
+    date: '2026-08-16',
+  }));
+  const transitioned = run(
+    fixture.root,
+    'transition', '--ledger', fixture.ledger, '--input', requestPath, '--json',
+  );
+  assert.equal(transitioned.exit, 0, JSON.stringify(transitioned.envelope));
+
+  const created = run(
+    fixture.root,
+    'create', '--ledger', fixture.ledger,
+    '--input', await createRequest(
+      fixture.root,
+      'create-after-authorized-predecessor.json',
+      secondId,
+    ),
+    '--json',
+  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+});
+
 test('an uncommitted same-branch regression remains unauthorized and blocks unrelated work', async () => {
   const fixture = await twoWorktreeRepository();
   const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';

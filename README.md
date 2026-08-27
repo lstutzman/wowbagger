@@ -271,8 +271,9 @@ skill exists because four things break when it does.
 - **Validation is whole-ledger and fail-closed.** One malformed item refuses
   every read and every guarded mutation on that ledger, including commands that
   never touch it. A hand-edit finds that out later, and usually in someone
-  else's session. `create`, `transition`, and `patch` validate the complete
-  candidate ledger *before* publishing anything, and refuse `unchanged`.
+  else's session. `create`, `transition`, `parent-migrate`, `snooze`, and
+  `patch` validate the complete candidate ledger *before* publishing anything,
+  and refuse `unchanged`.
 - **A hand-edit has no lost-update guard.** Every guarded write takes the exact
   SHA-256 revision `inspect` returned and refuses if the bytes moved. An editor
   writes over whatever is there.
@@ -711,12 +712,17 @@ operating rule:
 
 **Commit each mutation to Git before running the next mutating command.**
 
-The durable claim store validates every recorded mutation against Git `HEAD`,
-not against working-tree bytes. That is what makes a recorded mutation durable
-rather than a local edit one `git checkout` away from vanishing. An uncommitted
-mutation is an unreconciled mutation, so the next `create`, `transition`,
-`parent-migrate`, `snooze`, `patch`, or `publish-claimed` refuses instead of
-writing on top of it.
+The durable claim store reconciles every recorded mutation with Git `HEAD` and
+the working tree. The next mutation refuses when that reconciliation finds an
+`unauthorized-revision`, requires Git finalization, or requires synchronization
+for the item the command targets. A synchronization finding on an unrelated
+item remains visible to `claim-verify` but does not block the command.
+
+An existing item's latest authorized working-tree bytes and an earlier
+authorized revision at `HEAD` form an authorized predecessor/successor window.
+That window produces no finding, so another mutation can run before the first
+one is committed. Acceptance of the later mutation does not make either change
+durable. Commit each mutation anyway, then run `claim-verify`.
 
 The loop that works:
 
@@ -727,7 +733,8 @@ git add path/to/ledger && git commit -m "Record the mutation"
 ./bin/wowbagger.js transition --ledger path/to/ledger --input next.json --json
 ```
 
-Skip the commit and the next command returns exit 6:
+For example, an authorized new item that is still absent from `HEAD` makes the
+next command return exit 6:
 
 ```json
 {"ok":false,"namespace":"ledger-mutation","command":"create-v1","contract_version":1,

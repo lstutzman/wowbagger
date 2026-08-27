@@ -34,6 +34,16 @@ test('every consumer-facing surface names claim-verify as the reconciliation pro
   }
 });
 
+test('every consumer-facing surface states the authorized predecessor window is nonblocking', () => {
+  for (const [name, source] of Object.entries(surfaces)) {
+    assert.match(
+      source,
+      /authorized predecessor\/successor window/,
+      `${name} must distinguish the nonblocking authorized window from a refusal`,
+    );
+  }
+});
+
 test('the mutation contract records the rejected working-tree validation alternative', () => {
   assert.match(surfaces['the mutation contract'], /Rejected alternative: validate against working-tree bytes/);
   assert.match(surfaces['the mutation contract'], /the working tree instead of Git `HEAD`/);
