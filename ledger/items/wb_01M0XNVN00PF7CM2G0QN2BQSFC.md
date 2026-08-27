@@ -5,17 +5,22 @@ number: 171
 title: "Define retryability for cross-worktree auto-commit contention"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-retryability"
   recorded_at: "2026-08-26T22:57:00.000Z"
 depends_on: []
-related: [wb_01M0XNVN00NMH176S1BHVM0HHR]
+related: [ wb_01M0XNVN00NMH176S1BHVM0HHR ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "design"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the cross-worktree retryability design gap."
+    rationale: "The stress campaign proved the per-worktree mutex cannot represent shared claim-store contention and approved an underlying-reason retry signal."
 ---
 ## Design gap — current code matches the contract
 
