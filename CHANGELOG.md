@@ -13,6 +13,8 @@ consolidation. The first tagged release inherits this file.
   Previously authorized predecessor bytes now identify an in-protocol sibling
   window without turning genuine hand edits or same-branch regressions into
   nonblocking findings.
+  Restoring earlier authorized bytes in the same working tree remains
+  `unauthorized-revision` when the current branch owns the expected revision.
 - **Journal-owning auto-commit rebuilds its derived reconciliation log.** Claim
   decisions may dirty that tracked projection; patch, transition,
   parent-migrate, snooze, and publish-claimed now validate and commit the rebuilt
@@ -21,6 +23,8 @@ consolidation. The first tagged release inherits this file.
   post-commit errors carry the underlying claim verification code and reason;
   claim-store lock contention is retryable while persistent reconciliation is
   not.
+  `mutation-finalize` recovery now carries the identical diagnostics without
+  inventing a `findings` member.
 - **Auto-commit uses target scope before and after committing.** Unrelated
   synchronization findings no longer turn a successfully committed mutation
   into a reported post-commit failure; target-blocking findings remain fatal and
@@ -36,6 +40,13 @@ consolidation. The first tagged release inherits this file.
   cut and tagged but never published to npm. This release advances to alpha.11
   instead of moving that tag, so tag identity remains immutable and the
   registry history honestly skips alpha.10.
+
+### Known limitations
+
+- **Parent-migrate and snooze lock owners lose diagnostic detail.** Their real
+  lock still refuses every concurrent mutation, but the refusal currently
+  reports `owner: null` with `owner_diagnostic: "invalid-shape"`. Item #174
+  tracks restoring those owner details; mutual exclusion is unaffected.
 
 ## 0.1.0-alpha.10 - 2026-08-26
 
