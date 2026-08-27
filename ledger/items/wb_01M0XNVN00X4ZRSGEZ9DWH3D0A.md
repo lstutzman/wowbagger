@@ -5,17 +5,22 @@ number: 167
 title: "Remove the false live-item precondition from parent-migrate help"
 kind: task
 priority: 3
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-help"
   recorded_at: "2026-08-26T22:53:00.000Z"
 depends_on: []
-related: [wb_01M0XNVN00TRMBY86QXZV6EH3D]
+related: [ wb_01M0XNVN00TRMBY86QXZV6EH3D ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "documentation-defect"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the parent-migrate help-text defect."
+    rationale: "The command correctly supports terminal items, while help invents a live-item precondition and needs a wording-only correction."
 ---
 ## Help-text defect
 
