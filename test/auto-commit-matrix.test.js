@@ -4,11 +4,9 @@
 // and they stay byte-identical. Refusals: no refused or unknown mutation ever
 // creates a commit or moves HEAD or the index, log side effects included.
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-
-import { mkdir } from 'node:fs/promises';
 
 import {
   ITEM_ID,
@@ -355,6 +353,7 @@ test('an unreconciled prior mutation refuses in the preflight and creates no com
   assert.equal(result.exit, 4, result.stdout);
   assert.equal(result.envelope.error.code, 'auto-commit-preflight-failed');
   assert.equal(result.envelope.error.details.reason, 'claim-state-unreconciled');
+  assert.equal(result.envelope.error.details.retryable, false);
   assert.ok(result.envelope.error.details.findings.length > 0);
   assert.equal(await ledgerFile(fixture, `items/${SECOND_ITEM_ID}.md`), fixture.sources.get(SECOND_ITEM_ID));
   assertNoCommit(fixture, before);
@@ -440,5 +439,32 @@ test('a held auto-commit mutex refuses before the mutation', async () => {
   assert.equal(result.exit, 4, result.stdout);
   assert.equal(result.envelope.error.details.retryable, true);
   assert.equal(await ledgerFile(fixture, `items/${ITEM_ID}.md`), fixture.sources.get(ITEM_ID));
+  assertNoCommit(fixture, before);
+});
+
+test('a held claim-store lock makes auto-commit preflight retryable', async () => {
+  const fixture = await twoItems();
+  const gitCommonDir = git(fixture.root, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  const lockPath = path.join(
+    gitCommonDir,
+    'wowbagger',
+    `claims-${fixture.namespace}.json.lock`,
+  );
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, '');
+  const before = snapshot(fixture);
+  const request = await requestFile(fixture, 'patch-claim-lock.json', patchRequest(fixture, SECOND_ITEM_ID));
+  let result;
+  try {
+    result = run(fixture.root, 'patch', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit');
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+
+  assert.equal(result.exit, 4, result.stdout);
+  assert.equal(result.envelope.error.details.reason, 'claim-state-unreconciled');
+  assert.equal(result.envelope.error.details.claim_verify_code, 'claim-store-unavailable');
+  assert.equal(result.envelope.error.details.claim_verify_reason, 'claim-store-locked');
+  assert.equal(result.envelope.error.details.retryable, true);
   assertNoCommit(fixture, before);
 });

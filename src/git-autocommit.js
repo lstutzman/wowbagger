@@ -158,10 +158,11 @@ async function finalize({
     writeLogWhenEmpty: false,
   });
   if (verified.exit !== 0 || verified.stdout.ok !== true) {
-    return shape.preflightFailed(
-      'claim-state-unreconciled',
-      claimVerificationFailureDetails(verified),
-    );
+    const details = claimVerificationFailureDetails(verified);
+    return shape.preflightFailed('claim-state-unreconciled', {
+      ...details,
+      retryable: details.claim_verify_reason === 'claim-store-locked',
+    });
   }
 
   // Reconciliation rewrites the tracked log. Only a command that will commit
