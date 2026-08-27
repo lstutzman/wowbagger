@@ -5,7 +5,7 @@ number: 166
 title: "Document terminal-item date equality for patch, snooze, and parent-migrate"
 kind: task
 priority: 3
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
