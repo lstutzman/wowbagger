@@ -5,17 +5,22 @@ number: 170
 title: "Preserve claim-verify refusal diagnostics after auto-commit lands"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-postcommit-diagnostics"
   recorded_at: "2026-08-26T22:56:00.000Z"
 depends_on: []
-related: [wb_01M0XNVN00PFRFXKTRC7D8CM63]
+related: [ wb_01M0XNVN00PFRFXKTRC7D8CM63 ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "defect"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the post-commit diagnostics defect."
+    rationale: "The stress campaign reproduced committed auto-commit failures that discarded the underlying claim-verification refusal cause."
 ---
 ## Defect
 
