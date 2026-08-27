@@ -73,9 +73,14 @@ export async function findRevisionOwner(ledgerDirectory, itemPath, expectedRevis
   try {
     currentRef = (await gitText(root, ['symbolic-ref', '-q', 'HEAD'])).trim() || null;
   } catch {
-    // A detached HEAD has no current branch to classify as a local owner.
+    // A detached HEAD has no current branch; its commit history is checked below.
   }
-  for (const commit of gitLines(await gitText(root, ['rev-list', '--all', '--', gitPath]))) {
+  const detachedHeadCommits = new Set(currentRef === null
+    ? gitLines(await gitText(root, ['rev-list', 'HEAD', '--', gitPath]))
+    : []);
+  const allRefCommits = gitLines(await gitText(root, ['rev-list', '--all', '--', gitPath]));
+  const commits = [...new Set([...detachedHeadCommits, ...allRefCommits])];
+  for (const commit of commits) {
     let bytes;
     try {
       bytes = await gitBuffer(root, ['show', `${commit}:${gitPath}`]);
@@ -84,6 +89,9 @@ export async function findRevisionOwner(ledgerDirectory, itemPath, expectedRevis
       continue;
     }
     if (revisionFor(bytes) !== expectedRevision) continue;
+    if (detachedHeadCommits.has(commit)) {
+      return { owner_unavailable: true, owner_current_ref: true, owner_commit: commit };
+    }
     const refs = gitLines(await gitText(root, [
       'for-each-ref',
       '--contains',
