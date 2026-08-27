@@ -5,9 +5,10 @@ number: 169
 title: "Define an in-protocol recovery from claim-refusal reconciliation-log dirt"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-claim-log"
   recorded_at: "2026-08-26T22:55:00.000Z"
@@ -22,6 +23,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept the claim-log recovery design gap."
     rationale: "The stress campaign reproduced three claim-decision paths that dirty the derived reconciliation log and approved a safe authoritative-journal rebuild design."
+  - action: complete
+    date: 2026-08-26
+    summary: "Added in-protocol recovery from claim-generated reconciliation-log dirt."
+    rationale: "Runtime recovery landed in 3695798, contract guidance in 0cdfa42, and combined foreign-dirt coverage in 555713c. The complete suite passed 1726/1726 on current Node and Node 20."
 ---
 ## Design and documentation gap — not a defect
 
