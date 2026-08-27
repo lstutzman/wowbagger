@@ -121,15 +121,18 @@ async function finalize({
   const logPath = ledgerRelative(ledgerDirectory, claimReconcileLogPath(path.resolve(ledgerDirectory), namespace));
   const journalOwned = command !== 'create';
 
-  // Preflight, before any Wowbagger write. Any staged path anywhere and any
-  // dirty path under the ledger refuses: a broad commit would otherwise absorb
-  // foreign work, and this profile has no temporary index to protect it.
+  // Preflight, before any Wowbagger write. Any staged path and every dirty
+  // ledger path except the journal-owning command's derived log refuse: a broad
+  // commit would otherwise absorb foreign work.
   const before = await inspectWorktree(root, prefix);
   if (before.staged.length > 0) {
     return shape.preflightFailed('staged-paths-present', { staged_paths: bounded(before.staged) });
   }
-  if (before.dirtyLedger.length > 0) {
-    return shape.preflightFailed('ledger-not-clean', { dirty_paths: bounded(before.dirtyLedger) });
+  const foreignDirtyBefore = before.dirtyLedger.filter((entry) => (
+    !(journalOwned && entry === logPath)
+  ));
+  if (foreignDirtyBefore.length > 0) {
+    return shape.preflightFailed('ledger-not-clean', { dirty_paths: bounded(foreignDirtyBefore) });
   }
   if (!await hasCommitIdentity(root)) {
     return shape.preflightFailed('identity-unavailable', {});

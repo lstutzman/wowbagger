@@ -13,6 +13,7 @@ import { mkdir } from 'node:fs/promises';
 import {
   ITEM_ID,
   SECOND_ITEM_ID,
+  createRequest,
   git,
   itemSource,
   ledgerFile,
@@ -114,18 +115,54 @@ test('an untracked path inside the ledger refuses before the mutation', async ()
   assertNoCommit(fixture, before);
 });
 
-test('a dirty reconciliation log refuses before the mutation', async () => {
+test('journal-owning auto-commit rebuilds prior claim-generated log dirt', async () => {
+  const fixture = await twoItems();
+  const acquire = await requestFile(fixture, 'acquire-dirty-log.json', {
+    ledger_namespace: fixture.namespace,
+    item_id: ITEM_ID,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300000,
+    expected: { last_epoch: '0', active: null },
+  });
+  const acquired = run(fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger, '--input', acquire, '--json');
+  assert.equal(acquired.exit, 0, acquired.stdout);
+  assert.equal(
+    git(fixture.root, 'status', '--porcelain', '--', `ledger/${fixture.logPath}`),
+    `M ledger/${fixture.logPath}`,
+  );
+  const request = await requestFile(fixture, 'patch-after-claim.json', patchRequest(fixture, SECOND_ITEM_ID));
+
+  const result = run(fixture.root, 'patch', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit');
+
+  assert.equal(result.exit, 0, result.stdout);
+  assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath, `items/${SECOND_ITEM_ID}.md`]);
+  assert.equal(git(fixture.root, 'status', '--porcelain', '--', 'ledger'), '');
+});
+
+test('journal-owning auto-commit rebuilds a tampered derived log', async () => {
   const fixture = await twoItems();
   await writeFile(path.join(fixture.ledger, fixture.logPath), 'tampered\n');
-  const before = snapshot(fixture);
-  const request = await requestFile(fixture, 'transition.json', transitionRequest(fixture));
+  const request = await requestFile(fixture, 'patch-after-tampered-log.json', patchRequest(fixture, SECOND_ITEM_ID));
 
-  const result = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit');
+  const result = run(fixture.root, 'patch', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit');
+
+  assert.equal(result.exit, 0, result.stdout);
+  assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath, `items/${SECOND_ITEM_ID}.md`]);
+  assert.doesNotMatch(await ledgerFile(fixture, fixture.logPath), /tampered/u);
+  assert.equal(git(fixture.root, 'status', '--porcelain', '--', 'ledger'), '');
+});
+
+test('create auto-commit still refuses a dirty derived log', async () => {
+  const fixture = await twoItems();
+  await writeFile(path.join(fixture.ledger, fixture.logPath), 'tampered\n');
+  const createdId = 'wb_01KZBMBEZKPE7D15HKW9Q3GT02';
+  const request = await requestFile(fixture, 'create-with-dirty-log.json', createRequest(createdId));
+
+  const result = run(fixture.root, 'create', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit');
 
   assert.equal(result.exit, 4, result.stdout);
   assert.equal(result.envelope.error.details.reason, 'ledger-not-clean');
   assert.deepEqual(result.envelope.error.details.dirty_paths, [fixture.logPath]);
-  assertNoCommit(fixture, before);
 });
 
 test('unstaged and untracked paths outside the ledger are allowed and stay uncommitted', async () => {
