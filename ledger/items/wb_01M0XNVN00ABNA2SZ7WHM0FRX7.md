@@ -5,9 +5,10 @@ number: 172
 title: "Align auto-commit preflight and post-commit finding scopes"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-finding-scope"
   recorded_at: "2026-08-26T22:58:00.000Z"
@@ -21,6 +22,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept the auto-commit finding-scope design gap."
     rationale: "The stress campaign proved target-scoped preflight and global post-commit finding checks create committed-but-reported-failed steady state."
+  - action: complete
+    date: 2026-08-26
+    summary: "Aligned auto-commit preflight and post-commit finding scopes."
+    rationale: "Target-scoped post-commit handling landed in 8d856f1, contract guidance in 0cdfa42, and same-target companion coverage in 555713c. The complete suite passed 1726/1726 on current Node and Node 20, and adapter conformance passed."
 ---
 ## Design gap — current code matches the contract
 
