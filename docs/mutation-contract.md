@@ -1911,6 +1911,14 @@ Patch accepts exactly:
 | date | Yes | ISO calendar date not earlier than existing created or updated. |
 | set | Yes | Mapping naming at least one patchable field. |
 
+For an item whose status is `done`, `killed`, `archived`, or `deferred`, the
+request date must equal the existing `updated` date for `patch`, `snooze`, and
+`parent-migrate`. The active lifecycle date must equal `updated`; these three
+verbs update `updated` without changing that lifecycle date. An earlier request
+fails the date floor, while a later request produces `candidate-invalid` with
+`terminal-date-must-match-updated`. Inspect immediately before the mutation and
+reuse the item's current `updated` date.
+
 The patchable field set is exactly `title`, `priority`, `depends_on`,
 `related`, `body`, `body_append`, and `extensions`. A set member outside it is an invalid-request issue at
 its /set pointer — the boundary is stated here, not discovered from the

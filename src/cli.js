@@ -119,7 +119,7 @@ const COMMAND_SUMMARIES = {
   list: 'List a validated ledger as bounded, paginated item summaries.',
   create: 'Create one ledger item through atomic, no-clobber publication.',
   transition: "Transition one item's lifecycle, guarded by lock and compare-and-swap.",
-  'parent-migrate': 'Move one live item to or from an epic with CAS fencing.',
+  'parent-migrate': 'Move one item to or from an epic with CAS fencing.',
   snooze: 'Set or clear an item snooze date with CAS fencing.',
   patch: "Patch an item's priority and relation lists, guarded the same way.",
   'extensions-provision': 'Declare explicitly selected existing extension members.',

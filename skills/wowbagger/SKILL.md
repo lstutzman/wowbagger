@@ -296,6 +296,11 @@ and `number` is refused because it is immutable identity.
   are required, so a null one returns `candidate-invalid`, exit 2,
   `unchanged`. Use `[]` for a list; send the corrected string for a title.
 - `priority` takes a non-negative integer.
+- For an item whose status is `done`, `killed`, `archived`, or `deferred`, the
+  request date must equal the existing `updated` date for `patch`, `snooze`, and
+  `parent-migrate`. Inspect immediately before the mutation and reuse that date;
+  an earlier date fails the request floor and a later date violates the
+  terminal-date invariant.
 - Patch appends no decision; the Git diff is the audit trail. It never mutates
   a second item, and it cannot touch status or provenance.
 

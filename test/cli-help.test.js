@@ -160,3 +160,11 @@ test('help documents claim verification and list query members', () => {
   assert.match(list.stdout, /cursor/);
   assert.match(list.stdout, /sort/);
 });
+
+test('parent-migrate help permits historical items without inventing liveness', () => {
+  const result = runCli('parent-migrate', '--help');
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Move one item to or from an epic with CAS fencing/);
+  assert.doesNotMatch(result.stdout, /live item/);
+});

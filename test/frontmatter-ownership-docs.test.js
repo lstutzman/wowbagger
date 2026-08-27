@@ -198,3 +198,22 @@ test('the installed skill teaches the same three-way boundary', () => {
     'the skill must point at the table that carries the whole boundary',
   );
 });
+
+test('the contract documents equality-only dates for lifecycle-dated item edits', () => {
+  for (const command of ['patch', 'snooze', 'parent-migrate']) {
+    assert.match(contract, phrase(command), `the contract must name ${command}`);
+  }
+  for (const status of ['done', 'killed', 'archived', 'deferred']) {
+    assert.match(contract, phrase(status), `the contract must name ${status}`);
+  }
+  assert.match(
+    contract,
+    phrase('request date must equal the existing updated date'),
+    'the contract must state the equality-only terminal date rule',
+  );
+  assert.match(
+    skill,
+    phrase('request date must equal the existing updated date'),
+    'the skill must teach the same equality-only terminal date rule',
+  );
+});
