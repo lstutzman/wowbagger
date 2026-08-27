@@ -25,3 +25,7 @@ The alpha.11 release phase found #173, #176, and #177 in the same ownership-dete
 - Add public-seam tests that cover every distinct outcome and fail if one topology silently aliases another.
 - Review `findRevisionOwner`, `reconciliationDiagnosis`, and target-scope handling as one module boundary before changing implementation.
 - Preserve the #173/#176/#177 decisions and explain any deliberate consolidation.
+
+## Worktree identity constraint
+
+The matrix must include the cell where an expected revision is uncommitted and unreachable while the working tree holds an authorized predecessor. Committed Git evidence alone cannot distinguish this worktree's own uncommitted successor from another worktree's successor. Resolving self-versus-sibling attribution likely requires an explicit worktree identity mechanism; do not infer it from item path, journal order, or absence from refs. Pin target, unrelated, and bare claim-verify behavior plus the not-yet-reachable remediation before proposing such a mechanism.
