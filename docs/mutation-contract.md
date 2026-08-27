@@ -1312,6 +1312,13 @@ one of too-large, invalid-utf8, duplicate-key, invalid-json, or invalid-shape.
 Valid metadata returns owner and owner_diagnostic null. Raw invalid bytes are
 never returned.
 
+Known limitation: lock-owner diagnostics currently recognize only `create`,
+`transition`, and `patch`. A real `parent-migrate` or `snooze` lock therefore
+returns `owner: null` with `owner_diagnostic: "invalid-shape"`. The exclusive
+lock-file creation has already failed before metadata is read, so the concurrent
+mutation still refuses with `lock-held`; mutual exclusion is unaffected. Item
+#174 tracks restoring the omitted owner details.
+
 Locks are never removed automatically merely because started_at is old. Manual
 recovery follows ADR 0003.
 
