@@ -5,9 +5,10 @@ number: 165
 title: "Classify uncommitted sibling revisions as synchronization-required without weakening unauthorized edits"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-c2"
   recorded_at: "2026-08-26T22:50:00.000Z"
@@ -21,6 +22,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept the confirmed uncommitted-sibling reconciliation defect."
     rationale: "The alpha10 stress campaign reproduced the classifier failure, traced its root cause, and approved a safety-preserving implementation design."
+  - action: complete
+    date: 2026-08-26
+    summary: "Classified uncommitted sibling revisions without weakening unauthorized-edit blocking."
+    rationale: "Implemented in 89fcccd and refined in d00fb95; reviewer coverage landed in 555713c. The complete suite passed 1726/1726 on current Node and Node 20, and adapter conformance passed. A broad simplifier rewrite was rejected on surgical-scope grounds and never committed. Reinstalling the externally linked alpha10 CLI was outside this batch."
 ---
 ## Defect
 
