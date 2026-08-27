@@ -5,7 +5,7 @@ number: 166
 title: "Document terminal-item date equality for patch, snooze, and parent-migrate"
 kind: task
 priority: 3
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
@@ -16,6 +16,11 @@ related: [ wb_01M0XNVN002WFNRD85Q1SSF5FK ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "documentation"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the terminal-date documentation gap."
+    rationale: "The campaign proved patch, snooze, and parent-migrate share an undocumented equality-only date constraint on lifecycle-dated items."
 ---
 ## Documentation gap — code is correct
 
