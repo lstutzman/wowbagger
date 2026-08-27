@@ -370,6 +370,65 @@ test('an existing stale sibling revision does not block an unrelated patch', asy
   assert.match(finding.owner_commit, /^[0-9a-f]{40}$/);
 });
 
+test('a restored predecessor keeps known sibling owner evidence', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const original = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const predecessor = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-known-owner-predecessor.json',
+      seedId,
+      original.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(predecessor.exit, 0, JSON.stringify(predecessor.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Commit the authorized predecessor');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const sibling = run(
+    fixture.siblingRoot,
+    'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const requestPath = path.join(fixture.siblingRoot, 'patch-known-owner-latest.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: seedId,
+    expected_revision: sibling.envelope.result.item.revision,
+    date: '2026-08-16',
+    set: { title: 'Sibling latest' },
+  }));
+  const latest = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger, '--input', requestPath, '--json',
+  );
+  assert.equal(latest.exit, 0, JSON.stringify(latest.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+  const siblingBranch = git(fixture.siblingRoot, 'rev-parse', '--abbrev-ref', 'HEAD');
+  const siblingCommit = git(fixture.siblingRoot, 'rev-parse', 'HEAD');
+
+  git(fixture.root, 'restore', '--source=HEAD^', '--', 'ledger/item.md');
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_ref, `refs/heads/${siblingBranch}`);
+  assert.equal(finding.owner_commit, siblingCommit);
+  assert.equal(Object.hasOwn(finding, 'owner_unavailable'), false);
+  assert.match(finding.remediation, new RegExp(siblingCommit));
+});
+
 test('an uncommitted in-protocol sibling revision does not block an unrelated patch', async () => {
   const fixture = await twoWorktreeRepository();
   const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';

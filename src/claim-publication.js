@@ -810,6 +810,15 @@ async function reconciliationDiagnosis({
   }
   if (authorizedRevisions.has(actualRevision)) {
     expectedOwner ??= await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
+    if (expectedOwner.owner_ref) {
+      return {
+        reason: 'worktree-synchronization-required',
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        owner_ref: expectedOwner.owner_ref,
+        owner_commit: expectedOwner.owner_commit,
+        remediation: `WAIT for owner ${expectedOwner.owner_ref} to publish ${expectedOwner.owner_commit}, then synchronize this worktree and run claim-verify.`,
+      };
+    }
     if (expectedOwner.owner_current_ref !== true) {
       return {
         reason: 'worktree-synchronization-required',
