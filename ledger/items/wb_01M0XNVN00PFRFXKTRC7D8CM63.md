@@ -5,7 +5,7 @@ number: 169
 title: "Define an in-protocol recovery from claim-refusal reconciliation-log dirt"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
@@ -17,6 +17,11 @@ tags:
   - "stress-run-2026-08-26-alpha10"
   - "design"
   - "documentation"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the claim-log recovery design gap."
+    rationale: "The stress campaign reproduced three claim-decision paths that dirty the derived reconciliation log and approved a safe authoritative-journal rebuild design."
 ---
 ## Design and documentation gap — not a defect
 
