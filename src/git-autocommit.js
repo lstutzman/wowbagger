@@ -419,7 +419,6 @@ function reconciliationFailureReason(verified, commit, operationId, itemId) {
     return { reason: 'claim-verify-refused', ...claimVerificationFailureDetails(verified) };
   }
   const result = verified.stdout.result;
-  if (result.findings.length > 0) return { reason: 'claim-findings-present', findings: result.findings };
   if (result.ledger_validation.valid !== true) return { reason: 'ledger-invalid', findings: [] };
   if (operationId === null) return null;
   const row = result.publications.find((entry) => (

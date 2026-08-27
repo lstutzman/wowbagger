@@ -458,3 +458,55 @@ test('an unknown sibling revision remains unauthorized and blocks unrelated work
   assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
   assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
 });
+
+test('post-commit verification ignores an unrelated synchronization finding', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const privatePatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-private-before-auto-commit.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(privatePatch.exit, 0, JSON.stringify(privatePatch.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Commit the private item');
+
+  const second = run(fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'auto-commit-unrelated.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+    '--auto-commit',
+  );
+
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.result.claim_verified, true);
+  assert.deepEqual(unrelated.envelope.result.commit_paths, [
+    `.wowbagger/reconcile-${NAMESPACE}.md`,
+    `${secondId}.md`,
+  ]);
+  const verified = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
+});
