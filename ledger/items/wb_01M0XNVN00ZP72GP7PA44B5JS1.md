@@ -5,7 +5,7 @@ number: 168
 title: "Document parent-migrate and snooze request and journal fence-family semantics"
 kind: task
 priority: 3
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
