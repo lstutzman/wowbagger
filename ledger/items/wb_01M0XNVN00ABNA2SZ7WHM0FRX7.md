@@ -5,7 +5,7 @@ number: 172
 title: "Align auto-commit preflight and post-commit finding scopes"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
