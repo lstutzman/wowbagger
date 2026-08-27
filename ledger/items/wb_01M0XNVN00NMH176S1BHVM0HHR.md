@@ -5,9 +5,10 @@ number: 170
 title: "Preserve claim-verify refusal diagnostics after auto-commit lands"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-postcommit-diagnostics"
   recorded_at: "2026-08-26T22:56:00.000Z"
@@ -21,6 +22,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept the post-commit diagnostics defect."
     rationale: "The stress campaign reproduced committed auto-commit failures that discarded the underlying claim-verification refusal cause."
+  - action: complete
+    date: 2026-08-26
+    summary: "Preserved claim-verify refusal diagnostics after auto-commit lands."
+    rationale: "The post-commit diagnostic transport landed in 69b4b20 and its public contract in 0cdfa42. The complete suite passed 1726/1726 on current Node and Node 20, including real claim-store lock coverage."
 ---
 ## Defect
 
