@@ -5,9 +5,10 @@ number: 171
 title: "Define retryability for cross-worktree auto-commit contention"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-retryability"
   recorded_at: "2026-08-26T22:57:00.000Z"
@@ -21,6 +22,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept the cross-worktree retryability design gap."
     rationale: "The stress campaign proved the per-worktree mutex cannot represent shared claim-store contention and approved an underlying-reason retry signal."
+  - action: complete
+    date: 2026-08-26
+    summary: "Defined retryability for cross-worktree auto-commit contention."
+    rationale: "The claim-store reason mapping landed in ad7ed33 and its public contract in 0cdfa42. The complete suite passed 1726/1726 on current Node and Node 20, covering retryable lock contention and nonretryable reconciliation."
 ---
 ## Design gap — current code matches the contract
 
