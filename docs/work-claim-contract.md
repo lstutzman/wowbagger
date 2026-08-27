@@ -377,11 +377,12 @@ Each refusal carries a `reason` that separates the cases:
 | `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision and discard the edit, then `claim-verify`; or adopt the committed revision and keep the edit, then `claim-verify` (section 3.3) |
 
 Ownership on the current symbolic ref is never reported as a foreign worktree
-owner. If the expected revision is already reachable from the current branch,
-a same-branch regression cannot be repaired by waiting for another worktree;
-it remains `unauthorized-revision` and blocks unrelated mutations. This
-distinguishes a real sibling's uncommitted successor from history the current
-branch already owns.
+owner, and a detached `HEAD` applies the same guard through its reachable
+commit history. If the expected revision is already reachable from the current
+checkout, a same-branch regression cannot be repaired by waiting for another
+worktree; it remains `unauthorized-revision` and blocks unrelated mutations.
+This distinguishes a real sibling's uncommitted successor from history the
+current checkout already owns.
 
 ### 3.2 Recovering from a foreign-writer block
 
