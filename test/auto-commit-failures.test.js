@@ -284,6 +284,37 @@ test('a post-commit reconciliation failure names the commit it already created',
   assert.equal(git(fixture.root, 'log', '-1', '--format=%s'), 'wowbagger: transition item #1');
 });
 
+test('post-commit reconciliation preserves a claim-store lock refusal', async () => {
+  const fixture = await twoItems();
+  const request = await requestFile(fixture, 'transition-lock.json', transitionRequest(fixture));
+  const gitCommonDir = git(fixture.root, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  const lockPath = path.join(
+    gitCommonDir,
+    'wowbagger',
+    `claims-${fixture.namespace}.json.lock`,
+  );
+  const paused = pausedRun(fixture, 'reconcile-lock', [
+    'transition', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  ]);
+  await paused.published;
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, '');
+  let result;
+  try {
+    result = await paused.release();
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+
+  assert.equal(result.exit, 6, result.stdout);
+  assert.equal(result.envelope.state, 'committed');
+  assert.equal(result.envelope.error.code, 'post-commit-reconciliation-failed');
+  assert.equal(result.envelope.error.details.reason, 'claim-verify-refused');
+  assert.equal(result.envelope.error.details.claim_verify_code, 'claim-store-unavailable');
+  assert.equal(result.envelope.error.details.claim_verify_reason, 'claim-store-locked');
+  assert.equal(Object.hasOwn(result.envelope.error.details, 'findings'), false);
+});
+
 test('an item that no longer holds the published bytes is git-commit-failed', async () => {
   const fixture = await twoItems();
   const request = await requestFile(fixture, 'transition.json', transitionRequest(fixture));

@@ -158,10 +158,10 @@ async function finalize({
     writeLogWhenEmpty: false,
   });
   if (verified.exit !== 0 || verified.stdout.ok !== true) {
-    return shape.preflightFailed('claim-state-unreconciled', {
-      claim_verify_code: verified.stdout.error?.code ?? null,
-      findings: verified.stdout.result?.findings ?? [],
-    });
+    return shape.preflightFailed(
+      'claim-state-unreconciled',
+      claimVerificationFailureDetails(verified),
+    );
   }
 
   // Reconciliation rewrites the tracked log. Only a command that will commit
@@ -295,8 +295,7 @@ async function finalize({
       published_revision: published.revision,
       git_commit: commit.commit,
       commit_paths: commitSet,
-      reason: reconciliation.reason,
-      findings: reconciliation.findings,
+      ...reconciliation,
     });
   }
   return shape.decorate(outcome, evidence);
@@ -404,9 +403,19 @@ async function verifyCommit(root, commit, parent, subject, gitPaths, digests, pr
   return { ok: true, reason: null };
 }
 
+function claimVerificationFailureDetails(verified) {
+  const error = verified.stdout.error;
+  const findings = verified.stdout.result?.findings ?? error?.details?.findings;
+  return {
+    ...(error?.code ? { claim_verify_code: error.code } : {}),
+    ...(error?.details?.reason ? { claim_verify_reason: error.details.reason } : {}),
+    ...(findings ? { findings } : {}),
+  };
+}
+
 function reconciliationFailureReason(verified, commit, operationId, itemId) {
   if (verified.exit !== 0 || verified.stdout.ok !== true) {
-    return { reason: 'claim-verify-refused', findings: verified.stdout.result?.findings ?? [] };
+    return { reason: 'claim-verify-refused', ...claimVerificationFailureDetails(verified) };
   }
   const result = verified.stdout.result;
   if (result.findings.length > 0) return { reason: 'claim-findings-present', findings: result.findings };
