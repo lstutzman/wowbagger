@@ -5,7 +5,7 @@ number: 175
 title: "Preserve claim verification diagnostics in mutation-finalize recovery"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-27
 updated: 2026-08-27
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-27T19:30:00Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-27
+    summary: "Accept the release-blocking mutation-finalize diagnostics gap."
+    rationale: "The release review proved that mutation-finalize drops claim verification code and reason even though ordinary auto-commit preserves them and alpha.11 documents same-fidelity diagnostics. The recovery path must share the established construction before publication."
 ---
 ## Problem
 
