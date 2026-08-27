@@ -661,7 +661,7 @@ test('the mutation contract states both sanctioned exceptions and why they stay'
   assert.match(rule, /They stay bare/);
   assert.match(
     rule,
-    /claim-fenced refusal to `create`, `transition`, or `patch` answers in the ledger-mutation domain/,
+    /claim-fenced refusal to `create`, `transition`, `parent-migrate`, `snooze`, or `patch` answers in the ledger-mutation domain/,
   );
   assert.match(rule, /This is not envelope drift/);
   assert.match(rule, /Re-wrapping it in a core envelope would silently change three pinned surfaces/);
