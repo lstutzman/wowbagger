@@ -5,7 +5,7 @@ number: 167
 title: "Remove the false live-item precondition from parent-migrate help"
 kind: task
 priority: 3
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
