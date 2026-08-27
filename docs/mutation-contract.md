@@ -321,16 +321,18 @@ wowbagger inspect --ledger <dir> --id <id> --workbench --as-of YYYY-MM-DD --json
 wowbagger list --ledger <dir> --input <json-file|-> --json
 wowbagger create --ledger <dir> --input <json-file|-> --json [--auto-commit]
 wowbagger transition --ledger <dir> --input <json-file|-> --json [--auto-commit]
+wowbagger parent-migrate --ledger <dir> --input <json-file|-> --json [--auto-commit]
+wowbagger snooze --ledger <dir> --input <json-file|-> --json [--auto-commit]
 wowbagger patch --ledger <dir> --input <json-file|-> --json [--auto-commit]
 wowbagger mint-id [--date YYYY-MM-DD] --json
 wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json
 ~~~
 
 `--auto-commit` is a bare opt-in flag. It is accepted once on `create`,
-`transition`, `patch`, and `publish-claimed`, and it is an unknown argument
-everywhere else. Repeating it is `invalid-request`. Section 13 defines what it
-does. Without it, every existing invocation keeps its exact stdout, exit,
-files, index, and Git `HEAD`.
+`transition`, `parent-migrate`, `snooze`, `patch`, and `publish-claimed`, and it
+is an unknown argument everywhere else. Repeating it is `invalid-request`.
+Section 13 defines what it does. Without it, every existing invocation keeps
+its exact stdout, exit, files, index, and Git `HEAD`.
 
 A dash for --input means standard input. File and standard-input requests have
 identical semantics. Request bytes must be valid UTF-8 JSON with one top-level
@@ -338,7 +340,8 @@ object and no duplicate member names at any depth. Duplicate members are
 invalid; a parser must not apply last-member-wins behaviour.
 
 Unknown, missing, and repeated command arguments are invalid-request. Create,
-transition, and patch use JSON input rather than parallel field flags.
+transition, parent migration, snooze, and patch use JSON input rather than
+parallel field flags.
 
 ### Standard output and standard error
 

@@ -360,10 +360,10 @@ version.
 
 ### Security
 
-- **Read-only by default.** `validate`, `ready`, `report`, `inspect`,
-  `capabilities`, and `mint-id` never modify anything. Every mutation
-  (`create`, `transition`, `patch`, and `publish-claimed`) is an explicit,
-  reviewable write.
+- **Read-only by default.** `validate`, `ready`, `report`, `inspect`, `list`,
+  `capabilities`, and `mint-id` never modify anything. Every item mutation
+  (`create`, `transition`, `parent-migrate`, `snooze`, `patch`, and
+  `publish-claimed`) is an explicit, reviewable write.
 - **Lock is not a claim.** A short mutation lock serializes writers during one
   operation. It does not grant a work claim.
 - **Claims are merge-coordinated, not exclusive.** `claim acquire` uses
@@ -567,21 +567,28 @@ npm ci
 ./bin/wowbagger.js ready --ledger path/to/ledger --as-of 2030-01-15
 ./bin/wowbagger.js report --ledger path/to/ledger --as-of 2030-01-15 --json
 ./bin/wowbagger.js capabilities --json
-./bin/wowbagger.js mint-id --json
 ./bin/wowbagger.js inspect --ledger path/to/ledger --id wb_... --json
 ./bin/wowbagger.js inspect --ledger path/to/ledger --number 30 --json
+./bin/wowbagger.js list --ledger path/to/ledger --input query.json --json
 ./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js transition --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js parent-migrate --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js snooze --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js patch --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js extensions-provision --ledger path/to/ledger --input declaration.json --json
+./bin/wowbagger.js mint-id --json
+./bin/wowbagger.js publish-claimed --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js claim-merge-verify --ledger path/to/ledger --base main --head feature --json
+./bin/wowbagger.js claim-sync --ledger path/to/ledger --json
+./bin/wowbagger.js claim-adopt --ledger path/to/ledger --input request.json --json
+./bin/wowbagger.js mutation-finalize --ledger path/to/ledger --recovery-token token --json
 ./bin/wowbagger.js provision --ledger path/to/ledger --json
 ./bin/wowbagger.js claim capabilities --ledger path/to/ledger --json
 ./bin/wowbagger.js claim acquire --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim read --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim renew --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim release --ledger path/to/ledger --input request.json --json
-./bin/wowbagger.js publish-claimed --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
-./bin/wowbagger.js claim-adopt --ledger path/to/ledger --input request.json --json
 ```
 
 `validate` writes exactly one JSON result to standard output. A valid ledger
@@ -707,8 +714,9 @@ operating rule:
 The durable claim store validates every recorded mutation against Git `HEAD`,
 not against working-tree bytes. That is what makes a recorded mutation durable
 rather than a local edit one `git checkout` away from vanishing. An uncommitted
-mutation is an unreconciled mutation, so the next `create`, `transition`, or
-`patch` refuses instead of writing on top of it.
+mutation is an unreconciled mutation, so the next `create`, `transition`,
+`parent-migrate`, `snooze`, `patch`, or `publish-claimed` refuses instead of
+writing on top of it.
 
 The loop that works:
 
@@ -734,7 +742,9 @@ Skip the commit and the next command returns exit 6:
 `state: "unchanged"` is exact — nothing was written. **`claim-verify` is the
 reconciliation procedure.** Read `details.findings`, do what each
 `remediation` string says, run `claim-verify` until it returns exit 0, then
-repeat the refused command.
+repeat the refused command. A `worktree-synchronization-required` finding on an
+unrelated item does not block the requested mutation. The same finding on the
+target item, and every `unauthorized-revision` finding, remains blocking.
 
 Batch work is where this bites. Filing ten items means ten commits, not one
 commit at the end.
@@ -750,16 +760,23 @@ ledger only:
 
 It is opt-in per invocation. There is no configuration setting or environment
 default, because a hidden default would make existing automation create Git
-commits unexpectedly. The flag is accepted on `create`, `transition`, `patch`,
-and `publish-claimed`.
+commits unexpectedly. The flag is accepted on `create`, `transition`,
+`parent-migrate`, `snooze`, `patch`, and `publish-claimed`.
 
 What one flagged invocation does: refuse if anything is staged anywhere or any
-path under the ledger is dirty; reconcile; run the mutation unchanged; commit
-exactly the changed item and at most one
+foreign path under the ledger is dirty; reconcile; run the mutation unchanged;
+commit exactly the changed item and at most one
 `.wowbagger/reconcile-<namespace>.md` with a fixed subject such as
 `wowbagger: transition item #7`; verify the commit; then run `claim-verify`
-before it answers. On success the result gains `git_commit`, `commit_paths`, and
-`claim_verified`.
+before it answers. A command that owns the claim journal may rebuild only its
+derived reconciliation log during preflight. `create` remains strict, and
+every other dirty ledger path still refuses. On success the result gains
+`git_commit`, `commit_paths`, and `claim_verified`.
+
+If claim verification refuses, auto-commit preserves its code and reason in
+`claim_verify_code` and `claim_verify_reason`. Only
+`claim_verify_reason: "claim-store-locked"` is retryable; unresolved
+reconciliation is not.
 
 Unstaged and untracked files **outside** the ledger are left alone. Hooks and
 signing are honoured; `--no-verify` is never passed. Nothing is pushed.

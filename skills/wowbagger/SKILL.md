@@ -421,8 +421,8 @@ wowbagger transition --ledger <dir> --input next.json --json
 The claim store validates every recorded mutation against Git `HEAD`, never
 against working-tree bytes — that is what makes a mutation durable rather than
 a local edit. So an uncommitted mutation blocks the next one. Skip the commit
-and the next `create`, `transition`, `patch`, or `publish-claimed` returns
-exit 6 `claim-store-unavailable` with
+and the next `create`, `transition`, `parent-migrate`, `snooze`, `patch`, or
+`publish-claimed` returns exit 6 `claim-store-unavailable` with
 `details.reason: "publication-reconciliation-required"`. `state` is
 `unchanged`, so nothing was written.
 
@@ -496,10 +496,20 @@ is no setting that turns it on for you.
 wowbagger transition --ledger <dir> --input next.json --json --auto-commit
 ```
 
-One flagged invocation refuses if anything is staged anywhere or any path under
-the ledger is dirty, reconciles, runs the mutation unchanged, commits exactly
-the changed item plus at most one `.wowbagger/reconcile-<namespace>.md` with a
-fixed subject, verifies that commit, and runs `claim-verify` before it answers.
+One flagged invocation refuses if anything is staged anywhere or any foreign
+path under the ledger is dirty, reconciles, runs the mutation unchanged,
+commits exactly the changed item plus at most one
+`.wowbagger/reconcile-<namespace>.md` with a fixed subject, verifies that commit,
+and runs `claim-verify` before it answers. A command that owns the claim journal
+may rebuild only its derived reconciliation log during preflight. `create`
+remains strict, and every other dirty ledger path still refuses.
+
+Preflight and post-commit reconciliation block findings for the requested item.
+An unrelated `worktree-synchronization-required` finding remains visible to
+`claim-verify` without turning a successful mutation into failure. If claim
+verification refuses, the result preserves `claim_verify_code` and
+`claim_verify_reason`; only `claim-store-locked` is retryable.
+
 Success adds `git_commit`, `commit_paths`, and `claim_verified` to `result`.
 
 Say these limits plainly when you use it:

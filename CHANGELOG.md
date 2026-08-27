@@ -32,6 +32,11 @@ consolidation. The first tagged release inherits this file.
   contract and installed skill document their requests, CAS and date rules,
   response domains, auto-commit behavior, and legacy journal fence-family
   semantics. Parent-migrate help no longer invents a live-item restriction.
+- **Release numbering preserves the unpublished alpha.10 cut.** Alpha.10 was
+  cut and tagged but never published to npm. This release advances to alpha.11
+  instead of moving that tag, so tag identity remains immutable and the
+  registry history honestly skips alpha.10.
+
 ## 0.1.0-alpha.10 - 2026-08-26
 
 ### Fixed
