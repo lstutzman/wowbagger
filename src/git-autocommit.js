@@ -692,8 +692,8 @@ function coreError(code, message, state, exit, details) {
   return { ok: false, exit, state, error: { code, message, details } };
 }
 
-// Both shapes report the same preflight refusal. A held mutex is the one reason
-// the identical request can succeed later, so it is the only retryable one.
+// Both shapes report the same preflight refusal. Mutex contention is retryable
+// here; an underlying claim-store lock overrides this default in `details`.
 function preflightDetails(reason, details) {
   return { reason, retryable: reason === 'mutex-held', ...details };
 }
@@ -1004,8 +1004,7 @@ async function finalizeVerified({
         ...(operationId === null ? {} : { operation_id: operationId }),
         git_commit: commit,
         commit_paths: commitSet,
-        reason: reconciliation.reason,
-        findings: reconciliation.findings,
+        ...reconciliation,
       });
   }
   return {

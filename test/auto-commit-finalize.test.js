@@ -81,6 +81,35 @@ test('mutation-finalize completes the commit and claim-verify in one invocation'
   assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
 });
 
+test('mutation-finalize preserves a claim-store lock refusal after committing', async () => {
+  const fixture = await twoItems();
+  const token = await transitionRefused(fixture);
+  const gitCommonDir = git(fixture.root, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  const lockPath = path.join(
+    gitCommonDir,
+    'wowbagger',
+    `claims-${fixture.namespace}.json.lock`,
+  );
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  await writeFile(lockPath, '');
+  let result;
+  try {
+    result = run(fixture.root, 'mutation-finalize', '--ledger', fixture.ledger, '--recovery-token', token, '--json');
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+
+  assert.equal(result.exit, 6, result.stdout);
+  assert.equal(result.envelope.state, 'committed');
+  assert.equal(result.envelope.error.code, 'post-commit-reconciliation-failed');
+  assert.equal(result.envelope.error.details.reason, 'claim-verify-refused');
+  assert.equal(result.envelope.error.details.claim_verify_code, 'claim-store-unavailable');
+  assert.equal(result.envelope.error.details.claim_verify_reason, 'claim-store-locked');
+  assert.equal(Object.hasOwn(result.envelope.error.details, 'findings'), false);
+  assert.equal(result.envelope.error.details.git_commit, git(fixture.root, 'rev-parse', 'HEAD'));
+  assert.deepEqual(result.envelope.error.details.commit_paths, [fixture.logPath, `items/${ITEM_ID}.md`]);
+});
+
 test('repeating mutation-finalize is idempotent and creates no second commit', async () => {
   const fixture = await twoItems();
   const token = await transitionRefused(fixture);
