@@ -90,7 +90,9 @@ export async function findRevisionOwner(ledgerDirectory, itemPath, expectedRevis
       commit,
       '--format=%(refname)',
     ])).sort();
-    if (currentRef !== null && refs.includes(currentRef)) return { owner_unavailable: true };
+    if (currentRef !== null && refs.includes(currentRef)) {
+      return { owner_unavailable: true, owner_current_ref: true, owner_commit: commit };
+    }
     const [ownerRef] = refs;
     return ownerRef ? { owner_ref: ownerRef, owner_commit: commit } : { owner_unavailable: true };
   }
