@@ -5,7 +5,7 @@ number: 170
 title: "Preserve claim-verify refusal diagnostics after auto-commit lands"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
