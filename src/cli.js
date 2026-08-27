@@ -1336,7 +1336,7 @@ function parseContractOptions(command, argumentsList) {
             : command === 'mint-id'
               ? new Map([['--date', 'date']])
               : new Map();
-  // Bare flags carry no value. `--auto-commit` is accepted only on the four
+  // Bare flags carry no value. `--auto-commit` is accepted only on the
   // commands whose Git finalization it folds in; `--workbench` only on the one
   const bareFlags = AUTO_COMMIT_COMMANDS.has(command)
     ? new Map([['--auto-commit', 'autoCommit']])

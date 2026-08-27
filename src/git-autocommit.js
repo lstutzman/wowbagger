@@ -146,9 +146,9 @@ async function finalize({
   //
   // A nonzero claim-verify is exactly the unsafe claim state, so this one check
   // is the whole gate. An invalid ledger is deliberately NOT re-checked here:
-  // every one of the four mutations already refuses it with ledger-invalid and
-  // state unchanged, and duplicating that would add a branch no fixture can
-  // distinguish from the mutation's own refusal.
+  // every one of the auto-commit mutations already refuses it with
+  // ledger-invalid and state unchanged, and duplicating that would add a
+  // branch no fixture can distinguish from the mutation's own refusal.
   const verified = await verifyClaimJournal({
     ledgerDirectory,
     gitCommonDir,
