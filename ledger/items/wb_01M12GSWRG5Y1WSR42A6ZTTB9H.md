@@ -5,9 +5,10 @@ number: 177
 title: "Keep detached HEAD ownership regressions blocking"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-27
 updated: 2026-08-27
+completed: 2026-08-27
 provenance:
   source: "no-mistakes/01M12F0YXS2QA72BQTTFABB5M6/review"
   recorded_at: "2026-08-27T21:00:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-27
     summary: "Accept the release-blocking detached-HEAD classifier regression."
     rationale: "The release review proved that current ownership depends on a symbolic branch, allowing a detached checkout that contains the expected revision to misclassify a restored predecessor as advisory synchronization. Alpha.11 must preserve the #173 safety guarantee on the documented detached-HEAD path."
+  - action: complete
+    date: 2026-08-27
+    summary: "Kept detached HEAD ownership regressions blocking."
+    rationale: "RED classified a detached checkout's restored predecessor as synchronization instead of unauthorized. Commit 98c55b5 gives detached HEAD history explicit current-owner precedence under the existing output bound; dbe33a9 corrects parent ownership guidance and 8b55aa7 records the open topology audit. GREEN passed 16/16, ownership safety passed 56/56, and the complete suite passed 1733/1733 on current Node and Node 20 with adapter conformance and ledger validation green."
 ---
 ## Problem
 
