@@ -808,13 +808,16 @@ async function reconciliationDiagnosis({
         : `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
     };
   }
-  if (authorizedRevisions.has(actualRevision) && expectedOwner?.owner_current_ref !== true) {
-    return {
-      reason: 'worktree-synchronization-required',
-      ...(expectedPath ? { expected_path: expectedPath } : {}),
-      owner_unavailable: true,
-      remediation: `Ownership of ${pathLabel} revision ${expectedRevision} is not yet reachable; wait for the owning worktree to commit, then synchronize this worktree and run claim-verify.`,
-    };
+  if (authorizedRevisions.has(actualRevision)) {
+    expectedOwner ??= await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
+    if (expectedOwner.owner_current_ref !== true) {
+      return {
+        reason: 'worktree-synchronization-required',
+        ...(expectedPath ? { expected_path: expectedPath } : {}),
+        owner_unavailable: true,
+        remediation: `Ownership of ${pathLabel} revision ${expectedRevision} is not yet reachable; wait for the owning worktree to commit, then synchronize this worktree and run claim-verify.`,
+      };
+    }
   }
   // Two remedies, both named, in the order that makes the cost obvious. The
   // field report behind item #113 read the single restore sentence as the only
