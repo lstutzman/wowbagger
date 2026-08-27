@@ -15,6 +15,9 @@ consolidation. The first tagged release inherits this file.
   nonblocking findings.
   Restoring earlier authorized bytes in the same working tree remains
   `unauthorized-revision` when the current branch owns the expected revision.
+  When Git proves that a sibling ref owns the expected revision, the finding
+  retains that `owner_ref` and `owner_commit` instead of reporting the owner as
+  unavailable.
 - **Journal-owning auto-commit rebuilds its derived reconciliation log.** Claim
   decisions may dirty that tracked projection; patch, transition,
   parent-migrate, snooze, and publish-claimed now validate and commit the rebuilt
@@ -36,6 +39,10 @@ consolidation. The first tagged release inherits this file.
   contract and installed skill document their requests, CAS and date rules,
   response domains, auto-commit behavior, and legacy journal fence-family
   semantics. Parent-migrate help no longer invents a live-item restriction.
+- **Parent and snooze fields are documented as dedicated mutations, not
+  create-once values.** Existing items can be repointed to or from an epic with
+  `parent-migrate`, and `snooze` can set or clear `snoozed_until`; `kind` and
+  `provenance` remain genuinely create-once.
 - **Release numbering preserves the unpublished alpha.10 cut.** Alpha.10 was
   cut and tagged but never published to npm. This release advances to alpha.11
   instead of moving that tag, so tag identity remains immutable and the
