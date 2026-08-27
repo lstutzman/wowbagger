@@ -5,7 +5,7 @@ number: 169
 title: "Define an in-protocol recovery from claim-refusal reconciliation-log dirt"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
