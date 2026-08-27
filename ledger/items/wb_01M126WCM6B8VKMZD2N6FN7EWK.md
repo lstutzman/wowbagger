@@ -5,7 +5,7 @@ number: 173
 title: "Block same-branch working-tree regressions when HEAD owns the expected revision"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-27
 updated: 2026-08-27
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-27T18:20:00Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-27
+    summary: "Accept the release-blocking reconciliation safety defect."
+    rationale: "The no-mistakes release review produced a concrete same-branch working-tree regression that can be downgraded from blocking unauthorized revision to advisory synchronization. Alpha.11 must not publish until a regression test proves the classifier remains blocking without breaking legitimate sibling windows."
 ---
 ## Problem
 
