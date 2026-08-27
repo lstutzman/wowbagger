@@ -5,9 +5,10 @@ number: 176
 title: "Preserve known sibling owner evidence for restored authorized bytes"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-27
 updated: 2026-08-27
+completed: 2026-08-27
 provenance:
   source: "no-mistakes/01M12BEPPZGQVW09XQ56BHZMCR/review"
   recorded_at: "2026-08-27T20:15:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-27
     summary: "Accept the release-blocking known-owner evidence regression."
     rationale: "The final release review proved that Git can identify a sibling ref and commit for an expected revision while the authorized-predecessor branch replaces that evidence with owner_unavailable. Alpha.11 must restore the explicit #165 contract without weakening blocking or current-ref discrimination."
+  - action: complete
+    date: 2026-08-27
+    summary: "Preserved known sibling owner evidence for restored authorized bytes."
+    rationale: "RED kept exit 6 safety but omitted owner_ref for a real N-2/N-1/sibling-N history. Commit 48d8ac2 reuses the named-owner finding shape; 2d1114c keeps unavailable-owner remedies exact; dbe33a9 and 70ebc51 correct user-facing parent ownership and release notes. GREEN passed 15/15, reconciliation safety passed 55/55, and the complete suite passed 1732/1732 on current Node and Node 20 with adapter conformance and ledger validation green."
 ---
 ## Problem
 
