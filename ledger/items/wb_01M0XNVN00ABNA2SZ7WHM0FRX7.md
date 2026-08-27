@@ -5,17 +5,22 @@ number: 172
 title: "Align auto-commit preflight and post-commit finding scopes"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-finding-scope"
   recorded_at: "2026-08-26T22:58:00.000Z"
 depends_on: []
-related: [wb_01M0XNVN002WFNRD85Q1SSF5FK, wb_01M0XNVN00NMH176S1BHVM0HHR]
+related: [ wb_01M0XNVN002WFNRD85Q1SSF5FK, wb_01M0XNVN00NMH176S1BHVM0HHR ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "design"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the auto-commit finding-scope design gap."
+    rationale: "The stress campaign proved target-scoped preflight and global post-commit finding checks create committed-but-reported-failed steady state."
 ---
 ## Design gap — current code matches the contract
 
