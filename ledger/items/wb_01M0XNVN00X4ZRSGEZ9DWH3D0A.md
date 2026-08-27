@@ -5,9 +5,10 @@ number: 167
 title: "Remove the false live-item precondition from parent-migrate help"
 kind: task
 priority: 3
-status: in-progress
+status: done
 created: 2026-08-26
 updated: 2026-08-26
+completed: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-help"
   recorded_at: "2026-08-26T22:53:00.000Z"
@@ -21,6 +22,10 @@ decisions:
     date: 2026-08-26
     summary: "Accept the parent-migrate help-text defect."
     rationale: "The command correctly supports terminal items, while help invents a live-item precondition and needs a wording-only correction."
+  - action: complete
+    date: 2026-08-26
+    summary: "Removed the false live-item precondition from parent-migrate help."
+    rationale: "The help correction and its dedicated behavior test landed in 0a85483. The complete suite passed 1726/1726 on current Node and Node 20."
 ---
 ## Help-text defect
 
