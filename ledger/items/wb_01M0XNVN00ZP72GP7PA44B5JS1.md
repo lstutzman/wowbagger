@@ -5,17 +5,22 @@ number: 168
 title: "Document parent-migrate and snooze request and journal fence-family semantics"
 kind: task
 priority: 3
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
   source: "exploratory-stress/2026-08-26/phase2-journal"
   recorded_at: "2026-08-26T22:54:00.000Z"
 depends_on: []
-related: [wb_01M0XNVN00TRMBY86QXZV6EH3D, wb_01M0XNVN00X4ZRSGEZ9DWH3D0A]
+related: [ wb_01M0XNVN00TRMBY86QXZV6EH3D, wb_01M0XNVN00X4ZRSGEZ9DWH3D0A ]
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "documentation"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the parent-migrate and snooze contract coverage gap."
+    rationale: "Two public mutation verbs lack dedicated request, response, date, CAS, auto-commit, and durable journal documentation."
 ---
 ## Documentation gap — observed behavior is defensible
 
