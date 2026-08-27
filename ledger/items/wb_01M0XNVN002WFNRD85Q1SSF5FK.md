@@ -5,7 +5,7 @@ number: 165
 title: "Classify uncommitted sibling revisions as synchronization-required without weakening unauthorized edits"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-26
 updated: 2026-08-26
 provenance:
@@ -16,6 +16,11 @@ related: [ wb_01M0MR2Y8GKNCTTVS9V5ZX8Q0N, wb_01M0Z48AYMPJWSA7YHFWK1SKBA, wb_01M0
 tags:
   - "stress-run-2026-08-26-alpha10"
   - "defect"
+decisions:
+  - action: accept
+    date: 2026-08-26
+    summary: "Accept the confirmed uncommitted-sibling reconciliation defect."
+    rationale: "The alpha10 stress campaign reproduced the classifier failure, traced its root cause, and approved a safety-preserving implementation design."
 ---
 ## Defect
 
