@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.11 - 2026-08-27
+
 ### Fixed
 
 - **Uncommitted sibling revisions keep target-scoped reconciliation safe.**
