@@ -445,16 +445,36 @@ validates that every selected member exists across the complete ledger with the
 declared type; it never infers authority from one item. Commit the generated
 `.wowbagger/extensions.json` before the first `patch` that uses those members.
 
-To detach or reparent a live child without recreating its identity, use the
+To detach or reparent an item without recreating its identity, use the
 CAS-fenced relation migration:
 
 ```sh
 wowbagger parent-migrate --ledger <dir> --input relation.json --json [--auto-commit]
 ```
 
-Request must carry `id`, `expected_revision`, `expected_parent`, `parent` (or
-`null`), and `date`. The complete ledger validates the old and new parent
+The parent-migrate request is:
+
+```json
+{"id":"wb_...","expected_revision":"sha256:...","expected_parent":"wb_...","parent":null,"date":"YYYY-MM-DD"}
+```
+
+Every member is required; `expected_parent` and `parent` may be `null`. Inspect
+immediately before sending it. The complete ledger validates old and new parent
 accounting before publication.
+
+Set or clear a snooze date with:
+
+```sh
+wowbagger snooze --ledger <dir> --input snooze.json --json [--auto-commit]
+```
+
+The snooze request is:
+
+```json
+{"id":"wb_...","expected_revision":"sha256:...","snoozed_until":"YYYY-MM-DD","date":"YYYY-MM-DD"}
+```
+
+Use `snoozed_until: null` to clear it. Every member is required.
 
 Successful mutation responses also return `result.changed_paths`: the exact
 ledger-relative paths changed by that invocation. Use this set for manual

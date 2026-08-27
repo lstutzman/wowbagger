@@ -1862,6 +1862,84 @@ temporary file followed by the platform's existing-file atomic replacement
 primitive. It then re-reads exact final bytes. This remains a local filesystem
 operation without universal crash durability or hostile-writer protection.
 
+## 8.1 Parent migration
+
+`parent-migrate` moves one item to an epic or detaches it without changing item
+identity or lifecycle. Parent-migrate accepts exactly:
+
+~~~json
+{
+  "id": "wb_...",
+  "expected_revision": "sha256:<64 lowercase hexadecimal characters>",
+  "expected_parent": "wb_...",
+  "parent": null,
+  "date": "2030-01-11"
+}
+~~~
+
+`id`, `expected_revision`, `expected_parent`, `parent`, and `date` are required.
+`expected_parent` and `parent` are each a canonical item ID or `null`.
+`expected_parent` is a second compare-and-swap witness: it must equal the
+current parent after the locked re-read. A mismatch returns exit 4
+`parent-migration-precondition-failed` with a `parent-revision-conflict` issue
+and both `expected_parent` and `actual_parent`. An unknown parent, a non-epic
+parent, self-parenting, or a date before `created` or `updated` returns exit 2
+with the same error code and deterministic issues. Revision and lock conflicts
+retain their ordinary exit 4 precedence.
+
+The command sets `updated` to request `date` and changes only `parent`. For an
+item whose status is `done`, `killed`, `archived`, or `deferred`, the request
+date must equal the existing `updated` date. No status or liveness precondition
+exists; the complete candidate ledger still validates every parent and rollup
+invariant before publication.
+
+A core success answers as command `parent-migrate`, contract version 5, state
+`committed`, and returns the lossless item. On a provisioned ledger, a claim
+fence refusal answers in the `ledger-mutation` domain as command
+`parent-migrate-v1`. `--auto-commit` commits the changed item, when its bytes
+move, plus the reconciliation log under the fixed parent-migrate subject.
+
+Parent migration reuses the legacy `patch-v1` fence family in the durable claim
+journal. That journal `command` is a fence-family and recovery classifier, not
+the public operation name. Internally, `responseCommand` identifies the
+response operation and keeps `parent-migrate-v1` distinct in envelopes. The
+journal's attempt ID and expected, candidate, and committed revisions remain
+the recovery evidence; Git history remains the reviewable operation audit.
+
+## 8.2 Snooze
+
+`snooze` sets or clears one item's snooze date without changing lifecycle.
+Snooze accepts exactly:
+
+~~~json
+{
+  "id": "wb_...",
+  "expected_revision": "sha256:<64 lowercase hexadecimal characters>",
+  "snoozed_until": "2030-02-01",
+  "date": "2030-01-11"
+}
+~~~
+
+`id`, `expected_revision`, `snoozed_until`, and `date` are required.
+`snoozed_until` is an ISO calendar date or `null`; `null` removes the member.
+`date` is an ISO calendar date not before `created` or `updated`. The command
+sets `updated` to request `date` and changes only `snoozed_until`. For an item
+whose status is `done`, `killed`, `archived`, or `deferred`, the request date
+must equal the existing `updated` date.
+
+Invalid input returns exit 2 `invalid-request`; stale item revision and lock
+conflicts retain exit 4; date and candidate validation use the same bounded
+issue and error shapes as patch. A core success answers as command `snooze`,
+contract version 5, state `committed`, and returns the lossless item. On a
+provisioned ledger, a claim fence refusal answers in the `ledger-mutation`
+domain as command `snooze-v1`. `--auto-commit` commits the changed item, when
+its bytes move, plus the reconciliation log under the fixed snooze subject.
+
+Snooze also reuses the legacy `patch-v1` fence family in the durable claim
+journal. The journal `command` identifies the fence and recovery family, while
+`responseCommand` identifies the response operation as `snooze-v1`. This split
+is intentional and does not change the journal format.
+
 ## 9. Patch
 
 Patch changes the mutable non-lifecycle content of one existing item — its
