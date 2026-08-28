@@ -5,9 +5,10 @@ number: 179
 title: "Keep out-of-protocol local states blocking when a sibling owns the expected revision"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-28
 updated: 2026-08-28
+completed: 2026-08-28
 provenance:
   source: "item-178-topology-research"
   recorded_at: "2026-08-28T08:56:42Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-28
     summary: "Accept the alpha.11 reconciliation barrier defect."
     rationale: "The #178 topology sweep reproduced three public CLI states where out-of-protocol local bytes are mislabeled as sibling synchronization and an unrelated mutation proceeds. Lee chose an alpha.12 hotfix. One barrier predicate can fix the shared root without redesigning target scoping or the reconciliation short-circuits."
+  - action: complete
+    date: 2026-08-28
+    summary: "Restored the global barrier for out-of-protocol local states."
+    rationale: "Commit 6c9be8a adds one barrier predicate before owner and target-scope classification. RED row 1 expected unauthorized-revision but observed synchronization; GREEN blocks the unrelated patch with exit 6. Rows 2 and 3 passed as characterization, each failed when the predicate was temporarily removed, and passed after restoration. All four neighboring ownership cases passed in the 19/19 topology suite. Full current Node and Node 20 suites passed 1736/1736 with zero skips, Claude adapter conformance passed, the ledger validated, and npm audit found no vulnerabilities."
 ---
 ## Problem
 

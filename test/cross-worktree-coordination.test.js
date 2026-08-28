@@ -429,6 +429,169 @@ test('a restored predecessor keeps known sibling owner evidence', async () => {
   assert.match(finding.remediation, new RegExp(siblingCommit));
 });
 
+test('a committed unknown revision remains unauthorized when a sibling owns the expected revision', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const sibling = run(
+    fixture.siblingRoot,
+    'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const requestPath = path.join(fixture.siblingRoot, 'patch-expected-sibling.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: seedId,
+    expected_revision: sibling.envelope.result.item.revision,
+    date: '2026-08-28',
+    set: { title: 'Expected sibling' },
+  }));
+  const expected = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger, '--input', requestPath, '--json',
+  );
+  assert.equal(expected.exit, 0, JSON.stringify(expected.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+
+  const seedPath = path.join(fixture.ledger, 'item.md');
+  const source = await readFile(seedPath, 'utf8');
+  await writeFile(seedPath, source.replace('title: "Seed"', 'title: "Unknown committed"'));
+  git(fixture.root, 'add', 'ledger/item.md');
+  git(fixture.root, 'commit', '-qm', 'Commit an unknown local revision');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'unauthorized-revision');
+  assert.equal(Object.hasOwn(finding, 'owner_ref'), false);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-unknown-committed-revision.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
+});
+
+test('an unknown HEAD remains unauthorized after restoring an authorized working-tree predecessor', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const sibling = run(
+    fixture.siblingRoot,
+    'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const requestPath = path.join(fixture.siblingRoot, 'patch-expected-sibling-over-unknown-head.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: seedId,
+    expected_revision: sibling.envelope.result.item.revision,
+    date: '2026-08-28',
+    set: { title: 'Expected sibling' },
+  }));
+  const expected = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger, '--input', requestPath, '--json',
+  );
+  assert.equal(expected.exit, 0, JSON.stringify(expected.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+
+  const seedPath = path.join(fixture.ledger, 'item.md');
+  const source = await readFile(seedPath, 'utf8');
+  await writeFile(seedPath, source.replace('title: "Seed"', 'title: "Unknown committed"'));
+  git(fixture.root, 'add', 'ledger/item.md');
+  git(fixture.root, 'commit', '-qm', 'Commit an unknown local revision');
+  git(fixture.root, 'restore', '--source=HEAD^', '--', 'ledger/item.md');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'unauthorized-revision');
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-unknown-head.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
+});
+
+test('a working-tree deletion remains unauthorized when HEAD is an authorized predecessor', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const sibling = run(
+    fixture.siblingRoot,
+    'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const requestPath = path.join(fixture.siblingRoot, 'patch-expected-sibling-before-deletion.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: seedId,
+    expected_revision: sibling.envelope.result.item.revision,
+    date: '2026-08-28',
+    set: { title: 'Expected sibling' },
+  }));
+  const expected = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger, '--input', requestPath, '--json',
+  );
+  assert.equal(expected.exit, 0, JSON.stringify(expected.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+
+  await rm(path.join(fixture.ledger, 'item.md'));
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'unauthorized-revision');
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-deleted-item.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
+});
+
 test('an uncommitted in-protocol sibling revision does not block an unrelated patch', async () => {
   const fixture = await twoWorktreeRepository();
   const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';

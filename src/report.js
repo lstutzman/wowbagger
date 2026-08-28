@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { projectReadiness } from './ready.js';
 import { buildAttention } from './report-attention.js';
@@ -502,7 +502,16 @@ async function resolvePhysicalPath(targetPath) {
 
   while (true) {
     try {
-      return path.join(await realpath(existingPath), ...missingSegments.reverse());
+      const resolvedPath = await realpath(existingPath);
+      // Windows realpath reports ENOENT, not ENOTDIR, when a path component
+      // is a regular file, so the walk can land on a file that still has
+      // segments missing below it. Restate that as the ENOTDIR POSIX raises.
+      if (missingSegments.length > 0 && !(await stat(resolvedPath)).isDirectory()) {
+        const notADirectory = new Error(`ENOTDIR: not a directory, realpath '${targetPath}'`);
+        notADirectory.code = 'ENOTDIR';
+        throw notADirectory;
+      }
+      return path.join(resolvedPath, ...missingSegments.reverse());
     } catch (error) {
       if (error?.code !== 'ENOENT') {
         throw error;
