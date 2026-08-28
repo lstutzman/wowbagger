@@ -10,7 +10,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { appendClaimEntry, claimJournalPath } from '../src/claim-journal.js';
+import { appendClaimEntry, claimJournalPath, replayClaimJournal } from '../src/claim-journal.js';
+import { resolveGitCommonDir } from '../src/claim-store.js';
 
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
@@ -219,6 +220,22 @@ test('publish-claimed writes exact candidate bytes for the active claim fence', 
     `sha256:${createHash('sha256').update(fixture.candidate).digest('hex')}`,
   );
   assert.deepEqual(await readFile(fixture.itemPath), fixture.candidate);
+
+  // The publication authorized a revision, so the journal names the worktree
+  // that authorized it — on the intent it recorded before the write and on the
+  // terminal it recorded after. The ID is read from the writer's own private
+  // Git directory, never from the journal it is being compared against.
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const worktreeId = (await readFile(
+    path.join(gitCommonDir, 'wowbagger-worktree-id'), 'utf8',
+  )).trimEnd();
+  const { entries } = await replayClaimJournal(
+    claimJournalPath(gitCommonDir, fixture.namespace), fixture.namespace,
+  );
+  const intent = entries.find((entry) => entry.type === 'publish-intent');
+  const final = entries.find((entry) => entry.type === 'publish-final');
+  assert.equal(intent.writer_worktree_id, worktreeId);
+  assert.equal(final.writer_worktree_id, worktreeId);
 });
 
 test('publish-claimed rejects a request for another ledger namespace', async () => {

@@ -329,6 +329,8 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.expected_revision === 'string'
       && typeof entry.candidate_sha256 === 'string'
       && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
+      && (!Object.hasOwn(entry, 'writer_worktree_id')
+        || typeof entry.writer_worktree_id === 'string')
       && isRecord(entry.fence)
       && (namespace === null || entry.fence.ledger_namespace === namespace)
       && entry.fence.item_id === entry.item_id;
@@ -339,6 +341,8 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.ledger_namespace === 'string'
       && (namespace === null || entry.ledger_namespace === namespace)
       && typeof entry.item_id === 'string'
+      && (!Object.hasOwn(entry, 'writer_worktree_id')
+        || typeof entry.writer_worktree_id === 'string')
       && validPublicationOutcome(entry);
   }
   return typeof entry.operation_id === 'string'

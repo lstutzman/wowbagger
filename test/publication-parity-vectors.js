@@ -118,15 +118,21 @@ function publish(context, publicationRequest, scenario) {
   });
 }
 
-// Wall-clock instants and the generated namespace are the only values that
-// cannot be fixed by construction, so they are the only values replaced. The
-// operation digest hashes the request, and the request names the namespace, so
-// it moves with the namespace and is replaced for the same reason — the
-// digests inside one recording are still checked against each other.
+// Wall-clock instants, the generated namespace, and the writer's worktree UUID
+// are the only values that cannot be fixed by construction, so they are the
+// only values replaced. The operation digest hashes the request, and the
+// request names the namespace, so it moves with the namespace and is replaced
+// for the same reason — the digests inside one recording are still checked
+// against each other. The writer UUID is replaced in place rather than
+// dropped, so a recording still proves which entries carry the field.
 function normalize(value, namespace, digests) {
   const replaced = JSON.stringify(value)
     .replaceAll(namespace, '<namespace>')
-    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, '<time>');
+    .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, '<time>')
+    .replace(
+      /"writer_worktree_id":"[0-9a-f-]{36}"/g,
+      '"writer_worktree_id":"<writer-worktree-id>"',
+    );
   return JSON.parse(replaced.replace(/"operation_digest":"sha256:[0-9a-f]{64}"/g, (match) => {
     if (!digests.has(match)) digests.set(match, `<digest-${digests.size + 1}>`);
     return `"operation_digest":"${digests.get(match)}"`;

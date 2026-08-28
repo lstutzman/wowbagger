@@ -21,6 +21,7 @@ import { publishClaimedCandidate, revisionFor } from './mutation.js';
 import { validateLedger } from './validate.js';
 import {
   assertUniqueWorktreeIdentity,
+  ensureWorktreeIdentity,
   identityDiagnosticDetails,
   readWorktreeIdentity,
 } from './worktree-identity.js';
@@ -186,7 +187,12 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
       // what makes the revision compare-and-swap meaningful.
       //
       // A claimed publication authorizes an item revision, so an ambiguous
-      // domain is refused before reconciliation classifies one.
+      // domain is refused before reconciliation classifies one. The writer
+      // names itself first, under this same hold, so a domain that cannot
+      // resolve its own identity refuses as its own invalid identity rather
+      // than as an unreadable roster — and so every entry this hold appends
+      // carries one ID resolved exactly once.
+      const currentWorktreeId = await ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir });
       await assertUniqueWorktreeIdentity({ ledgerDirectory });
       let reconciled;
       try {
@@ -246,7 +252,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
             active_owner_id: record.active?.owner_id ?? null,
             active_epoch: record.active?.epoch ?? null,
           }, 4);
-        return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
+        return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath, currentWorktreeId);
       }
       await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
       const intent = await appendClaimEntry(journalPath, {
@@ -258,6 +264,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         candidate_sha256: request.candidate_sha256,
         fence: request.claim_fence,
         floor: observedAt,
+        writer_worktree_id: currentWorktreeId,
         state: 'pending',
       });
       entries.push(intent);
@@ -267,11 +274,11 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
       });
       if (!mutation.ok) {
         const outcome = mutationFailure(request, mutation);
-        return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
+        return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath, currentWorktreeId);
       }
       await publicationTestCheckpoint(scenario, 'after-ledger-commit', ledgerDirectory);
       const outcome = publicationSuccess(request, record, observedAt, mutation.item?.path, namespace);
-      const terminal = await persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath);
+      const terminal = await persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath, currentWorktreeId);
       await publicationTestCheckpoint(scenario, 'after-terminal-record', ledgerDirectory);
       return terminal;
     });
@@ -524,6 +531,12 @@ export async function reconcileClaimJournal({
       operation_digest: intent.operation_digest,
       ledger_namespace: namespace,
       item_id: intent.item_id,
+      // The writer that authorized the publication owns the revision this
+      // resolution ratifies, so its identity travels with the terminal entry.
+      // Absent on alpha.12 intents, which stay valid without it.
+      ...(intent.writer_worktree_id
+        ? { writer_worktree_id: intent.writer_worktree_id }
+        : {}),
       outcome,
     }));
     const unknownPath = itemPathRelativeToLedger(ledgerDirectory, item?.file);
@@ -1213,13 +1226,14 @@ export function operationDigest(request) {
   return `sha256:${createHash('sha256').update(canonicalJson(request)).digest('hex')}`;
 }
 
-async function persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, state, storePath) {
+async function persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, state, storePath, writerWorktreeId) {
   const terminal = await appendClaimEntry(journalPath, {
     type: 'publish-final',
     operation_id: request.operation_id,
     operation_digest: operationDigest(request),
     ledger_namespace: request.ledger_namespace,
     item_id: request.item_id,
+    writer_worktree_id: writerWorktreeId,
     outcome,
   });
   entries.push(terminal);

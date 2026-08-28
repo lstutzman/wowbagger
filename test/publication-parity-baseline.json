@@ -83,6 +83,7 @@
           "epoch": "1"
         },
         "floor": "<time>",
+        "writer_worktree_id": "<writer-worktree-id>",
         "state": "pending"
       },
       {
@@ -92,6 +93,7 @@
         "operation_digest": "<digest-1>",
         "ledger_namespace": "<namespace>",
         "item_id": "wb_01M06G96000000000000000001",
+        "writer_worktree_id": "<writer-worktree-id>",
         "outcome": {
           "exit": 0,
           "stdout": {
@@ -197,6 +199,7 @@
         "operation_digest": "<digest-1>",
         "ledger_namespace": "<namespace>",
         "item_id": "wb_01M06G96000000000000000001",
+        "writer_worktree_id": "<writer-worktree-id>",
         "outcome": {
           "exit": 4,
           "stdout": {
@@ -293,6 +296,7 @@
           "epoch": "1"
         },
         "floor": "<time>",
+        "writer_worktree_id": "<writer-worktree-id>",
         "state": "pending"
       },
       {
@@ -302,6 +306,7 @@
         "operation_digest": "<digest-1>",
         "ledger_namespace": "<namespace>",
         "item_id": "wb_01M06G96000000000000000001",
+        "writer_worktree_id": "<writer-worktree-id>",
         "outcome": {
           "exit": 4,
           "stdout": {
@@ -474,6 +479,7 @@
           "epoch": "1"
         },
         "floor": "<time>",
+        "writer_worktree_id": "<writer-worktree-id>",
         "state": "pending"
       },
       {
@@ -483,6 +489,7 @@
         "operation_digest": "<digest-1>",
         "ledger_namespace": "<namespace>",
         "item_id": "wb_01M06G96000000000000000001",
+        "writer_worktree_id": "<writer-worktree-id>",
         "outcome": {
           "exit": 0,
           "stdout": {
@@ -591,6 +598,7 @@
           "epoch": "1"
         },
         "floor": "<time>",
+        "writer_worktree_id": "<writer-worktree-id>",
         "state": "pending"
       }
     ],

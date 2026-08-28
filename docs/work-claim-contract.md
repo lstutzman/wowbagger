@@ -384,13 +384,25 @@ worktree; it remains `unauthorized-revision` and blocks unrelated mutations.
 This distinguishes a real sibling's uncommitted successor from history the
 current checkout already owns.
 
-**Writer identity.** A legacy mutation records the worktree that authorized it
-in its journal entries as `writer_worktree_id`. The field is optional: an entry
-written before the field existed stays valid and attributes nothing. When the
-journal names the current worktree as the writer of the expected revision and
-no reachable ref carries that revision, no sibling can ever produce it, so the
-finding is `unauthorized-revision` and blocks every mutation instead of
+**Writer identity.** A legacy mutation and a claimed publication record the
+worktree that authorized them in their journal entries as
+`writer_worktree_id`: `legacy-mutation-intent`, `legacy-mutation`,
+`publish-intent`, and `publish-final`. The field is optional on all of them: an
+entry written before the field existed stays valid and attributes nothing. A
+publication resolves its identity once under the claim lock, so its intent and
+its terminal name one writer, and a terminal that recovery reconstructs after a
+lost response carries the identity its intent recorded. When the journal names
+the current worktree as the writer of the expected revision and no reachable
+ref carries that revision, no sibling can ever produce it, so the finding is
+`unauthorized-revision` and blocks every mutation instead of
 `worktree-synchronization-required`, which blocks only its own item.
+
+Recording the field on publication entries is an additive optional journal
+change, so core `contract_version` stays `5` and every public request, success
+envelope, and refusal envelope is unchanged. The item #122 lock-coarsening
+parity golden, `test/publication-parity-baseline.json`, was regenerated to
+record it: that recording is a work-claim contract change, never routine
+fixture maintenance.
 
 **What that identity discloses.** The identity is an opaque random UUID,
 created once per worktree in that worktree's private Git directory. It contains

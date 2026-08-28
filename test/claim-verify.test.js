@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { appendClaimEntry, claimJournalPath } from '../src/claim-journal.js';
+import { appendClaimEntry, claimJournalPath, replayClaimJournal } from '../src/claim-journal.js';
 import { operationDigest, publishClaimed } from '../src/claim-publication.js';
 import { resolveGitCommonDir } from '../src/claim-store.js';
 import { runReferenceVector } from './work-claim-reference.js';
@@ -193,6 +193,21 @@ test('claim-verify recovers a publication whose ledger write committed before re
   const read = capture(['claim', 'verify', '--ledger', fixture.ledger, '--input', readPath, '--json']);
   assert.equal(read.exit, 0, JSON.stringify(read.envelope));
   assert.equal(read.envelope.result.outcome.stdout.state, 'committed');
+
+  // The intent named the writer that authorized the revision. Recovery decides
+  // that publication's outcome on that writer's behalf, so the terminal it
+  // reconstructs attributes the revision to the same worktree rather than
+  // dropping the attribution the interrupted publication already recorded.
+  const writerWorktreeId = (await readFile(
+    path.join(fixture.gitCommonDir, 'wowbagger-worktree-id'), 'utf8',
+  )).trimEnd();
+  const { entries } = await replayClaimJournal(
+    claimJournalPath(fixture.gitCommonDir, fixture.namespace), fixture.namespace,
+  );
+  const intent = entries.find((entry) => entry.type === 'publish-intent');
+  const final = entries.find((entry) => entry.type === 'publish-final');
+  assert.equal(intent.writer_worktree_id, writerWorktreeId);
+  assert.equal(final.writer_worktree_id, writerWorktreeId);
 });
 
 test('publication replay survives an unrelated later Git commit and matches the reference read', async () => {
