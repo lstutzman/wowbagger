@@ -5,7 +5,7 @@ number: 180
 title: "Normalize Windows file-ancestor report path failures to ENOTDIR"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-28
 updated: 2026-08-28
 provenance:
