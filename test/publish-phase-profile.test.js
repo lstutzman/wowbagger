@@ -1,7 +1,10 @@
 // The phase profile of one claimed publication (ledger item #122). A
 // publication runs inside the namespace process lock for its whole length,
 // and the counters below say how many times that lock is taken and how much
-// per-item lock file work happens underneath it.
+// per-item lock file work happens underneath it. The worktree identity lock
+// is a second, differently scoped lock taken once inside it, so it is counted
+// separately: folding it into the namespace count would hide a regression in
+// either one.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -11,7 +14,7 @@ import {
 import { countersSince, phaseCounters } from '../src/instrumentation.js';
 import { inspectItem } from '../src/mutation.js';
 
-test('a claimed publication acquires the namespace process lock exactly once', async () => {
+test('a claimed publication acquires each process lock exactly once', async () => {
   await withProvisionedLedger(3, async (context) => {
     const inspected = await inspectItem(context.ledger, context.id);
     const request = publicationRequest(context, inspected, 'pub_phase_0001', 'Published');
@@ -20,7 +23,9 @@ test('a claimed publication acquires the namespace process lock exactly once', a
     const outcome = await publish(context, request);
 
     assert.equal(outcome.stdout.ok, true, JSON.stringify(outcome.stdout));
-    assert.equal(countersSince(before).namespace_lock_acquisitions, 1);
+    const delta = countersSince(before);
+    assert.equal(delta.namespace_lock_acquisitions, 1);
+    assert.equal(delta.worktree_identity_lock_acquisitions, 1);
   });
 });
 

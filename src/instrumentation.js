@@ -16,6 +16,7 @@ const COUNTER_NAMES = [
   'item_lock_fsyncs',
   'item_lock_releases',
   'namespace_lock_acquisitions',
+  'worktree_identity_lock_acquisitions',
   'head_tree_entries',
   'head_blobs_read',
   'head_bytes_read',

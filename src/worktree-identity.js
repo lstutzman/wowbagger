@@ -129,7 +129,7 @@ export async function ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir }) 
     const written = await readIdentityFile(identityPath);
     if (written === null) throw invalidIdentity('missing-after-write');
     return written;
-  });
+  }, { counter: 'worktree_identity_lock_acquisitions' });
 }
 
 // The verified common directory is the caller's proof of which repository it

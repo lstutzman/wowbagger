@@ -127,7 +127,12 @@ export function namespaceLockHeld(hold, storePath) {
     && hold.storePath === storePath;
 }
 
-export async function withClaimLock(storePath, fn) {
+// `withClaimLock` is the one file-lock primitive; the counter name says which
+// lock a caller is taking, so a profile can hold each one to its own number
+// instead of watching a single total drift.
+export async function withClaimLock(storePath, fn, {
+  counter = 'namespace_lock_acquisitions',
+} = {}) {
   const directory = path.dirname(storePath);
   await mkdir(directory, { recursive: true });
   const lockPath = `${storePath}.lock`;
@@ -143,7 +148,7 @@ export async function withClaimLock(storePath, fn) {
   }
 
   try {
-    await acquireClaimLock(candidatePath, lockPath, recoveryPath);
+    await acquireClaimLock(candidatePath, lockPath, recoveryPath, counter);
     const hold = { [NAMESPACE_LOCK_HOLD]: true, storePath, released: false };
     try {
       return await fn(hold);
@@ -158,7 +163,7 @@ export async function withClaimLock(storePath, fn) {
   }
 }
 
-async function acquireClaimLock(candidatePath, lockPath, recoveryPath) {
+async function acquireClaimLock(candidatePath, lockPath, recoveryPath, counter) {
   for (;;) {
     const recoveryOwner = await readLockOwner(recoveryPath);
     if (recoveryOwner) {
@@ -168,7 +173,7 @@ async function acquireClaimLock(candidatePath, lockPath, recoveryPath) {
     }
     try {
       await link(candidatePath, lockPath);
-      recordCount('namespace_lock_acquisitions');
+      recordCount(counter);
       return;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;
