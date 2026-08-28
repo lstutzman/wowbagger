@@ -9,11 +9,14 @@
 // asks for synchronization and names the owner holding the revision.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+
+import { withClaimLock } from '../src/claim-store.js';
+import { ensureWorktreeIdentity } from '../src/worktree-identity.js';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 
@@ -32,6 +35,7 @@ function git(root, ...argumentsList) {
 }
 
 const NAMESPACE = 'wbns_0123456789abcdef0123456789abcdef';
+const SECOND_NAMESPACE = 'wbns_fedcba9876543210fedcba9876543210';
 
 // A provisioned single-item repository plus a sibling worktree branched from
 // the same commit. The sibling shares the Git common directory, and therefore
@@ -933,5 +937,62 @@ test('a fenced patch creates a private worktree identity outside the working tre
   assert.match(identity, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\n$/);
   assert.equal((await stat(identityPath)).mode & 0o777, 0o600);
   assert.equal(path.dirname(identityPath), gitDir);
+  assert.equal(git(fixture.root, 'status', '--porcelain'), beforeStatus);
+});
+
+// Worktree identity is scoped to the worktree; the namespace write lock is
+// scoped to one ledger namespace. Two namespaces can share one worktree, and
+// therefore one private Git directory, so the namespace lock cannot serialize
+// them against each other. Read and create need their own worktree-keyed
+// exclusion: without it both writers observe no identity, both create one, and
+// the later rename leaves the earlier writer holding an ID the file no longer
+// contains. A writer that loses the race must be refused, not silently handed
+// a stale ID.
+test('two namespaces in one worktree cannot diverge the worktree identity', async () => {
+  const fixture = await twoWorktreeRepository();
+  const secondLedger = path.join(fixture.root, 'ledger-b');
+  await mkdir(path.join(secondLedger, '.wowbagger'), { recursive: true });
+  await writeFile(path.join(secondLedger, '.wowbagger', 'namespace'), `${SECOND_NAMESPACE}\n`);
+  const gitCommonDir = git(fixture.root, 'rev-parse', '--path-format=absolute', '--git-common-dir');
+  const gitDir = git(fixture.root, 'rev-parse', '--absolute-git-dir');
+  const identityPath = path.join(gitDir, 'wowbagger-worktree-id');
+  const beforeStatus = git(fixture.root, 'status', '--porcelain');
+
+  // While one worktree writer holds the identity lock, a writer in the other
+  // namespace cannot create a competing identity. It is refused with the
+  // retryable lock outcome and publishes nothing.
+  await withClaimLock(identityPath, async () => {
+    await assert.rejects(
+      ensureWorktreeIdentity({ ledgerDirectory: secondLedger, gitCommonDir }),
+      (error) => error.code === 'CLAIM_LOCK_HELD',
+    );
+    await assert.rejects(stat(identityPath), (error) => error.code === 'ENOENT');
+  });
+
+  const settled = await Promise.allSettled([
+    ensureWorktreeIdentity({ ledgerDirectory: fixture.ledger, gitCommonDir }),
+    ensureWorktreeIdentity({ ledgerDirectory: secondLedger, gitCommonDir }),
+  ]);
+  const stored = await readFile(identityPath, 'utf8');
+  assert.match(stored, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\n$/);
+  const canonical = stored.slice(0, -1);
+  assert.ok(settled.some((outcome) => outcome.status === 'fulfilled'));
+  for (const outcome of settled) {
+    if (outcome.status === 'fulfilled') assert.equal(outcome.value, canonical);
+    else assert.equal(outcome.reason?.code, 'CLAIM_LOCK_HELD');
+  }
+
+  // Either namespace reuses the published identity rather than rewriting it.
+  assert.equal(
+    await ensureWorktreeIdentity({ ledgerDirectory: fixture.ledger, gitCommonDir }),
+    canonical,
+  );
+  assert.equal(await readFile(identityPath, 'utf8'), stored);
+  assert.equal((await stat(identityPath)).mode & 0o777, 0o600);
+
+  const debris = (await readdir(gitDir)).filter(
+    (entry) => entry.includes('wowbagger-worktree-id') && entry !== 'wowbagger-worktree-id',
+  );
+  assert.deepEqual(debris, []);
   assert.equal(git(fixture.root, 'status', '--porcelain'), beforeStatus);
 });
