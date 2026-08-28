@@ -170,14 +170,30 @@ Never open the final identity file with truncate semantics.
 
 Before trusting a current UUID, enumerate live registered worktrees through `git worktree list --porcelain -z`. Resolve each live worktree's private Git directory through Git and read any identity file present. If two live worktrees in the same Git common directory carry one UUID, reconciliation fails before it classifies or publishes an item.
 
-The observable behavior reuses existing failure surfaces:
+The outer error code and existing `reason` stay compatible. Every duplicate refusal also adds this diagnostic inside `error.details`:
 
-- `claim-verify` exits `6` in the `work-claim` domain with `state: "unchanged"`, `error.code: "claim-store-unavailable"`, and `error.details.reason: "claim-store-unreadable"`;
-- an ordinary claim-protected mutation exits `6` in its existing domain with `state: "unchanged"`, `error.code: "claim-store-unavailable"`, and `error.details.reason: "claim-store-unreadable"`;
-- auto-commit refuses with exit `4`, `error.code: "auto-commit-preflight-failed"`, `error.details.reason: "claim-state-unreconciled"`, `claim_verify_code: "claim-store-unavailable"`, `claim_verify_reason: "claim-store-unreadable"`, and `retryable: false`;
-- `publish-claimed` and `claim-adopt` map the identity failure to their existing claim-store-unavailable form instead of reporting an unknown mutation outcome.
+```json
+{
+  "identity_diagnostic": {
+    "code": "duplicate-worktree-identity",
+    "worktree_id": "00000000-0000-4000-8000-000000000000",
+    "live_worktree_count": 2
+  }
+}
+```
 
-No item, journal, reconciliation log, identity file, Git index, or commit changes after duplicate detection. Claim reads and lease decisions that do not reconcile item bytes continue to use their existing claim-store rules. Do not add a new public error code or reason in this change.
+The UUID is random and opaque. The diagnostic exposes no worktree path, branch, hostname, or username. `live_worktree_count` is the number of live registered worktrees carrying that UUID and is at least `2`.
+
+Observable failure surfaces:
+
+- `claim-verify` exits `6` in the `work-claim` domain with `state: "unchanged"`, `error.code: "claim-store-unavailable"`, `error.details.reason: "claim-store-unreadable"`, and `error.details.identity_diagnostic`;
+- an ordinary claim-protected mutation exits `6` in its existing domain with `state: "unchanged"`, `error.code: "claim-store-unavailable"`, `error.details.reason: "claim-store-unreadable"`, and `error.details.identity_diagnostic`;
+- auto-commit refuses with exit `4`, `error.code: "auto-commit-preflight-failed"`, `error.details.reason: "claim-state-unreconciled"`, `claim_verify_code: "claim-store-unavailable"`, `claim_verify_reason: "claim-store-unreadable"`, `identity_diagnostic`, and `retryable: false`;
+- `publish-claimed` and `claim-adopt` return their existing exit `6`, unchanged-state, claim-store-unavailable form with `reason: "claim-store-unreadable"` and `identity_diagnostic`, instead of reporting an unknown mutation outcome.
+
+No item, journal, reconciliation log, identity file, Git index, or commit changes after duplicate detection. Claim reads and lease decisions that do not reconcile item bytes continue to use their existing claim-store rules.
+
+This is an additive diagnostic, not a new envelope or reason. `claim-store-unavailable.details` already permits additional diagnostic members, and clients that only read the outer code and reason remain compatible. Core `contract_version` stays `5`.
 
 A copied independent clone may carry the same UUID, but clones do not share a Git common directory or journal, so the identity cannot collide within the coordination domain.
 
@@ -202,7 +218,7 @@ Core `contract_version` remains `5`.
 
 Reasons:
 
-- Public requests, success envelopes, refusal envelopes, error codes, reason values, and fields remain unchanged.
+- Public requests, success envelopes, outer refusal envelopes, error codes, and reason values remain unchanged. Duplicate-identity refusals add only `identity_diagnostic` inside an error-details object that already permits additional diagnostic members.
 - `writer_worktree_id` is optional internal journal evidence.
 - The alpha.12 journal validator accepts extra members and ignores fields it does not understand.
 - The new reader accepts entries without the field and preserves alpha.12's ambiguous unreachable-writer behavior.
@@ -212,7 +228,7 @@ Published-binary compatibility was executed before implementation. The globally 
 
 Before implementation changes journal parsing, add the same case as a permanent characterization test and run it while the implementation still matches alpha.12. After implementation, keep it green. Add a new-reader test showing a missing field produces `expectedWriter: 'unknown'` and row 6c behavior.
 
-A contract-version bump becomes necessary only if implementation needs a new public member, error code, reason value, or incompatible journal requirement. Stop and ask Lee before making such a change.
+A contract-version bump becomes necessary only if implementation changes an outer public member, error code, reason value, required response field, or journal requirement incompatibly. The additive duplicate `identity_diagnostic` does not bump the version. Stop and ask Lee before any broader public change.
 
 ## Public-envelope rendering
 
@@ -223,7 +239,7 @@ A contract-version bump becomes necessary only if implementation needs a new pub
 - unavailable synchronization: `owner_unavailable: true` and reachable-history or unreachable-writer remediation.
 - `unauthorized-revision`: destructive restore and non-destructive adoption remedies.
 
-No worktree UUID appears in a finding. No public member is added or removed.
+No worktree UUID appears in a reconciliation finding. Only a duplicate-identity refusal exposes the conflicting random UUID inside the explicit `identity_diagnostic`; it exposes no path, ref, machine, or user information.
 
 ## Compatibility and failure behavior
 
@@ -231,7 +247,7 @@ No worktree UUID appears in a finding. No public member is added or removed.
 - New reader plus alpha.12 journal: treats writer identity as unknown.
 - Missing identity file: creates one only under the claim lock before a new journal write.
 - Malformed identity file: every item-reconciling write and `claim-verify` refuses through the existing claim-store-unreadable surface; the file is never replaced silently.
-- Duplicate live identity: every item-reconciling write and `claim-verify` refuses before mutation through the concrete envelopes defined above.
+- Duplicate live identity: every item-reconciling write and `claim-verify` refuses before mutation through the concrete envelopes and explicit `identity_diagnostic` defined above.
 - Git worktree enumeration failure: ownership evidence is unavailable; safety does not downgrade.
 - Identity write outcome unknown: re-read the final path before deciding; never generate and append a second UUID blindly.
 
@@ -287,4 +303,4 @@ No release is authorized by item #178 itself. When this work ships, release note
 - old journals remain compatible and safely ambiguous;
 - current-versus-sibling unreachable successors are distinguished for new evidence;
 - tags and remote refs no longer masquerade as active sibling owners;
-- public envelope shapes and core contract version remain unchanged.
+- outer envelope shapes and core contract version remain unchanged, while duplicate-identity errors gain an honest nested diagnostic.

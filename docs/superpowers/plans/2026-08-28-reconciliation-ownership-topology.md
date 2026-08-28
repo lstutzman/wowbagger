@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- Keep core `contract_version: 5`; stop and ask Lee before adding or changing any public field, code, reason, or incompatible journal requirement.
-- Public requests and envelope shapes remain unchanged.
+- Keep core `contract_version: 5`; the approved additive `identity_diagnostic` is the only new public detail. Stop and ask Lee before changing any outer field, code, reason, required member, or journal requirement incompatibly.
+- Public requests, outer envelope shapes, codes, and reasons remain unchanged.
 - `writer_worktree_id` is optional journal evidence; alpha.12 readers ignore it, and new readers treat absence as unknown.
 - Worktree IDs are random UUID v4 values; never derive them from path, branch, host, or user.
 - Store `wowbagger-worktree-id` inside the current worktree's private Git directory with mode `0600`.
@@ -305,19 +305,26 @@ git commit -m "Distinguish unreachable worktree writers"
 - Modify: `test/cross-worktree-coordination.test.js`
 
 **Interfaces:**
-- `assertUniqueWorktreeIdentity` enumerates live registered worktrees and throws `CLAIM_WORKTREE_IDENTITY_INVALID` on duplicates.
-- Public callers reuse claim-store-unreadable envelopes exactly as the spec states.
+- `assertUniqueWorktreeIdentity` enumerates live registered worktrees and throws `CLAIM_WORKTREE_IDENTITY_INVALID` on duplicates, carrying `identityDiagnostic: { code: 'duplicate-worktree-identity', worktree_id, live_worktree_count }`.
+- Public callers keep existing outer codes and reasons while copying that value to `error.details.identity_diagnostic`.
 
 - [ ] **Step 1: Write duplicate UUID RED through `claim-verify` and patch**
 
 Create two registered worktrees, write the same canonical UUID to both private Git directories, and run public commands. Assert:
 
 ```js
+const identityDiagnostic = {
+  code: 'duplicate-worktree-identity',
+  worktree_id: duplicateId,
+  live_worktree_count: 2,
+};
 assert.equal(verified.exit, 6);
 assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
 assert.equal(verified.envelope.error.details.reason, 'claim-store-unreadable');
+assert.deepEqual(verified.envelope.error.details.identity_diagnostic, identityDiagnostic);
 assert.equal(blocked.exit, 6);
 assert.equal(blocked.envelope.state, 'unchanged');
+assert.deepEqual(blocked.envelope.error.details.identity_diagnostic, identityDiagnostic);
 ```
 
 Also snapshot item bytes, journal bytes, reconciliation log, `HEAD`, and index before the commands; assert every snapshot remains identical.
@@ -332,20 +339,25 @@ Parse `git worktree list --porcelain -z` into records with path, `HEAD`, branch,
 
 - [ ] **Step 4: Map identity failure to existing public envelopes**
 
-Ensure `verifyClaimJournal`, legacy mutation fence, `publish-claimed`, and `claim-adopt` map `CLAIM_WORKTREE_IDENTITY_INVALID` to `claim-store-unavailable` / `claim-store-unreadable`, `state: 'unchanged'`, exit `6`. Auto-commit must expose:
+Ensure `verifyClaimJournal`, legacy mutation fence, `publish-claimed`, and `claim-adopt` map `CLAIM_WORKTREE_IDENTITY_INVALID` to `claim-store-unavailable` / `claim-store-unreadable`, `state: 'unchanged'`, exit `6`, and preserve `identity_diagnostic`. Auto-commit must expose:
 
 ```js
 {
   reason: 'claim-state-unreconciled',
   claim_verify_code: 'claim-store-unavailable',
   claim_verify_reason: 'claim-store-unreadable',
+  identity_diagnostic: {
+    code: 'duplicate-worktree-identity',
+    worktree_id: duplicateId,
+    live_worktree_count: 2,
+  },
   retryable: false,
 }
 ```
 
 - [ ] **Step 5: Run GREEN across every public failure surface**
 
-Require duplicate `claim-verify` and ordinary mutation tests to pass. Require auto-commit to refuse at exit `4` with `auto-commit-preflight-failed` and the exact nested claim verification fields above. Add focused public tests proving `publish-claimed` and `claim-adopt` exit `6`, return their existing `claim-store-unavailable` / `claim-store-unreadable` form with unchanged state, and leave journal, item bytes, identity files, index, and `HEAD` unchanged.
+Require duplicate `claim-verify` and ordinary mutation tests to pass with exact `identity_diagnostic` values. Require auto-commit to refuse at exit `4` with `auto-commit-preflight-failed` and the exact nested claim verification fields above. Add focused public tests proving `publish-claimed` and `claim-adopt` exit `6`, return their existing `claim-store-unavailable` / `claim-store-unreadable` form plus the same diagnostic with unchanged state, and leave journal, item bytes, identity files, index, and `HEAD` unchanged.
 
 - [ ] **Step 6: Write removal/recreation RED**
 
