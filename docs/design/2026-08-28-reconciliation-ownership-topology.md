@@ -238,7 +238,7 @@ Reasons:
 - The new reader accepts entries without the field and preserves alpha.12's ambiguous unreachable-writer behavior.
 - Tags and remote refs stop being mislabeled as active worktree owners, but the public finding still uses the existing synchronization reason and `owner_unavailable: true` shape.
 
-Published-binary compatibility was executed before implementation. The globally installed registry binary reported `0.1.0-alpha.12`. In a temporary provisioned Git ledger, a valid `legacy-mutation-intent` and matching `legacy-mutation` were appended with an extra random `writer_worktree_id` while preserving the journal hash chain. Running the published alpha.12 `claim-verify` against that journal exited `0`, returned `ok: true`, reported `findings: []`, and validated the ledger. This is execution evidence, not parser inspection.
+Published-binary compatibility was executed before implementation. The globally installed registry binary reported the alpha.12 distribution version. In a temporary provisioned Git ledger, a valid `legacy-mutation-intent` and matching `legacy-mutation` were appended with an extra random `writer_worktree_id` while preserving the journal hash chain. Running the published alpha.12 `claim-verify` against that journal exited `0`, returned `ok: true`, reported `findings: []`, and validated the ledger. This is execution evidence, not parser inspection.
 
 Before implementation changes journal parsing, add the same case as a permanent characterization test and run it while the implementation still matches alpha.12. After implementation, keep it green. Add a new-reader test showing a missing field produces `expectedWriter: 'unknown'` and row 6c behavior.
 
