@@ -286,6 +286,8 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.expected_revision === 'string'
       && typeof entry.candidate_revision === 'string'
       && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
+      && (!Object.hasOwn(entry, 'writer_worktree_id')
+        || typeof entry.writer_worktree_id === 'string')
       && typeof entry.observed_at === 'string';
   }
   if (entry.type === 'legacy-mutation') {
@@ -296,6 +298,8 @@ function validJournalEntry(entry, namespace) {
       && ['patch-v1', 'transition-v1'].includes(entry.command)
       && typeof entry.committed_revision === 'string'
       && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
+      && (!Object.hasOwn(entry, 'writer_worktree_id')
+        || typeof entry.writer_worktree_id === 'string')
       && typeof entry.observed_at === 'string';
   }
   if (entry.type === 'legacy-mutation-abort') {

@@ -19,6 +19,7 @@ import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { findRevisionOwner, readGitHeadLedger, readGitTreeFile } from './git-reconciliation.js';
 import { publishClaimedCandidate, revisionFor } from './mutation.js';
 import { validateLedger } from './validate.js';
+import { readWorktreeIdentity } from './worktree-identity.js';
 
 const ITEM_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
@@ -350,6 +351,10 @@ export async function reconcileClaimJournal({
   namespace,
   replayed,
   physicalNow,
+  // The worktree this invocation speaks for, when it has established an
+  // identity. A caller that cannot name itself passes null, and every
+  // recorded writer then reads as unknown.
+  currentWorktreeId = null,
   targetItemId = null,
   writeLogOnUnsafe = true,
   writeLogWhenEmpty = true,
@@ -407,6 +412,12 @@ export async function reconcileClaimJournal({
         command: intent.command,
         committed_revision: actualRevision,
         ...(intent.item_path ? { item_path: intent.item_path } : {}),
+        // The writer that authorized the attempt owns the revision this
+        // resolution ratifies, so its identity travels with the terminal
+        // entry. Absent on alpha.12 intents, which stay valid without it.
+        ...(intent.writer_worktree_id
+          ? { writer_worktree_id: intent.writer_worktree_id }
+          : {}),
         observed_at: observedAt,
       }));
     } else if (actualRevision === intent.expected_revision) {
@@ -608,6 +619,13 @@ export async function reconcileClaimJournal({
       });
       continue;
     }
+    // Who the journal says wrote the authorized revision, judged against who
+    // is asking. An entry from before writer identity existed, or a caller
+    // that cannot name itself, leaves the writer unknown.
+    const recordedWriter = latestAuthorized.writer_worktree_id ?? null;
+    const expectedWriter = recordedWriter === null || currentWorktreeId === null
+      ? 'unknown'
+      : recordedWriter === currentWorktreeId ? 'current' : 'other';
     const diagnosis = await reconciliationDiagnosis({
       ledgerDirectory,
       actualRevision,
@@ -615,6 +633,7 @@ export async function reconcileClaimJournal({
       expectedPath,
       expectedRevision,
       headRevision,
+      expectedWriter,
       workingTreeChanged,
     });
     findings.push({
@@ -770,6 +789,7 @@ async function reconciliationDiagnosis({
   expectedPath,
   expectedRevision,
   headRevision,
+  expectedWriter,
   workingTreeChanged,
 }) {
   const pathLabel = expectedPath ?? 'the item path';
@@ -833,7 +853,12 @@ async function reconciliationDiagnosis({
         remediation: `WAIT for owner ${expectedOwner.owner_ref} to publish ${expectedOwner.owner_commit}, then synchronize this worktree and run claim-verify.`,
       };
     }
-    if (expectedOwner.owner_current_ref !== true) {
+    // Advice to wait for an owning worktree needs an owner that could still
+    // appear. When the journal names this worktree as the writer of the
+    // expected revision and no ref carries it, the successor exists nowhere
+    // but in the journal: there is nothing to synchronize from, and the local
+    // bytes are simply unauthorized.
+    if (expectedWriter !== 'current' && expectedOwner.owner_current_ref !== true) {
       return {
         reason: 'worktree-synchronization-required',
         ...(expectedPath ? { expected_path: expectedPath } : {}),
@@ -919,6 +944,10 @@ export async function verifyClaimJournal({
         namespace,
         replayed: await replayClaimJournal(journalPath, namespace),
         physicalNow: new Date().toISOString(),
+        // Verification writes no item byte and creates no identity: it reports
+        // on the worktree it runs in, and an unidentified worktree simply
+        // cannot recognize itself in a recorded writer.
+        currentWorktreeId: await readWorktreeIdentity({ ledgerDirectory, gitCommonDir }),
         targetItemId,
         writeLogWhenEmpty,
         writeLogOnUnsafe,

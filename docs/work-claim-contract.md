@@ -384,6 +384,23 @@ worktree; it remains `unauthorized-revision` and blocks unrelated mutations.
 This distinguishes a real sibling's uncommitted successor from history the
 current checkout already owns.
 
+**Writer identity.** A legacy mutation records the worktree that authorized it
+in its journal entries as `writer_worktree_id`. The field is optional: an entry
+written before the field existed stays valid and attributes nothing. When the
+journal names the current worktree as the writer of the expected revision and
+no reachable ref carries that revision, no sibling can ever produce it, so the
+finding is `unauthorized-revision` and blocks every mutation instead of
+`worktree-synchronization-required`, which blocks only its own item.
+
+**What that identity discloses.** The identity is an opaque random UUID,
+created once per worktree in that worktree's private Git directory. It contains
+no path, branch, ref, hostname, user, or machine data. Journal entries are
+projected into the tracked reconciliation log, so the identity persists in
+committed Git history: any reader of that history can correlate every entry
+written from one worktree, and an identity stays in that history indefinitely
+after the worktree it named is removed. It never becomes a claim owner, and no
+protocol decision reads it other than the writer comparison above.
+
 ### 3.2 Recovering from a foreign-writer block
 
 1. Stop writing the affected item in the blocked worktree. Unrelated item

@@ -41,13 +41,14 @@ export async function withLegacyMutationFence(
       // The writer's own identity must exist before anything it does can be
       // attributed, so it is established under the same lock that serializes
       // the journal, ahead of reconciliation and of any intent append.
-      await ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir });
+      const currentWorktreeId = await ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir });
       const replayed = await replayClaimJournal(journalPath, namespace);
       const reconciled = await reconcileClaimJournal({
         ledgerDirectory,
         gitCommonDir,
         namespace,
         replayed,
+        currentWorktreeId,
         physicalNow: new Date().toISOString(),
         targetItemId: itemId,
         writeLogOnUnsafe: false,
@@ -81,6 +82,7 @@ export async function withLegacyMutationFence(
           expected_revision: expectedRevision,
           candidate_revision: candidateRevision,
           item_path: itemPath,
+          writer_worktree_id: currentWorktreeId,
           observed_at: observedAt,
         };
         const terminalEntry = {
@@ -91,6 +93,7 @@ export async function withLegacyMutationFence(
           command,
           committed_revision: candidateRevision,
           item_path: itemPath,
+          writer_worktree_id: currentWorktreeId,
           observed_at: observedAt,
         };
         const abortEntry = {
@@ -153,6 +156,7 @@ export async function withLegacyMutationFence(
             committed_revision: committedRevision,
             observed_at: observedAt,
             item_path: intent.item_path,
+            writer_worktree_id: currentWorktreeId,
           }));
         } catch {
           return claimStoreUnavailable(responseCommand, 'legacy-mutation-record-failed', {

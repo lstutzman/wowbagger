@@ -118,6 +118,18 @@ async function writeItem(root, ledger, label, id) {
   return transitioned.envelope.result.item.revision;
 }
 
+// Every byte a refusal must leave alone: the ledger files an operator reads,
+// including the derived reconciliation log, and the Git status of the
+// working tree holding them.
+async function ledgerSnapshot(root, ledger) {
+  const files = [];
+  for (const name of (await readdir(ledger, { recursive: true })).sort()) {
+    const file = path.join(ledger, name);
+    if ((await stat(file)).isFile()) files.push([name, await readFile(file, 'utf8')]);
+  }
+  return { files, status: git(root, 'status', '--porcelain') };
+}
+
 test('a visible sibling worktree write does not block create elsewhere', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
@@ -637,6 +649,116 @@ test('an uncommitted in-protocol sibling revision does not block an unrelated pa
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'worktree-synchronization-required');
   assert.equal(finding.owner_unavailable, true);
+});
+
+// The mirror of the vector above: this worktree wrote the successor itself and
+// never committed it, so no sibling holds the expected revision and no
+// synchronization can produce it. Restoring the predecessor is therefore an
+// unauthorized local edit, and it blocks every mutation, not just its own item.
+test('an unreachable own successor restored to its predecessor blocks unrelated work', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-unreachable-own-successor.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'restore', '--source=HEAD', '--', 'ledger/item.md');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'unauthorized-revision');
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelatedRequest = await patchRequest(
+    fixture.root,
+    'patch-past-unreachable-own-successor.json',
+    secondId,
+    second.envelope.result.item.revision,
+  );
+  const before = await ledgerSnapshot(fixture.root, fixture.ledger);
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger, '--input', unrelatedRequest, '--json',
+  );
+  assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
+  assert.deepEqual(await ledgerSnapshot(fixture.root, fixture.ledger), before);
+});
+
+// The same state written by an alpha.12 worktree, which recorded no writer.
+// An entry that names nobody attributes nothing, so the diagnosis falls back
+// to the ownership evidence Git can produce and the advisory scoping that
+// evidence earns: the finding stays advisory and an unrelated item proceeds.
+test('a legacy successor without a recorded writer keeps advisory synchronization', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-legacy-successor.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'restore', '--source=HEAD', '--', 'ledger/item.md');
+
+  // Age the journal back to alpha.12 by removing every writer identity it
+  // recorded. Every remaining entry must still replay.
+  const journalPath = path.join(
+    git(fixture.root, 'rev-parse', '--absolute-git-dir'),
+    'wowbagger', NAMESPACE, 'journal.ndjson',
+  );
+  const aged = (await readFile(journalPath, 'utf8')).trimEnd().split('\n')
+    .map((line) => {
+      const { writer_worktree_id: writer, ...entry } = JSON.parse(line);
+      return JSON.stringify(entry);
+    });
+  await writeFile(journalPath, `${aged.join('\n')}\n`);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_unavailable, true);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-legacy-successor.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
 });
 
 test('an authorized predecessor at HEAD does not block the next mutation', async () => {
