@@ -151,6 +151,43 @@ test('claim journal replay retains a later durable clock floor', async () => {
   assert.equal(replayed.state.clock_floor, '2030-01-11T10:00:00.000Z');
 });
 
+test('alpha12 journal entries ignore an optional future writer worktree id', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-future-field-'));
+  const journalPath = claimJournalPath(root, NS);
+  const writerWorktreeId = '06d0814b-4e22-4e67-9edd-2915f0d38f29';
+
+  const attemptId = 'alpha12_future_writer_0001';
+  const revision = `sha256:${'a'.repeat(64)}`;
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: attemptId,
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    command: 'patch-v1',
+    expected_revision: revision,
+    candidate_revision: revision,
+    item_path: 'item.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+    writer_worktree_id: writerWorktreeId,
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation',
+    attempt_id: attemptId,
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    command: 'patch-v1',
+    committed_revision: revision,
+    item_path: 'item.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+    writer_worktree_id: writerWorktreeId,
+  });
+
+  const replayed = await replayClaimJournal(journalPath, NS);
+  assert.equal(replayed.entries.length, 2);
+  assert.equal(replayed.entries[0].writer_worktree_id, writerWorktreeId);
+  assert.equal(replayed.entries[1].writer_worktree_id, writerWorktreeId);
+});
+
 test('claim journal rejects entry 65537 without truncating history', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-limit-'));
   const journalPath = claimJournalPath(root, NS);
