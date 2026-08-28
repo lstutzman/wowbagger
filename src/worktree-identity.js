@@ -3,7 +3,7 @@ import { open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { withClaimLock } from './claim-store.js';
-import { resolvePrivateGitDir } from './git-worktrees.js';
+import { listWorktrees, resolvePrivateGitDir } from './git-worktrees.js';
 
 const IDENTITY_FILE = 'wowbagger-worktree-id';
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -17,6 +17,71 @@ function invalidIdentity(reason) {
 
 export async function readWorktreeIdentity({ ledgerDirectory, gitCommonDir }) {
   return readIdentityFile(await resolveIdentityPath(ledgerDirectory, gitCommonDir));
+}
+
+// Two live worktrees answering to one UUID make every writer attribution in
+// the shared journal ambiguous, and an ambiguous writer is exactly what
+// reconciliation reasons from. The caller runs this before it classifies or
+// publishes anything, so an ambiguous domain refuses rather than guesses.
+//
+// Nothing here creates an identity file: a worktree that has never written one
+// stays anonymous and holds no UUID to collide with.
+export async function assertUniqueWorktreeIdentity({ ledgerDirectory }) {
+  const identities = await enumerateWorktreeIdentities(ledgerDirectory);
+  const holders = new Map();
+  for (const identity of identities) {
+    if (identity !== null) holders.set(identity, (holders.get(identity) ?? 0) + 1);
+  }
+  // Sorted so a domain holding more than one collision always names the same
+  // one, and the diagnostic an operator reads twice does not move.
+  const duplicate = [...holders]
+    .filter(([, count]) => count > 1)
+    .sort(([left], [right]) => (left < right ? -1 : 1))
+    .at(0);
+  if (!duplicate) return;
+  const error = invalidIdentity('duplicate-worktree-identity');
+  error.identityDiagnostic = {
+    code: 'duplicate-worktree-identity',
+    worktree_id: duplicate[0],
+    live_worktree_count: duplicate[1],
+  };
+  throw error;
+}
+
+// One entry per live registered worktree: its recorded UUID, or null when it
+// has never written one.
+//
+// Evidence gathering fails closed, because a roster this function could not
+// finish reading is not a roster without duplicates. An enumeration that never
+// ran, a private Git directory that will not resolve, a path that vanished
+// between the listing and the read, and identity bytes that are present but
+// malformed all leave the roster incomplete, so all of them refuse the caller
+// rather than shrink the evidence. Silently dropping any of them could hide
+// the very duplicate this check exists to find.
+//
+// Only what Git itself has already disowned is excluded: a record Git marks
+// prunable, and a bare repository, which has no checkout to hold an identity.
+async function enumerateWorktreeIdentities(ledgerDirectory) {
+  try {
+    const roster = await listWorktrees(ledgerDirectory);
+    return await Promise.all(roster
+      .filter((worktree) => !(worktree.bare || worktree.prunable))
+      .map(async (worktree) => readIdentityFile(path.join(
+        await resolvePrivateGitDir(worktree.path), IDENTITY_FILE,
+      ))));
+  } catch {
+    const error = invalidIdentity('worktree-enumeration-failed');
+    // The roster is unknown, so the diagnostic names no UUID and no count.
+    error.identityDiagnostic = { code: 'worktree-enumeration-failed' };
+    throw error;
+  }
+}
+
+// A duplicate refusal keeps its caller's existing outer code and reason, and
+// adds only this diagnostic to the details a client already tolerates extra
+// members in.
+export function identityDiagnosticDetails(error) {
+  return error?.identityDiagnostic ? { identity_diagnostic: error.identityDiagnostic } : {};
 }
 
 // The identity file is created once and never rewritten: a worktree that

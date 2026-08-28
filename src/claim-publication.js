@@ -19,7 +19,11 @@ import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { findRevisionOwner, readGitHeadLedger, readGitTreeFile } from './git-reconciliation.js';
 import { publishClaimedCandidate, revisionFor } from './mutation.js';
 import { validateLedger } from './validate.js';
-import { readWorktreeIdentity } from './worktree-identity.js';
+import {
+  assertUniqueWorktreeIdentity,
+  identityDiagnosticDetails,
+  readWorktreeIdentity,
+} from './worktree-identity.js';
 
 const ITEM_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
@@ -180,6 +184,10 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
       // file, so the first of them is the snapshot the rest share. The read
       // under lock, which the mutation engine still performs on its own, is
       // what makes the revision compare-and-swap meaningful.
+      //
+      // A claimed publication authorizes an item revision, so an ambiguous
+      // domain is refused before reconciliation classifies one.
+      await assertUniqueWorktreeIdentity({ ledgerDirectory });
       let reconciled;
       try {
         reconciled = await reconcileClaimJournal({
@@ -271,6 +279,15 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
     if (error?.code === 'CLAIM_LOCK_HELD') {
       return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
         reason: 'claim-store-locked',
+      }, 6);
+    }
+    // An identity the coordination domain cannot resolve is a store this
+    // command could not read, not a mutation whose outcome is unknown: it
+    // refused before it appended an intent or touched an item byte.
+    if (error?.code === 'CLAIM_WORKTREE_IDENTITY_INVALID') {
+      return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
+        reason: 'claim-store-unreadable',
+        ...identityDiagnosticDetails(error),
       }, 6);
     }
     return publicationUnknown(request);
@@ -938,16 +955,22 @@ export async function verifyClaimJournal({
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
     return await withClaimLock(storePath, async () => {
+      // Verification writes no item byte and creates no identity: it reports on
+      // the worktree it runs in, and an unidentified worktree simply cannot
+      // recognize itself in a recorded writer. Its own file is judged first, so
+      // bytes this worktree owns keep reporting as its own invalid identity
+      // rather than as an unreadable roster.
+      const currentWorktreeId = await readWorktreeIdentity({ ledgerDirectory, gitCommonDir });
+      // Verification reasons from recorded writers, so it refuses an ambiguous
+      // domain before it classifies anything, exactly as a mutation does.
+      await assertUniqueWorktreeIdentity({ ledgerDirectory });
       const reconciled = await reconcileClaimJournal({
         ledgerDirectory,
         gitCommonDir,
         namespace,
         replayed: await replayClaimJournal(journalPath, namespace),
         physicalNow: new Date().toISOString(),
-        // Verification writes no item byte and creates no identity: it reports
-        // on the worktree it runs in, and an unidentified worktree simply
-        // cannot recognize itself in a recorded writer.
-        currentWorktreeId: await readWorktreeIdentity({ ledgerDirectory, gitCommonDir }),
+        currentWorktreeId,
         targetItemId,
         writeLogWhenEmpty,
         writeLogOnUnsafe,
@@ -986,6 +1009,7 @@ export async function verifyClaimJournal({
             reason: error?.code === 'CLAIM_LOCK_HELD'
               ? 'claim-store-locked'
               : 'claim-store-unreadable',
+            ...identityDiagnosticDetails(error),
           },
         },
       },
@@ -1005,6 +1029,9 @@ export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespa
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
     return await withClaimLock(storePath, async () => {
+      // Adoption re-baselines an authorized revision, so it too refuses an
+      // ambiguous domain before reconciliation classifies one.
+      await assertUniqueWorktreeIdentity({ ledgerDirectory });
       const reconciled = await reconcileClaimJournal({
         ledgerDirectory,
         gitCommonDir,
@@ -1079,6 +1106,7 @@ export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespa
             reason: error?.code === 'CLAIM_LOCK_HELD'
               ? 'claim-store-locked'
               : 'claim-store-unreadable',
+            ...identityDiagnosticDetails(error),
           },
         },
       },

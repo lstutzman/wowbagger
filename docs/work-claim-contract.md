@@ -401,6 +401,28 @@ written from one worktree, and an identity stays in that history indefinitely
 after the worktree it named is removed. It never becomes a claim owner, and no
 protocol decision reads it other than the writer comparison above.
 
+**Ambiguous identity.** A UUID names one worktree. Before it reasons from a
+recorded writer, the coordinator enumerates the worktrees Git currently reports
+live and reads the identity each one already holds; it creates none. Two live
+worktrees answering to one UUID, or a roster the coordinator could not finish
+reading, refuses `claim-verify`, every claim-protected mutation,
+`publish-claimed`, and `claim-adopt` before anything is classified or written.
+The refusal keeps the existing exit `6`, `claim-store-unavailable`,
+`claim-store-unreadable`, `state: "unchanged"` form and adds one
+`error.details.identity_diagnostic`: `code: "duplicate-worktree-identity"` with
+`worktree_id` and `live_worktree_count`, or `code:
+"worktree-enumeration-failed"` with no further member. Auto-commit surfaces the
+same diagnostic inside its `auto-commit-preflight-failed` details with
+`retryable: false`. Nothing else about the envelope changes, and core
+`contract_version` stays `5`.
+
+Detection covers only what Git reports live. A worktree Git marks prunable —
+including one whose path is temporarily unavailable or unmounted — is excluded,
+so a duplicate identity held there is not detected until Git sees that worktree
+live again. Removing a worktree removes the private Git directory that held its
+identity, and nothing restores it: a worktree recreated at the same path earns
+a new UUID, and the removed UUID stays in journal history attributing nothing.
+
 ### 3.2 Recovering from a foreign-writer block
 
 1. Stop writing the affected item in the blocked worktree. Unrelated item

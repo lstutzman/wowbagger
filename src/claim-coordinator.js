@@ -14,7 +14,11 @@ import { readBack } from './claim-operations.js';
 import { reconcileClaimJournal } from './claim-publication.js';
 import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './claim-store.js';
 import { readNamespace } from './namespace.js';
-import { ensureWorktreeIdentity } from './worktree-identity.js';
+import {
+  assertUniqueWorktreeIdentity,
+  ensureWorktreeIdentity,
+  identityDiagnosticDetails,
+} from './worktree-identity.js';
 
 export async function withLegacyMutationFence(
   ledgerDirectory,
@@ -40,8 +44,13 @@ export async function withLegacyMutationFence(
     return await withClaimLock(storePath, async () => {
       // The writer's own identity must exist before anything it does can be
       // attributed, so it is established under the same lock that serializes
-      // the journal, ahead of reconciliation and of any intent append.
+      // the journal, ahead of reconciliation and of any intent append. Its own
+      // file is judged first, so bytes this worktree owns keep reporting as its
+      // own invalid identity rather than as an unreadable roster.
       const currentWorktreeId = await ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir });
+      // Then the domain: a UUID two live worktrees answer to attributes
+      // nothing, so nothing may be written from it.
+      await assertUniqueWorktreeIdentity({ ledgerDirectory });
       const replayed = await replayClaimJournal(journalPath, namespace);
       const reconciled = await reconcileClaimJournal({
         ledgerDirectory,
@@ -201,7 +210,7 @@ export async function withLegacyMutationFence(
   } catch (error) {
     return claimStoreUnavailable(responseCommand, error?.code === 'CLAIM_LOCK_HELD'
       ? 'claim-store-locked'
-      : 'claim-store-unreadable', {}, intent ? 'unknown' : 'unchanged');
+      : 'claim-store-unreadable', identityDiagnosticDetails(error), intent ? 'unknown' : 'unchanged');
   }
 }
 

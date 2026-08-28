@@ -410,6 +410,12 @@ function claimVerificationFailureDetails(verified) {
   return {
     ...(error?.code ? { claim_verify_code: error.code } : {}),
     ...(error?.details?.reason ? { claim_verify_reason: error.details.reason } : {}),
+    // Why the claim store could not be read travels with the refusal: an
+    // operator told only that a store is unreadable cannot find the two
+    // worktrees answering to one identity.
+    ...(error?.details?.identity_diagnostic
+      ? { identity_diagnostic: error.details.identity_diagnostic }
+      : {}),
     ...(findings ? { findings } : {}),
   };
 }

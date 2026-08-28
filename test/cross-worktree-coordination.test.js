@@ -9,6 +9,7 @@
 // asks for synchronization and names the owner holding the revision.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -1286,4 +1287,539 @@ test('two namespaces in one worktree cannot diverge the worktree identity', asyn
   );
   assert.deepEqual(debris, []);
   assert.equal(git(fixture.root, 'status', '--porcelain'), beforeStatus);
+});
+
+// The private Git directory of one worktree, whose bytes belong to that
+// worktree alone.
+function identityPathOf(root) {
+  return path.join(git(root, 'rev-parse', '--absolute-git-dir'), 'wowbagger-worktree-id');
+}
+
+// A file that a refusal must not create, read as its absence rather than as an
+// error, so "never written" and "written and unchanged" are both provable.
+async function readIfPresent(file) {
+  try {
+    return await readFile(file, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+// Everything a refusal on ambiguous identity must leave exactly as it found
+// it: the item bytes an operator reads, the durable journal, the derived
+// reconciliation log, every worktree identity file, and the commit and index
+// of the worktree running the command.
+async function identitySnapshot(root, ledger, roots) {
+  const journalPath = path.join(
+    git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'),
+    'wowbagger', NAMESPACE, 'journal.ndjson',
+  );
+  const identities = [];
+  for (const at of roots) identities.push(await readIfPresent(identityPathOf(at)));
+  return {
+    head: git(root, 'rev-parse', 'HEAD'),
+    identities,
+    index: git(root, 'ls-files', '-s'),
+    item: await readFile(path.join(ledger, 'item.md'), 'utf8'),
+    journal: await readIfPresent(journalPath),
+    log: await readIfPresent(path.join(ledger, '.wowbagger', `reconcile-${NAMESPACE}.md`)),
+    status: git(root, 'status', '--porcelain'),
+  };
+}
+
+// A UUID names one worktree. Two live worktrees answering to one UUID make
+// every writer attribution in the shared journal ambiguous, so nothing may be
+// classified or published from that evidence: both the report and the mutation
+// refuse before touching a byte, and both name the collision explicitly.
+test('two live worktrees sharing one identity refuse verification and mutation', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+
+  // One completed fenced mutation first, so the journal, the reconciliation
+  // log, and an identity file all exist to be left alone.
+  const seeded = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const seedPatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-before-duplicate.json',
+      seedId,
+      seeded.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(seedPatch.exit, 0, JSON.stringify(seedPatch.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Record the first mutation');
+
+  const duplicateId = '00000000-0000-4000-8000-000000000000';
+  const roots = [fixture.root, fixture.siblingRoot];
+  for (const at of roots) {
+    await writeFile(identityPathOf(at), `${duplicateId}\n`, { mode: 0o600 });
+  }
+  const identityDiagnostic = {
+    code: 'duplicate-worktree-identity',
+    worktree_id: duplicateId,
+    live_worktree_count: 2,
+  };
+  // The request file is untracked working-tree noise the refusal is not
+  // responsible for, so it exists before the snapshot is taken.
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json',
+  );
+  const blockedRequest = await patchRequest(
+    fixture.root,
+    'patch-duplicate-identity.json',
+    seedId,
+    inspected.envelope.result.item.revision,
+  );
+  const before = await identitySnapshot(fixture.root, fixture.ledger, roots);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  const blocked = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', blockedRequest,
+    '--json',
+  );
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.state, 'unchanged');
+  assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(verified.envelope.error.details.reason, 'claim-store-unreadable');
+  assert.deepEqual(verified.envelope.error.details.identity_diagnostic, identityDiagnostic);
+
+  assert.equal(blocked.exit, 6, JSON.stringify(blocked.envelope));
+  assert.equal(blocked.envelope.state, 'unchanged');
+  assert.equal(blocked.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(blocked.envelope.error.details.reason, 'claim-store-unreadable');
+  assert.deepEqual(blocked.envelope.error.details.identity_diagnostic, identityDiagnostic);
+
+  assert.deepEqual(await identitySnapshot(fixture.root, fixture.ledger, roots), before);
+});
+
+// Two live worktrees, one canonical UUID, and both identity files already
+// written: the collision the whole roster check exists to catch.
+async function duplicateIdentityFixture() {
+  const fixture = await twoWorktreeRepository();
+  const duplicateId = '00000000-0000-4000-8000-000000000000';
+  const roots = [fixture.root, fixture.siblingRoot];
+  for (const at of roots) {
+    await writeFile(identityPathOf(at), `${duplicateId}\n`, { mode: 0o600 });
+  }
+  return { ...fixture, duplicateId, roots };
+}
+
+// Auto-commit gates on claim verification, so the collision reaches it as a
+// preflight refusal. The nested claim-verification fields are the whole
+// diagnosis an operator gets, so they must carry the collision itself and must
+// not invite a retry: no wait clears two worktrees answering to one UUID.
+test('auto-commit refuses in preflight when two live worktrees share one identity', async () => {
+  const fixture = await duplicateIdentityFixture();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const request = await patchRequest(
+    fixture.root,
+    'patch-duplicate-auto-commit.json',
+    seedId,
+    inspected.envelope.result.item.revision,
+  );
+  const head = git(fixture.root, 'rev-parse', 'HEAD');
+
+  const blocked = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', request,
+    '--json',
+    '--auto-commit',
+  );
+
+  assert.equal(blocked.exit, 4, JSON.stringify(blocked.envelope));
+  assert.equal(blocked.envelope.state, 'unchanged');
+  assert.equal(blocked.envelope.error.code, 'auto-commit-preflight-failed');
+  assert.deepEqual(blocked.envelope.error.details, {
+    reason: 'claim-state-unreconciled',
+    claim_verify_code: 'claim-store-unavailable',
+    claim_verify_reason: 'claim-store-unreadable',
+    identity_diagnostic: {
+      code: 'duplicate-worktree-identity',
+      worktree_id: fixture.duplicateId,
+      live_worktree_count: 2,
+    },
+    retryable: false,
+  });
+  assert.equal(git(fixture.root, 'rev-parse', 'HEAD'), head);
+  for (const at of fixture.roots) {
+    assert.equal(await readFile(identityPathOf(at), 'utf8'), `${fixture.duplicateId}\n`);
+  }
+});
+
+// A claimed publication is a mutation, so an ambiguous domain must refuse it
+// on the claim-store surface rather than report a mutation whose outcome
+// nobody can name. An operator who reads `unknown` starts recovering a write
+// that never happened.
+test('publish-claimed refuses when two live worktrees share one identity', async () => {
+  const fixture = await duplicateIdentityFixture();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const itemPath = path.join(fixture.ledger, 'item.md');
+  const before = await readFile(itemPath);
+  const candidate = Buffer.from(
+    before.toString('utf8').replace('title: "Seed"', 'title: "Published"'), 'utf8',
+  );
+
+  const acquirePath = path.join(fixture.root, 'acquire-duplicate.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const requestPath = path.join(fixture.root, 'publish-duplicate.json');
+  await writeFile(requestPath, JSON.stringify({
+    operation_id: 'pub_agent-a_0001',
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    expected_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+    candidate_source_base64: candidate.toString('base64'),
+    candidate_sha256: `sha256:${createHash('sha256').update(candidate).digest('hex')}`,
+    claim_fence: {
+      ledger_namespace: NAMESPACE,
+      item_id: seedId,
+      owner_id: 'agent-a',
+      epoch: acquired.envelope.result.claim.epoch,
+    },
+  }));
+  const snapshot = await identitySnapshot(fixture.root, fixture.ledger, fixture.roots);
+
+  const published = run(
+    fixture.root, 'publish-claimed', '--ledger', fixture.ledger,
+    '--input', requestPath, '--json',
+  );
+
+  assert.equal(published.exit, 6, JSON.stringify(published.envelope));
+  assert.equal(published.envelope.state, 'unchanged');
+  assert.equal(published.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(published.envelope.error.details, {
+    reason: 'claim-store-unreadable',
+    identity_diagnostic: {
+      code: 'duplicate-worktree-identity',
+      worktree_id: fixture.duplicateId,
+      live_worktree_count: 2,
+    },
+  });
+  assert.deepEqual(await readFile(itemPath), before);
+  assert.deepEqual(
+    await identitySnapshot(fixture.root, fixture.ledger, fixture.roots),
+    snapshot,
+  );
+});
+
+// Adoption re-baselines an authorized revision, so it reasons from the same
+// ambiguous writer evidence and refuses on the same surface. It refuses before
+// it judges the request against state: an ambiguous domain cannot rule on what
+// is legitimate.
+test('claim-adopt refuses when two live worktrees share one identity', async () => {
+  const fixture = await duplicateIdentityFixture();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const before = await readFile(path.join(fixture.ledger, 'item.md'));
+
+  const requestPath = path.join(fixture.root, 'adopt-duplicate.json');
+  await writeFile(requestPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    from_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+    to_revision: `sha256:${'a'.repeat(64)}`,
+    adopted_by: 'operator-lee',
+  }));
+  const snapshot = await identitySnapshot(fixture.root, fixture.ledger, fixture.roots);
+
+  const adopted = run(
+    fixture.root, 'claim-adopt', '--ledger', fixture.ledger,
+    '--input', requestPath, '--json',
+  );
+
+  assert.equal(adopted.exit, 6, JSON.stringify(adopted.envelope));
+  assert.equal(adopted.envelope.state, 'unchanged');
+  assert.equal(adopted.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(adopted.envelope.error.details, {
+    reason: 'claim-store-unreadable',
+    identity_diagnostic: {
+      code: 'duplicate-worktree-identity',
+      worktree_id: fixture.duplicateId,
+      live_worktree_count: 2,
+    },
+  });
+  assert.deepEqual(
+    await identitySnapshot(fixture.root, fixture.ledger, fixture.roots),
+    snapshot,
+  );
+});
+
+// A roster the coordinator could not finish reading is not a roster without
+// duplicates. Git still reports this sibling as a live worktree, so it is
+// ownership evidence that must be gathered; its private Git directory no
+// longer resolves, so it cannot be. Shrinking the evidence to what happened to
+// read would hide exactly the collision the roster exists to find, so every
+// surface refuses instead, and says the roster is what failed.
+async function unreadableRosterFixture() {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const seeded = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const seedPatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-before-unreadable-roster.json',
+      seedId,
+      seeded.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(seedPatch.exit, 0, JSON.stringify(seedPatch.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Record the first mutation');
+
+  // Git keeps listing the sibling as live: its administrative gitdir file is
+  // intact, so nothing marks it prunable. Only the worktree's own `.git` link
+  // is unusable, which is precisely a live record that will not resolve.
+  await writeFile(path.join(fixture.siblingRoot, '.git'), 'not a gitfile\n');
+  const listed = git(fixture.root, 'worktree', 'list', '--porcelain');
+  assert.ok(listed.includes(fixture.siblingRoot), listed);
+  assert.ok(!listed.includes('prunable'), listed);
+  return { ...fixture, roots: [fixture.root], seedId };
+}
+
+test('an unreadable worktree roster refuses verification, mutation, and auto-commit', async () => {
+  const fixture = await unreadableRosterFixture();
+  const identityDiagnostic = { code: 'worktree-enumeration-failed' };
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', fixture.seedId, '--json',
+  );
+  const request = await patchRequest(
+    fixture.root,
+    'patch-unreadable-roster.json',
+    fixture.seedId,
+    inspected.envelope.result.item.revision,
+  );
+  const before = await identitySnapshot(fixture.root, fixture.ledger, fixture.roots);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  const blocked = run(
+    fixture.root, 'patch', '--ledger', fixture.ledger, '--input', request, '--json',
+  );
+  const autoCommitted = run(
+    fixture.root, 'patch', '--ledger', fixture.ledger, '--input', request, '--json',
+    '--auto-commit',
+  );
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.state, 'unchanged');
+  assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(verified.envelope.error.details, {
+    reason: 'claim-store-unreadable',
+    identity_diagnostic: identityDiagnostic,
+  });
+
+  assert.equal(blocked.exit, 6, JSON.stringify(blocked.envelope));
+  assert.equal(blocked.envelope.state, 'unchanged');
+  assert.equal(blocked.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(blocked.envelope.error.details, {
+    reason: 'claim-store-unreadable',
+    identity_diagnostic: identityDiagnostic,
+  });
+
+  assert.equal(autoCommitted.exit, 4, JSON.stringify(autoCommitted.envelope));
+  assert.equal(autoCommitted.envelope.state, 'unchanged');
+  assert.equal(autoCommitted.envelope.error.code, 'auto-commit-preflight-failed');
+  assert.deepEqual(autoCommitted.envelope.error.details, {
+    reason: 'claim-state-unreconciled',
+    claim_verify_code: 'claim-store-unavailable',
+    claim_verify_reason: 'claim-store-unreadable',
+    identity_diagnostic: identityDiagnostic,
+    retryable: false,
+  });
+
+  assert.deepEqual(
+    await identitySnapshot(fixture.root, fixture.ledger, fixture.roots),
+    before,
+  );
+});
+
+test('an unreadable worktree roster refuses publish-claimed and claim-adopt', async () => {
+  const fixture = await unreadableRosterFixture();
+  const identityDiagnostic = { code: 'worktree-enumeration-failed' };
+  const itemPath = path.join(fixture.ledger, 'item.md');
+  const before = await readFile(itemPath);
+  const candidate = Buffer.from(
+    before.toString('utf8').replace('title: "Sibling edit"', 'title: "Published"'), 'utf8',
+  );
+  assert.notDeepEqual(candidate, before);
+
+  const acquirePath = path.join(fixture.root, 'acquire-unreadable-roster.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.seedId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const publishPath = path.join(fixture.root, 'publish-unreadable-roster.json');
+  await writeFile(publishPath, JSON.stringify({
+    operation_id: 'pub_agent-a_0001',
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.seedId,
+    expected_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+    candidate_source_base64: candidate.toString('base64'),
+    candidate_sha256: `sha256:${createHash('sha256').update(candidate).digest('hex')}`,
+    claim_fence: {
+      ledger_namespace: NAMESPACE,
+      item_id: fixture.seedId,
+      owner_id: 'agent-a',
+      epoch: acquired.envelope.result.claim.epoch,
+    },
+  }));
+  const adoptPath = path.join(fixture.root, 'adopt-unreadable-roster.json');
+  await writeFile(adoptPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.seedId,
+    from_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+    to_revision: `sha256:${'a'.repeat(64)}`,
+    adopted_by: 'operator-lee',
+  }));
+  const snapshot = await identitySnapshot(fixture.root, fixture.ledger, fixture.roots);
+
+  const published = run(
+    fixture.root, 'publish-claimed', '--ledger', fixture.ledger,
+    '--input', publishPath, '--json',
+  );
+  const adopted = run(
+    fixture.root, 'claim-adopt', '--ledger', fixture.ledger,
+    '--input', adoptPath, '--json',
+  );
+
+  assert.equal(published.exit, 6, JSON.stringify(published.envelope));
+  assert.equal(published.envelope.state, 'unchanged');
+  assert.equal(published.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(published.envelope.error.details, {
+    reason: 'claim-store-unreadable',
+    identity_diagnostic: identityDiagnostic,
+  });
+
+  assert.equal(adopted.exit, 6, JSON.stringify(adopted.envelope));
+  assert.equal(adopted.envelope.state, 'unchanged');
+  assert.equal(adopted.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(adopted.envelope.error.details, {
+    reason: 'claim-store-unreadable',
+    identity_diagnostic: identityDiagnostic,
+  });
+
+  assert.deepEqual(await readFile(itemPath), before);
+  assert.deepEqual(
+    await identitySnapshot(fixture.root, fixture.ledger, fixture.roots),
+    snapshot,
+  );
+});
+
+// Removing a worktree removes the private Git directory that held its
+// identity, and nothing copies or restores it. A worktree recreated at the
+// same path is a different worktree, so it must earn a fresh UUID: if it
+// inherited the removed one, the journal entry the departed worktree wrote
+// would read as this worktree's own work, and the advice would flip from "wait
+// for the owner" to "your local bytes are unauthorized, discard them".
+test('a recreated worktree earns a new identity instead of inheriting the removed one', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const siblingPatch = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-before-recreation.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(siblingPatch.exit, 0, JSON.stringify(siblingPatch.envelope));
+  const writer = await worktreeIdentity(fixture.siblingRoot);
+  assert.equal((await latestAuthorization(fixture.root, seedId)).entry.writer_worktree_id, writer);
+
+  git(fixture.root, 'worktree', 'remove', '--force', fixture.siblingRoot);
+  git(fixture.root, 'worktree', 'add', '-q', fixture.siblingRoot, 'sibling');
+  await assert.rejects(
+    stat(identityPathOf(fixture.siblingRoot)),
+    (error) => error.code === 'ENOENT',
+  );
+
+  // The recreated worktree cannot name itself yet, so the writer the journal
+  // still records normalizes to unknown. The finding stays the advisory
+  // synchronization one, never the destructive unauthorized-revision.
+  const verified = run(
+    fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json',
+  );
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required', JSON.stringify(finding));
+  assert.equal(finding.owner_unavailable, true, JSON.stringify(finding));
+
+  // The first fenced mutation in the recreated worktree earns a fresh UUID,
+  // and the journal keeps naming the removed one for the entry it authorized.
+  const second = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', secondId, '--json',
+  );
+  const unrelated = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-after-recreation.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+  const recreated = await worktreeIdentity(fixture.siblingRoot);
+  assert.notEqual(recreated, writer);
+  assert.equal((await latestAuthorization(fixture.root, seedId)).entry.writer_worktree_id, writer);
+
+  // What the fresh UUID buys, demonstrated rather than asserted in the
+  // abstract: hand the recreated worktree the removed UUID and the same
+  // journal, the same refs, and the same bytes stop advising a wait and start
+  // advising the operator to discard work. That flip is the aliasing this test
+  // exists to prevent, so the identity above is load-bearing, not decorative.
+  await writeFile(identityPathOf(fixture.siblingRoot), `${writer}\n`, { mode: 0o600 });
+  const aliased = run(
+    fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json',
+  );
+  assert.equal(aliased.exit, 6, JSON.stringify(aliased.envelope));
+  assert.equal(
+    aliased.envelope.result.findings.find((entry) => entry.item_id === seedId).reason,
+    'unauthorized-revision',
+  );
 });
