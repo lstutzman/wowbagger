@@ -130,6 +130,55 @@ async function ledgerSnapshot(root, ledger) {
   return { files, status: git(root, 'status', '--porcelain') };
 }
 
+// The latest journal entry that authorizes an item revision, read from the
+// shared claim journal in the Git common directory.
+async function latestAuthorization(root, itemId) {
+  const file = path.join(
+    git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'),
+    'wowbagger', NAMESPACE, 'journal.ndjson',
+  );
+  const lines = (await readFile(file, 'utf8')).trimEnd().split('\n');
+  const index = lines.findLastIndex((line) => {
+    const entry = JSON.parse(line);
+    return entry.type === 'legacy-mutation' && entry.item_id === itemId;
+  });
+  assert.notEqual(index, -1);
+  return { entry: JSON.parse(lines[index]), file, index, lines };
+}
+
+// The identity of one worktree, as that worktree's own private Git directory
+// records it.
+async function worktreeIdentity(root) {
+  const identityPath = path.join(
+    git(root, 'rev-parse', '--absolute-git-dir'), 'wowbagger-worktree-id',
+  );
+  return (await readFile(identityPath, 'utf8')).trimEnd();
+}
+
+// Age one authorization back to alpha.12: the latest entry that authorizes the
+// item loses its writer identity and nothing else. Every other line stays byte
+// for byte, the aged line keeps every other field it carried, including the
+// committed revision hash the classifier compares against, and the returned ID
+// is the one the journal used to name.
+async function stripLatestWriterIdentity(root, itemId) {
+  const { entry, file, index, lines } = await latestAuthorization(root, itemId);
+  const { writer_worktree_id: writer, ...aged } = entry;
+  assert.equal(typeof writer, 'string');
+  await writeFile(file, `${lines.with(index, JSON.stringify(aged)).join('\n')}\n`);
+
+  const after = (await readFile(file, 'utf8')).trimEnd().split('\n');
+  assert.deepEqual(
+    after.filter((_, at) => at !== index),
+    lines.filter((_, at) => at !== index),
+  );
+  assert.deepEqual(
+    Object.keys(JSON.parse(after[index])),
+    Object.keys(entry).filter((key) => key !== 'writer_worktree_id'),
+  );
+  assert.equal(JSON.parse(after[index]).committed_revision, entry.committed_revision);
+  return writer;
+}
+
 test('a visible sibling worktree write does not block create elsewhere', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
@@ -753,6 +802,126 @@ test('a legacy successor without a recorded writer keeps advisory synchronizatio
     '--input', await patchRequest(
       fixture.root,
       'patch-past-legacy-successor.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+});
+
+// Row 6b: the writer is a real sibling worktree, and the journal names it. The
+// observer earned its own identity first, with a mutation it committed, so the
+// comparison is between two live worktrees rather than between a worktree and
+// nobody. The successor is reachable from no ref yet, but the sibling holding
+// it can still commit, so the advice stays "wait for the owner" and the finding
+// stays scoped to its own item.
+test('an unreachable named sibling successor keeps advisory synchronization', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const siblingPatch = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-named-sibling-successor.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(siblingPatch.exit, 0, JSON.stringify(siblingPatch.envelope));
+
+  // Both worktrees answer to an identity, the two differ, and the journal
+  // names the writer's. The observer still holds the predecessor in its
+  // working tree and at HEAD; it never touched the item.
+  const observer = await worktreeIdentity(fixture.root);
+  const writer = await worktreeIdentity(fixture.siblingRoot);
+  assert.notEqual(observer, writer);
+  assert.equal((await latestAuthorization(fixture.root, seedId)).entry.writer_worktree_id, writer);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_unavailable, true);
+  assert.match(finding.remediation, /not yet reachable/);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-named-sibling.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+});
+
+// Row 6c: the same unreachable topology, written by a worktree from before the
+// journal recorded writers. Only the writer identity leaves the authorizing
+// entry, so the evidence Git can produce is unchanged and only the attribution
+// is gone. An entry that names nobody must not be read as naming the reader:
+// without that fallback every journal written before alpha.13 would turn a
+// waiting worktree into a globally blocked one.
+test('an unreachable successor from a pre-identity writer keeps advisory synchronization', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const siblingPatch = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-pre-identity-successor.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(siblingPatch.exit, 0, JSON.stringify(siblingPatch.envelope));
+
+  // The topology was row 6b until this line: the identity the journal loses is
+  // the sibling's, and the observer keeps its own.
+  const stripped = await stripLatestWriterIdentity(fixture.root, seedId);
+  assert.equal(stripped, await worktreeIdentity(fixture.siblingRoot));
+  assert.notEqual(stripped, await worktreeIdentity(fixture.root));
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_unavailable, true);
+  assert.match(finding.remediation, /not yet reachable/);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-pre-identity-successor.json',
       secondId,
       second.envelope.result.item.revision,
     ),
