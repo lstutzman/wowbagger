@@ -385,6 +385,8 @@ function reportPhaseCounters(samples, baseline, publication) {
     + ` (fsyncs ${counted('transitionCounters', 'item_lock_fsyncs')})`);
   console.log(`namespace locks per mutation: create ${counted('createCounters', 'namespace_lock_acquisitions')}`
     + `  transition ${counted('transitionCounters', 'namespace_lock_acquisitions')}`);
+  console.log(`worktree identity locks per mutation: create ${counted('createCounters', 'worktree_identity_lock_acquisitions')}`
+    + `  transition ${counted('transitionCounters', 'worktree_identity_lock_acquisitions')}`);
   console.log(`HEAD reads per mutation: tree entries ${counted('transitionCounters', 'head_tree_entries')}`
     + `  blobs ${counted('transitionCounters', 'head_blobs_read')}`
     + `  bytes ${counted('transitionCounters', 'head_bytes_read')}`);
