@@ -2,6 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { listWorktrees } from './git-worktrees.js';
 import { recordCount, timePhase } from './instrumentation.js';
 import { revisionFor } from './mutation.js';
 
@@ -63,48 +64,84 @@ export async function readGitTreeFile(ledgerDirectory, treeish, relativePath) {
   return gitBuffer(root, ['show', `${treeish}:${gitPath}`]);
 }
 
-// Which local ref carries the revision the journal expects. A finding may name
-// only ownership it can prove from reachable history, so a revision no ref
-// contains stays unattributed rather than guessed from the item path.
+// Which active worktree carries the revision the journal expects. Reachability
+// alone proves nothing about ownership: a tag, a remote-tracking ref, or a
+// branch nobody has checked out names no worktree that could publish anything.
+// So the evidence is the worktree roster, this worktree first, and a revision
+// reachable only outside it stays unowned rather than attributed to a ref.
+//
+// Returns `{ kind, ref?, commit? }`, where `kind` is one of:
+//   `current`           this worktree's own history reaches the revision;
+//   `named-sibling`     a live sibling worktree on a branch reaches it;
+//   `reachable-unowned` Git reaches it, but no live named worktree does;
+//   `unreachable`       no reachable commit carries the expected bytes.
 export async function findRevisionOwner(ledgerDirectory, itemPath, expectedRevision) {
   const { root, relativeLedger } = await resolveWorktreeLedger(ledgerDirectory);
   const gitPath = toGitPath(path.join(relativeLedger, itemPath));
-  let currentRef = null;
+  const carrierIn = revisionCarrier(root, gitPath, expectedRevision);
+  const current = await carrierIn(await pathHistory(root, 'HEAD', gitPath));
+  if (current) return { kind: 'current', commit: current };
+  const live = (await listWorktrees(root)).filter((record) => (
+    !record.bare && !record.prunable && record.head !== null
+  ));
+  // One expected revision can sit in several live worktrees at once. Branch ref
+  // then path is the only ordering both stable across runs and independent of
+  // the order Git happened to register the worktrees in.
+  for (const record of live.filter((entry) => entry.branch !== null).sort(byBranchThenPath)) {
+    const commit = await carrierIn(await pathHistory(root, record.head, gitPath));
+    if (commit) return { kind: 'named-sibling', ref: record.branch, commit };
+  }
+  // A detached worktree is a real writer with no ref to wait on, so it proves
+  // reachability and nothing else. So does any remaining ref: a tag, a
+  // remote-tracking ref, or a branch no worktree has checked out.
+  for (const record of live.filter((entry) => entry.branch === null)) {
+    const commit = await carrierIn(await pathHistory(root, record.head, gitPath));
+    if (commit) return { kind: 'reachable-unowned', commit };
+  }
+  const reachable = await carrierIn(await pathHistory(root, '--all', gitPath));
+  return reachable ? { kind: 'reachable-unowned', commit: reachable } : { kind: 'unreachable' };
+}
+
+// The first commit of a history whose item bytes are the expected revision, or
+// null. Sibling histories overlap almost entirely and every answer costs a
+// `git show`, so one commit is read at most once per lookup.
+function revisionCarrier(root, gitPath, expectedRevision) {
+  const answered = new Map();
+  return async (commits) => {
+    for (const commit of commits) {
+      if (!answered.has(commit)) {
+        answered.set(commit, await carriesRevision(root, commit, gitPath, expectedRevision));
+      }
+      if (answered.get(commit)) return commit;
+    }
+    return null;
+  };
+}
+
+async function carriesRevision(root, commit, gitPath, expectedRevision) {
   try {
-    currentRef = (await gitText(root, ['symbolic-ref', '-q', 'HEAD'])).trim() || null;
+    const bytes = await gitBuffer(root, ['show', `${commit}:${gitPath}`]);
+    return revisionFor(bytes) === expectedRevision;
   } catch {
-    // A detached HEAD has no current branch; its commit history is checked below.
+    // The path does not exist in this commit, so it cannot carry the revision.
+    return false;
   }
-  const detachedHeadCommits = new Set(currentRef === null
-    ? gitLines(await gitText(root, ['rev-list', 'HEAD', '--', gitPath]))
-    : []);
-  const allRefCommits = gitLines(await gitText(root, ['rev-list', '--all', '--', gitPath]));
-  const commits = [...new Set([...detachedHeadCommits, ...allRefCommits])];
-  for (const commit of commits) {
-    let bytes;
-    try {
-      bytes = await gitBuffer(root, ['show', `${commit}:${gitPath}`]);
-    } catch {
-      // The path does not exist in this commit, so it cannot carry the revision.
-      continue;
-    }
-    if (revisionFor(bytes) !== expectedRevision) continue;
-    if (detachedHeadCommits.has(commit)) {
-      return { owner_unavailable: true, owner_current_ref: true, owner_commit: commit };
-    }
-    const refs = gitLines(await gitText(root, [
-      'for-each-ref',
-      '--contains',
-      commit,
-      '--format=%(refname)',
-    ])).sort();
-    if (currentRef !== null && refs.includes(currentRef)) {
-      return { owner_unavailable: true, owner_current_ref: true, owner_commit: commit };
-    }
-    const [ownerRef] = refs;
-    return ownerRef ? { owner_ref: ownerRef, owner_commit: commit } : { owner_unavailable: true };
+}
+
+// The commits one revision range reaches that touch the item path, newest
+// first. An unborn `HEAD` names no commit, so a worktree Git cannot resolve
+// reaches nothing.
+async function pathHistory(root, revisionRange, gitPath) {
+  try {
+    return gitLines(await gitText(root, ['rev-list', revisionRange, '--', gitPath]));
+  } catch {
+    return [];
   }
-  return { owner_unavailable: true };
+}
+
+function byBranchThenPath(a, b) {
+  if (a.branch !== b.branch) return a.branch < b.branch ? -1 : 1;
+  return a.path < b.path ? -1 : 1;
 }
 
 async function gitText(cwd, argumentsList) {

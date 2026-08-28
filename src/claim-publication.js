@@ -804,12 +804,24 @@ function blocksTarget(finding, targetItemId) {
 // Ownership is evidence, never a guess: an unreadable history or a missing
 // expected path leaves the revision unattributed instead of naming a ref.
 async function revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision) {
-  if (!expectedPath) return { owner_unavailable: true };
+  if (!expectedPath) return { kind: 'unreachable' };
   try {
     return await findRevisionOwner(ledgerDirectory, expectedPath, expectedRevision);
   } catch {
-    return { owner_unavailable: true };
+    return { kind: 'unreachable' };
   }
+}
+
+// One owner, one shape: only an active named worktree reaches this finding, and
+// the remediation names the same ref and commit the finding does.
+function namedOwnerFinding(owner, expectedPath) {
+  return {
+    reason: 'worktree-synchronization-required',
+    ...(expectedPath ? { expected_path: expectedPath } : {}),
+    owner_ref: owner.ref,
+    owner_commit: owner.commit,
+    remediation: `WAIT for owner ${owner.ref} to publish ${owner.commit}, then synchronize this worktree and run claim-verify.`,
+  };
 }
 
 async function reconciliationDiagnosis({
@@ -841,15 +853,7 @@ async function reconciliationDiagnosis({
   if (headRevision !== null && actualRevision === headRevision
     && headRevision !== expectedRevision) {
     expectedOwner = await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
-    if (expectedOwner.owner_ref) {
-      return {
-        reason: 'worktree-synchronization-required',
-        ...(expectedPath ? { expected_path: expectedPath } : {}),
-        owner_ref: expectedOwner.owner_ref,
-        owner_commit: expectedOwner.owner_commit,
-        remediation: `WAIT for owner ${expectedOwner.owner_ref} to publish ${expectedOwner.owner_commit}, then synchronize this worktree and run claim-verify.`,
-      };
-    }
+    if (expectedOwner.kind === 'named-sibling') return namedOwnerFinding(expectedOwner, expectedPath);
   }
   if (!workingTreeChanged && headRevision !== expectedRevision) {
     return {
@@ -860,35 +864,23 @@ async function reconciliationDiagnosis({
   }
   if (actualRevision === null && headRevision !== expectedRevision) {
     const owner = await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
-    const publicOwner = owner.owner_ref
-      ? { owner_ref: owner.owner_ref, owner_commit: owner.owner_commit }
-      : { owner_unavailable: true };
+    if (owner.kind === 'named-sibling') return namedOwnerFinding(owner, expectedPath);
     return {
       reason: 'worktree-synchronization-required',
       ...(expectedPath ? { expected_path: expectedPath } : {}),
-      ...publicOwner,
-      remediation: owner.owner_ref
-        ? `WAIT for owner ${owner.owner_ref} to publish ${owner.owner_commit}, then synchronize this worktree and run claim-verify.`
-        : `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
+      owner_unavailable: true,
+      remediation: `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
     };
   }
   if (authorizedRevisions.has(actualRevision)) {
     expectedOwner ??= await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
-    if (expectedOwner.owner_ref) {
-      return {
-        reason: 'worktree-synchronization-required',
-        ...(expectedPath ? { expected_path: expectedPath } : {}),
-        owner_ref: expectedOwner.owner_ref,
-        owner_commit: expectedOwner.owner_commit,
-        remediation: `WAIT for owner ${expectedOwner.owner_ref} to publish ${expectedOwner.owner_commit}, then synchronize this worktree and run claim-verify.`,
-      };
-    }
+    if (expectedOwner.kind === 'named-sibling') return namedOwnerFinding(expectedOwner, expectedPath);
     // Advice to wait for an owning worktree needs an owner that could still
     // appear. When the journal names this worktree as the writer of the
-    // expected revision and no ref carries it, the successor exists nowhere
-    // but in the journal: there is nothing to synchronize from, and the local
-    // bytes are simply unauthorized.
-    if (expectedWriter !== 'current' && expectedOwner.owner_current_ref !== true) {
+    // expected revision and no active worktree carries it, the successor exists
+    // nowhere but in the journal: there is nothing to synchronize from, and the
+    // local bytes are simply unauthorized.
+    if (expectedWriter !== 'current' && expectedOwner.kind !== 'current') {
       return {
         reason: 'worktree-synchronization-required',
         ...(expectedPath ? { expected_path: expectedPath } : {}),

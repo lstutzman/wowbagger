@@ -937,6 +937,242 @@ test('an unreachable successor from a pre-identity writer keeps advisory synchro
   assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
 });
 
+// Row 13: Git reaches the expected revision, but only through a tag. A tag is
+// not a worktree; nobody is going to publish anything on its behalf, so it must
+// never be named as an owner to wait for. The finding stays advisory for the
+// item it names and reports the owner as unavailable.
+test('a revision reachable only by a tag reports unavailable ownership', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const successor = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-tag-only-successor.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(successor.exit, 0, JSON.stringify(successor.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+  git(fixture.siblingRoot, 'tag', 'tag-only-owner');
+  git(fixture.siblingRoot, 'reset', '-q', '--hard', 'HEAD^');
+
+  // The topology this row exists for: one tag reaches the expected revision and
+  // no branch does.
+  assert.deepEqual(
+    git(fixture.root, 'for-each-ref', '--contains', 'tag-only-owner', '--format=%(refname)')
+      .split('\n'),
+    ['refs/tags/tag-only-owner'],
+  );
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required', JSON.stringify(finding));
+  assert.equal(Object.hasOwn(finding, 'owner_ref'), false, JSON.stringify(finding));
+  assert.equal(finding.owner_unavailable, true, JSON.stringify(finding));
+
+  const target = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-tag-only-target.json',
+      seedId,
+      finding.actual_revision,
+    ),
+    '--json',
+  );
+  assert.equal(target.exit, 6, JSON.stringify(target.envelope));
+  assert.equal(target.envelope.error.details.findings[0].item_id, seedId);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-tag-only-owner.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+});
+
+// Row 13 through the other ref namespace a reader might trust: a
+// remote-tracking ref records what some other repository published. Nothing in
+// this repository will move it, so it is no more an owner than a tag is.
+test('a revision reachable only by a remote-tracking ref reports unavailable ownership', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const successor = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-remote-only-successor.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(successor.exit, 0, JSON.stringify(successor.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+  git(fixture.siblingRoot, 'update-ref', 'refs/remotes/origin/sibling', 'HEAD');
+  git(fixture.siblingRoot, 'reset', '-q', '--hard', 'HEAD^');
+
+  // The topology this row exists for: one remote-tracking ref reaches the
+  // expected revision and no branch does.
+  assert.deepEqual(
+    git(
+      fixture.root,
+      'for-each-ref', '--contains', 'refs/remotes/origin/sibling', '--format=%(refname)',
+    ).split('\n'),
+    ['refs/remotes/origin/sibling'],
+  );
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required', JSON.stringify(finding));
+  assert.equal(Object.hasOwn(finding, 'owner_ref'), false, JSON.stringify(finding));
+  assert.equal(finding.owner_unavailable, true, JSON.stringify(finding));
+
+  const target = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-remote-only-target.json',
+      seedId,
+      finding.actual_revision,
+    ),
+    '--json',
+  );
+  assert.equal(target.exit, 6, JSON.stringify(target.envelope));
+  assert.equal(target.envelope.error.details.findings[0].item_id, seedId);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-remote-only-owner.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+});
+
+// Row 14: the live sibling worktree holding the expected revision is detached,
+// so the revision is reachable and there is still no branch to wait on. The
+// worktree is real, so an owner may yet appear; the finding stays advisory and
+// names nothing, rather than inventing a ref out of a detached HEAD.
+test('a live detached sibling worktree is reachable but never a named owner', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const successor = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      'patch-detached-sibling-successor.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(successor.exit, 0, JSON.stringify(successor.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+  const siblingCommit = git(fixture.siblingRoot, 'rev-parse', 'HEAD');
+  git(fixture.siblingRoot, 'switch', '--detach', '-q');
+  git(fixture.siblingRoot, 'branch', '-D', 'sibling');
+
+  // The topology this row exists for: a live worktree reaches the expected
+  // revision from a detached HEAD, and no ref reaches it at all.
+  const siblingRecord = (await listWorktrees(fixture.root))
+    .find((record) => record.head === siblingCommit);
+  assert.equal(siblingRecord.detached, true);
+  assert.equal(siblingRecord.branch, null);
+  assert.equal(
+    git(fixture.root, 'for-each-ref', '--contains', siblingCommit, '--format=%(refname)'),
+    '',
+  );
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'worktree-synchronization-required', JSON.stringify(finding));
+  assert.equal(Object.hasOwn(finding, 'owner_ref'), false, JSON.stringify(finding));
+  assert.equal(finding.owner_unavailable, true, JSON.stringify(finding));
+
+  const target = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-detached-sibling-target.json',
+      seedId,
+      finding.actual_revision,
+    ),
+    '--json',
+  );
+  assert.equal(target.exit, 6, JSON.stringify(target.envelope));
+  assert.equal(target.envelope.error.details.findings[0].item_id, seedId);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-detached-sibling.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+});
+
 test('an authorized predecessor at HEAD does not block the next mutation', async () => {
   const fixture = await twoWorktreeRepository();
   const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
