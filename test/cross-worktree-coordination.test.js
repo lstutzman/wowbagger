@@ -756,6 +756,460 @@ test('an unreachable own successor restored to its predecessor blocks unrelated 
   assert.deepEqual(await ledgerSnapshot(fixture.root, fixture.ledger), before);
 });
 
+// Row 6a reached through publish-claimed. A claimed publication is a mutation,
+// so it must refuse exactly what an ordinary mutation refuses: the same
+// journal, the same worktree, and therefore the same verdict. Unauthorized
+// local bytes block every item, so a publication of an unrelated item is one
+// of the mutations this state refuses.
+test('an unreachable own successor blocks a claimed publication of an unrelated item', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+
+  // The claim is acquired before the topology exists, so the only command the
+  // unauthorized bytes have to refuse is the publication under test.
+  const acquirePath = path.join(fixture.root, 'acquire-unreachable-own.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json',
+  );
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-unreachable-own-publish.json',
+      secondId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  assert.equal(typeof patched.envelope.result.item.path, 'string');
+  git(
+    fixture.root, 'restore', '--source=HEAD', '--',
+    path.join('ledger', patched.envelope.result.item.path),
+  );
+
+  const itemPath = path.join(fixture.ledger, 'item.md');
+  const before = await readFile(itemPath);
+  const candidate = Buffer.from(
+    before.toString('utf8').replace('title: "Seed"', 'title: "Published"'), 'utf8',
+  );
+  const requestPath = path.join(fixture.root, 'publish-unreachable-own.json');
+  await writeFile(requestPath, JSON.stringify({
+    operation_id: 'pub_agent-a_0001',
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    expected_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+    candidate_source_base64: candidate.toString('base64'),
+    candidate_sha256: `sha256:${createHash('sha256').update(candidate).digest('hex')}`,
+    claim_fence: {
+      ledger_namespace: NAMESPACE,
+      item_id: seedId,
+      owner_id: 'agent-a',
+      epoch: acquired.envelope.result.claim.epoch,
+    },
+  }));
+  const roots = [fixture.root, fixture.siblingRoot];
+  const snapshot = await refusalSnapshot(fixture.root, fixture.ledger, roots);
+
+  const published = run(
+    fixture.root, 'publish-claimed', '--ledger', fixture.ledger,
+    '--input', requestPath, '--json',
+  );
+
+  assert.equal(published.exit, 6, JSON.stringify(published.envelope));
+  assert.equal(published.envelope.state, 'unchanged');
+  assert.equal(published.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(published.envelope.error.details.reason, 'publication-reconciliation-required');
+  const finding = published.envelope.error.details.findings.find(
+    (entry) => entry.item_id === secondId,
+  );
+  assert.equal(finding.reason, 'unauthorized-revision');
+  assert.equal(Object.hasOwn(finding, 'owner_unavailable'), false);
+  assert.deepEqual(await refusalSnapshot(fixture.root, fixture.ledger, roots), snapshot);
+});
+
+// The observer's view of an unreachable successor a sibling worktree wrote:
+// the sibling holds it uncommitted, so no ref reaches it, and the journal
+// names the sibling rather than the observer.
+async function siblingSuccessorTopology(label) {
+  const fixture = await twoWorktreeRepository();
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const inspected = run(
+    fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', secondId, '--json',
+  );
+  const patched = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger,
+    '--input', await patchRequest(
+      fixture.siblingRoot,
+      `patch-${label}.json`,
+      secondId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  return {
+    ...fixture,
+    predecessor: inspected.envelope.result.item.revision,
+    secondId,
+    successor: patched.envelope.result.item.revision,
+  };
+}
+
+// Claim the seeded item and publish a new revision of it, from the worktree
+// that observes rather than the one that wrote the successor.
+async function publishSeedItem(fixture, label) {
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const acquirePath = path.join(fixture.root, `acquire-${label}.json`);
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const before = await readFile(path.join(fixture.ledger, 'item.md'));
+  const candidate = Buffer.from(
+    before.toString('utf8').replace('title: "Seed"', 'title: "Published"'), 'utf8',
+  );
+  const requestPath = path.join(fixture.root, `publish-${label}.json`);
+  await writeFile(requestPath, JSON.stringify({
+    operation_id: 'pub_agent-a_0001',
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    expected_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+    candidate_source_base64: candidate.toString('base64'),
+    candidate_sha256: `sha256:${createHash('sha256').update(candidate).digest('hex')}`,
+    claim_fence: {
+      ledger_namespace: NAMESPACE,
+      item_id: seedId,
+      owner_id: 'agent-a',
+      epoch: acquired.envelope.result.claim.epoch,
+    },
+  }));
+  return run(
+    fixture.root, 'publish-claimed', '--ledger', fixture.ledger,
+    '--input', requestPath, '--json',
+  );
+}
+
+// Row 6b through publish-claimed. The sibling holding the successor can still
+// commit it, so the finding stays advisory and scoped to its own item: a
+// claimed publication of another item proceeds exactly as an ordinary mutation
+// of another item does.
+test('a claimed publication proceeds past an unreachable named sibling successor', async () => {
+  const fixture = await siblingSuccessorTopology('named-sibling-publication');
+  assert.notEqual(await worktreeIdentity(fixture.siblingRoot), null);
+  assert.equal(
+    (await latestAuthorization(fixture.root, fixture.secondId)).entry.writer_worktree_id,
+    await worktreeIdentity(fixture.siblingRoot),
+  );
+
+  const published = await publishSeedItem(fixture, 'named-sibling');
+  assert.equal(published.exit, 0, JSON.stringify(published.envelope));
+  assert.equal(published.envelope.state, 'committed');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  const finding = verified.envelope.result.findings.find(
+    (entry) => entry.item_id === fixture.secondId,
+  );
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_unavailable, true);
+  assert.match(finding.remediation, /not yet reachable/);
+});
+
+// Row 6c through publish-claimed. The authorizing entry names nobody, so it
+// must not be read as naming the publisher: an alpha.12 journal keeps the
+// advisory finding and keeps the publication of another item flowing.
+test('a claimed publication proceeds past an unreachable pre-identity successor', async () => {
+  const fixture = await siblingSuccessorTopology('pre-identity-publication');
+  const stripped = await stripLatestWriterIdentity(fixture.root, fixture.secondId);
+  assert.equal(stripped, await worktreeIdentity(fixture.siblingRoot));
+
+  const published = await publishSeedItem(fixture, 'pre-identity');
+  assert.equal(published.exit, 0, JSON.stringify(published.envelope));
+  assert.equal(published.envelope.state, 'committed');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  const finding = verified.envelope.result.findings.find(
+    (entry) => entry.item_id === fixture.secondId,
+  );
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.owner_unavailable, true);
+  assert.match(finding.remediation, /not yet reachable/);
+});
+
+// Row 6a through claim-adopt, which is the remedy the unauthorized-revision
+// finding names. Adoption is deliberately blind to the diagnosis — clearing an
+// unsafe reconciliation is the whole point of the command — so what must agree
+// with claim-verify is the outcome: adopting the committed revision retires
+// the finding and every mutation flows again.
+test('adopting the committed revision clears an unreachable own successor', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json',
+  );
+  const predecessor = inspected.envelope.result.item.revision;
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-unreachable-own-adoption.json',
+      seedId,
+      predecessor,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  const successor = patched.envelope.result.item.revision;
+  git(fixture.root, 'restore', '--source=HEAD', '--', 'ledger/item.md');
+
+  const blocked = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(blocked.exit, 6, JSON.stringify(blocked.envelope));
+  const finding = blocked.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'unauthorized-revision');
+  assert.match(finding.remediation, /claim-adopt/);
+
+  const requestPath = path.join(fixture.root, 'adopt-unreachable-own.json');
+  await writeFile(requestPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    from_revision: successor,
+    to_revision: predecessor,
+    adopted_by: 'operator-lee',
+  }));
+  const adopted = run(
+    fixture.root, 'claim-adopt', '--ledger', fixture.ledger, '--input', requestPath, '--json',
+  );
+  assert.equal(adopted.exit, 0, JSON.stringify(adopted.envelope));
+  assert.equal(adopted.envelope.result.to_revision, predecessor);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-after-adoption.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+});
+
+// A worktree's own identity bytes are its own to answer for. Every surface
+// that resolves identity judges its own file before the roster, so corrupt
+// local bytes report as exactly that rather than as a sibling enumeration that
+// failed. Adoption resolves identity too, so it must answer the way
+// claim-verify answers, on the same evidence, in the same order.
+test('a malformed own identity reports alike to claim-verify and claim-adopt', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const before = await readFile(path.join(fixture.ledger, 'item.md'));
+  await writeFile(identityPathOf(fixture.root), 'not-a-uuid\n', { mode: 0o600 });
+
+  const requestPath = path.join(fixture.root, 'adopt-malformed-own.json');
+  await writeFile(requestPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: seedId,
+    from_revision: `sha256:${createHash('sha256').update(before).digest('hex')}`,
+    to_revision: `sha256:${'a'.repeat(64)}`,
+    adopted_by: 'operator-lee',
+  }));
+  const roots = [fixture.root, fixture.siblingRoot];
+  const snapshot = await refusalSnapshot(fixture.root, fixture.ledger, roots);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  const adopted = run(
+    fixture.root, 'claim-adopt', '--ledger', fixture.ledger, '--input', requestPath, '--json',
+  );
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(verified.envelope.error.details, { reason: 'claim-store-unreadable' });
+
+  assert.equal(adopted.exit, 6, JSON.stringify(adopted.envelope));
+  assert.equal(adopted.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(adopted.envelope.error.details, { reason: 'claim-store-unreadable' });
+
+  assert.deepEqual(await refusalSnapshot(fixture.root, fixture.ledger, roots), snapshot);
+});
+
+// Adoption is the operator's explicit override, so it stays available in the
+// topologies the observer is otherwise told to wait out. These two pin the new
+// writer evidence at its other two values — a sibling this worktree is not,
+// and a writer the journal never recorded — and require the override to keep
+// working and to leave verification clean.
+async function adoptSecondItem(fixture, label) {
+  const requestPath = path.join(fixture.root, `adopt-${label}.json`);
+  await writeFile(requestPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.secondId,
+    from_revision: fixture.successor,
+    to_revision: fixture.predecessor,
+    adopted_by: 'operator-lee',
+  }));
+  return run(
+    fixture.root, 'claim-adopt', '--ledger', fixture.ledger, '--input', requestPath, '--json',
+  );
+}
+
+test('adoption overrides an unreachable named sibling successor', async () => {
+  const fixture = await siblingSuccessorTopology('named-sibling-adoption');
+  assert.notEqual(
+    await worktreeIdentity(fixture.root),
+    await worktreeIdentity(fixture.siblingRoot),
+  );
+  assert.equal(
+    (await latestAuthorization(fixture.root, fixture.secondId)).entry.writer_worktree_id,
+    await worktreeIdentity(fixture.siblingRoot),
+  );
+
+  const blocked = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(
+    blocked.envelope.result.findings.find((entry) => entry.item_id === fixture.secondId).reason,
+    'worktree-synchronization-required',
+  );
+
+  const adopted = await adoptSecondItem(fixture, 'named-sibling');
+  assert.equal(adopted.exit, 0, JSON.stringify(adopted.envelope));
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+});
+
+test('adoption overrides an unreachable pre-identity successor', async () => {
+  const fixture = await siblingSuccessorTopology('pre-identity-adoption');
+  const stripped = await stripLatestWriterIdentity(fixture.root, fixture.secondId);
+  assert.equal(stripped, await worktreeIdentity(fixture.siblingRoot));
+
+  const blocked = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(
+    blocked.envelope.result.findings.find((entry) => entry.item_id === fixture.secondId).reason,
+    'worktree-synchronization-required',
+  );
+
+  const adopted = await adoptSecondItem(fixture, 'pre-identity');
+  assert.equal(adopted.exit, 0, JSON.stringify(adopted.envelope));
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+});
+
+// Row 6a through the claim lifecycle. Acquiring a claim is a coordination
+// write on the same journal every mutation writes, and unauthorized local
+// bytes are a repository-wide problem, not one item's. The lifecycle command
+// must therefore refuse what the ordinary mutation refuses; the remedy stays
+// reachable, because claim-adopt is not a lifecycle command.
+test('an unreachable own successor blocks acquiring a claim on an unrelated item', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json',
+  );
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-unreachable-own-lifecycle.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'restore', '--source=HEAD', '--', 'ledger/item.md');
+
+  const acquirePath = path.join(fixture.root, 'acquire-unreachable-own-lifecycle.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: secondId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const readPath = path.join(fixture.root, 'read-unreachable-own-lifecycle.json');
+  await writeFile(readPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: secondId,
+  }));
+  const roots = [fixture.root, fixture.siblingRoot];
+  const snapshot = await refusalSnapshot(fixture.root, fixture.ledger, roots);
+
+  const acquired = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+
+  assert.equal(acquired.exit, 6, JSON.stringify(acquired.envelope));
+  assert.equal(acquired.envelope.state, 'unchanged');
+  assert.equal(acquired.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(acquired.envelope.error.details.reason, 'publication-reconciliation-required');
+  const finding = acquired.envelope.error.details.findings.find(
+    (entry) => entry.item_id === seedId,
+  );
+  assert.equal(finding.reason, 'unauthorized-revision');
+
+  // No claim was granted: the read-back projection still reports the item as
+  // unclaimed, and no tracked or durable byte moved.
+  const claimRead = run(
+    fixture.root, 'claim', 'read', '--ledger', fixture.ledger, '--input', readPath, '--json',
+  );
+  assert.equal(claimRead.exit, 0, JSON.stringify(claimRead.envelope));
+  assert.equal(claimRead.envelope.result.read_back.active, null);
+  assert.equal(claimRead.envelope.result.read_back.last_epoch, '0');
+  assert.deepEqual(await refusalSnapshot(fixture.root, fixture.ledger, roots), snapshot);
+});
+
 // The same state written by an alpha.12 worktree, which recorded no writer.
 // An entry that names nobody attributes nothing, so the diagnosis falls back
 // to the ownership evidence Git can produce and the advisory scoping that
@@ -1567,6 +2021,20 @@ async function identitySnapshot(root, ledger, roots) {
     journal: await readIfPresent(journalPath),
     log: await readIfPresent(path.join(ledger, '.wowbagger', `reconcile-${NAMESPACE}.md`)),
     status: git(root, 'status', '--porcelain'),
+  };
+}
+
+// Everything a reconciliation refusal must leave exactly as it found it. The
+// journal is compared without its clock entries: reconciliation persists the
+// authoritative clock floor before it classifies anything, so an advanced
+// floor is the one journal byte a refusal is expected to have written.
+async function refusalSnapshot(root, ledger, roots) {
+  const snapshot = await identitySnapshot(root, ledger, roots);
+  if (snapshot.journal === null) return snapshot;
+  return {
+    ...snapshot,
+    journal: snapshot.journal.trimEnd().split('\n')
+      .filter((line) => JSON.parse(line).type !== 'clock'),
   };
 }
 

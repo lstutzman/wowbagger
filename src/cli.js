@@ -82,6 +82,7 @@ import { normalizeJsonValue, parseJsonRequest, sortIssues } from './request.js';
 import { selectReady } from './ready.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 import { inspectWorkbench } from './workbench.js';
+import { readWorktreeIdentity } from './worktree-identity.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 5;
@@ -1659,6 +1660,21 @@ async function runClaimCommand(claimCommand, argumentsList) {
       } catch (error) {
         throw taggedFailure('CLAIM_STORE_UNREADABLE', error);
       }
+      // A claim lifecycle command classifies item reconciliation and refuses
+      // on it, so it must reason from the same writer evidence every other
+      // classifying surface uses; otherwise one command grants a claim on
+      // exactly the state another command refuses to write. It writes no item
+      // byte and no writer-attributed entry, so it reads the identity it
+      // already answers to rather than creating one.
+      let currentWorktreeId;
+      try {
+        currentWorktreeId = await readWorktreeIdentity({
+          ledgerDirectory: parsedOptions.options.ledger,
+          gitCommonDir,
+        });
+      } catch (error) {
+        throw taggedFailure('CLAIM_STORE_UNREADABLE', error);
+      }
       const physicalNow = new Date().toISOString();
       let reconciled;
       try {
@@ -1669,6 +1685,7 @@ async function runClaimCommand(claimCommand, argumentsList) {
           replayed,
           physicalNow,
           targetItemId: request.item_id,
+          currentWorktreeId,
           writeLogOnUnsafe: false,
         });
       } catch (error) {

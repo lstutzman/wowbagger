@@ -7,6 +7,23 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- **Every reconciling command reads the same writer evidence.** `claim-verify`
+  and ordinary mutations named the worktree they spoke for when they
+  classified reconciliation; `publish-claimed`, `claim-adopt`, and the
+  `claim acquire`, `claim renew`, and `claim release` lifecycle commands did
+  not. An unreachable successor written by the current worktree therefore read
+  as advisory sibling synchronization on those surfaces, whose target scoping
+  let `publish-claimed` commit a publication and `claim acquire` grant a claim
+  in exactly the state a `patch` refused. Those commands now report
+  `unauthorized-revision` and refuse, matching `claim-verify`. A genuine
+  sibling successor and an authorization written before writer identity existed
+  remain advisory synchronization on every surface. `claim-adopt` reports no
+  reconciliation diagnosis and stays available as the remedy, but it now judges
+  its own identity bytes before the worktree roster, so its own malformed
+  identity reports as such instead of as a failed sibling enumeration.
+
 ## 0.1.0-alpha.12 - 2026-08-28
 
 ### Fixed

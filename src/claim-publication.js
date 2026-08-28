@@ -203,6 +203,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           replayed,
           physicalNow: new Date().toISOString(),
           targetItemId: request.item_id,
+          currentWorktreeId,
           writeLogOnUnsafe: false,
         });
       } catch (error) {
@@ -1034,6 +1035,12 @@ export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespa
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
     return await withClaimLock(storePath, async () => {
+      // Adoption writes no item byte and creates no identity, so it names
+      // itself by reading the ID it already answers to. Its own file is judged
+      // first, so bytes this worktree owns keep reporting as its own invalid
+      // identity rather than as an unreadable roster, exactly as claim-verify
+      // reports them.
+      const currentWorktreeId = await readWorktreeIdentity({ ledgerDirectory, gitCommonDir });
       // Adoption re-baselines an authorized revision, so it too refuses an
       // ambiguous domain before reconciliation classifies one.
       await assertUniqueWorktreeIdentity({ ledgerDirectory });
@@ -1043,6 +1050,7 @@ export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespa
         namespace,
         replayed: await replayClaimJournal(journalPath, namespace),
         physicalNow: new Date().toISOString(),
+        currentWorktreeId,
       });
       const refusal = adoptionRefusal(reconciled, ledgerDirectory, request);
       if (refusal) return refusal;
