@@ -7,6 +7,19 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.12 - 2026-08-28
+
+### Fixed
+
+- **Out-of-protocol local states remain global reconciliation barriers.**
+  Alpha.11 could misclassify an unknown committed revision, an authorized
+  working-tree predecessor over an unknown `HEAD`, or a working-tree deletion
+  over an authorized `HEAD` as advisory sibling synchronization when another
+  worktree owned the expected revision. `claim-verify` still failed, but an
+  unrelated mutation could proceed through the documented global barrier.
+  Alpha.12 classifies local state before owner and target scope, while genuine
+  authorized sibling predecessors remain target-scoped synchronization.
+
 ## 0.1.0-alpha.11 - 2026-08-27
 
 ### Fixed
