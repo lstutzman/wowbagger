@@ -9,7 +9,7 @@
 // asks for synchronization and names the owner holding the revision.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -903,4 +903,35 @@ test('auto-commit still blocks a synchronization finding on its own target', asy
   assert.equal(blocked.envelope.error.details.reason, 'claim-state-unreconciled');
   assert.equal(blocked.envelope.error.details.findings[0].reason, 'worktree-synchronization-required');
   assert.equal(git(fixture.siblingRoot, 'rev-parse', 'HEAD'), head);
+});
+
+// A worktree's identity belongs to that worktree alone, so it lives in the
+// private Git directory rather than the shared common directory or the
+// tracked working tree. Writing it is a side effect of the first fenced
+// mutation, and it must leave `git status` exactly as it found it.
+test('a fenced patch creates a private worktree identity outside the working tree', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-identity.json',
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+
+  const gitDir = git(fixture.root, 'rev-parse', '--absolute-git-dir');
+  const identityPath = path.join(gitDir, 'wowbagger-worktree-id');
+  const beforeStatus = git(fixture.root, 'status', '--porcelain');
+  const identity = await readFile(identityPath, 'utf8');
+  assert.match(identity, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\n$/);
+  assert.equal((await stat(identityPath)).mode & 0o777, 0o600);
+  assert.equal(path.dirname(identityPath), gitDir);
+  assert.equal(git(fixture.root, 'status', '--porcelain'), beforeStatus);
 });

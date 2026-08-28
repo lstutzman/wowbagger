@@ -14,6 +14,7 @@ import { readBack } from './claim-operations.js';
 import { reconcileClaimJournal } from './claim-publication.js';
 import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './claim-store.js';
 import { readNamespace } from './namespace.js';
+import { ensureWorktreeIdentity } from './worktree-identity.js';
 
 export async function withLegacyMutationFence(
   ledgerDirectory,
@@ -37,6 +38,10 @@ export async function withLegacyMutationFence(
   let intent = null;
   try {
     return await withClaimLock(storePath, async () => {
+      // The writer's own identity must exist before anything it does can be
+      // attributed, so it is established under the same lock that serializes
+      // the journal, ahead of reconciliation and of any intent append.
+      await ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir });
       const replayed = await replayClaimJournal(journalPath, namespace);
       const reconciled = await reconcileClaimJournal({
         ledgerDirectory,
