@@ -401,6 +401,7 @@ function reportPhaseCounters(samples, baseline, publication) {
       + ` (fsyncs ${publish.item_lock_fsyncs}, releases ${publish.item_lock_releases})`
       + `  after pending intent ${publication.reconciledPublishCounters.item_lock_acquisitions}`);
     console.log(`namespace locks per publish-claimed: ${publish.namespace_lock_acquisitions}`);
+    console.log(`worktree identity locks per publish-claimed: ${publish.worktree_identity_lock_acquisitions}`);
     console.log(`HEAD reads per publish-claimed: tree entries ${publish.head_tree_entries}`
       + `  blobs ${publish.head_blobs_read}  bytes ${publish.head_bytes_read}`);
   }
