@@ -5,7 +5,7 @@ number: 178
 title: "Audit reconciliation ownership classification as one topology matrix"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-27
 updated: 2026-08-28
 provenance:
