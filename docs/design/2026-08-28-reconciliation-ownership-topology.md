@@ -195,6 +195,20 @@ No item, journal, reconciliation log, identity file, Git index, or commit change
 
 This is an additive diagnostic, not a new envelope or reason. `claim-store-unavailable.details` already permits additional diagnostic members, and clients that only read the outer code and reason remain compatible. Core `contract_version` stays `5`.
 
+Roster enumeration has its own honest diagnostic:
+
+```json
+{
+  "identity_diagnostic": {
+    "code": "worktree-enumeration-failed"
+  }
+}
+```
+
+A `git worktree list` process or parse failure, a live record whose path disappears after listing, failure to resolve a live record's private Git directory, or malformed identity bytes in a live registered sibling all use this diagnostic and the same outer mappings and no-write guarantees above. None becomes an empty roster.
+
+Duplicate detection is evaluated against worktrees Git currently reports as live. Bare and Git-marked `prunable` records are excluded. A worktree on an unavailable or unmounted path may be marked prunable and therefore omitted even if its bytes still exist elsewhere; duplicates involving that worktree are not detected until Git reports it live again. This is an accepted liveness limitation, not evidence that no duplicate exists.
+
 A copied independent clone may carry the same UUID, but clones do not share a Git common directory or journal, so the identity cannot collide within the coordination domain.
 
 When a worktree is removed, its private identity file disappears with its Git administrative directory. A recreated worktree receives a new random UUID. Historical journal entries retain the removed UUID; readers classify that writer as `unknown`, never as the new worktree.
@@ -248,7 +262,7 @@ No worktree UUID appears in a reconciliation finding. Only a duplicate-identity 
 - Missing identity file: creates one only under the claim lock before a new journal write.
 - Malformed identity file: every item-reconciling write and `claim-verify` refuses through the existing claim-store-unreadable surface; the file is never replaced silently.
 - Duplicate live identity: every item-reconciling write and `claim-verify` refuses before mutation through the concrete envelopes and explicit `identity_diagnostic` defined above.
-- Git worktree enumeration failure: ownership evidence is unavailable; safety does not downgrade.
+- Git worktree enumeration failure: every item-reconciling write and `claim-verify` fails closed before mutation with the existing outer unavailable/unreadable result plus `identity_diagnostic.code: "worktree-enumeration-failed"`; it never becomes an empty roster.
 - Identity write outcome unknown: re-read the final path before deciding; never generate and append a second UUID blindly.
 
 ## Testing strategy

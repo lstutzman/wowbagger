@@ -357,7 +357,7 @@ Expected: commands proceed or classify ordinary synchronization because duplicat
 
 - [ ] **Step 3: Implement live-worktree enumeration and duplicate detection**
 
-Parse `git worktree list --porcelain -z` into records with path, `HEAD`, branch, detached, bare, locked, and prunable flags. Resolve each live path's private Git directory through `git -C <path> rev-parse --absolute-git-dir`. Ignore missing/prunable paths as ownership evidence. Read existing identity files without creating them. Throw before reconciliation writes when duplicate current UUIDs exist.
+Parse `git worktree list --porcelain -z` into records with path, `HEAD`, branch, detached, bare, locked, and prunable flags. Resolve each Git-marked-live path's private Git directory through `git -C <path> rev-parse --absolute-git-dir`. Exclude only `bare` and Git-marked `prunable` records. A process/parse error, ENOENT race on a record marked live, private-Git-directory resolution failure, or malformed live sibling identity throws before reconciliation with `identityDiagnostic: { code: 'worktree-enumeration-failed' }`; never substitute an empty roster.
 
 - [ ] **Step 4: Map identity failure to existing public envelopes**
 
@@ -381,18 +381,22 @@ Ensure `verifyClaimJournal`, legacy mutation fence, `publish-claimed`, and `clai
 
 Require duplicate `claim-verify` and ordinary mutation tests to pass with exact `identity_diagnostic` values. Require auto-commit to refuse at exit `4` with `auto-commit-preflight-failed` and the exact nested claim verification fields above. Add focused public tests proving `publish-claimed` and `claim-adopt` exit `6`, return their existing `claim-store-unavailable` / `claim-store-unreadable` form plus the same diagnostic with unchanged state, and leave journal, item bytes, identity files, index, and `HEAD` unchanged.
 
-- [ ] **Step 6: Write removal/recreation RED**
+- [ ] **Step 6: Pin enumeration failure and liveness limitation**
+
+Add a public failure injection that makes `git worktree list` fail and assert the same outer claim-store-unavailable / claim-store-unreadable operation mappings and no-write snapshots as duplicate detection, with exact `identity_diagnostic: { code: 'worktree-enumeration-failed' }`. Prove malformed identity bytes and a path disappearing after Git marks the record live fail the same way. Add contract text stating duplicate detection evaluates only worktrees Git currently reports live; bare/prunable records are excluded, so an unavailable or unmounted worktree marked prunable is not checked until Git reports it live again.
+
+- [ ] **Step 7: Write removal/recreation RED**
 
 Record writer UUID A in a journal, remove that worktree through Git, recreate a worktree at the same path, and require new UUID B where `A !== B`. The old authorizing entry must normalize to writer `unknown`, never current.
 
-- [ ] **Step 7: Implement and verify recreation behavior**
+- [ ] **Step 8: Implement and verify recreation behavior**
 
 Do not copy or restore identity files when Git recreates a worktree. The new private Git directory receives a fresh UUID on first write. Run the recreation test and duplicate suite.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/worktree-identity.js src/claim-publication.js src/claim-coordinator.js src/git-autocommit.js test/cross-worktree-coordination.test.js
+git add src/git-worktrees.js src/worktree-identity.js src/claim-publication.js src/claim-coordinator.js src/git-autocommit.js docs/work-claim-contract.md test/cross-worktree-coordination.test.js
 git commit -m "Reject ambiguous worktree identities"
 ```
 
