@@ -16,13 +16,38 @@ consolidation. The first tagged release inherits this file.
   not. An unreachable successor written by the current worktree therefore read
   as advisory sibling synchronization on those surfaces, whose target scoping
   let `publish-claimed` commit a publication and `claim acquire` grant a claim
-  in exactly the state a `patch` refused. Those commands now report
-  `unauthorized-revision` and refuse, matching `claim-verify`. A genuine
+  in exactly the state a `patch` refused. `publish-claimed` and the
+  `claim acquire`, `claim renew`, and `claim release` lifecycle commands now
+  report `unauthorized-revision` and refuse, matching `claim-verify`. A genuine
   sibling successor and an authorization written before writer identity existed
   remain advisory synchronization on every surface. `claim-adopt` reports no
   reconciliation diagnosis and stays available as the remedy, but it now judges
   its own identity bytes before the worktree roster, so its own malformed
   identity reports as such instead of as a failed sibling enumeration.
+
+### Known limitations
+
+- **Concurrent creates in sibling worktrees can commit duplicate item
+  numbers, and no sanctioned repair exists** (items #181 and #182). Two
+  worktrees that branch from the same base and each run an ordinary `create`
+  both derive the next schema-v2 `number` from the base they can see. Each
+  create succeeds, each refuses nothing, and reconciliation reports nothing:
+  the collision only exists once the two branches are integrated. `validate`
+  then fails globally with `duplicate-number` on every colliding item, and
+  because an invalid ledger blocks every mutation, the whole ledger stops
+  accepting work. `number` is immutable and `patch` correctly rejects it, so
+  Wowbagger currently offers no operation that repairs the collision.
+
+  Until both items ship, serialize `create` through a single worktree, and run
+  `validate` immediately after you integrate branches so a collision surfaces
+  at the merge rather than at the next mutation.
+
+  The PropertyCompass repair — editing `number` in the item source by hand,
+  committing it, then running `claim-adopt` — was an emergency intervention
+  taken under an outage. It is **not a supported workaround**. It bypasses the
+  number-collision and reference checks every mutation performs, and it can
+  leave dangling `depends_on`, `related`, and parent references that nothing
+  reports. Do not adopt it as routine practice.
 
 ## 0.1.0-alpha.12 - 2026-08-28
 

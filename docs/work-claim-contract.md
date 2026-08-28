@@ -360,6 +360,27 @@ next mutation refuses. Inside the window, only an actor that bypasses this tool
 can overwrite the item, and this protocol does not defend against that actor.
 It is merge-coordinated, not exclusive.
 
+**Warning: the same window lets two worktrees commit one item number, and
+nothing repairs it** (items #181 and #182). Because create is journal-silent,
+two worktrees that branch from the same base each derive the next schema-v2
+`number` from the base they can see. Both creates succeed, both refuse
+nothing, and reconciliation reports nothing, because there is no recorded
+revision to compare. The collision becomes visible only when the branches are
+integrated: `validate` then fails globally with `duplicate-number` on every
+colliding item, and an invalid ledger blocks every mutation, so the whole
+ledger stops accepting work. `number` is immutable and `patch` correctly
+rejects it, so this protocol currently offers no operation that repairs the
+collision.
+
+Until both items ship, serialize `create` through a single worktree, and run
+`validate` immediately after you integrate branches so a collision surfaces at
+the merge rather than at the next mutation. Editing `number` in the item
+source by hand, committing it, and then running `claim-adopt` is **not a
+supported workaround**: one field deployment did exactly that as an emergency
+intervention during an outage, and it bypasses the number-collision and
+reference checks every mutation performs, so it can leave dangling
+`depends_on`, `related`, and parent references that nothing reports.
+
 **`unauthorized-revision` has two remedies, and only one of them is
 destructive.** Restoring the authorized revision discards the out-of-protocol
 edit. Adopting the committed revision keeps it and moves the coordinator's
