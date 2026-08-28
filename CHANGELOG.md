@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.12 - 2026-08-28
+
 ### Fixed
 
 - **Out-of-protocol local states remain global reconciliation barriers.**

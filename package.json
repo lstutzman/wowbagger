@@ -1,6 +1,6 @@
 {
   "name": "wowbagger",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "description": "Git-native work ledger for coding agents: deterministic ready queues, guarded CAS mutations, claims and fencing, and self-contained HTML reports.",
   "type": "module",
   "license": "MIT",

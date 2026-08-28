@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Wowbagger — a Git-native work ledger for coding agents with deterministic ready queues, guarded CAS mutations, claims and fencing, and self-contained HTML reports.",
-    "version": "0.1.0-alpha.11"
+    "version": "0.1.0-alpha.12"
   },
   "plugins": [
     {
@@ -13,10 +13,10 @@
       "source": {
         "source": "url",
         "url": "https://github.com/lstutzman/wowbagger.git",
-        "ref": "v0.1.0-alpha.11"
+        "ref": "v0.1.0-alpha.12"
       },
       "description": "Coordinate coding agents through a Git-native ledger: validate, select ready work, inspect lossless item revisions, publish guarded mutations, and generate scoped HTML reports. Requires a separately installed matching Wowbagger core distribution; the skill refuses absent or incompatible core and contract versions.",
-      "version": "0.1.0-alpha.11",
+      "version": "0.1.0-alpha.12",
       "strict": true
     }
   ]
