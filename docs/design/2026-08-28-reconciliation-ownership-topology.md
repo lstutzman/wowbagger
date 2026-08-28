@@ -132,7 +132,7 @@ A sibling synchronization result has `scope: 'target'`. Every out-of-protocol or
 
 ## Evidence adapter
 
-`src/git-reconciliation.js` remains the Git evidence adapter. Replace arbitrary `for-each-ref --contains` ownership with active-worktree evidence:
+`src/git-reconciliation.js` remains the Git ownership-evidence adapter. A shared internal `src/git-worktrees.js` module parses `git worktree list --porcelain -z` and resolves private Git directories; both ownership evidence and duplicate-identity detection consume that one roster instead of maintaining competing parsers. Replace arbitrary `for-each-ref --contains` ownership with active-worktree evidence:
 
 1. Find a commit whose item bytes match the expected revision, under the existing output bound.
 2. Give current named or detached `HEAD` first priority.
@@ -277,6 +277,7 @@ Each new behavior gets one RED-GREEN-REFACTOR cycle. A row already covered by an
 Expected production files:
 
 - `src/reconciliation-classifier.js` — pure topology classification and scope.
+- `src/git-worktrees.js` — one NUL-safe registered-worktree roster and private-Git-directory resolver shared by identity and ownership evidence.
 - `src/worktree-identity.js` — private identity lifecycle and duplicate detection.
 - `src/git-reconciliation.js` — active-worktree ownership evidence.
 - `src/claim-publication.js` — evidence normalization and public rendering.

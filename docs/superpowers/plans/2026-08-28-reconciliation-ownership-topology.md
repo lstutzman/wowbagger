@@ -31,6 +31,7 @@
 ## File map
 
 - Create `src/worktree-identity.js`: resolve, create, validate, and duplicate-check private worktree UUIDs.
+- Create `src/git-worktrees.js`: parse the NUL-delimited registered-worktree roster and resolve private Git directories for both identity and owner evidence.
 - Create `src/reconciliation-classifier.js`: pure normalized topology classification and barrier scope.
 - Modify `src/claim-journal.js`: accept and preserve optional `writer_worktree_id` on authorizing entries.
 - Modify `src/claim-coordinator.js`: ensure identity under the claim lock, pass it into reconciliation, and record it on legacy intents/terminals.
@@ -63,20 +64,36 @@ test('alpha12 journal entries ignore an optional future writer worktree id', asy
   const journalPath = claimJournalPath(root, NS);
   const writerWorktreeId = '06d0814b-4e22-4e67-9edd-2915f0d38f29';
 
+  const attemptId = 'alpha12_future_writer_0001';
+  const revision = `sha256:${'a'.repeat(64)}`;
   await appendClaimEntry(journalPath, {
-    type: 'legacy-mutation',
-    attempt_id: 'alpha12_future_writer_0001',
+    type: 'legacy-mutation-intent',
+    attempt_id: attemptId,
     ledger_namespace: NS,
     item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
     command: 'patch-v1',
-    committed_revision: `sha256:${'a'.repeat(64)}`,
+    expected_revision: revision,
+    candidate_revision: revision,
+    item_path: 'item.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+    writer_worktree_id: writerWorktreeId,
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation',
+    attempt_id: attemptId,
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    command: 'patch-v1',
+    committed_revision: revision,
     item_path: 'item.md',
     observed_at: '2030-01-11T09:00:00.000Z',
     writer_worktree_id: writerWorktreeId,
   });
 
   const replayed = await replayClaimJournal(journalPath, NS);
+  assert.equal(replayed.entries.length, 2);
   assert.equal(replayed.entries[0].writer_worktree_id, writerWorktreeId);
+  assert.equal(replayed.entries[1].writer_worktree_id, writerWorktreeId);
 });
 ```
 
@@ -108,26 +125,33 @@ git commit -m "Characterize alpha12 journal field compatibility"
 ### Task 2: Create private worktree UUIDs safely
 
 **Files:**
+- Create: `src/git-worktrees.js`
 - Create: `src/worktree-identity.js`
 - Modify: `test/cross-worktree-coordination.test.js`
 
 **Interfaces:**
-- Produces:
+- `src/git-worktrees.js` produces:
+  - `resolvePrivateGitDir(directory): Promise<string>`
+  - `listRegisteredWorktrees(directory): Promise<Array<{ path, head, branch, detached, bare, locked, prunable, gitDir }>>`
+- `src/worktree-identity.js` produces:
   - `readWorktreeIdentity({ ledgerDirectory, gitCommonDir }): Promise<string | null>`
   - `ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir }): Promise<string>`
   - `assertUniqueWorktreeIdentity({ ledgerDirectory, gitCommonDir, worktreeId }): Promise<void>`
-- Throws errors with internal code `CLAIM_WORKTREE_IDENTITY_INVALID`; callers map this to existing public claim-store-unreadable surfaces.
+- Identity errors use internal code `CLAIM_WORKTREE_IDENTITY_INVALID`; callers map them to existing public outer errors plus the approved nested diagnostic.
 
 - [ ] **Step 1: Write RED for identity creation through public patch**
 
 Add a public CLI test that provisions a temporary Git ledger, runs `patch --json`, resolves the private Git directory with `git rev-parse --absolute-git-dir`, and asserts:
 
 ```js
-const identityPath = path.join(git(root, 'rev-parse', '--absolute-git-dir'), 'wowbagger-worktree-id');
+const gitDir = git(root, 'rev-parse', '--absolute-git-dir');
+const identityPath = path.join(gitDir, 'wowbagger-worktree-id');
+const beforeStatus = git(root, 'status', '--porcelain');
 const identity = await readFile(identityPath, 'utf8');
 assert.match(identity, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\n$/);
 assert.equal((await stat(identityPath)).mode & 0o777, 0o600);
-assert.equal(git(root, 'status', '--porcelain', '--', identityPath), '');
+assert.equal(path.dirname(identityPath), gitDir);
+assert.equal(git(root, 'status', '--porcelain'), beforeStatus);
 ```
 
 - [ ] **Step 2: Run RED**
@@ -150,7 +174,7 @@ function invalidIdentity(reason) {
 }
 ```
 
-Resolve the private Git directory with `git rev-parse --absolute-git-dir`. `readWorktreeIdentity` returns `null` on `ENOENT`, validates exactly one lowercase UUID v4 plus newline, and throws on malformed bytes. `ensureWorktreeIdentity` writes `${randomUUID()}\n` to a `wx` temporary file in that directory, calls `sync()`, closes it, renames it to the final path, then reads it back. Remove the temporary path in `finally`. Never truncate the final path.
+Use `resolvePrivateGitDir` from `git-worktrees.js`; never parse `.git` manually. `readWorktreeIdentity` returns `null` on `ENOENT`, validates exactly one lowercase UUID v4 plus newline, and throws on malformed bytes. `ensureWorktreeIdentity` writes `${randomUUID()}\n` to a `wx` temporary file in that directory, calls `sync()`, closes it, renames it to the final path, then reads it back. Remove the temporary path in `finally`. Never truncate the final path.
 
 - [ ] **Step 4: Call identity creation only under claim lock before a journal write**
 
@@ -162,10 +186,10 @@ Run the identity test and the complete `test/cross-worktree-coordination.test.js
 
 - [ ] **Step 6: Refactor and commit**
 
-Keep Git process helpers private to `worktree-identity.js`; do not expose filesystem paths in its interface.
+Keep roster parsing and Git-directory resolution in `git-worktrees.js`; both identity duplicate detection and Task 7 owner evidence must reuse it.
 
 ```bash
-git add src/worktree-identity.js src/claim-coordinator.js test/cross-worktree-coordination.test.js
+git add src/git-worktrees.js src/worktree-identity.js src/claim-coordinator.js test/cross-worktree-coordination.test.js
 git commit -m "Create private worktree identities"
 ```
 
