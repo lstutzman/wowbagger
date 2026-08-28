@@ -542,17 +542,17 @@ reconciled = await reconcileClaimJournal({
 
 Run the focused publish test and genuine-sibling/unreachable companions. Public codes and fields stay unchanged; only the reason/remediation corrects for current writer evidence.
 
-- [ ] **Step 4: Write public adoption row 6a RED, implement, and run GREEN**
+- [ ] **Step 4: Pin adoption semantics and fix own-identity diagnostic order**
 
-Create the same topology through `claim-adopt`. Read and uniqueness-check current identity under the existing lock, pass it into reconciliation, and assert the precondition path now agrees with claim-verify. Pin genuine sibling and legacy-unknown adoption companions so they remain unavailable synchronization.
+First characterize row 6a through `claim-adopt`: adoption deliberately ignores reconciliation unsafe/findings because clearing that state is its purpose, so a valid adoption must succeed, clear the state, and leave later claim-verify clean. Do not manufacture an unauthorized-refusal RED. Then add the real public RED: malformed current-worktree identity must match claim-verify's existing unreadable result without sibling `worktree-enumeration-failed` diagnostic. Read current identity before roster uniqueness inside the adoption lock, run GREEN, and pin genuine sibling/legacy-unknown adoption behavior.
 
 - [ ] **Step 5: Cover every remaining caller from the audit**
 
-For each omitted caller, add one public behavior test before wiring it. Do not change a caller that has a documented reason to remain identity-free. Run a single focused set proving claim-verify, ordinary mutation, publish, adoption, and claim lifecycle surfaces agree on row 6a and preserve row 6b/6c.
+For each omitted caller, add one public behavior test before wiring it. Do not change a caller that has a documented reason to remain identity-free, such as adoption's deliberate unsafe-state recovery. Run one focused set proving every caller that classifies barriers agrees on row 6a and preserves rows 6b/6c; adoption must preserve its documented recovery behavior while matching identity-error diagnostics.
 
 - [ ] **Step 6: Add release-note evidence and commit 8a separately**
 
-Record in `CHANGELOG.md` under Unreleased that publish and adopt now report unauthorized rather than synchronization for an unreachable successor written by the current worktree. Do not add a version heading.
+Record in `CHANGELOG.md` under Unreleased that `publish-claimed` and every claim lifecycle caller changed by the audit now report unauthorized rather than synchronization for an unreachable successor written by the current worktree. Record adoption's corrected own-identity diagnostic order separately if user-visible. Do not claim adoption now refuses row 6a, and do not add a version heading.
 
 ```bash
 git add src/claim-publication.js src/claim-coordinator.js src/cli.js test/cross-worktree-coordination.test.js test/claim-publish-refusal.test.js test/claim-adoption.test.js CHANGELOG.md
@@ -567,11 +567,8 @@ Stage only files that actually changed.
 
 Run the complete cross-worktree suite and every focused caller test. Save counts in the report. No source changes yet.
 
-- [ ] **Step 8: Pin own-malformed identity ordering**
 
-Add the deferred public regression: malformed current-worktree identity must keep the existing claim-store-unreadable outer result without a sibling-enumeration `identity_diagnostic`. Mutation-prove that moving roster assertion before current identity read fails this spelling.
-
-- [ ] **Step 9: Create normalized revision classification**
+- [ ] **Step 8: Create normalized revision classification**
 
 In `claim-publication.js`, convert revisions before calling the new module:
 
@@ -585,11 +582,11 @@ function revisionClass(revision, expectedRevision, authorizedRevisions) {
 
 Move expected-writer normalization into the classifier input construction or a named helper only if more than one caller uses it. This resolves the deferred inline-normalization Minor without creating a speculative export.
 
-- [ ] **Step 10: Move one topology at a time**
+- [ ] **Step 9: Move one topology at a time**
 
 Start with global unknown/deletion barriers, run their public tests, then move Git finalization, current-owner unauthorized, named sibling synchronization, unavailable synchronization, and final unauthorized fallback. After each move, run the matching public test before deleting the old branch.
 
-- [ ] **Step 11: Replace reason-based target scope**
+- [ ] **Step 10: Replace reason-based target scope**
 
 Replace:
 
@@ -599,19 +596,19 @@ return finding.reason !== 'worktree-synchronization-required';
 
 with the classifier's scope result. Store internal scope alongside the finding during reconciliation, strip it before returning public `findings`, and assert no new public member appears.
 
-- [ ] **Step 12: Run full public topology and caller suites**
+- [ ] **Step 11: Run full public topology and caller suites**
 
 Every matrix row, existing companion, publish/adopt caller, and malformed-identity test must pass with exact public envelopes.
 
-- [ ] **Step 13: Mutation-test distinct outcomes**
+- [ ] **Step 12: Mutation-test distinct outcomes**
 
 Change each result class once—global to target, target to global, current owner to sibling, unknown writer to current, named sibling to unavailable—and require a public test failure. Restore after each mutation.
 
-- [ ] **Step 14: Simplify without new public seams**
+- [ ] **Step 13: Simplify without new public seams**
 
 Remove obsolete `reconciliationDiagnosis`, `blocksTarget`, and duplicate remediation construction only after all public tests pass. Keep filesystem and Git evidence outside the pure module. Review the deferred `GIT_ENVIRONMENT` duplication Minor; fix it only if an existing shared internal interface can be reused without widening public or test seams, otherwise keep it ledgered for final review.
 
-- [ ] **Step 15: Commit 8b separately**
+- [ ] **Step 14: Commit 8b separately**
 
 ```bash
 git add src/reconciliation-classifier.js src/claim-publication.js test/cross-worktree-coordination.test.js
