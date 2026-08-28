@@ -5,7 +5,7 @@ number: 179
 title: "Keep out-of-protocol local states blocking when a sibling owns the expected revision"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-28
 updated: 2026-08-28
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-28T08:56:42Z"
 depends_on: []
 related: [ wb_01M0XNVN00ABNA2SZ7WHM0FRX7, wb_01M12GT91WYNWHTYRBV7Y5R9E3 ]
+decisions:
+  - action: accept
+    date: 2026-08-28
+    summary: "Accept the alpha.11 reconciliation barrier defect."
+    rationale: "The #178 topology sweep reproduced three public CLI states where out-of-protocol local bytes are mislabeled as sibling synchronization and an unrelated mutation proceeds. Lee chose an alpha.12 hotfix. One barrier predicate can fix the shared root without redesigning target scoping or the reconciliation short-circuits."
 ---
 ## Problem
 
