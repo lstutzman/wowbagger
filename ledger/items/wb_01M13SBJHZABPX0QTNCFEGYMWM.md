@@ -2,7 +2,7 @@
 schema_version: 2
 id: wb_01M13SBJHZABPX0QTNCFEGYMWM
 number: 179
-title: "Keep committed unknown revisions blocking when a sibling owns the expected revision"
+title: "Keep out-of-protocol local states blocking when a sibling owns the expected revision"
 kind: task
 priority: 1
 status: triage
@@ -12,7 +12,7 @@ provenance:
   source: "item-178-topology-research"
   recorded_at: "2026-08-28T08:56:42Z"
 depends_on: []
-related: [wb_01M0XNVN00ABNA2SZ7WHM0FRX7, wb_01M12GT91WYNWHTYRBV7Y5R9E3]
+related: [ wb_01M0XNVN00ABNA2SZ7WHM0FRX7, wb_01M12GT91WYNWHTYRBV7Y5R9E3 ]
 ---
 ## Problem
 
@@ -33,3 +33,19 @@ This is #172 target-scoped success meeting a state #172 never authorized. Target
 - The fix changes barrier classification, not #172 target scoping.
 - Update the changelog to state that alpha.11 shipped the unsafe downgrade and alpha.12 restores the global barrier.
 - Full current-Node, Node 20, adapter-conformance, ledger-validation, and release-review gates pass.
+
+## Expanded topology evidence
+
+All three reproduced rows share one rule: synchronization may be advisory only when the observed working-tree and HEAD states are authorized predecessors or legitimate path absence. Any unknown revision, or a working-tree deletion over an existing HEAD item, is a global barrier evaluated before owner and target-scope classification.
+
+| Row | Working tree | HEAD | Expected revision | Alpha.11 result | Required result |
+|---|---|---|---|---|---|
+| 1 | unknown U | same unknown U | named sibling E | synchronization; unrelated patch exits 0 | unauthorized; every mutation blocks |
+| 2 | authorized predecessor P | unknown U | named sibling E | synchronization; unrelated patch exits 0 | unauthorized; every mutation blocks |
+| 3 | missing after deletion | authorized predecessor P | named sibling E | synchronization; unrelated patch exits 0 | unauthorized; every mutation blocks |
+
+Each row was reproduced with the real public CLI. `claim-verify --json` exited 6, named the sibling owner, and the unrelated patch exited 0. Alpha.11 ships all three manifestations; the alpha.12 changelog must describe the barrier class, not only row 1.
+
+## Hotfix constraint
+
+Implement one barrier predicate at one classification point. Do not restructure `reconciliationDiagnosis` short-circuits under this item; that redesign belongs to #178. Take row 1 through RED and GREEN. Rows 2 and 3 may become characterization tests if the same predicate makes them pass, but prove each test detects the pre-fix behavior. Pin the authorized-predecessor sibling window, named current owner, detached current owner, and unreachable expected revision in the same run.
