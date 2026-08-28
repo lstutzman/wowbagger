@@ -498,23 +498,80 @@ git commit -m "Name only active worktree owners"
 
 ---
 
-### Task 8: Extract the typed reconciliation classifier
+### Task 8: Wire every reconciliation caller, then extract the classifier
 
 **Files:**
 - Create: `src/reconciliation-classifier.js`
 - Modify: `src/claim-publication.js`
+- Modify: any existing reconciliation caller identified by the audit, only when it omits current identity
 - Modify: `test/cross-worktree-coordination.test.js`
+- Modify: focused publish/adopt/claim lifecycle tests that exercise the corrected callers
 
 **Interfaces:**
-- Export `classifyReconciliation({ workingTree, head, expectedOwner, expectedWriter })`.
-- Export `findingBlocksTarget(scope, findingItemId, targetItemId)` or keep it private in the same module; scope, never reason, decides.
+- 8a produces command-independent `currentWorktreeId` evidence for every `reconcileClaimJournal` caller.
+- 8b exports `classifyReconciliation({ workingTree, head, expectedOwner, expectedWriter })`.
+- 8b exports `findingBlocksTarget(scope, findingItemId, targetItemId)` or keeps it private in the same module; scope, never reason, decides.
 - The classifier returns exactly the result union in the spec.
 
-- [ ] **Step 1: Capture current public matrix baseline**
+#### Task 8a: Wire current identity into every reconciliation caller
 
-Run the complete cross-worktree suite and save counts in the item decision evidence. No source changes yet.
+- [ ] **Step 1: Audit every caller before editing**
 
-- [ ] **Step 2: Create normalized revision classification**
+List every `reconcileClaimJournal` call site with file, enclosing command, lock context, and whether it currently passes `currentWorktreeId`. Record the complete table in the task report. Every caller that classifies item reconciliation must pass identity; if one legitimately must not, record the reason before implementation.
+
+- [ ] **Step 2: Write public publish row 6a RED**
+
+Construct the current-writer unreachable-successor topology, invoke `publish-claimed`, and assert the reconciliation refusal reports `unauthorized-revision`, blocks publication, and leaves item, journal, reconcile log, identity, index, and `HEAD` unchanged. Run before production edits and require the existing unavailable-synchronization diagnosis.
+
+- [ ] **Step 3: Implement publish wiring and run GREEN**
+
+Reuse the identity already ensured and uniqueness-checked inside the publication lock:
+
+```js
+reconciled = await reconcileClaimJournal({
+  ledgerDirectory,
+  gitCommonDir,
+  namespace,
+  replayed,
+  physicalNow: new Date().toISOString(),
+  targetItemId: request.item_id,
+  currentWorktreeId,
+  writeLogOnUnsafe: false,
+});
+```
+
+Run the focused publish test and genuine-sibling/unreachable companions. Public codes and fields stay unchanged; only the reason/remediation corrects for current writer evidence.
+
+- [ ] **Step 4: Write public adoption row 6a RED, implement, and run GREEN**
+
+Create the same topology through `claim-adopt`. Read and uniqueness-check current identity under the existing lock, pass it into reconciliation, and assert the precondition path now agrees with claim-verify. Pin genuine sibling and legacy-unknown adoption companions so they remain unavailable synchronization.
+
+- [ ] **Step 5: Cover every remaining caller from the audit**
+
+For each omitted caller, add one public behavior test before wiring it. Do not change a caller that has a documented reason to remain identity-free. Run a single focused set proving claim-verify, ordinary mutation, publish, adoption, and claim lifecycle surfaces agree on row 6a and preserve row 6b/6c.
+
+- [ ] **Step 6: Add release-note evidence and commit 8a separately**
+
+Record in `CHANGELOG.md` under Unreleased that publish and adopt now report unauthorized rather than synchronization for an unreachable successor written by the current worktree. Do not add a version heading.
+
+```bash
+git add src/claim-publication.js src/claim-coordinator.js src/cli.js test/cross-worktree-coordination.test.js test/claim-publish-refusal.test.js test/claim-adoption.test.js CHANGELOG.md
+git commit -m "Align reconciliation callers on worktree identity"
+```
+
+Stage only files that actually changed.
+
+#### Task 8b: Extract the typed classifier without behavior changes
+
+- [ ] **Step 7: Capture the post-8a public matrix baseline**
+
+Run the complete cross-worktree suite and every focused caller test. Save counts in the report. No source changes yet.
+
+- [ ] **Step 8: Pin own-malformed identity ordering**
+
+Add the deferred public regression: malformed current-worktree identity must keep the existing claim-store-unreadable outer result without a sibling-enumeration `identity_diagnostic`. Mutation-prove that moving roster assertion before current identity read fails this spelling.
+
+- [ ] **Step 9: Create normalized revision classification**
 
 In `claim-publication.js`, convert revisions before calling the new module:
 
@@ -526,11 +583,13 @@ function revisionClass(revision, expectedRevision, authorizedRevisions) {
 }
 ```
 
-- [ ] **Step 3: Move one topology at a time**
+Move expected-writer normalization into the classifier input construction or a named helper only if more than one caller uses it. This resolves the deferred inline-normalization Minor without creating a speculative export.
+
+- [ ] **Step 10: Move one topology at a time**
 
 Start with global unknown/deletion barriers, run their public tests, then move Git finalization, current-owner unauthorized, named sibling synchronization, unavailable synchronization, and final unauthorized fallback. After each move, run the matching public test before deleting the old branch.
 
-- [ ] **Step 4: Replace reason-based target scope**
+- [ ] **Step 11: Replace reason-based target scope**
 
 Replace:
 
@@ -540,24 +599,26 @@ return finding.reason !== 'worktree-synchronization-required';
 
 with the classifier's scope result. Store internal scope alongside the finding during reconciliation, strip it before returning public `findings`, and assert no new public member appears.
 
-- [ ] **Step 5: Run full public topology suite**
+- [ ] **Step 12: Run full public topology and caller suites**
 
-Every matrix row and existing companion must pass with exact public envelopes.
+Every matrix row, existing companion, publish/adopt caller, and malformed-identity test must pass with exact public envelopes.
 
-- [ ] **Step 6: Mutation-test distinct outcomes**
+- [ ] **Step 13: Mutation-test distinct outcomes**
 
 Change each result class once—global to target, target to global, current owner to sibling, unknown writer to current, named sibling to unavailable—and require a public test failure. Restore after each mutation.
 
-- [ ] **Step 7: Simplify without new public seams**
+- [ ] **Step 14: Simplify without new public seams**
 
-Remove obsolete `reconciliationDiagnosis`, `blocksTarget`, and duplicate remediation construction only after all public tests pass. Keep filesystem and Git evidence outside the pure module.
+Remove obsolete `reconciliationDiagnosis`, `blocksTarget`, and duplicate remediation construction only after all public tests pass. Keep filesystem and Git evidence outside the pure module. Review the deferred `GIT_ENVIRONMENT` duplication Minor; fix it only if an existing shared internal interface can be reused without widening public or test seams, otherwise keep it ledgered for final review.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 15: Commit 8b separately**
 
 ```bash
 git add src/reconciliation-classifier.js src/claim-publication.js test/cross-worktree-coordination.test.js
 git commit -m "Centralize reconciliation topology classification"
 ```
+
+The 8b diff contains no intended public behavior change. If a public fixture or expected reason changes, stop and treat it as a missing 8a behavior task rather than folding it into extraction.
 
 ---
 
