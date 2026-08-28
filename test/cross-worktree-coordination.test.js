@@ -21,12 +21,17 @@ import { ensureWorktreeIdentity } from '../src/worktree-identity.js';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
 
-function run(cwd, ...argumentsList) {
+function runEnv(cwd, env, ...argumentsList) {
   const result = spawnSync(process.execPath, [CLI, ...argumentsList], {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, ...env },
   });
   return { envelope: JSON.parse(result.stdout), exit: result.status };
+}
+
+function run(cwd, ...argumentsList) {
+  return runEnv(cwd, {}, ...argumentsList);
 }
 
 function git(root, ...argumentsList) {
@@ -1822,4 +1827,107 @@ test('a recreated worktree earns a new identity instead of inheriting the remove
     aliased.envelope.result.findings.find((entry) => entry.item_id === seedId).reason,
     'unauthorized-revision',
   );
+});
+
+// A `git` that answers the roster question wrongly, and answers every other
+// question exactly as Git does. The two modes are the failures Git itself
+// cannot be talked into on demand: the listing refusing outright, and a record
+// Git reports live whose path is already gone — the race between listing a
+// worktree and reading it.
+async function gitRosterShim(mode, ghostPath = '') {
+  const directory = await mkdtemp(path.join(tmpdir(), 'wb-git-shim-'));
+  const realGit = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+  assert.ok(realGit, 'the real git must be resolvable');
+  const roster = mode === 'listing-failed'
+    ? "  process.stderr.write('fatal: injected worktree listing failure\\n');\n  process.exit(3);"
+    : `  process.stdout.write('worktree ${ghostPath}\\u0000HEAD ${'0'.repeat(40)}\\u0000branch refs/heads/ghost\\u0000\\u0000');\n  process.exit(0);`;
+  const shim = path.join(directory, 'git');
+  await writeFile(shim, [
+    `#!${process.execPath}`,
+    "const { spawnSync } = require('node:child_process');",
+    'const args = process.argv.slice(2);',
+    "if (args[0] === 'worktree' && args[1] === 'list') {",
+    roster,
+    '}',
+    `const result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' });`,
+    'process.exit(result.status ?? 1);',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  return { PATH: `${directory}${path.delimiter}${process.env.PATH}` };
+}
+
+// The same fixture the unreadable-roster vectors use, minus the sabotage: one
+// completed fenced mutation committed to Git, so journal, reconciliation log,
+// and identity file all exist and can be proven untouched.
+async function seededWorktreeRepository(label) {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const seeded = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const seedPatch = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(fixture.root, `patch-before-${label}.json`, seedId, seeded.envelope.result.item.revision),
+    '--json',
+  );
+  assert.equal(seedPatch.exit, 0, JSON.stringify(seedPatch.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Record the first mutation');
+  return { ...fixture, roots: [fixture.root], seedId };
+}
+
+// Assert the two core surfaces refuse with the enumeration diagnostic and leave
+// every byte alone. `env` carries an optional roster shim.
+async function assertRosterRefusal(fixture, label, env) {
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', fixture.seedId, '--json',
+  );
+  const request = await patchRequest(
+    fixture.root, `patch-${label}.json`, fixture.seedId, inspected.envelope.result.item.revision,
+  );
+  const before = await identitySnapshot(fixture.root, fixture.ledger, fixture.roots);
+
+  const verified = runEnv(fixture.root, env, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  const blocked = runEnv(
+    fixture.root, env, 'patch', '--ledger', fixture.ledger, '--input', request, '--json',
+  );
+
+  for (const refused of [verified, blocked]) {
+    assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+    assert.equal(refused.envelope.state, 'unchanged');
+    assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+    assert.deepEqual(refused.envelope.error.details, {
+      reason: 'claim-store-unreadable',
+      identity_diagnostic: { code: 'worktree-enumeration-failed' },
+    });
+  }
+  assert.deepEqual(
+    await identitySnapshot(fixture.root, fixture.ledger, fixture.roots),
+    before,
+  );
+}
+
+// Git cannot answer the roster question at all. Evidence is unavailable, which
+// is not the same as evidence of no duplicate, so nothing classifies or writes.
+test('a failed worktree roster listing refuses verification and mutation', async () => {
+  const fixture = await seededWorktreeRepository('listing-failed');
+  await assertRosterRefusal(fixture, 'listing-failed', await gitRosterShim('listing-failed'));
+});
+
+// Git reports a worktree live and its path is already gone: the race between
+// listing a roster and reading it. A vanished path is not an absent identity.
+test('a live worktree record with a vanished path refuses verification and mutation', async () => {
+  const fixture = await seededWorktreeRepository('vanished-path');
+  const ghost = path.join(await mkdtemp(path.join(tmpdir(), 'wb-ghost-')), 'gone');
+  await assertRosterRefusal(
+    fixture, 'vanished-path', await gitRosterShim('vanished-path', ghost),
+  );
+});
+
+// A live sibling's identity file is present and unreadable as a UUID. Skipping
+// it would shrink the roster to what happened to parse, which could hide the
+// very duplicate the check exists to find, so the roster counts as incomplete.
+test('malformed identity bytes in a live sibling refuse verification and mutation', async () => {
+  const fixture = await seededWorktreeRepository('malformed-sibling');
+  await writeFile(identityPathOf(fixture.siblingRoot), 'not-a-uuid\n', { mode: 0o600 });
+  await assertRosterRefusal(fixture, 'malformed-sibling', {});
 });
