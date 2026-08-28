@@ -168,7 +168,16 @@ Never open the final identity file with truncate semantics.
 
 ### Duplicate detection
 
-Before trusting a current UUID, enumerate live registered worktrees through `git worktree list --porcelain -z`. Resolve each live worktree's private Git directory through Git and read any identity file present. If two live worktrees in the same Git common directory carry one UUID, fail closed through the existing `claim-store-unreadable` public path. Do not add a new public error code or reason in this change.
+Before trusting a current UUID, enumerate live registered worktrees through `git worktree list --porcelain -z`. Resolve each live worktree's private Git directory through Git and read any identity file present. If two live worktrees in the same Git common directory carry one UUID, reconciliation fails before it classifies or publishes an item.
+
+The observable behavior reuses existing failure surfaces:
+
+- `claim-verify` exits `6` in the `work-claim` domain with `state: "unchanged"`, `error.code: "claim-store-unavailable"`, and `error.details.reason: "claim-store-unreadable"`;
+- an ordinary claim-protected mutation exits `6` in its existing domain with `state: "unchanged"`, `error.code: "claim-store-unavailable"`, and `error.details.reason: "claim-store-unreadable"`;
+- auto-commit refuses with exit `4`, `error.code: "auto-commit-preflight-failed"`, `error.details.reason: "claim-state-unreconciled"`, `claim_verify_code: "claim-store-unavailable"`, `claim_verify_reason: "claim-store-unreadable"`, and `retryable: false`;
+- `publish-claimed` and `claim-adopt` map the identity failure to their existing claim-store-unavailable form instead of reporting an unknown mutation outcome.
+
+No item, journal, reconciliation log, identity file, Git index, or commit changes after duplicate detection. Claim reads and lease decisions that do not reconcile item bytes continue to use their existing claim-store rules. Do not add a new public error code or reason in this change.
 
 A copied independent clone may carry the same UUID, but clones do not share a Git common directory or journal, so the identity cannot collide within the coordination domain.
 
@@ -199,7 +208,9 @@ Reasons:
 - The new reader accepts entries without the field and preserves alpha.12's ambiguous unreachable-writer behavior.
 - Tags and remote refs stop being mislabeled as active worktree owners, but the public finding still uses the existing synchronization reason and `owner_unavailable: true` shape.
 
-Before implementation changes journal parsing, add a characterization test against the alpha.12 parser behavior: an otherwise valid entry carrying `writer_worktree_id` replays successfully. Run and record that test while the implementation still matches alpha.12. After implementation, keep it green. Add a new-reader test showing a missing field produces `expectedWriter: 'unknown'` and row 6c behavior.
+Published-binary compatibility was executed before implementation. The globally installed registry binary reported `0.1.0-alpha.12`. In a temporary provisioned Git ledger, a valid `legacy-mutation-intent` and matching `legacy-mutation` were appended with an extra random `writer_worktree_id` while preserving the journal hash chain. Running the published alpha.12 `claim-verify` against that journal exited `0`, returned `ok: true`, reported `findings: []`, and validated the ledger. This is execution evidence, not parser inspection.
+
+Before implementation changes journal parsing, add the same case as a permanent characterization test and run it while the implementation still matches alpha.12. After implementation, keep it green. Add a new-reader test showing a missing field produces `expectedWriter: 'unknown'` and row 6c behavior.
 
 A contract-version bump becomes necessary only if implementation needs a new public member, error code, reason value, or incompatible journal requirement. Stop and ask Lee before making such a change.
 
@@ -216,11 +227,11 @@ No worktree UUID appears in a finding. No public member is added or removed.
 
 ## Compatibility and failure behavior
 
-- Alpha.12 reader plus new journal field: accepts and ignores the field.
+- Alpha.12 reader plus new journal field: published alpha.12 execution exits `0`, ignores the field, reports no findings, and validates the ledger.
 - New reader plus alpha.12 journal: treats writer identity as unknown.
 - Missing identity file: creates one only under the claim lock before a new journal write.
-- Malformed identity file: fail closed as existing `claim-store-unreadable`; do not replace it silently.
-- Duplicate live identity: fail closed as existing `claim-store-unreadable`.
+- Malformed identity file: every item-reconciling write and `claim-verify` refuses through the existing claim-store-unreadable surface; the file is never replaced silently.
+- Duplicate live identity: every item-reconciling write and `claim-verify` refuses before mutation through the concrete envelopes defined above.
 - Git worktree enumeration failure: ownership evidence is unavailable; safety does not downgrade.
 - Identity write outcome unknown: re-read the final path before deciding; never generate and append a second UUID blindly.
 
