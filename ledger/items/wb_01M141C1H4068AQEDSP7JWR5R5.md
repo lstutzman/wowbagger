@@ -5,9 +5,10 @@ number: 180
 title: "Normalize Windows file-ancestor report path failures to ENOTDIR"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-28
 updated: 2026-08-28
+completed: 2026-08-28
 provenance:
   source: "no-mistakes/01M13V2KDWVXHHBNWZEWSZ7CQK/ci"
   recorded_at: "2026-08-28T11:16:45Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-28
     summary: "Accept the hosted Windows report-path defect."
     rationale: "Required Windows Node 20 CI reproduced a wrong public error class in an existing behavioral test. The defect predates #179, but excluding its surgical fix leaves the alpha.12 release blocked. It remains separately attributed and documented."
+  - action: complete
+    date: 2026-08-28
+    summary: "Normalized Windows file-ancestor report path failures."
+    rationale: "Hosted Windows Node 20 CI failed the existing public CLI test with report-write-failed/EEXIST before the fix. That test explicitly requires report-read-failed, resolve-output-path, ENOTDIR, unchanged blocker bytes, and no output publication. Commit 260be63 adds only a stat guard after ancestor realpath in src/report.js. The pipeline's Windows-semantic simulation failed before the guard and passed after it; the macOS report suite passed 12/12; hosted CI passed after the separate commit."
 ---
 ## Problem
 
