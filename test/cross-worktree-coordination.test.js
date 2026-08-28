@@ -10,13 +10,14 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { withClaimLock } from '../src/claim-store.js';
+import { listWorktrees } from '../src/git-worktrees.js';
 import { ensureWorktreeIdentity } from '../src/worktree-identity.js';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
@@ -1829,18 +1830,22 @@ test('a recreated worktree earns a new identity instead of inheriting the remove
   );
 });
 
-// A `git` that answers the roster question wrongly, and answers every other
-// question exactly as Git does. The two modes are the failures Git itself
-// cannot be talked into on demand: the listing refusing outright, and a record
-// Git reports live whose path is already gone — the race between listing a
-// worktree and reading it.
-async function gitRosterShim(mode, ghostPath = '') {
+// A `git` that answers the roster question as the caller dictates, and answers
+// every other question exactly as Git does. `records: null` makes the listing
+// refuse outright; otherwise each entry is the exact attribute list Git would
+// emit for one worktree, NUL-terminated with the extra NUL between records.
+// These are the rosters Git itself cannot be talked into on demand: a listing
+// that fails, a record Git calls live whose path is already gone, and a
+// prunable record that still holds a real colliding identity.
+async function gitRosterShim(records) {
   const directory = await mkdtemp(path.join(tmpdir(), 'wb-git-shim-'));
   const realGit = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
   assert.ok(realGit, 'the real git must be resolvable');
-  const roster = mode === 'listing-failed'
+  const roster = records === null
     ? "  process.stderr.write('fatal: injected worktree listing failure\\n');\n  process.exit(3);"
-    : `  process.stdout.write('worktree ${ghostPath}\\u0000HEAD ${'0'.repeat(40)}\\u0000branch refs/heads/ghost\\u0000\\u0000');\n  process.exit(0);`;
+    : `  process.stdout.write(${JSON.stringify(
+      records.map((fields) => `${fields.join('\0')}\0\0`).join(''),
+    )});\n  process.exit(0);`;
   const shim = path.join(directory, 'git');
   await writeFile(shim, [
     `#!${process.execPath}`,
@@ -1910,7 +1915,7 @@ async function assertRosterRefusal(fixture, label, env) {
 // is not the same as evidence of no duplicate, so nothing classifies or writes.
 test('a failed worktree roster listing refuses verification and mutation', async () => {
   const fixture = await seededWorktreeRepository('listing-failed');
-  await assertRosterRefusal(fixture, 'listing-failed', await gitRosterShim('listing-failed'));
+  await assertRosterRefusal(fixture, 'listing-failed', await gitRosterShim(null));
 });
 
 // Git reports a worktree live and its path is already gone: the race between
@@ -1918,9 +1923,9 @@ test('a failed worktree roster listing refuses verification and mutation', async
 test('a live worktree record with a vanished path refuses verification and mutation', async () => {
   const fixture = await seededWorktreeRepository('vanished-path');
   const ghost = path.join(await mkdtemp(path.join(tmpdir(), 'wb-ghost-')), 'gone');
-  await assertRosterRefusal(
-    fixture, 'vanished-path', await gitRosterShim('vanished-path', ghost),
-  );
+  await assertRosterRefusal(fixture, 'vanished-path', await gitRosterShim([[
+    `worktree ${ghost}`, `HEAD ${'0'.repeat(40)}`, 'branch refs/heads/ghost',
+  ]]));
 });
 
 // A live sibling's identity file is present and unreadable as a UUID. Skipping
@@ -1930,4 +1935,137 @@ test('malformed identity bytes in a live sibling refuse verification and mutatio
   const fixture = await seededWorktreeRepository('malformed-sibling');
   await writeFile(identityPathOf(fixture.siblingRoot), 'not-a-uuid\n', { mode: 0o600 });
   await assertRosterRefusal(fixture, 'malformed-sibling', {});
+});
+
+// The exclusion the spec grants and nothing else: a record Git itself marks
+// prunable is not ownership evidence, even when its identity file really does
+// hold the colliding UUID. Git cannot be made to mark a worktree prunable while
+// its bytes are still readable — deleting the checkout takes the identity file
+// with it, leaving nothing to collide and nothing to exclude — so the marker
+// comes from the roster while both identity files stay real. Production parses
+// that roster, resolves both private Git directories, and must still proceed.
+test('a prunable worktree carrying the same identity does not refuse anything', async () => {
+  const fixture = await seededWorktreeRepository('prunable-duplicate');
+  const duplicateId = '00000000-0000-4000-8000-000000000000';
+  for (const at of [fixture.root, fixture.siblingRoot]) {
+    await writeFile(identityPathOf(at), `${duplicateId}\n`, { mode: 0o600 });
+  }
+  const head = git(fixture.root, 'rev-parse', 'HEAD');
+  const env = await gitRosterShim([
+    [`worktree ${fixture.root}`, `HEAD ${head}`, `branch refs/heads/${fixture.branch}`],
+    [
+      `worktree ${fixture.siblingRoot}`, `HEAD ${head}`, 'branch refs/heads/sibling',
+      'prunable gitdir file points to non-existent location',
+    ],
+  ]);
+
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', fixture.seedId, '--json',
+  );
+  const verified = runEnv(fixture.root, env, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  const patched = runEnv(
+    fixture.root, env, 'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root, 'patch-prunable-duplicate.json', fixture.seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.ok, true);
+  assert.deepEqual(verified.envelope.result.findings, []);
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  assert.equal(patched.envelope.state, 'committed');
+  // The live worktree keeps the identity it already answered to, and the
+  // excluded one is neither read as a writer nor rewritten.
+  assert.equal(await readFile(identityPathOf(fixture.root), 'utf8'), `${duplicateId}\n`);
+  assert.equal(await readFile(identityPathOf(fixture.siblingRoot), 'utf8'), `${duplicateId}\n`);
+});
+
+// The parser answers with records, not text, so these vectors assert records.
+// NUL termination is not a style preference: a worktree path may contain a
+// newline, and the newline-delimited spelling cannot report one. Both awkward
+// paths here are real checkouts Git created and reports, and every marker Git
+// can attach to a record appears exactly once.
+test('the worktree roster parses every marker and survives awkward paths', async () => {
+  const home = await realpath(await mkdtemp(path.join(tmpdir(), 'wb-roster-')));
+  const root = path.join(home, 'main');
+  await mkdir(root);
+  git(root, 'init', '-q');
+  git(root, 'config', 'user.email', 'test@example.com');
+  git(root, 'config', 'user.name', 'Wowbagger Test');
+  await writeFile(path.join(root, 'file'), 'seed\n');
+  git(root, 'add', '.');
+  git(root, 'commit', '-qm', 'Seed');
+  const branch = git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
+  const head = git(root, 'rev-parse', 'HEAD');
+
+  const spaced = path.join(home, 'with space');
+  const newlined = path.join(home, 'with\nnewline');
+  const detached = path.join(home, 'detached');
+  const locked = path.join(home, 'locked');
+  const pruned = path.join(home, 'pruned');
+  git(root, 'worktree', 'add', '-q', '-b', 'spaced', spaced);
+  git(root, 'worktree', 'add', '-q', '-b', 'newlined', newlined);
+  git(root, 'worktree', 'add', '-q', '--detach', detached);
+  git(root, 'worktree', 'add', '-q', '-b', 'locked', locked);
+  git(root, 'worktree', 'lock', locked);
+  git(root, 'worktree', 'add', '-q', '-b', 'pruned', pruned);
+  // Git calls a worktree prunable once its checkout is gone. It still reports
+  // the record, which is why the record carries the flag rather than vanishing.
+  await rm(pruned, { force: true, recursive: true });
+
+  const byPath = (left, right) => (left.path < right.path ? -1 : 1);
+  const live = {
+    head, branch: null, detached: false, bare: false, locked: false, prunable: false,
+  };
+  assert.deepEqual((await listWorktrees(root)).sort(byPath), [
+    { ...live, path: root, branch: `refs/heads/${branch}` },
+    { ...live, path: spaced, branch: 'refs/heads/spaced' },
+    { ...live, path: newlined, branch: 'refs/heads/newlined' },
+    { ...live, path: detached, detached: true },
+    { ...live, path: locked, branch: 'refs/heads/locked', locked: true },
+    { ...live, path: pruned, branch: 'refs/heads/pruned', prunable: true },
+  ].sort(byPath));
+});
+
+// A bare repository is the one record Git reports with no `HEAD` and no branch,
+// so the parser must leave both null rather than inherit the previous record's.
+test('the worktree roster reports a bare repository beside its linked worktree', async () => {
+  const home = await realpath(await mkdtemp(path.join(tmpdir(), 'wb-roster-bare-')));
+  const source = path.join(home, 'source');
+  await mkdir(source);
+  git(source, 'init', '-q');
+  git(source, 'config', 'user.email', 'test@example.com');
+  git(source, 'config', 'user.name', 'Wowbagger Test');
+  await writeFile(path.join(source, 'file'), 'seed\n');
+  git(source, 'add', '.');
+  git(source, 'commit', '-qm', 'Seed');
+
+  const bare = path.join(home, 'bare.git');
+  const linked = path.join(home, 'linked');
+  git(home, 'clone', '-q', '--bare', source, bare);
+  git(bare, 'worktree', 'add', '-q', '-b', 'linked', linked);
+
+  assert.deepEqual(await listWorktrees(bare), [
+    {
+      path: bare,
+      head: null,
+      branch: null,
+      detached: false,
+      bare: true,
+      locked: false,
+      prunable: false,
+    },
+    {
+      path: linked,
+      head: git(source, 'rev-parse', 'HEAD'),
+      branch: 'refs/heads/linked',
+      detached: false,
+      bare: false,
+      locked: false,
+      prunable: false,
+    },
+  ]);
 });
