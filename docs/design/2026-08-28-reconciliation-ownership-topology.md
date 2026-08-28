@@ -166,6 +166,8 @@ Identity creation runs while the existing claim-store lock is held, so cooperati
 
 Never open the final identity file with truncate semantics.
 
+`ensureWorktreeIdentity` takes the worktree-keyed lock even when the identity file already exists, because checking outside the lock would reopen the cross-namespace first-creator race. This adds one process-lock acquisition to every legacy fenced mutation and every `publish-claimed` call. `claim-verify`, `claim-adopt`, and claim acquire/renew/release read the identity without taking this lock. The cost is deliberate and must remain visible in phase and latency instrumentation; do not cache the identity outside the lock.
+
 ### Duplicate detection
 
 Before trusting a current UUID, enumerate live registered worktrees through `git worktree list --porcelain -z`. Resolve each live worktree's private Git directory through Git and read any identity file present. If two live worktrees in the same Git common directory carry one UUID, reconciliation fails before it classifies or publishes an item.
