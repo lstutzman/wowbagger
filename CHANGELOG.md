@@ -17,6 +17,12 @@ consolidation. The first tagged release inherits this file.
   unrelated mutation could proceed through the documented global barrier.
   Alpha.12 classifies local state before owner and target scope, while genuine
   authorized sibling predecessors remain target-scoped synchronization.
+- **Windows report path resolution preserves the read-failure error class.**
+  Windows can report `ENOENT` where POSIX reports `ENOTDIR` when an output path
+  descends through a regular file. Report generation now recognizes that
+  non-directory ancestor and returns `report-read-failed` with
+  `resolve-output-path` and `ENOTDIR` before publication, instead of surfacing
+  `report-write-failed` with `EEXIST`.
 
 ## 0.1.0-alpha.11 - 2026-08-27
 
