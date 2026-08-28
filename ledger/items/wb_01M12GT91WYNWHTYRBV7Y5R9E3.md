@@ -5,7 +5,7 @@ number: 178
 title: "Audit reconciliation ownership classification as one topology matrix"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-27
 updated: 2026-08-28
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-27T21:05:00Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-28
+    summary: "Accept the consolidated ownership topology audit."
+    rationale: "The alpha.11 and alpha.12 gates found five adjacent reconciliation defects, four in the same classifier and two caused by preceding point fixes. Lee prioritized #178 now and approved an explicit generated worktree UUID plus a typed diagnosis seam so safety scope no longer depends on short-circuit order or reason strings."
 ---
 ## Problem
 
