@@ -132,11 +132,9 @@ git commit -m "Characterize alpha12 journal field compatibility"
 **Interfaces:**
 - `src/git-worktrees.js` produces:
   - `resolvePrivateGitDir(directory): Promise<string>`
-  - `listRegisteredWorktrees(directory): Promise<Array<{ path, head, branch, detached, bare, locked, prunable, gitDir }>>`
 - `src/worktree-identity.js` produces:
   - `readWorktreeIdentity({ ledgerDirectory, gitCommonDir }): Promise<string | null>`
   - `ensureWorktreeIdentity({ ledgerDirectory, gitCommonDir }): Promise<string>`
-  - `assertUniqueWorktreeIdentity({ ledgerDirectory, gitCommonDir, worktreeId }): Promise<void>`
 - Identity errors use internal code `CLAIM_WORKTREE_IDENTITY_INVALID`; callers map them to existing public outer errors plus the approved nested diagnostic.
 
 - [ ] **Step 1: Write RED for identity creation through public patch**
@@ -186,7 +184,7 @@ Run the identity test and the complete `test/cross-worktree-coordination.test.js
 
 - [ ] **Step 6: Refactor and commit**
 
-Keep roster parsing and Git-directory resolution in `git-worktrees.js`; both identity duplicate detection and Task 7 owner evidence must reuse it.
+Task 2 implements only private-Git-directory resolution in `git-worktrees.js`. Task 5 adds the NUL-safe roster parser alongside its first public consumers and duplicate tests; Task 7 must reuse that parser.
 
 ```bash
 git add src/git-worktrees.js src/worktree-identity.js src/claim-coordinator.js test/cross-worktree-coordination.test.js
