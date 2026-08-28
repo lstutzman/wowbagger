@@ -1,0 +1,34 @@
+---
+schema_version: 2
+id: wb_01M14Y1NTXQPMQ270VT1WH6H17
+number: 181
+title: "Prevent duplicate schema-v2 numbers across worktrees"
+kind: task
+priority: 1
+status: triage
+created: 2026-08-28
+updated: 2026-08-28
+provenance:
+  source: "PropertyCompass2 field failures"
+  recorded_at: "2026-08-28T19:38:40Z"
+depends_on: []
+related: []
+---
+## Problem
+
+PropertyCompass2 observed successful schema-v2 creates publish duplicate human-facing numbers. Existing advertising mirrors `wb_01M14JTJBCSGHGKF7BX9BS22B4` / #1685 (create `bc39320a9`) and `wb_01M14JWGEMHM6BRB3V27F777H9` / #1686 (`bb233c9f7`) were followed by successful mentorship creates `wb_01M14K5MKX474PN1C8K6YV836B` and `wb_01M14M0NW9JD5X0SWDSDHG3QZ4`, also published as #1685/#1686 (`e9862b341` / `a629e6551`). `wowbagger validate` then failed globally with `duplicate-number` on all four items.
+
+A create must never return committed when its assigned number already exists in committed ledger bytes. Evidence suggests stale or concurrent number allocation across worktrees or journal surfaces. Determine whether this is reachable in current Wowbagger through ordinary cooperating use or depends on consumer misuse; if ordinary, treat it as a live core safety defect.
+
+## Emergency repair already performed
+
+Lee ruled the advertising items were newer business work. PropertyCompass2 manually changed their numbers to free #1693/#1694, committed those out-of-band bytes, then CAS `claim-adopt`ed both revisions. Advertising legacy #1692/#1693 now bind to ledger #1693/#1694 through `data.legacy_id`; duplicate numbers are gone and `wowbagger validate` passes. This worked but is not a sanctioned recovery procedure.
+
+## Acceptance criteria
+
+- Reproduce duplicate allocation through public create seams across cooperating worktrees or identify the exact unsupported consumer action required.
+- Serialize number allocation against the committed ledger state within one Git coordination domain.
+- Validate the complete candidate ledger under the allocation fence immediately before publication.
+- A stale or concurrent create whose candidate number now exists refuses unchanged; it never reports committed.
+- Preserve atomic no-clobber item publication and core-assigned immutable numbering.
+- Add current Node and Node 20 public regressions plus cross-worktree contention coverage.
