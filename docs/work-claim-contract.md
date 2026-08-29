@@ -360,10 +360,14 @@ next mutation refuses. Inside the window, only an actor that bypasses this tool
 can overwrite the item, and this protocol does not defend against that actor.
 It is merge-coordinated, not exclusive.
 
-**Warning: the same window lets two worktrees commit one item number, and
-nothing repairs it** (items #181 and #182). Because create is journal-silent,
-two worktrees that branch from the same base each derive the next schema-v2
-`number` from the base they can see. Both creates succeed, both refuse
+**Warning: the same window lets more than one worktree commit one item number,
+and nothing repairs it** (items #181 and #182). Because create is
+journal-silent, nothing coordinates the number a create derives. Any two
+worktrees whose checkouts have not been integrated derive the next schema-v2
+`number` from the base each can see, and both derive the same one. The two
+creates need not overlap in time: a create in one worktree today and a create
+in another worktree tomorrow collide just as surely, so long as neither
+worktree has seen the other's commit. Both creates succeed, both refuse
 nothing, and reconciliation reports nothing, because there is no recorded
 revision to compare. The collision becomes visible only when the branches are
 integrated: `validate` then fails globally with `duplicate-number` on every

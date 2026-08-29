@@ -1696,7 +1696,15 @@ async function runClaimCommand(claimCommand, argumentsList) {
           error,
         );
       }
-      if (reconciled.unsafe) {
+      // Release relinquishes authority; it never extends or grants any. A
+      // barrier that refuses it strands the lease in the worktree least able
+      // to clear the barrier, because no other worktree can take the item over
+      // while the claim is held. Acquire and renew do extend authority against
+      // bytes nobody has ruled legitimate, so they keep refusing. Only this
+      // classification is bypassed: an unresolvable identity, an unreadable
+      // journal, and a clock floor that will not persist all throw before this
+      // point, and the tuple compare-and-swap below still rules on the request.
+      if (reconciled.unsafe && claimCommand !== 'release') {
         return claimStoreUnavailable(claimCommand, 'publication-reconciliation-required', {
           findings: reconciled.findings,
         });

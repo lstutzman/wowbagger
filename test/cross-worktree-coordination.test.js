@@ -16,6 +16,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { parseReconcileLog } from '../src/claim-journal.js';
 import { withClaimLock } from '../src/claim-store.js';
 import { listWorktrees } from '../src/git-worktrees.js';
 import { ensureWorktreeIdentity } from '../src/worktree-identity.js';
@@ -1208,6 +1209,280 @@ test('an unreachable own successor blocks acquiring a claim on an unrelated item
   assert.equal(claimRead.envelope.result.read_back.active, null);
   assert.equal(claimRead.envelope.result.read_back.last_epoch, '0');
   assert.deepEqual(await refusalSnapshot(fixture.root, fixture.ledger, roots), snapshot);
+});
+
+// A claim held on one item while another item holds unauthorized bytes. The
+// claim is acquired before the barrier exists, because acquiring one after it
+// is exactly what the barrier refuses.
+async function claimHeldUnderUnauthorizedBytes(label) {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+
+  const acquirePath = path.join(fixture.root, `acquire-${label}.json`);
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: secondId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const inspected = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json',
+  );
+  const patched = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      `patch-${label}.json`,
+      seedId,
+      inspected.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  git(fixture.root, 'restore', '--source=HEAD', '--', 'ledger/item.md');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(
+    verified.envelope.result.findings.find((entry) => entry.item_id === seedId).reason,
+    'unauthorized-revision',
+  );
+  return { ...fixture, claim: acquired.envelope.result.claim, secondId, seedId };
+}
+
+// The release request that matches the held claim, or a deliberately wrong
+// tuple built from the same claim.
+async function releaseRequestFile(fixture, label, overrides = {}) {
+  const requestPath = path.join(fixture.root, `release-${label}.json`);
+  await writeFile(requestPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.secondId,
+    owner_id: 'agent-a',
+    epoch: fixture.claim.epoch,
+    expected_expires_at: fixture.claim.expires_at,
+    ...overrides,
+  }));
+  return requestPath;
+}
+
+// The durable journal without its clock floor, which every invocation
+// advances, and the projected entries of the tracked reconciliation log.
+// Together they say exactly which records a command added.
+async function journalEntries(root) {
+  const file = path.join(
+    git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'),
+    'wowbagger', NAMESPACE, 'journal.ndjson',
+  );
+  return (await readFile(file, 'utf8')).trimEnd().split('\n')
+    .map((line) => JSON.parse(line))
+    .filter((entry) => entry.type !== 'clock');
+}
+
+async function reconcileLogEntries(ledger) {
+  return parseReconcileLog(
+    await readFile(path.join(ledger, '.wowbagger', `reconcile-${NAMESPACE}.md`), 'utf8'),
+    NAMESPACE,
+  );
+}
+
+// Every ledger file an operator reads, except the derived reconciliation log,
+// which a successful claim operation rewrites by design.
+async function ledgerItems(ledger) {
+  const files = [];
+  for (const name of (await readdir(ledger, { recursive: true })).sort()) {
+    if (name.endsWith(`reconcile-${NAMESPACE}.md`)) continue;
+    const file = path.join(ledger, name);
+    if ((await stat(file)).isFile()) files.push([name, await readFile(file, 'utf8')]);
+  }
+  return files;
+}
+
+// Releasing a claim relinquishes authority; it never extends or grants any.
+// An unauthorized-revision barrier must therefore not strand a lease: the
+// worktree holding it has to be able to hand it back so another worktree can
+// take the item over and repair the ledger. Acquiring and renewing do extend
+// authority against bytes nobody has ruled legitimate, so they keep refusing.
+test('an unreachable own successor still lets a claim be released', async () => {
+  const fixture = await claimHeldUnderUnauthorizedBytes('release-barrier');
+
+  const acquirePath = path.join(fixture.root, 'acquire-blocked-under-barrier.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.seedId,
+    owner_id: 'agent-b',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const blockedAcquire = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+  assert.equal(blockedAcquire.exit, 6, JSON.stringify(blockedAcquire.envelope));
+  assert.equal(
+    blockedAcquire.envelope.error.details.reason, 'publication-reconciliation-required',
+  );
+
+  const renewPath = path.join(fixture.root, 'renew-blocked-under-barrier.json');
+  await writeFile(renewPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.secondId,
+    owner_id: 'agent-a',
+    epoch: fixture.claim.epoch,
+    expected_expires_at: fixture.claim.expires_at,
+    lease_duration_ms: 300_000,
+  }));
+  const blockedRenew = run(
+    fixture.root, 'claim', 'renew', '--ledger', fixture.ledger,
+    '--input', renewPath, '--json',
+  );
+  assert.equal(blockedRenew.exit, 6, JSON.stringify(blockedRenew.envelope));
+  assert.equal(blockedRenew.envelope.error.details.reason, 'publication-reconciliation-required');
+
+  const itemsBefore = await ledgerItems(fixture.ledger);
+  const journalBefore = await journalEntries(fixture.root);
+  const logBefore = await reconcileLogEntries(fixture.ledger);
+  const head = git(fixture.root, 'rev-parse', 'HEAD');
+  const index = git(fixture.root, 'ls-files', '-s');
+
+  const released = run(
+    fixture.root, 'claim', 'release', '--ledger', fixture.ledger,
+    '--input', await releaseRequestFile(fixture, 'barrier'), '--json',
+  );
+
+  assert.equal(released.exit, 0, JSON.stringify(released.envelope));
+  assert.equal(released.envelope.state, 'committed');
+  assert.equal(released.envelope.result.read_back.active, null);
+  assert.equal(released.envelope.result.read_back.last_epoch, fixture.claim.epoch);
+  assert.equal(released.envelope.result.released_claim.epoch, fixture.claim.epoch);
+  assert.equal(released.envelope.result.released_claim.owner_id, 'agent-a');
+
+  // The release added exactly one durable record and one projected record, and
+  // moved nothing else: no item byte, no authorization or publication entry,
+  // no commit, no index entry.
+  const journalAfter = await journalEntries(fixture.root);
+  assert.deepEqual(journalAfter.slice(0, -1), journalBefore);
+  assert.equal(journalAfter.at(-1).type, 'claim');
+  assert.equal(journalAfter.at(-1).command, 'release');
+  assert.equal(journalAfter.at(-1).request.item_id, fixture.secondId);
+  const logAfter = await reconcileLogEntries(fixture.ledger);
+  assert.deepEqual(logAfter.slice(0, -1), logBefore);
+  assert.deepEqual(logAfter.at(-1), journalAfter.at(-1));
+  assert.deepEqual(await ledgerItems(fixture.ledger), itemsBefore);
+  assert.equal(git(fixture.root, 'rev-parse', 'HEAD'), head);
+  assert.equal(git(fixture.root, 'ls-files', '-s'), index);
+});
+
+// The barrier is bypassed for release, not the compare-and-swap. A caller that
+// does not hold the claim it names still cannot hand it back, and the wrong
+// tuple is refused on the ordinary claim surface rather than the store one.
+test('a wrong release tuple still refuses under an unauthorized-revision barrier', async () => {
+  const fixture = await claimHeldUnderUnauthorizedBytes('release-tuple');
+  const readPath = path.join(fixture.root, 'read-release-tuple.json');
+  await writeFile(readPath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: fixture.secondId,
+  }));
+
+  for (const [label, overrides] of [
+    ['wrong-owner', { owner_id: 'agent-b' }],
+    ['wrong-epoch', { epoch: '2' }],
+    ['wrong-expiry', { expected_expires_at: '2030-01-01T00:00:00.000Z' }],
+  ]) {
+    const refused = run(
+      fixture.root, 'claim', 'release', '--ledger', fixture.ledger,
+      '--input', await releaseRequestFile(fixture, label, overrides), '--json',
+    );
+    assert.equal(refused.exit, 4, `${label}: ${JSON.stringify(refused.envelope)}`);
+    assert.equal(refused.envelope.state, 'unchanged');
+    assert.equal(refused.envelope.error.code, 'claim-conflict');
+
+    const held = run(
+      fixture.root, 'claim', 'read', '--ledger', fixture.ledger, '--input', readPath, '--json',
+    );
+    assert.equal(held.envelope.result.read_back.active.owner_id, 'agent-a');
+    assert.equal(held.envelope.result.read_back.active.epoch, fixture.claim.epoch);
+  }
+
+  // The claim is still there to hand back, so the matching tuple still works.
+  const released = run(
+    fixture.root, 'claim', 'release', '--ledger', fixture.ledger,
+    '--input', await releaseRequestFile(fixture, 'matching'), '--json',
+  );
+  assert.equal(released.exit, 0, JSON.stringify(released.envelope));
+  assert.equal(released.envelope.result.read_back.active, null);
+});
+
+// Only the reconciliation classification is bypassed. A worktree that cannot
+// resolve its own identity resolves no writer evidence at all, so it refuses
+// every claim command, release included, before it rules on anything.
+test('a malformed own identity still refuses a release', async () => {
+  const fixture = await claimHeldUnderUnauthorizedBytes('release-identity');
+  const requestPath = await releaseRequestFile(fixture, 'malformed-identity');
+  await writeFile(identityPathOf(fixture.root), 'not-a-uuid\n', { mode: 0o600 });
+
+  const refused = run(
+    fixture.root, 'claim', 'release', '--ledger', fixture.ledger,
+    '--input', requestPath, '--json',
+  );
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.deepEqual(refused.envelope.error.details, { reason: 'claim-store-unreadable' });
+});
+
+// The control: with no barrier at all, release answers exactly as it always
+// has, so the bypass changed the barrier case and nothing else.
+test('a release with no reconciliation barrier is unchanged', async () => {
+  const fixture = await twoWorktreeRepository();
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+
+  const acquirePath = path.join(fixture.root, 'acquire-healthy-release.json');
+  await writeFile(acquirePath, JSON.stringify({
+    ledger_namespace: NAMESPACE,
+    item_id: secondId,
+    owner_id: 'agent-a',
+    lease_duration_ms: 300_000,
+    expected: { last_epoch: '0', active: null },
+  }));
+  const acquired = run(
+    fixture.root, 'claim', 'acquire', '--ledger', fixture.ledger,
+    '--input', acquirePath, '--json',
+  );
+  assert.equal(acquired.exit, 0, JSON.stringify(acquired.envelope));
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+
+  const released = run(
+    fixture.root, 'claim', 'release', '--ledger', fixture.ledger,
+    '--input', await releaseRequestFile(
+      { ...fixture, claim: acquired.envelope.result.claim, secondId }, 'healthy',
+    ),
+    '--json',
+  );
+  assert.equal(released.exit, 0, JSON.stringify(released.envelope));
+  assert.equal(released.envelope.state, 'committed');
+  assert.equal(released.envelope.result.read_back.active, null);
+  assert.equal(released.envelope.result.read_back.last_epoch, acquired.envelope.result.claim.epoch);
+  assert.equal(
+    released.envelope.result.released_claim.expires_at,
+    acquired.envelope.result.claim.expires_at,
+  );
 });
 
 // The same state written by an alpha.12 worktree, which recorded no writer.
