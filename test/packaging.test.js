@@ -247,6 +247,68 @@ test('the installed contract distinguishes reconciliation from Git finalization'
   );
 });
 
+// Alpha.13 is immutable, so the only place an operator can learn what its
+// generic unreadable-store refusal means is a shipped alpha.14 surface. Every
+// installed surface therefore carries the literal envelope and the upgrade
+// instruction, and the skill carries them before it teaches `create`.
+// Hard-wrapped prose is matched against a whitespace-flattened copy so an
+// assertion pins the sentence rather than the column the sentence broke at.
+function flatten(text) {
+  return text.replace(/\s+/gu, ' ');
+}
+
+const LEGACY_WRITER_EVIDENCE = [
+  'claim-store-unavailable',
+  'The durable claim store is unavailable.',
+  'claim-store-unreadable',
+  'upgrade every writer',
+  'before the first alpha.14 create',
+];
+
+for (const [surface, text] of [
+  ['installed skill', () => flatten(installedSkill)],
+  ['installed work-claim contract', () => flatten(installedWorkClaimContract)],
+  ['installed mutation contract', () => flatten(installedMutationContract)],
+]) {
+  test(`the ${surface} maps the alpha.13 refusal to the upgrade it needs`, () => {
+    const source = text();
+
+    for (const literal of LEGACY_WRITER_EVIDENCE) {
+      assert.ok(source.includes(literal), `${surface} must state ${JSON.stringify(literal)}`);
+    }
+    assert.match(source, /exit 6/i);
+    assert.match(source, /written by a newer Wowbagger/i);
+  });
+}
+
+test('the installed skill states the hard cutover before it teaches create', () => {
+  const source = flatten(installedSkill);
+  const cutover = source.indexOf('before the first alpha.14 create');
+  const writing = source.indexOf(' ## Writing ');
+
+  assert.ok(cutover > 0, 'the skill must state the cutover');
+  assert.ok(writing > 0, 'the skill must keep its writing section');
+  assert.ok(
+    cutover < writing,
+    'the cutover requirement must precede the create workflow it gates',
+  );
+});
+
+test('the installed skill teaches the supported bulk create pattern', () => {
+  const source = flatten(installedSkill);
+
+  assert.match(source, /no batch (?:mutation|operation)/i);
+  assert.match(source, /create-then-commit loop/i);
+  assert.match(source, /item #186/);
+});
+
+test('the installed skill routes an existing duplicate number to item #182', () => {
+  const source = flatten(installedSkill);
+
+  assert.match(source, /duplicate numbers?[^.]*item #182/u);
+  assert.match(source, /no item file/i);
+});
+
 test('the release gate rejects plugin bytes that differ from the version tag', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'wb-release-gate-'));
   mkdirSync(path.join(root, '.claude-plugin'));

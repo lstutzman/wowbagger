@@ -11,6 +11,8 @@ A create must either:
 
 The fix preserves atomic no-clobber item publication, core-assigned immutable numbering, and the existing `number = 1 + max(existing numbers)` rule.
 
+The guarantee is bounded. It closes the reported PropertyCompass2 collision: cooperating alpha.14 worktrees of one clone that share one Git common directory can no longer commit two items carrying the same number. Separate clones, separate machines, alpha.13 writers before the hard cutover, and noncooperating writes stay outside the fence and still rely on branch integration plus `validate`.
+
 ## Verified root cause
 
 Schema-version-2 create currently derives the next number from the invoking worktree's ledger. `NUMBER_INDEX_LOCK_ID` serializes concurrent creates only inside that working copy because its lock file lives below the checkout's ledger directory.
@@ -24,7 +26,7 @@ Create then publishes no authorization entry to the shared claim journal. Reconc
 This design covers item #181:
 
 - journal-fence successful and ambiguous creates in provisioned Git ledgers;
-- make create require repository-wide reconciliation before allocating a number;
+- make create fence allocation on global findings plus coordinated items absent from the creating worktree;
 - validate the complete candidate ledger under the allocation fence immediately before publication;
 - refuse stale and concurrent creates unchanged;
 - preserve the existing local number-index lock for unprovisioned and non-Git ledgers;
@@ -58,16 +60,31 @@ Because the intent and terminal are projected journal entries, a successful crea
 
 ### Repository-wide reconciliation fences allocation
 
-Existing transition and patch operations ask whether findings block their target item. Create is different: its output depends on the number carried by every item in the ledger. It therefore calls reconciliation with no target item. Any unresolved reconciliation finding blocks create before number allocation or item publication.
+Existing transition and patch operations ask whether findings block their
+target item. Create is different: its output depends on the number carried by
+every item in the ledger. It reconciles with its own item as the target, like
+every other mutation, and then reads one extra barrier before allocating a
+number or publishing an item.
 
-This changes create from target-scoped availability to repository-wide allocation safety:
+The implemented predicate is global findings plus coordinated items absent from
+the creating worktree:
 
-- a prior create in this worktree that is not committed reports `git-finalization-required` and blocks the next create;
-- a prior create committed only in a sibling worktree reports `worktree-synchronization-required` and blocks the stale create;
-- unknown or out-of-protocol bytes remain a global `unauthorized-revision` barrier;
+- a prior create in this worktree that is not committed reports the global
+  `git-finalization-required` and blocks the next create;
+- unknown or out-of-protocol bytes remain a global `unauthorized-revision`
+  barrier;
+- a coordinated item the shared journal records and this checkout does not hold
+  blocks create, because its immutable number cannot be read here, so the next
+  allocation may already be taken — this covers a create committed only in a
+  sibling worktree, whose own finding is `worktree-synchronization-required`;
+- a stale revision of an item this checkout does hold stays nonblocking, keeping
+  its ordinary target scope: a number is immutable, so the local maximum is
+  already correct;
 - a clean, synchronized ledger proceeds.
 
-The second worktree does not silently choose another number from coordinator state. It synchronizes the actual ledger, then retries. The ledger remains the one number authority.
+The second worktree does not silently choose another number from coordinator
+state. It synchronizes the actual ledger, then retries. The ledger remains the
+one number authority.
 
 ### Candidate validation remains inside both fences
 
@@ -142,7 +159,7 @@ The fixed create starts by loading a valid ledger. A ledger already carrying dup
 
 ### Cost on the create hot path
 
-Provisioned create already acquires the namespace lock, replays the journal, loads the ledger, reads Git `HEAD`, and reconciles before writing. Making the reconciliation repository-wide changes which existing findings refuse; it does not add another Git roster or history walk to a clean create.
+Provisioned create already acquires the namespace lock, replays the journal, loads the ledger, reads Git `HEAD`, and reconciles before writing. The allocation fence changes which existing findings refuse; it does not add another Git roster or history walk to a clean create.
 
 The durable cost is journal growth. Each successful post-fix create adds one intent and one committed terminal; the reconciliation clock already existed. With no other entries, the 65,536-entry journal limit permits at most 21,845 three-entry create cycles, and the 8 MiB byte limit may bind first. Other claim and mutation activity lowers that ceiling. Capacity is checked before publication and fails closed.
 
@@ -195,7 +212,7 @@ Each numbered behavior is one RED-GREEN-REFACTOR cycle. A later cycle starts onl
 1. Public sequential regression: two stale cooperating worktrees start from one numbered ledger; the first create commits, and the second refuses unchanged without an item file.
 2. Journal contract: a create appends an intent before publication and a committed terminal afterward; mutation proof removing the authorize call reproduces the duplicate.
 3. Auto-commit ownership: a successful create commits exactly its item and reconciliation log; pre-existing log residue still refuses before publication.
-4. Repository-wide create fence: changing create back to target-scoped reconciliation makes the sequential regression fail while unrelated transition and patch scope tests remain green.
+4. Create allocation fence: removing the missing-coordinated-item barrier makes the sequential regression fail while unrelated transition and patch scope tests remain green.
 5. Crash recovery: candidate present resolves committed, item absent resolves aborted, and different bytes remain unknown and globally blocking.
 6. Candidate validation ordering: a candidate ledger that becomes invalid under the allocation fence refuses before intent or item publication.
 7. Contention: two public create processes in sibling worktrees produce at most one committed item from the stale base; the loser is unchanged, never committed with the same number.

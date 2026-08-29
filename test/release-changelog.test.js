@@ -1,7 +1,23 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { rewriteChangelog } from '../scripts/lib/release-changelog.js';
+
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+
+// Every shipped surface hard-wraps its prose, so these surfaces are read
+// whitespace-flattened: the assertions pin sentences, never wrap columns.
+function shipped(...segments) {
+  return readFileSync(path.join(projectRoot, ...segments), 'utf8').replace(/\s+/gu, ' ');
+}
+
+const changelogText = shipped('CHANGELOG.md');
+const workClaimContract = shipped('docs', 'work-claim-contract.md');
+const mutationContract = shipped('docs', 'mutation-contract.md');
+const installedSkill = shipped('skills', 'wowbagger', 'SKILL.md');
 
 const PREAMBLE = '# Changelog\n\nBehaviour changes land here when they ship.\n\n';
 const PREVIOUS = '## 9.9.0-alpha.6 - 2026-08-17\n\n### Added\n\n- the previous release\n';
@@ -88,4 +104,71 @@ test('a date that is not an ISO calendar day refuses the cut', () => {
     assert.equal(result.ok, false, date);
     assert.deepEqual(result.problems.map(({ code }) => code), ['date-invalid'], date);
   }
+});
+
+// The bounded guarantee is the sentence a reader acts on. It is worthless if
+// one surface promises more than another, so every surface that states it must
+// state the reported failure it closes before the topologies it leaves open.
+const GUARANTEE = /cooperating alpha\.14 worktrees of one clone that share one Git common directory/i;
+const OUTSIDE = /separate clones, separate machines, alpha\.13 writers before the hard cutover, and noncooperating writes/i;
+
+for (const [surface, text] of [
+  ['CHANGELOG', () => changelogText],
+  ['work-claim contract', () => workClaimContract],
+  ['mutation contract', () => mutationContract],
+  ['installed skill', () => installedSkill],
+]) {
+  test(`the ${surface} bounds the alpha.14 guarantee in one order`, () => {
+    const source = text();
+
+    assert.match(source, /reported PropertyCompass2 collision/i);
+    assert.match(source, GUARANTEE);
+    assert.match(source, OUTSIDE);
+    assert.match(source, /branch integration plus `validate`/i);
+    assert.ok(
+      source.search(GUARANTEE) < source.search(OUTSIDE),
+      `${surface} must state what alpha.14 fixes before what stays outside the fence`,
+    );
+  });
+}
+
+// The unreleased notes are sliced by structure, not by the released version
+// below them: naming that version here would plant an occurrence the release
+// site manifest has to classify.
+const unreleasedNotes = (() => {
+  const start = changelogText.indexOf(' ## Unreleased ');
+  const end = changelogText.indexOf(' ## ', start + 1);
+
+  assert.ok(start > 0 && end > start, 'the changelog must carry an Unreleased section');
+  return changelogText.slice(start, end);
+})();
+
+test('the changelog states the hard cutover with the evidence it rests on', () => {
+  for (const literal of [
+    'claim-store-unavailable',
+    'The durable claim store is unavailable.',
+    'claim-store-unreadable',
+    'upgrade every writer',
+    'before the first alpha.14 create',
+  ]) {
+    assert.ok(
+      unreleasedNotes.includes(literal),
+      `the release note must state ${JSON.stringify(literal)}`,
+    );
+  }
+  assert.match(unreleasedNotes, /no automatic migration/i);
+  assert.match(unreleasedNotes, /mixed-version grace period/i);
+});
+
+test('the changelog scopes batch creates and existing duplicates out of alpha.14', () => {
+  assert.match(unreleasedNotes, /no batch (?:mutation|operation)/i);
+  assert.match(unreleasedNotes, /create-then-commit loop/i);
+  assert.match(unreleasedNotes, /item #186/);
+  assert.match(unreleasedNotes, /item #182/);
+});
+
+test('the changelog records the measured create cost without promising a duration', () => {
+  assert.match(unreleasedNotes, /no new Git roster or history traversal/i);
+  assert.match(unreleasedNotes, /two extra .*journal appends/i);
+  assert.match(unreleasedNotes, /65,536/);
 });

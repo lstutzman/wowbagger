@@ -184,6 +184,32 @@ work read as ready.
   redaction and no access control. Say that plainly if a user asks for a report
   that hides work from a reader.
 
+## Every writer must be on the same core before the first create
+
+On a provisioned ledger, `create` now records its allocation in the shared
+claim journal before it publishes anything. That grammar is new, so the upgrade
+is a hard cutover with no automatic migration and no mixed-version grace
+period: **upgrade every writer in one Git coordination domain to the current
+core before the first alpha.14 create.** A worktree left on the old core does
+not write a duplicate — it stops making claim-protected mutations, which is the
+safe outcome, not a usable one.
+
+An old core cannot read the new create entry and says so badly. It answers
+exit 6, `error.code` `claim-store-unavailable`, message
+`The durable claim store is unavailable.`, and `error.details.reason`
+`claim-store-unreadable`, leaves state unchanged, and writes no item. Read that
+exact combination as **this repository was written by a newer Wowbagger;
+upgrade this worktree to continue**, and say so to the user: the old binary is
+immutable and can never print better guidance. (Item #185 is open for general
+version-drift detection.)
+
+Say what the fix does and does not cover. It closes the reported
+PropertyCompass2 collision: cooperating alpha.14 worktrees of one clone that
+share one Git common directory can no longer commit two items carrying the same
+number. Separate clones, separate machines, alpha.13 writers before the hard
+cutover, and noncooperating writes stay outside that fence and still rely on
+branch integration plus `validate`.
+
 ## Writing
 
 Every write is an explicit, reviewable Git change. Show the user the command
@@ -434,6 +460,11 @@ authorized predecessor/successor window produces no finding, so another
 mutation can run before the first is committed. Do not mistake acceptance for
 durability. Commit each mutation anyway, then run `claim-verify`.
 
+`create` never gets that window. A new item has no earlier authorized revision,
+so Git `HEAD` is the only place its authorized bytes can live, and an
+uncommitted create blocks every later mutation — including the next create —
+with `git-finalization-required`.
+
 **`claim-verify` is the reconciliation procedure for that refusal.** Do not go
 looking for another verb; there is none. Read `details.findings`, do exactly
 what each finding's `remediation` string says (it names the path), run
@@ -491,7 +522,10 @@ commit. With `--auto-commit`, `changed_paths` matches `commit_paths`, and
 `git_commit` proves the commit.
 
 Batch work is where this bites: filing ten items means ten commits, not one
-commit at the end. Tell the user that before starting a batch.
+commit at the end. Tell the user that before starting a batch. There is no
+batch mutation to reach for — the create-then-commit loop is the supported bulk
+pattern, and item #186 is open to design a safe batch create. `--auto-commit`
+on each `create` is the shortest form of that loop.
 
 ### Or use --auto-commit and let one invocation do it
 
@@ -508,9 +542,11 @@ One flagged invocation refuses if anything is staged anywhere or any foreign
 path under the ledger is dirty, reconciles, runs the mutation unchanged,
 commits exactly the changed item plus at most one
 `.wowbagger/reconcile-<namespace>.md` with a fixed subject, verifies that commit,
-and runs `claim-verify` before it answers. A command that owns the claim journal
-may rebuild only its derived reconciliation log during preflight. `create`
-remains strict, and every other dirty ledger path still refuses.
+and runs `claim-verify` before it answers. A successful `create --auto-commit`
+commits exactly two paths: the created item and that reconciliation log. Every
+command rebuilds its own derived reconciliation log during preflight, but
+`create` refuses a log that was already dirty when you invoked it, and every
+other dirty ledger path still refuses.
 
 Preflight and post-commit reconciliation block findings for the requested item.
 An unrelated `worktree-synchronization-required` finding remains visible to
@@ -610,11 +646,28 @@ envelope's `limits.cross_worktree_coordination: false` as permission to write
 with hostile or noncooperating tools — it only says the core never synchronizes
 checkouts.
 
-A recorded `transition`, `patch`, or claimed publication blocks mutations
-targeting that same item with exit 6 `claim-store-unavailable`, reason
-`publication-reconciliation-required`. An unrelated item mutation may proceed
-when the only finding is `worktree-synchronization-required`. `create` records
-nothing, so it never creates a publication block.
+A recorded `create`, `transition`, `patch`, or claimed publication blocks
+mutations targeting that same item with exit 6 `claim-store-unavailable`,
+reason `publication-reconciliation-required`. An unrelated item mutation may
+proceed when the only finding is `worktree-synchronization-required`.
+
+`create` is the one exception to that scoping, because it allocates the next
+number from the items this checkout can see. It also refuses when the journal
+records a committed item this worktree does not hold at all: that item carries
+a number nobody here can read, so the next number allocated here might already
+be taken. A stale revision of an item this worktree does hold is not a blocker
+for `create` — a number is immutable, so the local maximum is still right. The
+refusal is the same exit 6 `claim-store-unavailable` with reason
+`publication-reconciliation-required`, state `unchanged`, and no item file
+written; integrate the missing item, run `claim-verify` until it exits 0, and
+resend the same request, which then takes the next number.
+
+That fence stops new collisions; it does not repair old ones. A ledger that
+already carries duplicate numbers is item #182's recovery work: it fails
+`validate` and refuses every mutation until #182 ships. Never hand-edit a
+`number` to clear it — the edit skips the collision and reference checks every
+mutation runs and can leave dangling `depends_on`, `related`, and parent
+references that nothing reports.
 
 Read `error.details.findings[0].reason` and act on the named item:
 

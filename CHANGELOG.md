@@ -7,7 +7,102 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Changed
+
+- **Upgrading is a hard cutover: upgrade every writer in one Git coordination
+  domain before the first alpha.14 create.** The journal grammar widened —
+  `legacy-mutation-intent` and `legacy-mutation` accept `command: "create-v1"`,
+  a create intent accepts `expected_revision: null`, and a create abort requires
+  `command: "create-v1"` with `observed_revision: null` — and an alpha.13 binary
+  cannot read the new create entry. Run against a ledger whose shared journal
+  already carries one, alpha.13's `create` exits 6 with `error.code`
+  `claim-store-unavailable`, message `The durable claim store is unavailable.`,
+  and `error.details.reason` `claim-store-unreadable`, leaves state unchanged,
+  and writes no item. Failing closed is the compatibility guarantee: an old
+  writer cannot commit another duplicate. It is also the operational limit,
+  because alpha.13 is immutable and can only emit that generic unreadable-store
+  message. Read it as "this repository was written by a newer Wowbagger; upgrade
+  this worktree to continue." There is no automatic migration and no
+  mixed-version grace period; a partial upgrade leaves the remaining alpha.13
+  worktrees unable to make claim-protected mutations until they move. Item #185
+  owns general version-drift detection; nothing here can retrofit a message into
+  an already-published executable. The new reader executes every journal
+  alpha.13 emitted, which is the backward-compatibility direction that had to
+  hold.
+
+- **A create must be committed before the next mutation, and there is still no
+  batch operation.** A created item has no earlier authorized revision, so Git
+  `HEAD` is the only surface that can carry its authorized bytes; an uncommitted
+  create raises the global `git-finalization-required` barrier for every later
+  mutation, including the next create. It cannot occupy the authorized
+  predecessor/successor window a `patch` or `transition` may occupy, and that
+  window was never permission to skip a commit. The supported bulk pattern is
+  the create-then-commit loop — filing ten items is ten cycles, and
+  `--auto-commit` on each create is its shortest form. Safe batch design is
+  item #186.
+
+- **The measured cost of the fence is two extra fsync'd journal appends.** A
+  provisioned create already took the namespace lock, replayed the journal,
+  loaded the ledger, read Git `HEAD`, and reconciled, so the fence adds no new
+  Git roster or history traversal to a clean create; on a 1,500-item fixture the
+  captured `git` invocation sequence is identical before and after. The durable
+  cost is journal growth: each successful create adds one intent and one
+  committed terminal, so with no other activity the 65,536-entry limit permits
+  at most 21,845 three-entry create cycles, and the 8 MiB byte limit may bind
+  first. Other claim and mutation activity lowers that ceiling. Capacity is
+  reserved before the intent append, so an exhausted journal refuses unchanged
+  rather than stranding an attempt. Journal compaction is not part of this
+  change.
+
 ### Fixed
+
+- **Two worktrees can no longer commit two items carrying the same number.**
+  Through alpha.13, `create` was journal-silent by design: it derived
+  `1 + max(existing numbers)` from the items its own checkout held and recorded
+  nothing in the shared claim journal. Two worktrees that had not integrated
+  each other's commits therefore derived the same number and both published,
+  and they did not have to race to do it — a create today and a create tomorrow
+  collided just as reliably, because the loser was a stale checkout rather than
+  a lost race. `number` is immutable and `patch` correctly refuses it, so the
+  collision surfaced only at integration, as a global `duplicate-number`
+  validation failure that stopped the whole ledger. On a provisioned ledger,
+  `create` is now a journaled legacy mutation: under the shared namespace lock
+  it reconciles, validates the complete candidate ledger, reserves journal
+  capacity, appends a `legacy-mutation-intent` with `command: "create-v1"` and
+  `expected_revision: null` before any byte reaches the item path, publishes
+  atomically and no-clobber, verifies the exact bytes, and appends its terminal
+  — `legacy-mutation` when the bytes landed, or an abort carrying
+  `command: "create-v1"` and `observed_revision: null` when the path stayed
+  absent. Allocation is fenced in front of all of that: every global finding
+  blocks `create` as it blocks any write, and in addition any coordinated item
+  this checkout does not hold blocks `create`, because its number cannot be
+  read here. A stale revision of an item this checkout does hold stays
+  nonblocking, because a number is immutable. A fenced create refuses with
+  exit 6, `state: "unchanged"`, `error.code: "claim-store-unavailable"`,
+  `error.details.reason: "publication-reconciliation-required"`, and no item
+  file; integrate the named item, run `claim-verify` to exit 0, and resend the
+  same request ID to take the next number. **What this fixes and what it does
+  not:** it closes the reported PropertyCompass2 collision, so cooperating
+  alpha.14 worktrees of one clone that share one Git common directory can no
+  longer commit the same number, because every such create is visible through
+  the shared journal before publication even without branch integration.
+  Separate clones, separate machines, alpha.13 writers before the hard cutover,
+  and noncooperating writes stay outside that fence and still rely on branch
+  integration plus `validate`. A ledger that already carries duplicate numbers
+  is not repaired here; item #182 owns that fenced recovery. Core
+  `contract_version` stays `5` and the create success and refusal envelopes add,
+  remove, and rename no member.
+
+- **`create --auto-commit` commits its reconciliation log with the item.**
+  Because create now owns journal entries, its commit set is exactly the created
+  item and `<ledger>/.wowbagger/reconcile-<namespace>.md`, and
+  `mutation-finalize` accepts that same two-path recovery token. Between the
+  fence landing and this fix, `create --auto-commit` failed outright with
+  `git-commit-failed`, `failure_stage: "prepare-commit-set"`, and
+  `reason: "tree-changed"`, because the commit set excluded a log the mutation
+  had just written. Owning that log is not absorbing what was already in it:
+  `create` still refuses a reconciliation log that was dirty before the
+  invocation, and every other dirty ledger path still refuses.
 
 - **A revision Git can already reach is no longer an instruction to wait for
   it.** When the expected revision was reachable only from a tag, a

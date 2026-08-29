@@ -334,56 +334,185 @@ The plain statement: **a recorded private write in one worktree blocks
 mutations targeting that item, not unrelated item mutations in sibling
 worktrees.** Own uncommitted work and out-of-protocol revisions remain global
 safety barriers. This is item-scoped availability, not exclusive dispatch.
+`create` reads that same reconciliation with one extra barrier, because it is
+the one mutation whose output depends on an identity no caller supplied.
 
-**Decided: create stays journal-silent.** The asymmetry is intended. Three
-reasons hold it:
+**Superseded: create no longer stays journal-silent.** Through alpha.13 this
+contract decided that create records nothing, and three reasons held that
+decision: create already protects its own instant, because publication is
+atomic, refuses to clobber an existing path, and verifies the published bytes
+exactly; a journaled create would serialize every worktree on the
+highest-volume mutation; and the remaining exposure window was judged narrow
+because it closed at the item's first journal-visible mutation.
 
-1. Create already protects its own instant. Publication is atomic, it refuses
-   to clobber an existing path, and it verifies the published bytes exactly
-   after the write. A journal entry adds no protection to that instant.
-2. A journaled create would serialize every worktree on the highest-volume
-   mutation. The field reports name create as the most frequent mutation and as
-   the most frequent victim of a block. Making create a blocker as well as a
-   victim multiplies a cost that consumers already report.
-3. The remaining exposure window is real but narrow, and it closes at the
-   item's first journal-visible mutation.
+Item #181 overturns that decision. The first reason answers the wrong
+question. Create's atomic instant protects the path it publishes to, and
+nothing protected the `number` it derives. A schema-version-2 create takes
+`1 + max(existing numbers)` from the items its own checkout holds, so two
+worktrees that have not integrated each other's commits derive the same number
+and both publish. They need not overlap in time: a create today and a create
+tomorrow collide as reliably as two simultaneous ones, because the loser is a
+stale checkout rather than a lost race, and a wider mutex cannot fix a
+sequential failure. Only durable evidence can. `number` is immutable and
+`patch` correctly rejects it, so an undetected collision surfaces at
+integration as a global `duplicate-number` validation failure that stops the
+whole ledger.
 
-**The exposure window, stated honestly.** The journal does not know a created
-item until that item's first journal-visible mutation, which is a `transition`
-or a `patch`. Until then an out-of-protocol overwrite of the item's bytes is
-not detected. A commit alone does not close the window, because reconciliation
-compares only the revisions the journal expects, and the journal expects none
-for that item. From the first `transition` or `patch`, the ordinary surfaces
-cover the item: with the authorized revision committed, an out-of-protocol
-overwrite of the working-tree bytes reports `unauthorized-revision` and the
-next mutation refuses. Inside the window, only an actor that bypasses this tool
-can overwrite the item, and this protocol does not defend against that actor.
-It is merge-coordinated, not exclusive.
+**The fixed ordering.** On a provisioned ledger a create is a legacy mutation
+like any other, and the shared namespace lock is held across every step:
 
-**Warning: the same window lets more than one worktree commit one item number,
-and nothing repairs it** (items #181 and #182). Because create is
-journal-silent, nothing coordinates the number a create derives. Any two
-worktrees whose checkouts have not been integrated derive the next schema-v2
-`number` from the base each can see, and both derive the same one. The two
-creates need not overlap in time: a create in one worktree today and a create
-in another worktree tomorrow collide just as surely, so long as neither
-worktree has seen the other's commit. Both creates succeed, both refuse
-nothing, and reconciliation reports nothing, because there is no recorded
-revision to compare. The collision becomes visible only when the branches are
-integrated: `validate` then fails globally with `duplicate-number` on every
-colliding item, and an invalid ledger blocks every mutation, so the whole
-ledger stops accepting work. `number` is immutable and `patch` correctly
-rejects it, so this protocol currently offers no operation that repairs the
-collision.
+1. Acquire the shared namespace lock.
+2. Reconcile the repository state and apply the allocation fence below.
+3. Load this worktree's ledger.
+4. Acquire the item, relation, and number-index lock closure.
+5. Reload and validate the ledger under those locks.
+6. Derive `1 + max(existing numbers)`.
+7. Serialize the candidate item.
+8. Validate the complete candidate ledger.
+9. Reserve journal capacity, then append the create intent.
+10. Publish with atomic no-clobber semantics.
+11. Verify the final path holds the exact candidate bytes.
+12. Append the committed or aborted terminal.
 
-Until both items ship, serialize `create` through a single worktree, and run
-`validate` immediately after you integrate branches so a collision surfaces at
-the merge rather than at the next mutation. Editing `number` in the item
-source by hand, committing it, and then running `claim-adopt` is **not a
-supported workaround**: one field deployment did exactly that as an emergency
+A create appends its `legacy-mutation-intent` with `command: "create-v1"`
+before any byte reaches the item path, and it appends that intent only after
+step 8, so a refusal the command would have returned anyway records no
+attempt. The intent carries `expected_revision: null`, which is valid only for
+`create-v1`; every other command still requires a string revision. The
+committed terminal is `legacy-mutation` with `command: "create-v1"`. The
+create abort carries `command: "create-v1"` and `observed_revision: null`,
+while an abort for any other command remains valid without `command` and still
+requires a string revision. No entry records the assigned number: the
+candidate revision binds the complete item bytes, and the ledger stays the one
+number authority.
+
+**The allocation fence.** Create reconciles with its own item as the target,
+exactly like every other mutation, and one extra barrier reads the result.
+Every global finding blocks create because it blocks every write:
+`git-finalization-required` for this worktree's own uncommitted authorized
+bytes, `unauthorized-revision` for out-of-protocol bytes, and an unresolved
+`legacy-mutation-outcome-unknown`. On top of those, any coordinated item this
+checkout does not hold blocks `create`, because the journal records a
+committed terminal for an item whose number this working ledger cannot read,
+so the next number derived here may be one a sibling already published. A
+stale revision of an item this checkout holds does not block `create`: a
+number is immutable, so the local maximum is already correct, and that finding
+keeps its ordinary target scope.
+
+**The old exposure window is closed on a provisioned ledger.** The journal used
+to learn of an item only at its first `transition` or `patch`, so an
+out-of-protocol overwrite before that mutation went unreported. A journaled
+create records an authorized revision at the item's birth, so the ordinary
+surfaces cover the item from then on: an out-of-protocol overwrite reports
+`unauthorized-revision` and the next mutation refuses. An unprovisioned or
+non-Git ledger keeps only its local number-index lock and its atomic
+no-clobber publication; nothing there coordinates across checkouts, and nothing
+here defends against an actor that bypasses this tool.
+
+**The refusal.** A fenced create refuses before it allocates a number and
+before it writes a byte:
+
+```text
+exit: 6
+ok: false
+namespace: "ledger-mutation"
+command: "create-v1"
+contract_version: 1
+state: "unchanged"
+error.code: "claim-store-unavailable"
+error.details.reason: "publication-reconciliation-required"
+```
+
+`error.details.findings` names the item whose authorized create this checkout
+cannot see, and each finding's own `remediation` string stays authoritative:
+commit this worktree's bytes for `git-finalization-required`; synchronize the
+named sibling revision when `owner_ref` names a live worktree; inspect the
+reachable or dangling history and restore or explicitly adopt reviewed bytes
+for a locally absent or reachable-unowned revision; and restore or adopt for
+unauthorized bytes. The reproduced stale-sibling case is locally absent on both
+surfaces, so it renders the cannot-be-established sentence, which is an
+instruction to inspect and integrate, never an instruction to wait. Once the
+ledger validates and `claim-verify` exits 0, retry the same request ID: the
+refusal published no byte, so the retry is an ordinary no-clobber create and
+takes the next number. The fence does not trap recovery — `claim-verify` stays
+read-only, `claim-adopt` keeps its explicit override, claim release stays
+available under barriers, and Git synchronization was never this tool's to
+block.
+
+**Recovery from an interrupted create.** An intent with no terminal resolves on
+the next invocation from the item path alone: the candidate revision present
+appends the committed terminal, the path absent appends the create abort, and
+any third revision reports `legacy-mutation-outcome-unknown` as a global
+barrier. Recovery never guesses a number and never publishes an item. Because
+capacity for the intent, one clock entry, and one terminal is reserved before
+the intent is appended, an exhausted journal refuses unchanged before
+publication rather than stranding an unresolvable attempt.
+
+**Create owns its item and its reconciliation log.** A successful create is
+journal-visible from the item's birth, so its `changed_paths` and its
+`--auto-commit` commit set are exactly the created item and
+`<ledger>/.wowbagger/reconcile-<namespace>.md`. Owning the log it writes is not
+permission to absorb residue: a reconciliation log already dirty before the
+invocation is foreign, and create still refuses it.
+
+**Commit every create before the next mutation.** A create has no authorized
+predecessor — there is no earlier revision of an item that did not exist — so
+Git `HEAD` is the only surface that can hold its authorized bytes, and an
+uncommitted create reports the global `git-finalization-required` until it is
+committed. A `patch` or `transition` may instead occupy the documented
+authorized predecessor/successor window and run before its predecessor is
+committed, but that window is an accepted overlap, not a licence: commit every
+mutation before the next one. Alpha.14 ships no batch mutation. The supported
+bulk pattern is the create-then-commit loop, one commit per created item, and
+item #186 owns the design of a safe batch create.
+
+**Cost.** A provisioned create already took the namespace lock, replayed the
+journal, loaded the ledger, read Git `HEAD`, and reconciled. The fence changes
+which findings refuse; it adds no new Git roster or history traversal to a
+clean create, and the measured cost of the change is two extra fsync'd journal
+appends. The durable cost is journal growth: each successful create adds one
+intent and one committed terminal, so with no other activity the
+65,536-entry limit permits at most 21,845 three-entry create cycles and the
+8 MiB byte limit may bind first. Other claim and mutation activity lowers that
+ceiling. Capacity is checked before publication and fails closed. Journal
+compaction is not part of this change.
+
+**A ledger that already carries duplicate numbers is item #182's recovery
+work, not this fix's.** Such a ledger fails validation and refuses every
+mutation before allocation, and item #182 owns the fenced repair. #181 prevents
+new collisions in every valid ledger; it neither renumbers damaged items nor
+makes an invalid ledger worse. Editing `number` in the item source by hand,
+committing it, and then running `claim-adopt` is **not a supported
+workaround**: one field deployment did exactly that as an emergency
 intervention during an outage, and it bypasses the number-collision and
 reference checks every mutation performs, so it can leave dangling
 `depends_on`, `related`, and parent references that nothing reports.
+
+**What alpha.14 guarantees, and what it does not.** Alpha.14 closes the
+reported PropertyCompass2 collision: cooperating alpha.14 worktrees of one
+clone that share one Git common directory can no longer commit two items
+carrying the same number, because every such create is visible through the
+shared journal before publication even without branch integration. Separate
+clones, separate machines, alpha.13 writers before the hard cutover, and
+noncooperating writes stay outside that fence and still rely on branch
+integration plus `validate`.
+
+**The upgrade is a hard cutover.** Alpha.13 cannot read a `create-v1` legacy
+intent. Executed against a ledger whose shared journal already carries one, its
+create exits 6 with `error.code` `claim-store-unavailable`, message
+`The durable claim store is unavailable.`, and `error.details.reason`
+`claim-store-unreadable`, leaving the state unchanged and writing no item. That
+fail-closed behavior is the compatibility guarantee: an old writer cannot
+commit another duplicate. It is also the operational limit, because alpha.13 is
+immutable and emits a generic unreadable-store message rather than upgrade
+guidance. Read that exact refusal as **this repository was written by a newer
+Wowbagger; upgrade this worktree to continue.** There is no automatic migration
+and no mixed-version grace period: upgrade every writer in one Git coordination
+domain before the first alpha.14 create. If a partial upgrade writes the new
+grammar first, every remaining alpha.13 worktree stops making claim-protected
+mutations until it is upgraded. Item #185 owns the general ability of a running
+old binary to diagnose its own version drift; no change here can retrofit a
+message into an already-published executable.
 
 **`unauthorized-revision` has two remedies, and only one of them is
 destructive.** Restoring the authorized revision discards the out-of-protocol
@@ -1187,17 +1316,23 @@ create MUST reject any item identity whose tuple has claim history with exit 4
 high-water mark. Both checks persist authoritative decision time before their
 response.
 
-Before a merge-coordinated backend permits a legacy transition or patch to
-write bytes, it MUST fsync a `legacy-mutation-intent` with the expected and
-candidate revisions. Under the same namespace lock, it MUST reserve journal
-capacity for that intent, one recovery clock entry, and one terminal entry. A
-committed write appends `legacy-mutation`; an unchanged write appends
-`legacy-mutation-abort`. Reconciliation resolves a pending intent to the
-committed terminal when the candidate revision is present, or to the abort
+Before a merge-coordinated backend permits a legacy create, transition, or
+patch to write bytes, it MUST fsync a `legacy-mutation-intent` carrying the
+expected and candidate revisions. Under the same namespace lock, it MUST
+reserve journal capacity for that intent, one recovery clock entry, and one
+terminal entry. A committed write appends `legacy-mutation`; an unchanged write
+appends `legacy-mutation-abort`. Reconciliation resolves a pending intent to
+the committed terminal when the candidate revision is present, or to the abort
 terminal when the expected revision remains. Any third revision produces
 `legacy-mutation-outcome-unknown`. The latest committed terminal is the
 authorized expected revision. A later unrecorded revision remains a stale
 write.
+
+A create has no predecessor, so its intent carries `expected_revision: null`,
+which is valid only for `create-v1`, and the item path's absence is what
+resolves it to the abort terminal. Section 3.1 states the complete create
+ordering, its allocation fence, and the alpha.13 cutover the widened grammar
+forces.
 
 A merge-coordinated backend MUST reconcile before it authorizes a legacy write,
 and section 6 states the same requirement for `publish-claimed`.

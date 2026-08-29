@@ -1567,6 +1567,62 @@ no-clobber publication still protects an intervening creator.
 Successful create returns state committed and the inspect item shape from
 section 5.
 
+### Journal-fenced allocation on a provisioned ledger
+
+On a provisioned merge-coordinated ledger, a schema-version-2 create is a
+journaled legacy mutation. Under the shared namespace lock it reconciles,
+applies the allocation fence below, loads and validates the ledger, derives
+`1 + max(existing numbers)`, serializes the candidate, validates the complete
+candidate ledger, reserves journal capacity, and only then appends its
+`legacy-mutation-intent` with `command: "create-v1"` before any byte reaches
+the item path. Publication, exact-byte verification, and the terminal append
+all happen under that same lock. The intent carries
+`expected_revision: null`, which is valid only for `create-v1`. The committed
+terminal is `legacy-mutation` with `command: "create-v1"`; the create abort
+carries `command: "create-v1"` and `observed_revision: null`. No entry records
+the assigned number, because the candidate revision binds the complete item
+bytes and the ledger remains the one number authority.
+
+The allocation fence reads reconciliation with one extra barrier. Every global
+finding blocks create as it blocks every write. On top of those, any
+coordinated item this checkout does not hold blocks `create`, because the
+journal records a committed terminal for an item whose number this working
+ledger cannot read. A stale revision of an item this checkout holds does not
+block `create`, because a number is immutable and the local maximum is already
+correct. A fenced create refuses with exit 6, `state: "unchanged"`,
+`error.code: "claim-store-unavailable"`, and
+`error.details.reason: "publication-reconciliation-required"` in the
+`ledger-mutation` domain as `create-v1`, having written no item byte. Resolve
+each finding by its own `remediation`, run `claim-verify` until it exits 0, and
+retry the same request ID; the retry takes the next number.
+
+A create has no authorized predecessor, so Git `HEAD` is the only surface that
+can carry its authorized bytes, and an uncommitted create raises the global
+`git-finalization-required` barrier for every later mutation. Commit each
+created item before the next mutating command. This release adds no batch
+mutation; the supported bulk pattern is the create-then-commit loop, and item
+#186 owns safe batch design. A ledger that already carries duplicate numbers is
+item #182's recovery work: it fails validation and refuses every mutation
+before allocation, and nothing here renumbers it.
+
+**What this guarantees, and what it does not.** The fence closes the reported
+PropertyCompass2 collision: cooperating alpha.14 worktrees of one clone that
+share one Git common directory can no longer commit two items carrying the same
+number, because every such create is visible through the shared journal before
+publication even without branch integration. Separate clones, separate
+machines, alpha.13 writers before the hard cutover, and noncooperating writes
+stay outside the fence and still rely on branch integration plus `validate`.
+
+The widened journal grammar forces a hard cutover, so upgrade every writer in
+one Git coordination domain before the first alpha.14 create. An alpha.13
+binary cannot read a `create-v1` intent: it refuses with exit 6,
+`error.code` `claim-store-unavailable`, message
+`The durable claim store is unavailable.`, and `error.details.reason`
+`claim-store-unreadable`, leaving state unchanged and writing no item. That
+refusal means **this repository was written by a newer Wowbagger; upgrade this
+worktree to continue.** There is no automatic migration and no mixed-version
+grace period.
+
 ## 8. Transition
 
 ### Request
@@ -2635,6 +2691,13 @@ That window produces no finding, so another mutation can run before the first
 one is committed. The later command's acceptance does not prove durability;
 the operating rule remains write, commit, `claim-verify`, next write.
 
+`create` never occupies that window. A created item has no earlier authorized
+revision, so Git `HEAD` is the only surface that can carry its authorized
+bytes, and an uncommitted create raises the global `git-finalization-required`
+barrier for every later mutation, including the next create. Filing ten items
+is therefore ten create-then-commit cycles, not one commit at the end. This
+release adds no batch mutation; item #186 owns safe batch design.
+
 The loop that works:
 
 ~~~sh
@@ -2774,10 +2837,10 @@ item bytes at `HEAD`. A byte-identical `parent-migrate`, `snooze`, or `patch`
 still records its decision in the reconciliation log, so its auto-commit set
 contains the log alone.
 
-`create` is journal-visible from the item's birth, so its commit set carries the
-reconciliation log alongside the created item. For every command, the log must
-already carry this invocation's terminal entry before it may be staged; if it
-does not, the invocation reports `git-commit-failed` with
+`create` is journal-visible from the item's birth, so a successful `create`
+commits exactly the created item and its reconciliation log. For every command,
+the log must already carry this invocation's terminal entry before it may be
+staged; if it does not, the invocation reports `git-commit-failed` with
 `reason: "log-unavailable"`.
 
 Commit subjects are fixed:
@@ -2806,8 +2869,10 @@ Before the mutation runs, the invocation takes a per-working-tree mutex and
 requires all of:
 
 - No path staged anywhere in the repository.
-- No dirty path under the ledger except the current namespace reconciliation
-  log for a command that owns and commits that log.
+- No dirty path under the ledger, with one exception: `transition`,
+  `parent-migrate`, `snooze`, `patch`, and `publish-claimed` tolerate a dirty
+  current-namespace reconciliation log, because each rebuilds that one derived
+  file from the authoritative journal. `create` does not tolerate it.
 - A Git identity Git can resolve without committing.
 - A `HEAD` that exists. A detached `HEAD` is supported, because a commit works
   from one; an unborn `HEAD` refuses.
@@ -2837,11 +2902,12 @@ underlying verification reason, never on the generic message.
 The rule is deliberately strict rather than preserving foreign staged work in
 a temporary index. A journal-owning auto-commit validates and rebuilds the
 dirty derived reconciliation log from the authoritative journal, then commits
-it with the mutation. `create` still refuses a reconciliation log that was
-already dirty when it was invoked: it owns the log it writes, not residue that
-predates it. Every other dirty ledger path refuses. Claim refusal
-evidence is never suppressed: both the authoritative journal and its projected
-log retain the decision before a later command rebuilds or commits the log.
+it with the mutation. Owning the log is not absorbing what was already in it:
+`create` still refuses a dirty reconciliation log, because residue that
+predates the invocation is foreign to the entries create is about to write.
+Every other dirty ledger path refuses. Claim refusal evidence is never
+suppressed: both the authoritative journal and its projected log retain the
+decision before a later command rebuilds or commits the log.
 
 A flagged invocation on an advisory or non-provisioned ledger returns exit 5
 `capability-unavailable` with `state: "unchanged"` before the mutation. It does
