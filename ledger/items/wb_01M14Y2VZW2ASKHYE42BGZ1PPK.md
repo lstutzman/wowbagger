@@ -4,10 +4,10 @@ id: wb_01M14Y2VZW2ASKHYE42BGZ1PPK
 number: 185
 title: "Detect stale installed skill and core version drift"
 kind: task
-priority: 2
+priority: 1
 status: triage
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-29
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
@@ -29,3 +29,7 @@ This is the same class as the globally linked alpha.10 checkout on this machine 
 - Cover both directions: stale skill with newer core and newer skill with incompatible older core.
 - Reuse the alpha.10 global-link incident and PropertyCompass alpha.6/contract3 drift as public onboarding/update tests, not one-off project checks.
 - Keep current strict distribution and contract pins; do not soften them to make drift pass.
+
+## Priority escalation — 2026-08-29
+
+Raised from priority 2 to priority 1 before the #181 alpha.14 hard cutover. Once one upgraded worktree writes the new create journal grammar, an alpha.13 worktree fails closed with generic `claim-store-unavailable` / `claim-store-unreadable` output and no hint that version drift caused it. The cutover therefore makes early, actionable skill/core version diagnosis materially more urgent.
