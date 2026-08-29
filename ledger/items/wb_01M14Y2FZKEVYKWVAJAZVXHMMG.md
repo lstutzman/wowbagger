@@ -7,12 +7,12 @@ kind: task
 priority: 1
 status: triage
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-29
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
-related: [wb_01M0XNVN00ABNA2SZ7WHM0FRX7, wb_01M12GT91WYNWHTYRBV7Y5R9E3, wb_01M13SBJHZABPX0QTNCFEGYMWM]
+related: [ wb_01M0XNVN00ABNA2SZ7WHM0FRX7, wb_01M12GT91WYNWHTYRBV7Y5R9E3, wb_01M13SBJHZABPX0QTNCFEGYMWM ]
 ---
 ## Problem
 
@@ -30,3 +30,9 @@ Determine whether current behavior is a Wowbagger defect reachable through ordin
 - Preserve a strict repository-wide mode for operators who need every unresolved publication and claim.
 - Update auto-commit, claimed publication, and installed skill gates to consume the correct scope rather than requiring an impossible globally empty result.
 - Public tests prove unrelated work remains visible, target work still blocks, and a consumer can reach a successful required gate.
+
+## Assessment after #178 — 2026-08-29
+
+#178 does not close this item. It preserved `claim-verify` as a repository-wide diagnostic: any blocking finding anywhere still makes verification exit nonzero. #178 made every item-reconciling mutation caller consume the same worktree evidence and preserved target-scoped mutation and auto-commit availability for genuine unrelated synchronization, but that does not make the consumer's required global verify-exit-0 gate attainable while unrelated findings remain.
+
+The hypothesis that this field failure was already covered by #178 was tested and rejected. This item remains triage for a dedicated design: item-scoped verification, target-aware input, or repository-wide success with structured foreign warnings, while retaining a strict whole-repository mode. Task 9 of #178 documents the current distinction so consumers do not confuse successful target-scoped mutation proof with a globally clean claim store.
