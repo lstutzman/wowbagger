@@ -528,10 +528,12 @@ answering with `namespace: "work-claim"`, `command: "claim-adopt"`, and
 mutation runs and no item file changes. It is not a `claim-verify` flag, because
 `claim-verify` is the read-mostly reconciliation report every remediation string
 names, and one command name must not mean both "tell me the state" and "change
-the authorization baseline". It is not a `claim` subcommand, because every claim
-lifecycle subcommand refuses with `publication-reconciliation-required` while
-reconciliation reports blocking findings, and adoption exists to clear exactly
-that state, so it runs while those findings stand.
+the authorization baseline". It is not a `claim` subcommand, because
+`work-claim.acquire` and `work-claim.renew` refuse with
+`publication-reconciliation-required` while reconciliation reports blocking
+findings, and adoption exists to clear exactly that state, so it runs while
+those findings stand. `work-claim.release` also runs while they stand, for the
+narrower reason that surrendering a lease takes no authority (section 5).
 
 The request is UTF-8 JSON with exactly these members:
 
@@ -678,6 +680,22 @@ member at any depth, and exactly the listed members. Unknown members, wrong
 types, noncanonical values, and unprovisioned namespaces are exit 2
 `invalid-request`; no authoritative lease decision has then occurred.
 
+**A reconciliation barrier stops a caller from taking or extending authority,
+never from surrendering it.** `work-claim.acquire` and `work-claim.renew` MUST
+refuse with exit 6 `claim-store-unavailable`, reason
+`publication-reconciliation-required`, and the reconciliation `findings`,
+whenever reconciliation reports a finding that blocks the request's item.
+`work-claim.release` MUST NOT refuse for that reason. The holder has to be able
+to hand the lease back: no other worktree can take the item over while the
+claim is held, and the worktree holding it is often the one least able to clear
+the barrier. Refusing the surrender strands the lease and the item with it.
+
+Release keeps every other refusal. An identity the domain cannot resolve, a
+journal it cannot read, and a clock floor it cannot persist all refuse before
+any lease decision, and the owner, epoch, and expected-expiry CAS tuple below
+still rules on the request: a mismatch is exit 4 `claim-conflict` and the claim
+stays held. A barrier never turns a release into an unconditional discard.
+
 ### Read
 
 `work-claim.read` accepts exactly:
@@ -748,6 +766,10 @@ persisted decision time, and returns `claim` plus `read_back`.
 It uses the same precedence. Success sets `active` to `null`, retains
 `last_epoch`, and returns `released_claim` plus `read_back`. A later acquire
 must allocate a greater epoch, preventing ABA even across restart.
+
+A reconciliation barrier does not refuse a release; it refuses only acquire and
+renew (section 5 preamble). The CAS tuple still applies, so a release under a
+barrier is exactly as conditional as a release without one.
 
 Success envelopes for these three commands have exactly `ok`, `namespace`,
 `command`, `contract_version`, `state: "committed"`, and `result`. Semantic
