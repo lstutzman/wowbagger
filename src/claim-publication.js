@@ -1027,9 +1027,9 @@ export async function verifyClaimJournal({
 // re-baselines the coordinator's authorized revision onto bytes that are
 // already committed, and writes no item byte. It runs while reconciliation is
 // unsafe on purpose — clearing that state is the point — so it never refuses on
-// `publication-reconciliation-required` the way a claim lifecycle operation
-// does. Every precondition is checked under the claim lock against the state
-// reconciliation just observed.
+// `publication-reconciliation-required` the way `claim acquire` or
+// `claim renew` do. Every precondition is checked under the claim lock against
+// the state reconciliation just observed.
 export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespace, request }) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
