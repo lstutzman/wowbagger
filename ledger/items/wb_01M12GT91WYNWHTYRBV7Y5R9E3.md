@@ -5,9 +5,10 @@ number: 178
 title: "Audit reconciliation ownership classification as one topology matrix"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-27
 updated: 2026-08-29
+completed: 2026-08-29
 provenance:
   source: "no-mistakes/01M12F0YXS2QA72BQTTFABB5M6/review"
   recorded_at: "2026-08-27T21:05:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-28
     summary: "Accept the consolidated ownership topology audit."
     rationale: "The alpha.11 and alpha.12 gates found five adjacent reconciliation defects, four in the same classifier and two caused by preceding point fixes. Lee prioritized #178 now and approved an explicit generated worktree UUID plus a typed diagnosis seam so safety scope no longer depends on short-circuit order or reason strings."
+  - action: complete
+    date: 2026-08-29
+    summary: "Complete the reconciliation ownership topology audit."
+    rationale: "Implemented persistent per-worktree writer identity, active named-worktree ownership evidence, duplicate and enumeration refusal diagnostics, one pure row-based reconciliation classifier, caller-wide refusal-scope parity, alpha.12 compatibility, and corrective remediation for reachable-unowned and locally absent topologies. The final review found row 12 naming a sibling from an observer with neither item bytes nor HEAD history; cd6ce3b reproduced it at claim-verify, reordered the classifier, and passed re-review. Bidirectional remediation mutants discriminated exactly the reachable tag/remote/detached rows from rows 6b/6c and their publication companions. Final verification passed 1772 tests on current Node and Node 20, 54 cross-worktree tests, adapter conformance, ledger validation, claim verification with no findings, npm audit, and diff checks. no-mistakes test/review and comment-analyzer were unavailable because of external agent/model limits; an OMP whole-branch review substituted and caught release-blocking issues. Contract version remains 5 because code, reason, members, and scope did not change. The reachable-unowned prose correction remains Unreleased after alpha13 and should ship with the #181 hotfix. GIT_ENVIRONMENT sanitization duplication remains a documented non-blocking observation."
 ---
 ## Problem
 
