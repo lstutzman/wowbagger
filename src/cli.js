@@ -1654,20 +1654,18 @@ async function runClaimCommand(claimCommand, argumentsList) {
   }
   try {
     const envelope = await withClaimLock(storePath, async () => {
-      let replayed;
-      try {
-        replayed = await replayClaimJournal(journalPath, namespace);
-      } catch (error) {
-        throw taggedFailure('CLAIM_STORE_UNREADABLE', error);
-      }
       // A claim lifecycle command classifies item reconciliation and refuses
       // on it, so it must reason from the same writer evidence every other
       // classifying surface uses; otherwise one command grants a claim on
       // exactly the state another command refuses to write. It writes no item
       // byte and no writer-attributed entry, so it reads the identity it
-      // already answers to rather than creating one.
+      // already answers to rather than creating one. Journal and identity are
+      // both store state this command only reads, so neither reading failure
+      // is anything but an unreadable store.
+      let replayed;
       let currentWorktreeId;
       try {
+        replayed = await replayClaimJournal(journalPath, namespace);
         currentWorktreeId = await readWorktreeIdentity({
           ledgerDirectory: parsedOptions.options.ledger,
           gitCommonDir,

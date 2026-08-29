@@ -410,11 +410,11 @@ export async function reconcileClaimJournal({
   const entries = [...replayed.entries];
   const findings = [];
   // What each finding refuses is the coordinator's own judgement, never a
-  // published member, so it travels beside the findings rather than inside
-  // them: nothing has to remember to strip it back out.
-  const findingScopes = [];
+  // published member, so the scope rules on the write as the finding is
+  // recorded and never becomes a member something has to strip back out.
+  let unsafe = false;
   const addFinding = (scope, finding) => {
-    findingScopes.push(scope);
+    unsafe ||= blocksTarget(scope, finding.item_id, targetItemId);
     findings.push(finding);
   };
   const observedAt = advanceClockFloor(replayed.state, physicalNow);
@@ -741,9 +741,6 @@ export async function reconcileClaimJournal({
     });
   }
 
-  const unsafe = findings.some((finding, index) => (
-    blocksTarget(findingScopes[index], finding.item_id, targetItemId)
-  ));
   const logPath = claimReconcileLogPath(path.resolve(ledgerDirectory), namespace);
   let logExists = true;
   try {
