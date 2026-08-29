@@ -162,9 +162,17 @@ The internal journal grammar widens deliberately:
 
 The new reader must execute every journal emitted by alpha.13. That is the required backward-compatibility proof.
 
-Alpha.13 cannot understand a post-fix `create-v1` legacy intent under its current validator. When executed against a post-fix journal, alpha.13 must refuse a claim-protected mutation unchanged as `claim-store-unreadable`; it must not write an item or report committed. This fail-closed mixed-version behavior is required and must be proven by running the packed alpha.13 binary, not inferred from source. Transparent mixed-version writing is impossible without first shipping a bridge reader because alpha.13 is already immutable.
+Alpha.13 cannot understand a post-fix `create-v1` legacy intent under its current validator. The published alpha.13 binary was executed on 2026-08-29 against an isolated valid Git ledger whose shared journal contained one such intent. Its create exited 6 with:
 
-The release note must state both facts: upgrade every writer in a Git coordination domain before resuming create, and an older writer encountering the new journal refuses rather than risking another duplicate. The general stale-install detection gap remains #185.
+```json
+{"ok":false,"namespace":"ledger-mutation","command":"create-v1","contract_version":1,"state":"unchanged","error":{"code":"claim-store-unavailable","message":"The durable claim store is unavailable.","details":{"reason":"claim-store-unreadable"}}}
+```
+
+The requested item path remained absent. This proves alpha.13 fails closed; it cannot commit another duplicate after the new grammar appears.
+
+It also proves the operational limitation: alpha.13 emits a generic unreadable-store message, not upgrade guidance. Alpha.13 is immutable, so alpha.14 cannot improve that old binary's text. #181 therefore uses a hard cutover with no automatic migration or mixed-version grace period. Upgrade every writer in one Git coordination domain before the first alpha.14 create. If a partial upgrade writes the new grammar, remaining alpha.13 worktrees stop making claim-protected mutations until upgraded.
+
+Alpha.14's release notes and installed skill must state that coordination requirement before the create instructions. They must map the observed alpha.13 exit 6 `claim-store-unreadable` refusal to “this repository was written by a newer Wowbagger; upgrade this worktree to continue.” The general ability for a running old binary to diagnose its own version drift remains #185; #181 cannot retrofit an actionable message into an already-published executable.
 
 ## Rejected alternatives
 
