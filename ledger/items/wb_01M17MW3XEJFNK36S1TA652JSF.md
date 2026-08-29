@@ -12,7 +12,7 @@ provenance:
   source: "item #181 batch workflow decision"
   recorded_at: "2026-08-29T18:30:00Z"
 depends_on: []
-related: [wb_01M14Y1NTXQPMQ270VT1WH6H17]
+related: [ wb_01M14Y1NTXQPMQ270VT1WH6H17 ]
 ---
 ## Problem
 
@@ -30,3 +30,8 @@ Alpha.14 intentionally requires each create to be committed before the next crea
 - Define one auto-commit set and Git commit for the whole successful batch without absorbing foreign dirt.
 - Prove same-clone cross-worktree contention and deterministic ordering on current Node and Node 20.
 - Preserve the existing single-create request, response, and refusal contract.
+
+## Design boundaries
+
+- A valid design outcome is `no batch operation`: document create-then-commit in a loop as the supported bulk-import pattern if that is safer than a new atomic surface.
+- Any batch operation must preserve the #181 guarantee exactly. Holding one namespace lock for N allocations must be at least as safe as N sequential fenced creates; batching may not weaken candidate validation, publication fencing, or recovery semantics.
