@@ -177,6 +177,7 @@ async function readJournalEntries(journalPath, namespace = null) {
   const lines = source.split('\n').filter(Boolean);
   if (lines.length > MAX_JOURNAL_ENTRIES) throw journalCapacityExceeded();
   const entries = lines.map((line) => JSON.parse(line));
+  const createAttempts = new Map();
   for (let index = 0; index < entries.length; index += 1) {
     if (!Number.isSafeInteger(entries[index]?.seq) || entries[index].seq !== index + 1) {
       throw journalInvalid('non-contiguous-sequence');
@@ -185,6 +186,9 @@ async function readJournalEntries(journalPath, namespace = null) {
       throw journalInvalid('unknown-entry-type');
     }
     if (!validJournalEntry(entries[index], namespace)) {
+      throw journalInvalid('invalid-entry');
+    }
+    if (!validCreateResolution(entries[index], createAttempts)) {
       throw journalInvalid('invalid-entry');
     }
   }
@@ -282,8 +286,10 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.ledger_namespace === 'string'
       && (namespace === null || entry.ledger_namespace === namespace)
       && typeof entry.item_id === 'string'
-      && ['patch-v1', 'transition-v1'].includes(entry.command)
-      && typeof entry.expected_revision === 'string'
+      && ['patch-v1', 'transition-v1', 'create-v1'].includes(entry.command)
+      && (entry.command === 'create-v1'
+        ? entry.expected_revision === null
+        : typeof entry.expected_revision === 'string')
       && typeof entry.candidate_revision === 'string'
       && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
       && (!Object.hasOwn(entry, 'writer_worktree_id')
@@ -295,7 +301,7 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.ledger_namespace === 'string'
       && (namespace === null || entry.ledger_namespace === namespace)
       && typeof entry.item_id === 'string'
-      && ['patch-v1', 'transition-v1'].includes(entry.command)
+      && ['patch-v1', 'transition-v1', 'create-v1'].includes(entry.command)
       && typeof entry.committed_revision === 'string'
       && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
       && (!Object.hasOwn(entry, 'writer_worktree_id')
@@ -303,11 +309,19 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.observed_at === 'string';
   }
   if (entry.type === 'legacy-mutation-abort') {
+    // A create abort names no predecessor revision, so the absence of one is
+    // its evidence. Patch and transition aborts keep their exact legacy shape
+    // and never carry a command.
+    const validAbortRevision = (
+      !Object.hasOwn(entry, 'command') && typeof entry.observed_revision === 'string'
+    ) || (
+      entry.command === 'create-v1' && entry.observed_revision === null
+    );
     return typeof entry.attempt_id === 'string'
       && typeof entry.ledger_namespace === 'string'
       && (namespace === null || entry.ledger_namespace === namespace)
       && typeof entry.item_id === 'string'
-      && typeof entry.observed_revision === 'string'
+      && validAbortRevision
       && typeof entry.observed_at === 'string';
   }
   if (entry.type === 'revision-adoption') {
@@ -349,6 +363,30 @@ function validJournalEntry(entry, namespace) {
     && typeof entry.item_id === 'string'
     && typeof entry.committed_revision === 'string'
     && typeof entry.git_commit === 'string';
+}
+
+// A journal-fenced create is only meaningful as a pair: the terminal that ends
+// an attempt must name the intent that opened it, so a standalone create
+// terminal names no authorized attempt and fails closed. Patch and transition
+// entries remain valid standing alone, so only create-v1 attempts are tracked.
+function validCreateResolution(entry, attempts) {
+  if (entry.command !== 'create-v1') return true;
+  if (entry.type === 'legacy-mutation-intent') {
+    attempts.set(entry.attempt_id, entry);
+    return true;
+  }
+  if (entry.type !== 'legacy-mutation' && entry.type !== 'legacy-mutation-abort') return true;
+  const intent = attempts.get(entry.attempt_id);
+  if (intent === undefined || intent.item_id !== entry.item_id) return false;
+  // A committed create publishes exactly the revision its intent proposed; an
+  // aborted one publishes none.
+  if (entry.type === 'legacy-mutation' && intent.candidate_revision !== entry.committed_revision) {
+    return false;
+  }
+  // One attempt resolves once, so the intent is consumed here and a repeated
+  // resolution finds no open attempt to end.
+  attempts.delete(entry.attempt_id);
+  return true;
 }
 
 function isRecord(value) {

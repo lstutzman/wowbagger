@@ -188,6 +188,395 @@ test('alpha12 journal entries ignore an optional future writer worktree id', asy
   assert.equal(replayed.entries[1].writer_worktree_id, writerWorktreeId);
 });
 
+test('journal replay accepts a create intent with an absent predecessor', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-intent-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_intent_0001',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'c'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R6.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  assert.equal((await replayClaimJournal(journalPath, NS)).entries.length, 1);
+});
+
+test('journal replay accepts a committed create terminal entry that resolves its intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-commit-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_commit_0001',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation',
+    attempt_id: 'create_commit_0001',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    committed_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+  assert.equal((await replayClaimJournal(journalPath, NS)).entries.length, 2);
+});
+
+test('journal replay rejects a create terminal with no matching intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-orphan-commit-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation',
+    attempt_id: 'create_commit_0002',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    committed_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a create terminal that names another item than its intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-item-mismatch-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_commit_0003',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation',
+    attempt_id: 'create_commit_0003',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    committed_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R8.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a create terminal that commits another revision than its intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-revision-mismatch-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_commit_0004',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation',
+    attempt_id: 'create_commit_0004',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    committed_revision: `sha256:${'e'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a second create terminal for an already resolved intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-duplicate-commit-'));
+  const journalPath = claimJournalPath(root, NS);
+  const intent = {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_commit_0005',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  };
+  const terminal = {
+    type: 'legacy-mutation',
+    attempt_id: 'create_commit_0005',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    committed_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  };
+  await appendClaimEntry(journalPath, intent);
+  await appendClaimEntry(journalPath, terminal);
+  await appendClaimEntry(journalPath, { ...terminal, observed_at: '2030-01-11T09:00:02.000Z' });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay accepts a create abort that resolves its intent with an absent observed revision', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-abort-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_abort_0001',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'e'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R8.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-abort',
+    attempt_id: 'create_abort_0001',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    observed_revision: null,
+    observed_at: '2030-01-11T09:00:02.000Z',
+  });
+  assert.equal((await replayClaimJournal(journalPath, NS)).entries.length, 2);
+});
+
+test('journal replay rejects a create abort with no matching intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-orphan-abort-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-abort',
+    attempt_id: 'create_abort_0002',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    observed_revision: null,
+    observed_at: '2030-01-11T09:00:02.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a create abort that names another item than its intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-abort-item-mismatch-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_abort_0003',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'e'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R8.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-abort',
+    attempt_id: 'create_abort_0003',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    observed_revision: null,
+    observed_at: '2030-01-11T09:00:02.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a create abort for an already resolved intent', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-duplicate-abort-'));
+  const journalPath = claimJournalPath(root, NS);
+  const abort = {
+    type: 'legacy-mutation-abort',
+    attempt_id: 'create_abort_0004',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    observed_revision: null,
+    observed_at: '2030-01-11T09:00:02.000Z',
+  };
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_abort_0004',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'e'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R8.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+  await appendClaimEntry(journalPath, abort);
+  await appendClaimEntry(journalPath, { ...abort, observed_at: '2030-01-11T09:00:03.000Z' });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a create intent that names a predecessor revision', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-intent-predecessor-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_intent_0002',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    command: 'create-v1',
+    expected_revision: `sha256:${'b'.repeat(64)}`,
+    candidate_revision: `sha256:${'c'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R6.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a patch intent with an absent predecessor', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-patch-intent-absent-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'patch_intent_0001',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    command: 'patch-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'c'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R6.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a create terminal without a string committed revision', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-commit-shape-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_commit_0006',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'d'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation',
+    attempt_id: 'create_commit_0006',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R7',
+    command: 'create-v1',
+    committed_revision: null,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R7.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a create abort that names an observed revision', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-create-abort-shape-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: 'create_abort_0005',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: `sha256:${'e'.repeat(64)}`,
+    item_path: 'items/wb_01Q4837BM01W70T30B184GG1R8.md',
+    observed_at: '2030-01-11T09:00:01.000Z',
+  });
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-abort',
+    attempt_id: 'create_abort_0005',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R8',
+    command: 'create-v1',
+    observed_revision: `sha256:${'e'.repeat(64)}`,
+    observed_at: '2030-01-11T09:00:02.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
+test('journal replay rejects a patch abort that carries a command', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-patch-abort-command-'));
+  const journalPath = claimJournalPath(root, NS);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-abort',
+    attempt_id: 'patch_abort_0001',
+    ledger_namespace: NS,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+    command: 'patch-v1',
+    observed_revision: `sha256:${'a'.repeat(64)}`,
+    observed_at: '2030-01-11T09:00:02.000Z',
+  });
+
+  await assert.rejects(replayClaimJournal(journalPath, NS), (error) => (
+    error.code === 'CLAIM_JOURNAL_INVALID'
+      && error.reason === 'invalid-entry'
+  ));
+});
+
 test('claim journal rejects entry 65537 without truncating history', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-journal-limit-'));
   const journalPath = claimJournalPath(root, NS);
