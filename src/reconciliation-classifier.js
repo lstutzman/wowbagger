@@ -57,25 +57,25 @@ export function classifyReconciliation({ workingTree, head, expectedOwner, expec
   if (workingTree === 'expected') {
     return { scope: 'global', reason: 'git-finalization-required', remediation: 'commit-in-git' };
   }
+  // An item absent from both local surfaces has never existed in this
+  // checkout. A sibling may carry the expected revision, but that does not
+  // establish ownership for a checkout with no local history or item path.
+  if (workingTree === 'absent') {
+    return {
+      scope: 'target',
+      reason: 'worktree-synchronization-required',
+      remediation: 'establish-ownership',
+    };
+  }
   // A live named worktree carries the expected revision, so there is a ref to
-  // wait on and a commit to name. This outranks every other synchronization
-  // answer, because it is the only one that names an owner.
+  // wait on and a commit to name. This outranks the remaining synchronization
+  // answers, because it is the only one that names an owner.
   if (expectedOwner.kind === 'named-sibling') {
     return {
       scope: 'target',
       reason: 'worktree-synchronization-required',
       owner: expectedOwner,
       remediation: 'wait-for-named-owner',
-    };
-  }
-  // The item is gone locally while the journal still expects a revision no
-  // named worktree carries. There is nothing here to call unauthorized and
-  // nobody to wait for, so the remedy is to establish ownership by inspection.
-  if (workingTree === 'absent') {
-    return {
-      scope: 'target',
-      reason: 'worktree-synchronization-required',
-      remediation: 'establish-ownership',
     };
   }
   // Advice to wait for an owning worktree needs an owner that could still

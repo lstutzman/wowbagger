@@ -219,7 +219,7 @@ test('a visible sibling worktree write does not block create elsewhere', async (
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
 });
 
-test('an unrelated private branch publication does not block another item mutation', async () => {
+test('an item absent from this checkout reports unavailable ownership despite a named sibling', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
   await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
@@ -242,8 +242,10 @@ test('an unrelated private branch publication does not block another item mutati
   assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
   const [finding] = verified.envelope.result.findings;
   assert.equal(finding.item_id, writtenId);
-  assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
-  assert.match(finding.owner_commit, /^[0-9a-f]{40}$/);
+  assert.equal(finding.owner_unavailable, true);
+  assert.equal(Object.hasOwn(finding, 'owner_ref'), false);
+  assert.equal(Object.hasOwn(finding, 'owner_commit'), false);
+  assert.match(finding.remediation, /cannot be established from reachable refs/);
 });
 
 test('an abandoned private publication reports unavailable ownership', async () => {
