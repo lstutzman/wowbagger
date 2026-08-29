@@ -1678,7 +1678,13 @@ test('an unreachable named sibling successor keeps advisory synchronization', as
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'worktree-synchronization-required');
   assert.equal(finding.owner_unavailable, true);
-  assert.match(finding.remediation, /not yet reachable/);
+  assert.equal(
+    finding.remediation,
+    `Ownership of ${finding.expected_path} revision ${finding.expected_revision}`
+      + ' is not yet reachable; wait for the owning worktree to commit,'
+      + ' then synchronize this worktree and run claim-verify.',
+    JSON.stringify(finding),
+  );
 
   const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
   const unrelated = run(
@@ -1737,7 +1743,13 @@ test('an unreachable successor from a pre-identity writer keeps advisory synchro
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'worktree-synchronization-required');
   assert.equal(finding.owner_unavailable, true);
-  assert.match(finding.remediation, /not yet reachable/);
+  assert.equal(
+    finding.remediation,
+    `Ownership of ${finding.expected_path} revision ${finding.expected_revision}`
+      + ' is not yet reachable; wait for the owning worktree to commit,'
+      + ' then synchronize this worktree and run claim-verify.',
+    JSON.stringify(finding),
+  );
 
   const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
   const unrelated = run(
@@ -1757,7 +1769,9 @@ test('an unreachable successor from a pre-identity writer keeps advisory synchro
 // Row 13: Git reaches the expected revision, but only through a tag. A tag is
 // not a worktree; nobody is going to publish anything on its behalf, so it must
 // never be named as an owner to wait for. The finding stays advisory for the
-// item it names and reports the owner as unavailable.
+// item it names, reports the owner as unavailable, and — because the commit is
+// already in Git — sends the reader to the reachable history rather than to a
+// wait that can never end.
 test('a revision reachable only by a tag reports unavailable ownership', async () => {
   const fixture = await twoWorktreeRepository();
   const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
@@ -1800,7 +1814,15 @@ test('a revision reachable only by a tag reports unavailable ownership', async (
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'worktree-synchronization-required', JSON.stringify(finding));
   assert.equal(Object.hasOwn(finding, 'owner_ref'), false, JSON.stringify(finding));
+  assert.equal(Object.hasOwn(finding, 'owner_commit'), false, JSON.stringify(finding));
   assert.equal(finding.owner_unavailable, true, JSON.stringify(finding));
+  assert.equal(
+    finding.remediation,
+    `Revision ${finding.expected_revision} of ${finding.expected_path} is reachable in Git,`
+      + ' but no active named worktree owner is established; inspect the reachable history,'
+      + ' restore or explicitly adopt reviewed bytes, then run claim-verify.',
+    JSON.stringify(finding),
+  );
 
   const target = run(
     fixture.root,
@@ -1878,7 +1900,15 @@ test('a revision reachable only by a remote-tracking ref reports unavailable own
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'worktree-synchronization-required', JSON.stringify(finding));
   assert.equal(Object.hasOwn(finding, 'owner_ref'), false, JSON.stringify(finding));
+  assert.equal(Object.hasOwn(finding, 'owner_commit'), false, JSON.stringify(finding));
   assert.equal(finding.owner_unavailable, true, JSON.stringify(finding));
+  assert.equal(
+    finding.remediation,
+    `Revision ${finding.expected_revision} of ${finding.expected_path} is reachable in Git,`
+      + ' but no active named worktree owner is established; inspect the reachable history,'
+      + ' restore or explicitly adopt reviewed bytes, then run claim-verify.',
+    JSON.stringify(finding),
+  );
 
   const target = run(
     fixture.root,
@@ -1911,8 +1941,9 @@ test('a revision reachable only by a remote-tracking ref reports unavailable own
 
 // Row 14: the live sibling worktree holding the expected revision is detached,
 // so the revision is reachable and there is still no branch to wait on. The
-// worktree is real, so an owner may yet appear; the finding stays advisory and
-// names nothing, rather than inventing a ref out of a detached HEAD.
+// worktree is real, so the finding stays advisory and names nothing rather than
+// inventing a ref out of a detached HEAD; the commit it carries is reachable
+// now, so the remedy is to read that history, not to wait for it.
 test('a live detached sibling worktree is reachable but never a named owner', async () => {
   const fixture = await twoWorktreeRepository();
   const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
@@ -1959,7 +1990,15 @@ test('a live detached sibling worktree is reachable but never a named owner', as
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'worktree-synchronization-required', JSON.stringify(finding));
   assert.equal(Object.hasOwn(finding, 'owner_ref'), false, JSON.stringify(finding));
+  assert.equal(Object.hasOwn(finding, 'owner_commit'), false, JSON.stringify(finding));
   assert.equal(finding.owner_unavailable, true, JSON.stringify(finding));
+  assert.equal(
+    finding.remediation,
+    `Revision ${finding.expected_revision} of ${finding.expected_path} is reachable in Git,`
+      + ' but no active named worktree owner is established; inspect the reachable history,'
+      + ' restore or explicitly adopt reviewed bytes, then run claim-verify.',
+    JSON.stringify(finding),
+  );
 
   const target = run(
     fixture.root,

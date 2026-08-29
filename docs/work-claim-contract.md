@@ -437,15 +437,24 @@ of three things: the expected revision is not reachable at all, a live sibling
 holds it on a detached `HEAD`, or it is reachable only from refs no active
 worktree has checked out.
 
-The two `owner_unavailable` remediation sentences do not separate those three
-cases. The sentence naming ownership that cannot be established from reachable
-refs is emitted only when this checkout has no item path and `HEAD` has none
-either, so the item has never existed here. Every other unavailable-owner
-topology gets the not-yet-reachable sentence, including a revision Git can in
-fact reach from a tag, a remote-tracking ref, or a detached sibling. Read that
-sentence as "no worktree you can wait on has published these bytes yet". The
-remedy it names — wait for the owning worktree to commit, then synchronize this
-checkout and run `claim-verify` — is the correct one for all of them.
+Three `owner_unavailable` remediation sentences separate those cases. The
+sentence naming ownership that cannot be established from reachable refs is
+emitted only when this checkout has no item path and `HEAD` has none either, so
+the item has never existed here. A revision Git does reach — from a tag, a
+remote-tracking ref, a branch no worktree has checked out, or a live worktree on
+a detached `HEAD` — gets the sentence saying the revision is reachable in Git
+while no active named worktree owner is established. Its remedy is to inspect
+the reachable history and restore or explicitly adopt reviewed bytes, then run
+`claim-verify`; there is no commit left to wait for. Only a revision no
+reachable commit carries at all gets the not-yet-reachable sentence, whose
+remedy is to wait for the owning worktree to commit, then synchronize this
+checkout and run `claim-verify`.
+
+Through alpha.13 the reachable cases were given the not-yet-reachable sentence
+too, which told a reader to wait for a commit Git already had. The wait never
+ended, because no named worktree was ever going to publish those bytes. The
+`reason`, the codes, the scope, and the finding members are unchanged; only the
+`remediation` text for the reachable-unowned cases is corrected.
 
 **Writer identity.** A legacy mutation and a claimed publication record the
 worktree that authorized them in their journal entries as
@@ -514,13 +523,15 @@ a new UUID, and the removed UUID stays in journal history attributing nothing.
    carries `owner_unavailable: true`.
 3. If an owner is named, WAIT for that owner to publish the commit, then
    synchronize this checkout to it. Do not merge unrelated live work.
-4. If ownership is unavailable, the `remediation` string separates two cases.
+4. If ownership is unavailable, the `remediation` string separates three cases.
    When it says the expected revision is not yet reachable, the owning
    worktree has not committed it yet: wait as in step 3, then synchronize.
-   When it says ownership cannot be established from reachable refs, inspect
-   reachable or dangling commits. Restore the exact authorized bytes or use
-   explicit `claim-adopt` authority after review. Do not copy peer
-   working-tree bytes.
+   When it says the revision is reachable in Git while no active named worktree
+   owner is established, do not wait: inspect the reachable history that carries
+   it, then restore the exact authorized bytes or use explicit `claim-adopt`
+   authority after review. When it says ownership cannot be established from
+   reachable refs, inspect reachable or dangling commits and remedy it the same
+   way. In neither inspection case do you copy peer working-tree bytes.
 5. Run `claim-verify --ledger <dir> --json` in the blocked worktree and require
    exit 0.
 6. Resume the affected item.

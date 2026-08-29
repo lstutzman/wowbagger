@@ -7,6 +7,31 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Fixed
+
+- **A revision Git can already reach is no longer an instruction to wait for
+  it.** When the expected revision was reachable only from a tag, a
+  remote-tracking ref, a branch no worktree had checked out, or a live worktree
+  on a detached `HEAD`, the `worktree-synchronization-required` finding rendered
+  the not-yet-reachable sentence: "wait for the owning worktree to commit, then
+  synchronize this worktree and run claim-verify." The commit already existed
+  and no named worktree was ever going to publish it, so that wait could not
+  end. Those cases now render: "Revision <revision> of <path> is reachable in
+  Git, but no active named worktree owner is established; inspect the reachable
+  history, restore or explicitly adopt reviewed bytes, then run claim-verify."
+  A revision no reachable commit carries keeps the not-yet-reachable sentence
+  and its wait, and an item that has never existed in this checkout keeps the
+  cannot-be-established sentence. **A consumer that matches on `remediation`
+  text must update its patterns:** a finding that used to match "not yet
+  reachable" now matches "reachable in Git" for the four reachable-unowned
+  cases. Nothing else moves. The `reason` stays
+  `worktree-synchronization-required`, the code stays `stale-write-detected`,
+  `owner_unavailable: true` with no `owner_ref` or `owner_commit` is unchanged,
+  the finding stays advisory — it blocks a mutation targeting its own item and
+  lets an unrelated mutation proceed — and core `contract_version` stays `5`,
+  because no field, code, reason, or scope changes and the text correction
+  replaces a false instruction.
+
 ### Documentation
 
 - **Worktree identity and its refusals are now documented.** Alpha.13 shipped an

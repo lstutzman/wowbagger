@@ -2706,7 +2706,13 @@ envelope, subject and commit set included.
 For every blocking finding:
 
 1. Do what `remediation` says, for each finding, using its `expected_path`.
-   `git-finalization-required` means commit that path.
+   `git-finalization-required` means commit that path. A
+   `worktree-synchronization-required` finding means wait only when its
+   `remediation` names an owner to wait for or says the expected revision is not
+   yet reachable. When it says the revision is reachable in Git while no active
+   named worktree owner is established, there is no commit left to wait for:
+   inspect that reachable history, then restore or explicitly adopt reviewed
+   bytes.
 2. Run `wowbagger claim-verify --ledger <dir> --json`.
 3. Exit 0 with `state: "committed"` means the ledger is reconciled and the next
    mutating command may run. Exit 6 means findings remain; repeat from step 1.

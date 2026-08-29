@@ -629,13 +629,17 @@ Read `error.details.findings[0].reason` and act on the named item:
   revision is not reachable at all, a live sibling holds it on a detached
   `HEAD`, or it is reachable only from a tag, a remote-tracking ref, or a
   branch no worktree has checked out. Reachability is not ownership; a ref you
-  can see is not a worktree that can publish. Follow the `remediation`: a
-  revision that is not yet reachable means WAIT for the owning worktree to
-  commit, then synchronize, and that sentence is also what you get for a
-  detached or unowned-ref owner. Only ownership that cannot be established from
-  reachable refs — the item has never existed in this checkout — calls for
-  inspecting reachable or dangling commits with explicit restore or
-  `claim-adopt`. Never merge unrelated live work.
+  can see is not a worktree that can publish. Follow the `remediation`, which
+  separates those cases. A revision that is **not yet reachable** means WAIT for
+  the owning worktree to commit, then synchronize. A revision that is
+  **reachable in Git while no active named worktree owner is established** —
+  a tag, a remote-tracking ref, an unchecked-out branch, or a detached sibling
+  carries it — is not a wait at all: inspect that reachable history, then
+  restore the authorized bytes or use explicit `claim-adopt` after review.
+  Ownership that **cannot be established from reachable refs** — the item has
+  never existed in this checkout — calls for inspecting reachable or dangling
+  commits with the same explicit restore or `claim-adopt`. Never merge unrelated
+  live work.
 - `unauthorized-revision` — the item changed outside the protocol. Two remedies
   are explicit: **restore** the authorized revision and run `claim-verify` to
   discard the edit, or **adopt** the committed revision and run `claim-verify`

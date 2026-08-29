@@ -87,7 +87,14 @@ export function classifyReconciliation({ workingTree, head, expectedOwner, expec
     return {
       scope: 'target',
       reason: 'worktree-synchronization-required',
-      remediation: 'await-owner-commit',
+      // Waiting is only truthful while the commit is still missing. Git already
+      // reaches a `reachable-unowned` revision through a tag, a remote-tracking
+      // ref, an unchecked branch, or a detached HEAD, so telling a reader to
+      // wait for a commit names a wait that can never end: the bytes are there
+      // to inspect, and no named worktree will publish them.
+      remediation: expectedOwner.kind === 'reachable-unowned'
+        ? 'inspect-reachable-history'
+        : 'await-owner-commit',
     };
   }
   return UNAUTHORIZED_REVISION;

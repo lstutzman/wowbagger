@@ -843,6 +843,16 @@ function topologyFinding(decision, expectedPath, expectedRevision) {
         owner_unavailable: true,
         remediation: `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
       };
+    // Reachable but unowned: the revision is in Git already, so the only honest
+    // instruction is to go read it. Naming an owner to wait for would be a wait
+    // with no end, which is what item #178 found in the field.
+    case 'inspect-reachable-history':
+      return {
+        reason: decision.reason,
+        ...at,
+        owner_unavailable: true,
+        remediation: `Revision ${expectedRevision} of ${pathLabel} is reachable in Git, but no active named worktree owner is established; inspect the reachable history, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
+      };
     case 'await-owner-commit':
       return {
         reason: decision.reason,
