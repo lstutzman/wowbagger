@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.13 - 2026-08-28
+
 ### Fixed
 
 - **Every reconciling command reads the same writer evidence.** `claim-verify`
