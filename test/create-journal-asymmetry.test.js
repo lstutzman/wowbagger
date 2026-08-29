@@ -320,3 +320,32 @@ test('a journaled create blocks stale sibling allocation but not an unrelated tr
   assert.equal(siblingTransition.exit, 0, JSON.stringify(siblingTransition.envelope));
   assert.equal(siblingTransition.envelope.state, 'committed');
 });
+
+test('a stale revision of an item this checkout holds does not block create', async () => {
+  const fixture = await twoWorktreeRepository();
+  // The root worktree publishes a new revision of the seed item and commits.
+  // The sibling still holds the seed at its previous revision, so its view of
+  // that item is stale. Its number is not: an item's number is immutable, and
+  // the sibling holds the item, so the allocation it reads is complete.
+  const seedRevision = run(
+    fixture.root, 'inspect', '--ledger', fixture.ledger, '--number', '1', '--json',
+  ).envelope.result.item.revision;
+  const transitioned = run(
+    fixture.root, 'transition', '--ledger', fixture.ledger,
+    '--input', await transitionRequest(
+      fixture.root, 'transition-seed.json', SEED_ID, seedRevision, 'in-progress',
+    ),
+    '--json',
+  );
+  assert.equal(transitioned.exit, 0, JSON.stringify(transitioned.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Transition the seed item');
+
+  const siblingCreate = run(
+    fixture.siblingRoot, 'create', '--ledger', fixture.siblingLedger,
+    '--input', await createRequest(fixture.siblingRoot, 'create-sibling.json', SECOND_ID), '--json',
+  );
+  assert.equal(siblingCreate.exit, 0, JSON.stringify(siblingCreate.envelope));
+  assert.equal(siblingCreate.envelope.state, 'committed');
+  assert.equal(siblingCreate.envelope.result.item.core.number, 2);
+});

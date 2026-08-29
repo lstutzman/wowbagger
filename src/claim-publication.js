@@ -621,7 +621,12 @@ export async function reconcileClaimJournal({
     const expectedRevision = authorizedRevisionOf(latestAuthorized);
     const authorizedRevisions = new Set(authorized.map(authorizedRevisionOf));
     for (const intent of entries) {
-      if (intent.type === 'legacy-mutation-intent' && intent.item_id === itemId) {
+      // A create names no predecessor revision, so its `null` is the absence of
+      // one, never a ruling that absent bytes are authorized. Reading it as a
+      // revision would make an uncommitted create look finalized in Git.
+      if (intent.type === 'legacy-mutation-intent'
+        && intent.item_id === itemId
+        && intent.expected_revision !== null) {
         authorizedRevisions.add(intent.expected_revision);
       }
     }
@@ -631,7 +636,16 @@ export async function reconcileClaimJournal({
     const headItem = headItems.get(itemId);
     const headRevision = headItem ? revisionFor(headItem.bytes) : null;
     const workingTreeChanged = actualRevision !== expectedRevision;
-    const gitHeadChanged = gitHead !== null && !authorizedRevisions.has(headRevision);
+    // Until an item takes part in a guarded mutation, its creation is the only
+    // ruling the journal holds for it, and committing that creation is not a
+    // precondition for other writes: the bytes are here and the number they
+    // carry is readable. A checkout that cannot read them is judged by the
+    // create fence, which refuses an allocation while a coordinated item is
+    // missing, so relaxing the Git surface here concedes no allocation.
+    const createOnly = authorized.every((entry) => entry.command === 'create-v1');
+    const gitHeadChanged = !createOnly
+      && gitHead !== null
+      && !authorizedRevisions.has(headRevision);
     if (!workingTreeChanged && !gitHeadChanged) continue;
     const record = replayed.state.claims.find((entry) => entry.item_id === itemId);
     const expectedPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)
@@ -765,6 +779,11 @@ export async function reconcileClaimJournal({
     findings,
     gitHead,
     headItems,
+    // Every coordinated item the journal knows and this working ledger does not
+    // hold. An item's number is immutable, so a caller that allocates the next
+    // one needs to know when an allocation exists that it cannot read; a stale
+    // revision of an item that is present hides no number.
+    missingCoordinatedItems: [...coordinatedItems].filter((itemId) => !items.has(itemId)),
     // The snapshot reconciliation judged. Reconciliation writes only the
     // journal, the claim state, and the ledger's `.wowbagger` reconcile log,
     // none of which a complete ledger load reads, so these are still the bytes

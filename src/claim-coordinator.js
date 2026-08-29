@@ -37,10 +37,11 @@ export async function withLegacyMutationFence(
   const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
   if (!capability.claim_protected_publication) return write();
 
-  // A create allocates a repository-wide identity, not just its own item, so
-  // its reconciliation judges every coordinated item: a stale checkout that
-  // cannot see a sibling's publication must not hand the same number out
-  // again. Transition and patch keep target-item scope.
+  // A create is the one mutation that reads an identity it was not given: it
+  // allocates the ledger's next number from the items this checkout holds. Its
+  // reconciliation therefore stays target-scoped like every other mutation, and
+  // gains one extra barrier below, for the coordinated items this working
+  // ledger cannot see at all.
   const create = command === 'create-v1';
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
@@ -64,11 +65,21 @@ export async function withLegacyMutationFence(
         replayed,
         currentWorktreeId,
         physicalNow: new Date().toISOString(),
-        targetItemId: create ? null : itemId,
+        targetItemId: itemId,
         writeLogOnUnsafe: false,
         writeLogWhenEmpty: !create,
       });
       if (reconciled.unsafe) {
+        return claimStoreUnavailable(responseCommand, 'publication-reconciliation-required', {
+          findings: reconciled.findings,
+        });
+      }
+      // A coordinated item this checkout does not hold carries a number nobody
+      // here can read, so the next number this create would allocate may be one
+      // a sibling worktree already published. A stale revision of an item that
+      // is present hides no number: an item's number is immutable, so target
+      // scoping above still lets that create through.
+      if (create && reconciled.missingCoordinatedItems.length > 0) {
         return claimStoreUnavailable(responseCommand, 'publication-reconciliation-required', {
           findings: reconciled.findings,
         });

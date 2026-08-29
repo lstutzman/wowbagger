@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { access, copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -219,25 +219,40 @@ test('a visible sibling worktree write does not block create elsewhere', async (
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
 });
 
-test('an item absent from this checkout reports unavailable ownership despite a named sibling', async () => {
+test('an item absent from this checkout blocks create and reports unavailable ownership despite a named sibling', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
   await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
   git(fixture.root, 'add', 'ledger');
   git(fixture.root, 'commit', '-qm', 'Add private branch item');
 
+  const newId = 'wb_01M01BFR000TXV22D7KZ6TQYH3';
+  // The item is absent here, so its number is unreadable and the allocation
+  // this create would make may already be a sibling's.
   const unrelated = run(
     fixture.siblingRoot,
     'create', '--ledger', fixture.siblingLedger,
-    '--input', await createRequest(
-      fixture.siblingRoot,
-      'create-unrelated.json',
-      'wb_01M01BFR000TXV22D7KZ6TQYH3',
-    ),
+    '--input', await createRequest(fixture.siblingRoot, 'create-unrelated.json', newId),
     '--json',
   );
 
-  assert.equal(unrelated.exit, 0, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.namespace, 'ledger-mutation');
+  assert.equal(unrelated.envelope.command, 'create-v1');
+  assert.equal(unrelated.envelope.state, 'unchanged');
+  assert.equal(unrelated.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(unrelated.envelope.error.details.reason, 'publication-reconciliation-required');
+  await assert.rejects(
+    access(path.join(fixture.siblingLedger, `${newId}.md`)),
+    { code: 'ENOENT' },
+  );
+  assert.deepEqual(
+    (await journalEntries(fixture.siblingRoot)).filter((entry) => entry.item_id === newId),
+    [],
+  );
+
+  // The topology the refusal reasoned from, reported unchanged: the expected
+  // revision belongs to a checkout that never held the item.
   const verified = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
   assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
   const [finding] = verified.envelope.result.findings;
@@ -313,7 +328,7 @@ test('a private publication still blocks a same-item mutation', async () => {
   assert.equal(blocked.envelope.error.details.findings[0].item_id, targetId);
 });
 
-test('claim verify reports a private foreign publication until synchronization', async () => {
+test('a private foreign publication blocks create and is reported until synchronization', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
   await writeItem(fixture.root, fixture.ledger, 'main', writtenId);
@@ -322,17 +337,27 @@ test('claim verify reports a private foreign publication until synchronization',
   const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
   assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
 
+  const newId = 'wb_01M01BFR000TXV22D7KZ6TQYH3';
   const created = run(
     fixture.siblingRoot,
     'create', '--ledger', fixture.siblingLedger,
-    '--input', await createRequest(
-      fixture.siblingRoot,
-      'create-early.json',
-      'wb_01M01BFR000TXV22D7KZ6TQYH3',
-    ),
+    '--input', await createRequest(fixture.siblingRoot, 'create-early.json', newId),
     '--json',
   );
-  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  assert.equal(created.exit, 6, JSON.stringify(created.envelope));
+  assert.equal(created.envelope.namespace, 'ledger-mutation');
+  assert.equal(created.envelope.command, 'create-v1');
+  assert.equal(created.envelope.state, 'unchanged');
+  assert.equal(created.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(created.envelope.error.details.reason, 'publication-reconciliation-required');
+  await assert.rejects(
+    access(path.join(fixture.siblingLedger, `${newId}.md`)),
+    { code: 'ENOENT' },
+  );
+  assert.deepEqual(
+    (await journalEntries(fixture.siblingRoot)).filter((entry) => entry.item_id === newId),
+    [],
+  );
 
   const stillUnresolved = run(fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json');
   assert.equal(stillUnresolved.exit, 6, JSON.stringify(stillUnresolved.envelope));
