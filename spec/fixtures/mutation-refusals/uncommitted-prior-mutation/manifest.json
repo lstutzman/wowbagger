@@ -16,7 +16,6 @@
     "steps": [
       "provision the ledger and commit the namespace",
       "create the prior item and leave it uncommitted",
-      "transition the prior item to backlog and leave it uncommitted",
       "create the next item"
     ]
   },
