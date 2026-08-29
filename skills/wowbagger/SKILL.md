@@ -620,18 +620,53 @@ Read `error.details.findings[0].reason` and act on the named item:
 
 - `git-finalization-required` — you wrote the item here and have not committed.
   Commit, then `claim-verify`.
-- `worktree-synchronization-required` — another worktree wrote the item. If the
+- `worktree-synchronization-required` — another worktree wrote the item.
+  `owner_ref` names an **active named worktree** and nothing else: it is always
+  the branch of a live worktree that carries the expected revision. If the
   finding names `owner_ref` and `owner_commit`, WAIT for that owner to publish,
-  then synchronize this checkout and run `claim-verify`. If it carries
-  `owner_unavailable: true`, follow its `remediation`: a revision that is not
-  yet reachable means WAIT for the owning worktree to commit, then synchronize;
-  only ownership that cannot be established from reachable refs calls for
+  then synchronize this checkout and run `claim-verify`. `owner_unavailable:
+  true` means no such worktree exists, and it covers three cases: the expected
+  revision is not reachable at all, a live sibling holds it on a detached
+  `HEAD`, or it is reachable only from a tag, a remote-tracking ref, or a
+  branch no worktree has checked out. Reachability is not ownership; a ref you
+  can see is not a worktree that can publish. Follow the `remediation`: a
+  revision that is not yet reachable means WAIT for the owning worktree to
+  commit, then synchronize, and that sentence is also what you get for a
+  detached or unowned-ref owner. Only ownership that cannot be established from
+  reachable refs — the item has never existed in this checkout — calls for
   inspecting reachable or dangling commits with explicit restore or
   `claim-adopt`. Never merge unrelated live work.
 - `unauthorized-revision` — the item changed outside the protocol. Two remedies
   are explicit: **restore** the authorized revision and run `claim-verify` to
   discard the edit, or **adopt** the committed revision and run `claim-verify`
   to keep it. Ask before discarding reviewed work.
+
+Two live worktrees answering to one identity, or a worktree roster the
+coordinator could not finish reading, refuse before anything is classified.
+You get exit 6 `claim-store-unavailable`, reason `claim-store-unreadable`, with
+`error.details.identity_diagnostic`: `duplicate-worktree-identity` naming the
+`worktree_id` and `live_worktree_count`, or `worktree-enumeration-failed` with
+no further member. Auto-commit reports the same diagnostic inside
+`auto-commit-preflight-failed` with `retryable: false`. Neither is retryable
+and neither is yours to repair by editing files. Report the diagnostic verbatim,
+including the `worktree_id` and `live_worktree_count`: a duplicate means two
+live worktrees hold the same identity file, usually because a private Git
+directory was copied, and which worktree keeps the UUID is a person's decision.
+An enumeration failure means a registered worktree path could not be read. The
+identity itself is an opaque UUID a worktree writes once into its private Git
+directory. Never create, copy, or edit it.
+
+**`claim-verify` is repository-wide, and a clean mutation does not make it
+exit 0.** It names no target, so any blocking finding anywhere in the
+repository keeps it at exit 6 — including a finding on an item belonging to
+work you have nothing to do with. On a repository with live sibling worktrees
+you may commit every one of your own mutations and still never see
+`claim-verify` exit 0. That is current behavior; item #184 is open in triage to
+decide the supported verification surface. When the remaining findings all name
+items you are not working on, say so and stop; do not hand-edit an item, and do
+not run `claim-adopt` on a sibling's item to force exit 0. Adoption moves the
+coordinator's authorized revision and is not a way to silence someone else's
+finding.
 
 Adoption is per item and per revision explicit. Name the item and both
 revisions, take them from the finding, and commit the edited bytes first:
@@ -692,7 +727,9 @@ Use the claimed write path as one complete loop:
 9. Run `claim-verify` after the commit or merge. It finalizes the Git outcome,
    repairs response-loss cases, and reports later revision drift. Require exit
    0 before the next mutating command; exit 6 means findings remain, so act on
-   each `remediation` string and run it again.
+   each `remediation` string and run it again. If every remaining finding names
+   an item you are not working on, that is the repository-wide scope described
+   above, not a failure of your work: report it instead of forcing exit 0.
 10. Release the claim with its current observed state.
 11. Run `validate` and show the resulting diff.
 
@@ -717,7 +754,8 @@ response envelopes, refusal precedence, and recovery rules.
    `git add <dir> && git commit`.
 8. On a provisioned ledger, run `claim-verify --ledger <dir> --json` and
    require exit 0 before the next `create`, `transition`, `parent-migrate`,
-   `snooze`, `patch`, or `publish-claimed`.
+   `snooze`, `patch`, or `publish-claimed`. Findings that name only unrelated
+   items are repository-wide scope; report them rather than forcing exit 0.
 
 Write, commit, `claim-verify`, next write. The unclaimed loop obeys the same
 rule as the claimed one, because both run through the same coordinator. Steps 7

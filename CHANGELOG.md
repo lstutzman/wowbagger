@@ -7,6 +7,84 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+### Documentation
+
+- **Worktree identity and its refusals are now documented.** Alpha.13 shipped an
+  explicit worktree identity — an opaque random UUID a worktree creates once in
+  its private Git directory — and started recording it as the optional
+  `writer_worktree_id` member on `legacy-mutation-intent`, `legacy-mutation`,
+  `publish-intent`, and `publish-final` journal entries. Reconciliation reads it
+  to tell this worktree's own unreachable successor from a sibling's, which is
+  what turns that topology into a global `unauthorized-revision` barrier instead
+  of advisory `worktree-synchronization-required`. Alpha.13 also began refusing
+  before it classifies anything when two live worktrees answer to one UUID, or
+  when the worktree roster cannot be read to completion: exit 6
+  `claim-store-unavailable`, reason `claim-store-unreadable`, plus one new
+  `error.details.identity_diagnostic` carrying `duplicate-worktree-identity`
+  with `worktree_id` and `live_worktree_count`, or `worktree-enumeration-failed`
+  with no further member, and the same diagnostic inside
+  `auto-commit-preflight-failed` with `retryable: false`. All of that shipped
+  without a release note; the alpha.13 entry mentioned writer identity only in
+  passing while describing which callers read it. The work-claim contract
+  section 3.1, the mutation contract auto-commit preflight details, and the
+  installed skill now state the journal field, its alpha.12-and-earlier
+  compatibility (such entries stay valid, attribute nothing, and leave the
+  writer unknown), what the identity discloses in committed history, and both
+  diagnostics. Core `contract_version` stays `5` and no public request or
+  success envelope changes.
+
+- **Owner evidence names only an active named worktree, and the contract now
+  says so.** Through alpha.12 the owner search was a reachability search, so a
+  finding could report `owner_ref` naming a tag, a remote-tracking ref, or a
+  branch no worktree had checked out — an owner that could never publish
+  anything, and an instruction to wait forever. Alpha.13 replaced that with the
+  live worktree roster: this checkout first, then live worktrees on a branch
+  ordered by branch ref and then path, with bare and prunable records excluded.
+  `owner_ref` is therefore always the branch of a live worktree. A revision
+  reachable only from a tag, a remote-tracking ref, an unchecked-out branch, or
+  a live worktree on a detached `HEAD` now reports `owner_unavailable: true` and
+  no `owner_ref`. That narrowing shipped in alpha.13 with no release note, and
+  the alpha.11 note promising that a finding "retains that `owner_ref` and
+  `owner_commit`" no longer describes those cases. The contract and the
+  installed skill now state the roster rule, the three distinct meanings of
+  `owner_unavailable`, and which remediation sentence each one gets.
+
+- **Repository-wide `claim-verify` and target-scoped mutation are stated as
+  different questions.** The mutation contract still said a recorded write in
+  one worktree "refuses every mutation in the others", which target scoping
+  stopped being true before alpha.11. It now states the item scope, and both
+  contracts and the installed skill now say plainly that a successful mutation
+  is not proof of a globally clean claim store: `claim-verify` names no target,
+  so it stays exit 6 while any item in the repository carries a blocking
+  finding, including an unrelated one. Item #184 is open in triage to decide the
+  supported verification surface; nothing about that behavior changed here, and
+  a gate that demands a globally clean `claim-verify` on a repository with live
+  sibling work is still unsatisfiable.
+
+- **A refused reconciliation still persists the clock floor.** Reconciliation
+  has written its clock entry before it classifies anything since work claims
+  were implemented, so a command that then refuses with
+  `publication-reconciliation-required` has already advanced the durable
+  monotonic floor to `max(physical_utc, previous_floor)`. Section 4 documented
+  the floor only for authoritative lease decisions, so the pre-decision advance
+  and its one observable consequence were undocumented: because the floor never
+  rolls back, a lease or fence observed expired at that floor can never read
+  live again, and a holder on a ledger whose floor runs ahead of its own wall
+  clock may find its lease expired the moment it asks after clearing a barrier.
+  Behavior is unchanged; the contract now says it.
+
+- **The reconciliation topology classifier moved without changing an answer.**
+  The topology decision that was spread across owner lookup, diagnosis, and
+  scope inference now lives in one pure module,
+  `src/reconciliation-classifier.js`, which takes normalized evidence and
+  returns a typed decision. That type is internal: scope travels beside a
+  finding and no response has ever carried it, so a consumer must keep reading
+  the refusal rather than the `reason` string. Every public seam — reason,
+  blocking behavior, owner fields, remediation sentence, exit, state, and
+  envelope domain — is byte-identical to alpha.13 on every matrix row, which is
+  the whole point of the change and the only claim made for it. No behavior
+  shipped with it.
+
 ## 0.1.0-alpha.13 - 2026-08-28
 
 ### Fixed

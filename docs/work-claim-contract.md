@@ -401,6 +401,16 @@ Each refusal carries a `reason` that separates the cases:
 | `worktree-synchronization-required` | another worktree wrote the item | wait for the owner named by `owner_ref`/`owner_commit`, then synchronize this checkout and run `claim-verify`; if `owner_unavailable` is true, follow the finding's `remediation` (section 3.2 step 4) |
 | `unauthorized-revision` | the item was changed outside the protocol | restore the authorized revision and discard the edit, then `claim-verify`; or adopt the committed revision and keep the edit, then `claim-verify` (section 3.3) |
 
+**Scope is the coordinator's judgement, not a published member.** What a
+finding refuses — every write, only a write against the item it names, or
+nothing — is decided from the topology and travels beside the finding, never
+inside it. No response carries it. A consumer MUST NOT infer scope from the
+`reason` string, from the `remediation` sentence, or from whether `owner_ref`
+is present: those are diagnostics for a person, and reading them as a scope
+signal is exactly how alpha.11 treated an out-of-protocol revision as advisory
+synchronization. The only supported scope signal is the refusal itself: a
+mutation that returns exit 6 was blocked, and one that returns exit 0 was not.
+
 Ownership on the current symbolic ref is never reported as a foreign worktree
 owner, and a detached `HEAD` applies the same guard through its reachable
 commit history. If the expected revision is already reachable from the current
@@ -409,16 +419,49 @@ worktree; it remains `unauthorized-revision` and blocks unrelated mutations.
 This distinguishes a real sibling's uncommitted successor from history the
 current checkout already owns.
 
+**`owner_ref` names an active named worktree, and nothing else.** Owner
+evidence is the worktree roster Git reports live, searched this checkout first,
+then every live worktree that has a branch checked out, ordered by branch ref
+and then by path so one revision carried by several live worktrees always names
+the same owner. A bare record, a record Git marks prunable, and a worktree
+whose `HEAD` names no commit are excluded. `owner_ref` is always the branch of
+one of those live worktrees, and `owner_commit` is the commit in that
+worktree's history whose item bytes are the expected revision.
+
+Reachability alone is never ownership. A tag, a remote-tracking ref, a branch
+no worktree has checked out, and a live worktree on a detached `HEAD` can each
+reach the expected revision while naming nobody who could publish it. All of
+them, and a revision no reachable commit carries at all, produce
+`owner_unavailable: true` and no `owner_ref`. So `owner_unavailable` means one
+of three things: the expected revision is not reachable at all, a live sibling
+holds it on a detached `HEAD`, or it is reachable only from refs no active
+worktree has checked out.
+
+The two `owner_unavailable` remediation sentences do not separate those three
+cases. The sentence naming ownership that cannot be established from reachable
+refs is emitted only when this checkout has no item path and `HEAD` has none
+either, so the item has never existed here. Every other unavailable-owner
+topology gets the not-yet-reachable sentence, including a revision Git can in
+fact reach from a tag, a remote-tracking ref, or a detached sibling. Read that
+sentence as "no worktree you can wait on has published these bytes yet". The
+remedy it names — wait for the owning worktree to commit, then synchronize this
+checkout and run `claim-verify` — is the correct one for all of them.
+
 **Writer identity.** A legacy mutation and a claimed publication record the
 worktree that authorized them in their journal entries as
 `writer_worktree_id`: `legacy-mutation-intent`, `legacy-mutation`,
 `publish-intent`, and `publish-final`. The field is optional on all of them: an
-entry written before the field existed stays valid and attributes nothing. A
-publication resolves its identity once under the claim lock, so its intent and
-its terminal name one writer, and a terminal that recovery reconstructs after a
-lost response carries the identity its intent recorded. When the journal names
-the current worktree as the writer of the expected revision and no reachable
-ref carries that revision, no sibling can ever produce it, so the finding is
+entry written before the field existed, which is every entry alpha.12 and
+earlier wrote, stays valid, attributes nothing, and leaves the expected writer
+`unknown`. Writer attribution alone therefore cannot turn such a finding into a
+global barrier: it stays advisory `worktree-synchronization-required`. Local
+state and current-checkout ownership are still judged first, and both remain
+global barriers whatever the entry records. A publication resolves its identity
+once under the claim lock, so its intent and its terminal name one writer, and
+a terminal that recovery reconstructs after a lost response carries the
+identity its intent recorded. When the journal names the current worktree as
+the writer of the expected revision and no reachable ref carries that revision,
+no sibling can ever produce it, so the finding is
 `unauthorized-revision` and blocks every mutation instead of
 `worktree-synchronization-required`, which blocks only its own item.
 
@@ -486,6 +529,27 @@ Auto-commit applies this target scope both before and after its Git commit. A
 successful mutation requires a valid ledger and no findings blocking the target
 item, not a globally empty findings list. Nonblocking findings remain available
 to `claim-verify`, where a caller that names no target still sees every finding.
+
+**A target-scoped success is not a globally clean claim store.** The two scopes
+answer different questions and a caller MUST NOT substitute one for the other.
+A mutation, and auto-commit inside it, requires only that no finding blocks its
+own target item. `claim-verify` names no target, so every unresolved finding
+blocks it: exit 6 there is the repository-wide answer, and it stays exit 6
+while any item in the repository carries a blocking finding, including one
+belonging to work this caller has nothing to do with. A cooperating worker can
+therefore commit every one of its own mutations while `claim-verify` never
+reaches exit 0, because a sibling worktree's unpublished item is visible from
+every checkout that shares the common directory.
+
+That is current behavior, not a settled design. Item #184 is open in triage to
+choose the supported surface — item-scoped verification, target-aware input, or
+repository-wide success with structured foreign-work warnings, while keeping a
+strict whole-repository mode. Until it ships, an automated gate that demands a
+globally clean `claim-verify` is unsatisfiable in a repository with live
+sibling work. Gate on the mutation's own refusal, and read a repository-wide
+`claim-verify` as the diagnostic it is. Do not hand-edit an item or run
+`claim-adopt` to reach exit 0: adoption moves the coordinator's authorized
+revision and is not a way to silence a sibling's finding.
 
 `claim-verify` in the writing worktree finalizes that worktree's own state; it
 does not make a sibling checkout able to see the item. Synchronization or
@@ -665,6 +729,23 @@ fails or its durability is uncertain, the backend returns exit 6 with
 `clock-floor-persistence-failed`, makes no claim or ledger change, and refuses
 to guess. It cannot report a lease success or semantic rejection whose time
 was not persisted.
+
+**A refused reconciliation has already advanced the floor.** Reconciliation
+persists its clock entry before it classifies anything, so a command that then
+refuses with exit 6 `claim-store-unavailable`, reason
+`publication-reconciliation-required`, has still moved the durable floor to
+`max(physical_utc, previous_floor)`. No claim, epoch, or ledger byte changes,
+and the refusal reports none. The floor is monotonic, so the effect is on time
+alone and it is permanent: once a refused reconciliation has published a floor
+at or past a lease's `expires_at`, that lease can never read live again, and a
+later acquire, renew, or fence check on the same tuple observes it expired.
+On a ledger whose floor already runs ahead of this caller's wall clock, every
+refused reconciliation republishes the higher floor, so a holder whose lease
+looks live by its own clock may find it expired the moment it asks. A caller
+that meets a barrier during a long recovery SHOULD expect to reacquire rather
+than assume its lease survived. This is section 5's rule for a rejected
+decision applied one step earlier: an advanced floor is never evidence that
+anything succeeded.
 
 When `last_epoch` is `18446744073709551615` (the unsigned 64-bit maximum), a
 new acquire or takeover is impossible. After the authoritative decision time

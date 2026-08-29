@@ -792,10 +792,19 @@ another. It is **not** a statement that worktrees write independently.
 
 On a provisioned Git-backed ledger they do not. One claim journal lives in the
 shared Git common directory, so it serializes every worktree of that
-repository: a recorded `transition` or `patch` in one worktree refuses every
-mutation in the others with exit 6 `claim-store-unavailable`, reason
+repository. The serialization is scoped to the item: a recorded `transition` or
+`patch` in one worktree refuses a mutation in the others that targets *that
+item* with exit 6 `claim-store-unavailable`, reason
 `publication-reconciliation-required`, until the writing commit is visible in
-the blocked checkout. Clones do not share the common directory, so
+the blocked checkout. A mutation targeting an unrelated item still runs, and
+the sibling's finding remains visible. Own uncommitted work and
+out-of-protocol revisions are global barriers and refuse every mutation. A
+repository-wide `claim-verify` names no target, so it reports exit 6 while any
+item carries a blocking finding, including an unrelated one: a successful
+mutation is therefore not proof of a globally clean claim store. See
+[the work-claim contract](work-claim-contract.md), section 3.2, for the scopes
+and for the open item #184 that owns the verification-surface decision. Clones
+do not share the common directory, so
 `limits.cross_clone_coordination: false` carries no such consequence.
 
 That serialization is discoverable, per ledger, at
@@ -2812,8 +2821,12 @@ staging, or commit occurs. `details.reason` is one of `staged-paths-present`,
 Every `auto-commit-preflight-failed` refusal also carries
 `details.retryable`. `mutex-held` is retryable inside one working tree.
 `claim-state-unreconciled` also carries optional `claim_verify_code`,
-`claim_verify_reason`, and bounded `findings`; `claim-store-locked` is
-retryable, while persistent reconciliation is not retryable. Every other
+`claim_verify_reason`, `identity_diagnostic`, and bounded `findings`;
+`claim-store-locked` is retryable, while persistent reconciliation is not
+retryable. An `identity_diagnostic` reports an ambiguous or unreadable
+worktree identity — `duplicate-worktree-identity` with `worktree_id` and
+`live_worktree_count`, or `worktree-enumeration-failed` with no further member
+— and is never retryable. Every other
 preflight reason is not retryable. Clients branch on this boolean and the
 underlying verification reason, never on the generic message.
 
