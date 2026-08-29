@@ -167,9 +167,14 @@ async function withClaimedItem(callback) {
   return withLedger(true, async (context) => {
     const id = mintId(DATE);
     assert.equal((await createItem(context.ledger, createRequest(id))).ok, true);
+    // Each journaled create reaches Git before the next mutation runs. The two
+    // items, their mint order, and the claim taken on the first are unchanged,
+    // so the ledger the publication tests measure loads against still holds
+    // exactly these two committed items when the claim is acquired.
+    context.commit('create the claimed item');
     const otherId = mintId(DATE);
     assert.equal((await createItem(context.ledger, createRequest(otherId))).ok, true);
-    context.commit('create the items');
+    context.commit('create the second item');
     const namespace = await readNamespace(context.ledger);
     const gitCommonDir = await resolveGitCommonDir(context.ledger);
     const claim = await acquireClaim(context.ledger, context.root, namespace, id);

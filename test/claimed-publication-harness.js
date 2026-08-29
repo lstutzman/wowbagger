@@ -68,13 +68,19 @@ export async function withProvisionedLedger(bystanders, callback) {
   try {
     const id = mintId(HARNESS_DATE);
     assert.equal((await createItem(ledger, createRequest(id))).ok, true);
+    // Every journaled create has to reach Git before the next mutation runs, so
+    // the claimed item is committed here rather than in one collapsed commit at
+    // the end. The bystanders are still created one at a time, in the same
+    // order, and the claim is still acquired against the same committed item,
+    // so the topology the publish tests count locks over is unchanged.
+    commit('create the claimed item');
     const otherIds = [];
     for (let index = 0; index < bystanders; index += 1) {
       const otherId = mintId(HARNESS_DATE);
       assert.equal((await createItem(ledger, createRequest(otherId, `Bystander ${index}`))).ok, true);
       otherIds.push(otherId);
+      commit(`create bystander ${index}`);
     }
-    commit('create the items');
     const claim = await acquireClaim(ledger, root, namespace, id);
     return await callback({
       claim, commit, gitCommonDir, id, ledger, namespace, otherIds, root,

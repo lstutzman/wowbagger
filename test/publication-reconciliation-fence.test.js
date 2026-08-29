@@ -55,9 +55,13 @@ function sha256(bytes) {
 }
 
 // A provisioned ledger whose committed baseline holds one claimed item, and
-// whose working tree then gains an uncommitted legacy create and transition on
-// a second item. The claim is acquired while reconciliation is still clean,
-// because every claim lifecycle subcommand already reconciles unconditionally.
+// whose working tree then gains an uncommitted legacy create on a second item.
+// That uncommitted create is the prior mutation the publication fence has to
+// refuse: `git-finalization-required` is reachable only while the item is
+// absent from Git HEAD, so the create is the mutation left uncommitted and no
+// further mutation is stacked on top of it. The claim is acquired while
+// reconciliation is still clean, because every claim lifecycle subcommand
+// already reconciles unconditionally.
 async function unreconciledLedger() {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-publication-fence-'));
   git(root, 'init', '-q');
@@ -90,15 +94,6 @@ async function unreconciledLedger() {
   const prior = run(root, 'create', '--ledger', ledger, '--input',
     await requestFile(root, 'create-prior.json', createRequest(PRIOR_ID, 'Prior item')), '--json');
   assert.equal(prior.exit, 0, JSON.stringify(prior.envelope));
-  const transitioned = run(root, 'transition', '--ledger', ledger, '--input',
-    await requestFile(root, 'transition-prior.json', {
-      id: PRIOR_ID,
-      expected_revision: prior.envelope.result.item.revision,
-      to_status: 'backlog',
-      date: '2026-08-17',
-      decision: { summary: 'Accept the prior item.', rationale: 'The prior item is ready for work.' },
-    }), '--json');
-  assert.equal(transitioned.exit, 0, JSON.stringify(transitioned.envelope));
 
   const itemPath = path.join(ledger, claimed.envelope.result.item.path);
   const before = await readFile(itemPath);
@@ -124,7 +119,7 @@ async function unreconciledLedger() {
     ledger,
     namespace,
     priorPath: prior.envelope.result.item.path,
-    priorRevision: transitioned.envelope.result.item.revision,
+    priorRevision: prior.envelope.result.item.revision,
     publishPath,
     root,
   };

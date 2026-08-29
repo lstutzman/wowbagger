@@ -75,6 +75,12 @@ async function committedLedger() {
     },
   ), '--json');
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  // The journaled create reaches Git before the acceptance transition runs.
+  // The accepted revision and the reconciliation claim-verify records keep
+  // their own commits below, so the fixture still ends on a clean working tree
+  // holding one backlog item whose byte state every test snapshots.
+  git(root, 'add', 'ledger');
+  git(root, 'commit', '-qm', 'Commit the created item and its reconciliation log');
   const accepted = run(root, 'transition', '--ledger', ledger, '--input', await writeJson(
     path.join(root, 'accept.json'),
     {
@@ -87,7 +93,7 @@ async function committedLedger() {
   ), '--json');
   assert.equal(accepted.exit, 0, JSON.stringify(accepted.envelope));
   git(root, 'add', 'ledger');
-  git(root, 'commit', '-qm', 'Commit the item and its coordinator surfaces');
+  git(root, 'commit', '-qm', 'Commit the accepted revision and its coordinator surfaces');
   const verified = run(root, 'claim-verify', '--ledger', ledger, '--json');
   assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
   git(root, 'add', 'ledger');
@@ -258,17 +264,10 @@ test('an uncommitted item, not reconciliation-log residue, refuses the next muta
     },
   ), '--json');
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
-  const accepted = run(fixture.root, 'transition', '--ledger', fixture.ledger, '--input', await writeJson(
-    path.join(fixture.root, 'second-accept.json'),
-    {
-      id: secondId,
-      expected_revision: created.envelope.result.item.revision,
-      to_status: 'backlog',
-      date: '2026-08-16',
-      decision: { summary: 'Accept the item.', rationale: 'Ready for work.' },
-    },
-  ), '--json');
-  assert.equal(accepted.exit, 0, JSON.stringify(accepted.envelope));
+  // The uncommitted create is itself the mutation Git has yet to record, so
+  // nothing is stacked on top of it. `git-finalization-required` is reachable
+  // only while the item is absent from Git HEAD, which is exactly what leaving
+  // this create uncommitted produces.
 
   const blocked = run(fixture.root, 'patch', '--ledger', fixture.ledger, '--input', await writeJson(
     path.join(fixture.root, 'blocked-patch.json'),
