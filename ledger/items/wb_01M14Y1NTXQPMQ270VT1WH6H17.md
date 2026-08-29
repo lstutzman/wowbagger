@@ -5,14 +5,19 @@ number: 181
 title: "Prevent duplicate schema-v2 numbers across worktrees"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-29
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-29
+    summary: "Accept the cross-worktree number allocation safety fix."
+    rationale: "Ordinary sequential creates in stale cooperating worktrees can commit duplicate immutable numbers and invalidate the whole ledger. The approved design at c947a29 journal-fences create under the shared namespace lock, validates the complete candidate before publication, refuses stale creates unchanged, preserves the ledger as number authority, and leaves existing duplicate recovery to #182. The implementation plan is committed at 2340584."
 ---
 ## Problem
 
