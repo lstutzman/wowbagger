@@ -13,11 +13,18 @@
 // reconciles only its own item, which is why an unrelated guarded mutation
 // still commits in the very checkout whose create just refused.
 //
-// Synchronize-and-retry recovery and the create phase profile are item #181
-// Task 5; nothing here asserts them.
+// The escape: a refusal spends neither the request identity nor a number.
+// Synchronize the stale sibling's Git, let `claim-verify` clear, and the very
+// same create request commits the next number. Two live processes cannot both
+// hold the namespace lock, so the one that arrives second refuses instead of
+// allocating beside the first.
+//
+// The create phase profile is `test/create-phase-profile.test.js`.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { access, chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { spawn, spawnSync } from 'node:child_process';
+import {
+  access, chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -26,6 +33,14 @@ import { fileURLToPath } from 'node:url';
 import { claimJournalPath, replayClaimJournal } from '../src/claim-journal.js';
 
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
+// The scenario runner is the only way to reach a bounded test checkpoint. It
+// calls the same public `runCli` this file's `run` calls; the checkpoint is a
+// module argument no CLI flag can supply.
+const TEST_CLI = fileURLToPath(new URL('./mutation-runner.js', import.meta.url));
+
+// Every wait below is a condition against a wall clock. This ceiling is what a
+// stalled child is allowed to cost, never a delay a passing run pays.
+const WAIT_DEADLINE_MS = 30_000;
 
 function run(cwd, ...argumentsList) {
   const result = spawnSync(process.execPath, [CLI, ...argumentsList], {
@@ -118,6 +133,102 @@ async function replayedEntries(root) {
     NAMESPACE,
   );
   return entries;
+}
+
+// A mutation in its own process group. The group is what teardown signals, so
+// a checkpoint this test never releases, and anything the child itself
+// started, dies with the test rather than outliving it.
+function spawnMutation(cwd, scenario, argumentsList) {
+  const child = spawn(process.execPath, [scenario ? TEST_CLI : CLI, ...argumentsList], {
+    cwd,
+    detached: true,
+    env: scenario ? { ...process.env, WOWBAGGER_TEST_SCENARIO: scenario } : process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const stdout = [];
+  const stderr = [];
+  child.stdout.on('data', (chunk) => stdout.push(chunk));
+  child.stderr.on('data', (chunk) => stderr.push(chunk));
+  const closed = new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', (status, signal) => resolve({
+      signal,
+      status,
+      stderr: Buffer.concat(stderr).toString('utf8'),
+      stdout: Buffer.concat(stdout).toString('utf8'),
+    }));
+  });
+  return { child, closed };
+}
+
+// Signalling the negated PID reaches the whole group. `ESRCH` is the answer
+// that the group is already gone, which is the only other outcome allowed.
+function signalGroup(child, signal) {
+  try {
+    process.kill(-child.pid, signal);
+    return true;
+  } catch (error) {
+    assert.equal(error.code, 'ESRCH', `signalling ${child.pid} failed: ${error.code}`);
+    return false;
+  }
+}
+
+// The child's envelope, or its death at the deadline. A run that never returns
+// is killed rather than allowed to hold the suite open, and the kill is a
+// named failure instead of a timeout with no explanation.
+async function settledMutation(handle) {
+  const timer = setTimeout(() => signalGroup(handle.child, 'SIGKILL'), WAIT_DEADLINE_MS);
+  let result;
+  try {
+    result = await handle.closed;
+  } finally {
+    clearTimeout(timer);
+  }
+  assert.equal(result.signal, null, `child ${handle.child.pid} was killed at the deadline`);
+  assert.equal(result.stderr, '');
+  return { envelope: JSON.parse(result.stdout), exit: result.status };
+}
+
+// Teardown, and the proof of it: every group is signalled, every child is
+// reaped, and no group answers afterwards.
+async function shutDownMutations(handles) {
+  for (const handle of handles) signalGroup(handle.child, 'SIGKILL');
+  await Promise.all(handles.map((handle) => handle.closed));
+  for (const handle of handles) {
+    assert.equal(
+      signalGroup(handle.child, 0),
+      false,
+      `process group ${handle.child.pid} outlived the test`,
+    );
+  }
+}
+
+// Condition-based, never a fixed sleep: the marker is written under the lock
+// the successor has to find held, so its existence is the only signal that
+// starting the successor now proves anything.
+async function waitForMarker(file) {
+  const deadline = Date.now() + WAIT_DEADLINE_MS;
+  while (Date.now() < deadline) {
+    try {
+      await lstat(file);
+      return;
+    } catch (error) {
+      assert.equal(error.code, 'ENOENT');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(`Timed out waiting for ${path.basename(file)}`);
+}
+
+// The number every item file in one checkout carries. Two rows for one number
+// across the two checkouts is the duplicate allocation this fence prevents.
+async function publishedNumbers(ledger) {
+  const names = (await readdir(ledger)).filter((name) => name.endsWith('.md'));
+  const numbers = await Promise.all(names.map(async (name) => {
+    const source = await readFile(path.join(ledger, name), 'utf8');
+    return Number(/^number: (\d+)$/mu.exec(source)[1]);
+  }));
+  return numbers.sort((left, right) => left - right);
 }
 
 test('an overwrite of a created, committed item refuses from the item\'s birth', async () => {
@@ -455,4 +566,132 @@ test('a candidate-invalid create publishes no item and opens no intent', async (
     after.slice(before.length).map((entry) => entry.type).filter((type) => type !== 'clock'),
     [],
   );
+});
+
+// The refusal is a barrier, not a consumption. The stale sibling's request is
+// well formed and its identity is untouched by being refused, so once the
+// checkout can see what it was missing the very same bytes commit — at the
+// next number, not at the number the refusal was protecting.
+//
+// This is the whole escape hatch the fence owes its caller: synchronize Git,
+// clear `claim-verify`, retry. Nothing here is a new request.
+test('a refused stale create commits the same request after synchronization clears it', async () => {
+  const fixture = await twoWorktreeRepository();
+  const branch = git(fixture.root, 'branch', '--show-current');
+  const created = run(
+    fixture.root, 'create', '--ledger', fixture.ledger,
+    '--input', await createRequest(fixture.root, 'create-first.json', FIRST_ID), '--json',
+  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  assert.equal(created.envelope.result.item.core.number, 2);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the created item and its log');
+
+  // One request path, used twice: the refusal and the success are the same
+  // bytes and the same request ID, which is what makes this a retry.
+  const requestPath = await createRequest(fixture.siblingRoot, 'create-sibling.json', SECOND_ID);
+  const refused = run(
+    fixture.siblingRoot, 'create', '--ledger', fixture.siblingLedger,
+    '--input', requestPath, '--json',
+  );
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'publication-reconciliation-required');
+  await assert.rejects(
+    access(path.join(fixture.siblingLedger, `${SECOND_ID}.md`)),
+    { code: 'ENOENT' },
+  );
+
+  // Reconciliation projects the shared journal into a tracked log, and this
+  // stale checkout's refused run left one behind as an untracked file. Git
+  // refuses to overwrite an untracked path with a merged one, and the derived
+  // copy is the one that gives way: the published log is authoritative and the
+  // next command in this checkout rewrites it regardless.
+  await rm(path.join(fixture.siblingLedger, '.wowbagger', `reconcile-${NAMESPACE}.md`));
+  git(fixture.siblingRoot, 'merge', '-q', '--no-edit', branch);
+  const verified = run(
+    fixture.siblingRoot, 'claim-verify', '--ledger', fixture.siblingLedger, '--json',
+  );
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+
+  const retried = run(
+    fixture.siblingRoot, 'create', '--ledger', fixture.siblingLedger,
+    '--input', requestPath, '--json',
+  );
+
+  assert.equal(retried.exit, 0, JSON.stringify(retried.envelope));
+  assert.equal(retried.envelope.state, 'committed');
+  assert.equal(retried.envelope.result.item.id, SECOND_ID);
+  // Three, not two: the refusal protected the number the root worktree had
+  // already published, and spent nothing of its own.
+  assert.equal(retried.envelope.result.item.core.number, 3);
+  assert.deepEqual(await publishedNumbers(fixture.siblingLedger), [1, 2, 3]);
+
+  const validated = run(
+    fixture.siblingRoot, 'validate', '--ledger', fixture.siblingLedger, '--json',
+  );
+  assert.equal(validated.exit, 0, JSON.stringify(validated.envelope));
+  assert.deepEqual(validated.envelope, { valid: true, errors: [] });
+});
+
+// Two live processes, and the overlap is forced rather than hoped for: the
+// first is paused holding the namespace lock, and the marker it writes under
+// that lock is the condition the second waits on. Started together instead,
+// they would collide only when the machine chose to interleave them, and a
+// correct engine would fail the assertion on a quiet box (ledger item #106).
+test('a create refuses while a sibling worktree holds the namespace lock', async () => {
+  const fixture = await twoWorktreeRepository();
+  const token = 'create-contention';
+  const acquired = path.join(fixture.ledger, `.wowbagger-test-${token}-acquired`);
+  const allowSuccessor = path.join(fixture.ledger, `.wowbagger-test-${token}-allow-successor`);
+  // Both requests exist before either process starts: the successor must not
+  // pay for its own setup inside the window the holder is paused in.
+  const holderRequest = await createRequest(fixture.root, 'create-holder.json', FIRST_ID);
+  const arrivalRequest = await createRequest(fixture.siblingRoot, 'create-arrival.json', SECOND_ID);
+
+  const holder = spawnMutation(fixture.root, `pause-after-lock-acquired:${token}`, [
+    'create', '--ledger', fixture.ledger, '--input', holderRequest, '--json',
+  ]);
+  const started = [holder];
+  try {
+    await waitForMarker(acquired);
+    const arrival = spawnMutation(fixture.siblingRoot, null, [
+      'create', '--ledger', fixture.siblingLedger, '--input', arrivalRequest, '--json',
+    ]);
+    started.push(arrival);
+
+    const refused = await settledMutation(arrival);
+
+    // Exact, not either documented reason: the marker proves the holder still
+    // owns the lock, so the successor can only have been refused by it.
+    assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+    assert.equal(refused.envelope.namespace, 'ledger-mutation');
+    assert.equal(refused.envelope.command, 'create-v1');
+    assert.equal(refused.envelope.state, 'unchanged');
+    assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+    assert.equal(refused.envelope.error.details.reason, 'claim-store-locked');
+    await assert.rejects(
+      access(path.join(fixture.siblingLedger, `${SECOND_ID}.md`)),
+      { code: 'ENOENT' },
+    );
+
+    await writeFile(allowSuccessor, 'continue\n');
+    const held = await settledMutation(holder);
+
+    assert.equal(held.exit, 0, JSON.stringify(held.envelope));
+    assert.equal(held.envelope.state, 'committed');
+    assert.equal(held.envelope.result.item.core.number, 2);
+    // One item and one number two across the pair. The refusal left the
+    // sibling exactly as it found it.
+    assert.deepEqual(await publishedNumbers(fixture.ledger), [1, 2]);
+    assert.deepEqual(await publishedNumbers(fixture.siblingLedger), [1]);
+    assert.deepEqual(
+      (await replayedEntries(fixture.root)).filter((entry) => entry.item_id === SECOND_ID),
+      [],
+    );
+  } finally {
+    await shutDownMutations(started);
+  }
 });
