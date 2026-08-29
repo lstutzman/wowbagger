@@ -1,32 +1,31 @@
 // test/create-journal-asymmetry.test.js
 //
-// `create` records no claim-journal entry; `transition` and `patch` do. Item
-// #99 decided to keep that asymmetry, so these vectors pin both halves of what
-// the decision buys and what it costs.
+// Every mutation is journal-visible, `create` included. These vectors pin both
+// halves of what that buys and what it costs at the public writer surface.
 //
-// The cost: until an item's first journal-visible mutation the journal does
-// not know the item, so an out-of-protocol overwrite of a freshly created item
-// is invisible, and a commit alone does not change that. From the first
-// transition the ordinary surfaces cover the item and the same overwrite
-// refuses with `unauthorized-revision`.
+// The benefit: an allocation is fenced from the item's birth. A stale sibling
+// worktree that cannot see a published item cannot hand that item's number out
+// again, and an out-of-protocol overwrite of a freshly created item refuses
+// with `unauthorized-revision` without waiting for a first transition.
 //
-// The benefit: a create in one worktree never blocks a guarded mutation in a
-// sibling worktree. That is the property consumers rely on, and the reason the
-// highest-volume mutation is not also the highest-volume blocker.
+// The cost: a create reconciles the whole repository, so an unauthorized
+// revision on any coordinated item refuses it. A transition or patch still
+// reconciles only its own item, which is why an unrelated guarded mutation
+// still commits in the very checkout whose create just refused.
+//
+// Synchronize-and-retry recovery and the create phase profile are item #181
+// Task 5; nothing here asserts them.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { access, chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { claimJournalPath, replayClaimJournal } from '../src/claim-journal.js';
+
 const CLI = fileURLToPath(new URL('../bin/wowbagger.js', import.meta.url));
-const CONTRACT = readFileSync(
-  fileURLToPath(new URL('../docs/work-claim-contract.md', import.meta.url)),
-  'utf8',
-);
 
 function run(cwd, ...argumentsList) {
   const result = spawnSync(process.execPath, [CLI, ...argumentsList], {
@@ -108,26 +107,18 @@ async function overwriteOutsideTheProtocol(ledger, id) {
   await writeFile(itemPath, published.replace('title: "New item"', 'title: "Hijacked"'));
 }
 
-test('the work-claim contract records the decision to keep create journal-silent', () => {
-  assert.match(CONTRACT, /\*\*Decided: create stays journal-silent\.\*\*/);
-});
+// Both worktrees write one journal in the shared Git common directory. Reading
+// it back through the replay path is also the grammar check: an entry the
+// coordinator emitted that replay rejects throws here.
+async function replayedEntries(root) {
+  const { entries } = await replayClaimJournal(
+    claimJournalPath(path.join(root, '.git'), NAMESPACE),
+    NAMESPACE,
+  );
+  return entries;
+}
 
-test('the work-claim contract records all three reasons for the decision', () => {
-  // 1. create's own publication already covers the creation instant.
-  assert.match(CONTRACT, /refuses\s+to clobber an existing path, and it verifies the published bytes exactly/);
-  // 2. journaling create would serialize worktrees on the highest-volume mutation.
-  assert.match(CONTRACT, /journaled create would serialize every worktree on the highest-volume\s+mutation/);
-  // 3. the exposure window closes at the first journal-visible mutation.
-  assert.match(CONTRACT, /closes at the\s+item's first journal-visible mutation/);
-});
-
-test('the work-claim contract states the exposure window honestly', () => {
-  assert.match(CONTRACT, /\*\*The exposure window, stated honestly\.\*\*/);
-  assert.match(CONTRACT, /A commit alone does not close the window/);
-  assert.match(CONTRACT, /only an actor that bypasses this tool\s+can overwrite the item/);
-});
-
-test('an overwrite of a created, committed item the journal never recorded is not detected', async () => {
+test('an overwrite of a created, committed item refuses from the item\'s birth', async () => {
   const fixture = await twoWorktreeRepository();
   const created = run(
     fixture.root, 'create', '--ledger', fixture.ledger,
@@ -139,19 +130,68 @@ test('an overwrite of a created, committed item the journal never recorded is no
 
   await overwriteOutsideTheProtocol(fixture.ledger, FIRST_ID);
 
-  // The commit does not close the window. Reconciliation compares only the
-  // revisions the journal expects, and create recorded none.
+  // Create is journal-visible from the item's birth, so the coordinator
+  // already expects the revision it published and reports the overwrite.
   const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
-  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
-  assert.deepEqual(verified.envelope.result.findings, []);
-  assert.deepEqual(verified.envelope.result.publications, []);
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const [finding] = verified.envelope.result.findings;
+  assert.equal(verified.envelope.result.findings.length, 1);
+  assert.equal(finding.code, 'stale-write-detected');
+  assert.equal(finding.item_id, FIRST_ID);
+  assert.equal(finding.reason, 'unauthorized-revision');
+  assert.equal(finding.expected_revision, created.envelope.result.item.revision);
 
   const next = run(
     fixture.root, 'create', '--ledger', fixture.ledger,
     '--input', await createRequest(fixture.root, 'create-second.json', SECOND_ID), '--json',
   );
-  assert.equal(next.exit, 0, JSON.stringify(next.envelope));
-  assert.equal(next.envelope.state, 'committed');
+  assert.equal(next.exit, 6, JSON.stringify(next.envelope));
+  assert.equal(next.envelope.state, 'unchanged');
+  assert.equal(next.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(next.envelope.error.details.reason, 'publication-reconciliation-required');
+  await assert.rejects(
+    access(path.join(fixture.ledger, `${SECOND_ID}.md`)),
+    { code: 'ENOENT' },
+  );
+});
+
+test('a create that authorizes but cannot publish records a replayable abort', async () => {
+  const fixture = await twoWorktreeRepository();
+  // The lock directory is the only thing create writes outside the item path,
+  // so it exists before the ledger directory goes read-only. The create then
+  // reaches publication and fails there, having already authorized the
+  // allocation, which is the only public route to a create abort.
+  await mkdir(path.join(fixture.ledger, '.wowbagger-locks'), { recursive: true });
+  const input = await createRequest(fixture.root, 'create-first.json', FIRST_ID);
+  await chmod(fixture.ledger, 0o555);
+  let refused;
+  try {
+    refused = run(fixture.root, 'create', '--ledger', fixture.ledger, '--input', input, '--json');
+  } finally {
+    await chmod(fixture.ledger, 0o755);
+  }
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'operation-failed');
+  assert.equal(refused.envelope.error.details.operation, 'prepare-temporary');
+  await assert.rejects(
+    access(path.join(fixture.ledger, `${FIRST_ID}.md`)),
+    { code: 'ENOENT' },
+  );
+
+  // The abort resolves the intent it opened, names create as its command, and
+  // names no predecessor revision, because a create has none.
+  const entries = (await replayedEntries(fixture.root))
+    .filter((entry) => entry.item_id === FIRST_ID);
+  assert.equal(entries.length, 2);
+  const [intent, abort] = entries;
+  assert.equal(intent.type, 'legacy-mutation-intent');
+  assert.equal(intent.command, 'create-v1');
+  assert.equal(intent.expected_revision, null);
+  assert.equal(abort.type, 'legacy-mutation-abort');
+  assert.equal(abort.command, 'create-v1');
+  assert.equal(abort.observed_revision, null);
+  assert.equal(abort.attempt_id, intent.attempt_id);
 });
 
 test('the same overwrite refuses once the item has a journal-visible transition', async () => {
@@ -206,7 +246,7 @@ test('the same overwrite refuses once the item has a journal-visible transition'
   );
 });
 
-test('a create in one worktree does not block a guarded mutation in a sibling worktree', async () => {
+test('a journaled create blocks stale sibling allocation but not an unrelated transition', async () => {
   const fixture = await twoWorktreeRepository();
   const created = run(
     fixture.root, 'create', '--ledger', fixture.ledger,
@@ -215,17 +255,56 @@ test('a create in one worktree does not block a guarded mutation in a sibling wo
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
   git(fixture.root, 'add', 'ledger');
   git(fixture.root, 'commit', '-qm', 'Add the created item');
-  // The sibling checkout cannot see that commit. A journaled create would
-  // refuse every mutation below with worktree-synchronization-required.
+  // The sibling checkout cannot see that commit, so its next number would
+  // duplicate the one the root worktree already published.
 
   const siblingCreate = run(
     fixture.siblingRoot, 'create', '--ledger', fixture.siblingLedger,
     '--input', await createRequest(fixture.siblingRoot, 'create-sibling.json', SECOND_ID), '--json',
   );
-  assert.equal(siblingCreate.exit, 0, JSON.stringify(siblingCreate.envelope));
-  assert.equal(siblingCreate.envelope.state, 'committed');
-  git(fixture.siblingRoot, 'add', 'ledger');
-  git(fixture.siblingRoot, 'commit', '-qm', 'Add the sibling item');
+  assert.equal(siblingCreate.exit, 6, JSON.stringify(siblingCreate.envelope));
+  assert.equal(siblingCreate.envelope.namespace, 'ledger-mutation');
+  assert.equal(siblingCreate.envelope.command, 'create-v1');
+  assert.equal(siblingCreate.envelope.state, 'unchanged');
+  assert.equal(siblingCreate.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(
+    siblingCreate.envelope.error.details.reason,
+    'publication-reconciliation-required',
+  );
+  await assert.rejects(
+    access(path.join(fixture.siblingLedger, `${SECOND_ID}.md`)),
+    { code: 'ENOENT' },
+  );
+  const finding = siblingCreate.envelope.error.details.findings.find(
+    (entry) => entry.item_id === FIRST_ID,
+  );
+  assert.equal(finding.reason, 'worktree-synchronization-required');
+  assert.equal(finding.code, 'stale-write-detected');
+  assert.equal(finding.expected_revision, created.envelope.result.item.revision);
+  assert.equal(finding.expected_path, `${FIRST_ID}.md`);
+  assert.equal(finding.owner_unavailable, true);
+  assert.equal(
+    finding.remediation,
+    `Ownership of ${FIRST_ID}.md revision ${created.envelope.result.item.revision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
+  );
+
+  // The refusal names no attempt: reconciliation may append its clock, but no
+  // entry and no file speaks for the second identity. The pair the root's
+  // create emitted replays, which is what the sibling's refusal reasoned from.
+  const entries = await replayedEntries(fixture.root);
+  assert.deepEqual(entries.filter((entry) => entry.item_id === SECOND_ID), []);
+  const first = entries.filter((entry) => entry.item_id === FIRST_ID);
+  assert.equal(first.length, 2);
+  const [intent, terminal] = first;
+  assert.equal(intent.type, 'legacy-mutation-intent');
+  assert.equal(intent.command, 'create-v1');
+  assert.equal(intent.expected_revision, null);
+  assert.equal(intent.candidate_revision, created.envelope.result.item.revision);
+  assert.equal(intent.item_path, `${FIRST_ID}.md`);
+  assert.equal(terminal.type, 'legacy-mutation');
+  assert.equal(terminal.command, 'create-v1');
+  assert.equal(terminal.attempt_id, intent.attempt_id);
+  assert.equal(terminal.committed_revision, created.envelope.result.item.revision);
 
   const seedRevision = run(
     fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger,

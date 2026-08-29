@@ -230,11 +230,15 @@ export async function createItem(ledgerDirectory, request, scenario) {
     ledgerDirectory,
     request.id,
     'create-v1',
-    (authorize, ledgerSnapshot) => createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnapshot),
+    (authorize, ledgerSnapshot) => createItemUnfenced(
+      ledgerDirectory, request, scenario, authorize, ledgerSnapshot,
+    ),
   );
 }
 
-async function createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnapshot) {
+async function createItemUnfenced(
+  ledgerDirectory, request, scenario, authorize, ledgerSnapshot,
+) {
   const root = path.resolve(ledgerDirectory);
   const id = request.id;
   const readPreLockLedger = snapshotReader(root, ledgerSnapshot);
@@ -360,6 +364,15 @@ async function createItemUnfenced(ledgerDirectory, request, scenario, ledgerSnap
           recovery_artifacts: [],
           recovery_artifacts_truncated: false,
         }));
+      }
+
+      // The allocation this create proposes becomes journal-visible before any
+      // byte reaches the ledger, so a sibling worktree that cannot see this
+      // item's publication cannot hand the same number out again. The intent is
+      // appended only once the candidate is known publishable, so a refusal
+      // this command would have returned anyway records no attempt.
+      if (authorize) {
+        await authorize(null, revisionFor(bytes), relativeFinalPath);
       }
 
       temporaryPath = path.join(finalDirectory, `.wowbagger-tmp-${id}-${randomSuffix()}`);

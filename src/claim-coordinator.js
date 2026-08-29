@@ -37,6 +37,11 @@ export async function withLegacyMutationFence(
   const capability = resolveWorkClaimCapability({ gitCommonDir, namespace });
   if (!capability.claim_protected_publication) return write();
 
+  // A create allocates a repository-wide identity, not just its own item, so
+  // its reconciliation judges every coordinated item: a stale checkout that
+  // cannot see a sibling's publication must not hand the same number out
+  // again. Transition and patch keep target-item scope.
+  const create = command === 'create-v1';
   const storePath = claimStorePath(gitCommonDir, namespace);
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   let intent = null;
@@ -59,9 +64,9 @@ export async function withLegacyMutationFence(
         replayed,
         currentWorktreeId,
         physicalNow: new Date().toISOString(),
-        targetItemId: itemId,
+        targetItemId: create ? null : itemId,
         writeLogOnUnsafe: false,
-        writeLogWhenEmpty: command !== 'create-v1',
+        writeLogWhenEmpty: !create,
       });
       if (reconciled.unsafe) {
         return claimStoreUnavailable(responseCommand, 'publication-reconciliation-required', {
@@ -75,7 +80,7 @@ export async function withLegacyMutationFence(
       const projected = [...reconciled.entries];
       const record = reconciled.state.claims.find((entry) => entry.item_id === itemId)
         ?? { item_id: itemId, last_epoch: '0', active: null };
-      const mustRefuse = command === 'create-v1'
+      const mustRefuse = create
         ? record.last_epoch !== '0'
         : record.active !== null && observedAt < record.active.expires_at;
       if (mustRefuse) return legacyRefusal(responseCommand, namespace, itemId, observedAt, record);
@@ -110,6 +115,7 @@ export async function withLegacyMutationFence(
           attempt_id: attemptId,
           ledger_namespace: namespace,
           item_id: itemId,
+          ...(create ? { command } : {}),
           observed_revision: expectedRevision,
           observed_at: observedAt,
         };
@@ -180,6 +186,7 @@ export async function withLegacyMutationFence(
             attempt_id: intent.attempt_id,
             ledger_namespace: namespace,
             item_id: itemId,
+            ...(create ? { command } : {}),
             observed_revision: intent.expected_revision,
             observed_at: observedAt,
           }));
