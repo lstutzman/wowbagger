@@ -465,6 +465,10 @@ export async function reconcileClaimJournal({
         attempt_id: intent.attempt_id,
         ledger_namespace: namespace,
         item_id: intent.item_id,
+        // A create abort names no predecessor revision, so its terminal must
+        // say which command aborted; patch and transition aborts keep their
+        // exact legacy shape and never carry a command.
+        ...(intent.command === 'create-v1' ? { command: intent.command } : {}),
         observed_revision: actualRevision,
         observed_at: observedAt,
       }));

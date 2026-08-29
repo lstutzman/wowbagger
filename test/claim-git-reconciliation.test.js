@@ -383,6 +383,182 @@ test('an unknown legacy mutation outcome names the path to restore and claim-ver
   );
 });
 
+test('claim-verify resolves an absent create intent as aborted', async () => {
+  const fixture = await repository();
+  const itemId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  const attemptId = 'legacy_create_absent_0001';
+  const candidate = Buffer.from('---\nschema_version: 2\nid: wb_01M01BFR000TXV22D7KZ6TQYH2\nnumber: 2\ntitle: "Never written"\nkind: task\nstatus: backlog\ncreated: 2026-08-29\nupdated: 2026-08-29\nprovenance:\n  source: "repository-backlog"\n  recorded_at: "2026-08-29T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\nNever written\n');
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const journalPath = claimJournalPath(gitCommonDir, fixture.namespace);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: attemptId,
+    ledger_namespace: fixture.namespace,
+    item_id: itemId,
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: sha256(candidate),
+    item_path: `${itemId}.md`,
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+  const replayed = await replayClaimJournal(journalPath, fixture.namespace);
+  const abort = replayed.entries.find((entry) => entry.attempt_id === attemptId
+    && entry.type === 'legacy-mutation-abort');
+  assert.equal(abort.command, 'create-v1');
+  assert.equal(abort.observed_revision, null);
+  // The appended abort is the durable terminal, so a repeated verification
+  // finds the attempt resolved and never opens a second resolution.
+  const repeated = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(repeated.exit, 0, JSON.stringify(repeated.envelope));
+  const afterRepeat = await replayClaimJournal(journalPath, fixture.namespace);
+  assert.equal(afterRepeat.entries.filter((entry) => (
+    entry.type === 'legacy-mutation-abort' && entry.attempt_id === attemptId
+  )).length, 1);
+  assert.equal(
+    afterRepeat.entries.filter((entry) => entry.type === 'legacy-mutation').length,
+    0,
+  );
+  // An aborted create allocated nothing, so the same item ID still creates.
+  const createPath = path.join(fixture.root, 'create-after-abort.json');
+  await writeFile(createPath, JSON.stringify({
+    id: itemId,
+    item: {
+      title: 'Never written',
+      kind: 'task',
+      provenance: {
+        source: 'test',
+        recorded_at: '2026-08-29T00:00:00Z',
+      },
+      depends_on: [],
+    },
+    body: 'Never written\n',
+  }));
+  const created = run(
+    fixture.root,
+    'create', '--ledger', fixture.ledger, '--input', createPath, '--json',
+  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  assert.equal(created.envelope.result.item.core.number, 2);
+});
+
+test('claim-verify resolves an interrupted create as committed when its candidate is present', async () => {
+  const fixture = await repository();
+  const itemId = 'wb_01M01BFR000TXV22D7KZ6TQYH3';
+  const attemptId = 'legacy_create_candidate_0001';
+  const itemPath = `${itemId}.md`;
+  const candidate = Buffer.from('---\nschema_version: 2\nid: wb_01M01BFR000TXV22D7KZ6TQYH3\nnumber: 3\ntitle: "Recovered create"\nkind: task\nstatus: backlog\ncreated: 2026-08-29\nupdated: 2026-08-29\nprovenance:\n  source: "repository-backlog"\n  recorded_at: "2026-08-29T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\nRecovered create\n');
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const journalPath = claimJournalPath(gitCommonDir, fixture.namespace);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: attemptId,
+    ledger_namespace: fixture.namespace,
+    item_id: itemId,
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: sha256(candidate),
+    item_path: itemPath,
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await writeFile(path.join(fixture.ledger, itemPath), candidate);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  const replayed = await replayClaimJournal(journalPath, fixture.namespace);
+  const terminals = replayed.entries.filter((entry) => (
+    entry.type === 'legacy-mutation' && entry.attempt_id === attemptId
+  ));
+  assert.equal(terminals.length, 1);
+  assert.equal(terminals[0].command, 'create-v1');
+  assert.equal(terminals[0].committed_revision, sha256(candidate));
+  assert.equal(terminals[0].item_path, itemPath);
+  // The recovered item is authorized and still absent from Git HEAD, so the
+  // same run reports the finalization the recovery owes.
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, [{
+    code: 'stale-write-detected',
+    item_id: itemId,
+    actual_revision: null,
+    expected_revision: sha256(candidate),
+    observed_surface: 'git-head',
+    reason: 'git-finalization-required',
+    expected_path: itemPath,
+    remediation: `Commit ${itemPath} in Git, then run claim-verify.`,
+  }]);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Commit the recovered create');
+
+  const cleared = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(cleared.exit, 0, JSON.stringify(cleared.envelope));
+  assert.deepEqual(cleared.envelope.result.findings, []);
+  const afterCommit = await replayClaimJournal(journalPath, fixture.namespace);
+  assert.equal(afterCommit.entries.filter((entry) => (
+    entry.attempt_id === attemptId
+      && ['legacy-mutation', 'legacy-mutation-abort'].includes(entry.type)
+  )).length, 1);
+});
+
+test('an unknown create outcome stays global until the item path is restored', async () => {
+  const fixture = await repository();
+  const itemId = 'wb_01M01BFR000TXV22D7KZ6TQYH4';
+  const attemptId = 'legacy_create_unknown_0001';
+  const itemPath = `${itemId}.md`;
+  const candidate = Buffer.from('---\nschema_version: 2\nid: wb_01M01BFR000TXV22D7KZ6TQYH4\nnumber: 4\ntitle: "Candidate create"\nkind: task\nstatus: backlog\ncreated: 2026-08-29\nupdated: 2026-08-29\nprovenance:\n  source: "repository-backlog"\n  recorded_at: "2026-08-29T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\nCandidate create\n');
+  const third = Buffer.from('---\nschema_version: 2\nid: wb_01M01BFR000TXV22D7KZ6TQYH4\nnumber: 5\ntitle: "Third create"\nkind: task\nstatus: backlog\ncreated: 2026-08-29\nupdated: 2026-08-29\nprovenance:\n  source: "repository-backlog"\n  recorded_at: "2026-08-29T00:00:00Z"\ndepends_on: []\nrelated: []\ndecisions: []\n---\nThird create\n');
+  const gitCommonDir = await resolveGitCommonDir(fixture.ledger);
+  const journalPath = claimJournalPath(gitCommonDir, fixture.namespace);
+  await appendClaimEntry(journalPath, {
+    type: 'legacy-mutation-intent',
+    attempt_id: attemptId,
+    ledger_namespace: fixture.namespace,
+    item_id: itemId,
+    command: 'create-v1',
+    expected_revision: null,
+    candidate_revision: sha256(candidate),
+    item_path: itemPath,
+    observed_at: '2030-01-11T09:00:00.000Z',
+  });
+  await writeFile(path.join(fixture.ledger, itemPath), third);
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, [{
+    code: 'legacy-mutation-outcome-unknown',
+    item_id: itemId,
+    attempt_id: attemptId,
+    actual_revision: sha256(third),
+    expected_revision: null,
+    candidate_revision: sha256(candidate),
+    expected_path: itemPath,
+    remediation: `Restore ${itemPath} to the expected or candidate revision recorded for attempt ${attemptId}, then run claim-verify.`,
+  }]);
+  // Bytes nobody authorized resolve nothing: the journal gains only the clock
+  // floor every invocation records, and the attempt stays open.
+  const stalled = await replayClaimJournal(journalPath, fixture.namespace);
+  assert.deepEqual(stalled.entries.map((entry) => entry.type), [
+    'legacy-mutation-intent',
+    'clock',
+  ]);
+  await unlink(path.join(fixture.ledger, itemPath));
+
+  const cleared = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(cleared.exit, 0, JSON.stringify(cleared.envelope));
+  assert.deepEqual(cleared.envelope.result.findings, []);
+  const aborts = (await replayClaimJournal(journalPath, fixture.namespace)).entries
+    .filter((entry) => entry.type === 'legacy-mutation-abort' && entry.attempt_id === attemptId);
+  assert.equal(aborts.length, 1);
+  assert.equal(aborts[0].command, 'create-v1');
+  assert.equal(aborts[0].observed_revision, null);
+});
+
 test('claim-verify rejects an unrecorded revision after a legacy-only mutation', async () => {
   const fixture = await repository();
   const acquirePath = path.join(fixture.root, 'acquire-legacy-only.json');
@@ -544,6 +720,31 @@ test('claim-verify explains that a new authorized item still needs Git finalizat
     'create', '--ledger', fixture.ledger, '--input', createPath, '--json',
   );
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  // Task 2 requires a committed creation before the next mutation, so the
+  // create is the last write this item can take until Git holds it. The
+  // creation alone is now the whole of the state this finding names.
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, [{
+    code: 'stale-write-detected',
+    item_id: itemId,
+    actual_revision: null,
+    expected_revision: created.envelope.result.item.revision,
+    observed_surface: 'git-head',
+    reason: 'git-finalization-required',
+    expected_path: `${itemId}.md`,
+    remediation: `Commit ${itemId}.md in Git, then run claim-verify.`,
+  }]);
+  // Committing it is the escape the remediation names.
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Commit the new item');
+
+  const cleared = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+
+  assert.equal(cleared.exit, 0, JSON.stringify(cleared.envelope));
+  assert.deepEqual(cleared.envelope.result.findings, []);
   const transitionPath = path.join(fixture.root, 'legacy-uncommitted-transition.json');
   await writeFile(transitionPath, JSON.stringify({
     id: itemId,
@@ -560,20 +761,6 @@ test('claim-verify explains that a new authorized item still needs Git finalizat
     'transition', '--ledger', fixture.ledger, '--input', transitionPath, '--json',
   );
   assert.equal(transitioned.exit, 0, JSON.stringify(transitioned.envelope));
-
-  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
-
-  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
-  assert.deepEqual(verified.envelope.result.findings, [{
-    code: 'stale-write-detected',
-    item_id: itemId,
-    actual_revision: null,
-    expected_revision: transitioned.envelope.result.item.revision,
-    observed_surface: 'git-head',
-    reason: 'git-finalization-required',
-    expected_path: `${itemId}.md`,
-    remediation: `Commit ${itemId}.md in Git, then run claim-verify.`,
-  }]);
 });
 
 test('claim-verify names the configured item path when another worktree needs synchronization', async () => {
@@ -608,6 +795,10 @@ test('claim-verify names the configured item path when another worktree needs sy
     'create', '--ledger', fixture.ledger, '--input', createPath, '--json',
   );
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  // Task 2 requires a committed creation before the next mutation, so the new
+  // item reaches this worktree's Git before the transition that follows it.
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Commit the new item');
   const transitionPath = path.join(fixture.root, 'layout-transition.json');
   await writeFile(transitionPath, JSON.stringify({
     id: itemId,
