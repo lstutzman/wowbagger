@@ -5,7 +5,7 @@ number: 181
 title: "Prevent duplicate schema-v2 numbers across worktrees"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-28
 updated: 2026-08-29
 provenance:
