@@ -636,16 +636,7 @@ export async function reconcileClaimJournal({
     const headItem = headItems.get(itemId);
     const headRevision = headItem ? revisionFor(headItem.bytes) : null;
     const workingTreeChanged = actualRevision !== expectedRevision;
-    // Until an item takes part in a guarded mutation, its creation is the only
-    // ruling the journal holds for it, and committing that creation is not a
-    // precondition for other writes: the bytes are here and the number they
-    // carry is readable. A checkout that cannot read them is judged by the
-    // create fence, which refuses an allocation while a coordinated item is
-    // missing, so relaxing the Git surface here concedes no allocation.
-    const createOnly = authorized.every((entry) => entry.command === 'create-v1');
-    const gitHeadChanged = !createOnly
-      && gitHead !== null
-      && !authorizedRevisions.has(headRevision);
+    const gitHeadChanged = gitHead !== null && !authorizedRevisions.has(headRevision);
     if (!workingTreeChanged && !gitHeadChanged) continue;
     const record = replayed.state.claims.find((entry) => entry.item_id === itemId);
     const expectedPath = itemPathRelativeToLedger(ledgerDirectory, item?.file)

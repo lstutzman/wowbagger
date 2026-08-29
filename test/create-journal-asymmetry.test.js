@@ -246,6 +246,54 @@ test('the same overwrite refuses once the item has a journal-visible transition'
   );
 });
 
+test('an uncommitted create blocks the next create with the commit remedy', async () => {
+  const fixture = await twoWorktreeRepository();
+  const created = run(
+    fixture.root, 'create', '--ledger', fixture.ledger,
+    '--input', await createRequest(fixture.root, 'create-first.json', FIRST_ID), '--json',
+  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+
+  // Git holds no revision at all for the new item, so its allocation exists
+  // only in this working tree. Every mutation is committed before the next one
+  // begins, and create is no exception.
+  const next = run(
+    fixture.root, 'create', '--ledger', fixture.ledger,
+    '--input', await createRequest(fixture.root, 'create-second.json', SECOND_ID), '--json',
+  );
+  assert.equal(next.exit, 6, JSON.stringify(next.envelope));
+  assert.equal(next.envelope.namespace, 'ledger-mutation');
+  assert.equal(next.envelope.command, 'create-v1');
+  assert.equal(next.envelope.state, 'unchanged');
+  assert.equal(next.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(next.envelope.error.details.reason, 'publication-reconciliation-required');
+  assert.deepEqual(next.envelope.error.details.findings, [{
+    code: 'stale-write-detected',
+    item_id: FIRST_ID,
+    actual_revision: null,
+    expected_revision: created.envelope.result.item.revision,
+    observed_surface: 'git-head',
+    reason: 'git-finalization-required',
+    expected_path: `${FIRST_ID}.md`,
+    remediation: `Commit ${FIRST_ID}.md in Git, then run claim-verify.`,
+  }]);
+  await assert.rejects(
+    access(path.join(fixture.ledger, `${SECOND_ID}.md`)),
+    { code: 'ENOENT' },
+  );
+
+  // The commit is the whole remedy: nothing else changes, and the next create
+  // proceeds.
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the created item');
+  const afterCommit = run(
+    fixture.root, 'create', '--ledger', fixture.ledger,
+    '--input', await createRequest(fixture.root, 'create-second.json', SECOND_ID), '--json',
+  );
+  assert.equal(afterCommit.exit, 0, JSON.stringify(afterCommit.envelope));
+  assert.equal(afterCommit.envelope.state, 'committed');
+});
+
 test('a journaled create blocks stale sibling allocation but not an unrelated transition', async () => {
   const fixture = await twoWorktreeRepository();
   const created = run(

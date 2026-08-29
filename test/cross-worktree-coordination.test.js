@@ -109,12 +109,17 @@ async function patchRequest(directory, name, id, expectedRevision) {
 }
 
 // Write an item in the given worktree and record it in the shared journal.
+// Every mutation is committed before the next one begins, create included: an
+// item Git holds no revision for blocks the mutation after it, so the creation
+// commit is part of writing the item, not a step a scenario may skip.
 async function writeItem(root, ledger, label, id) {
   const created = run(
     root, 'create', '--ledger', ledger,
     '--input', await createRequest(root, `create-${label}.json`, id), '--json',
   );
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  git(root, 'add', path.relative(root, ledger));
+  git(root, 'commit', '-qm', `Add the ${label} item`);
   const transitioned = run(
     root, 'transition', '--ledger', ledger,
     '--input', await transitionRequest(
@@ -270,6 +275,9 @@ test('an abandoned private publication reports unavailable ownership', async () 
   git(fixture.root, 'add', 'ledger');
   git(fixture.root, 'commit', '-qm', 'Add abandoned branch item');
   git(fixture.root, 'branch', 'abandoned-owner');
+  // `writeItem` commits the creation, so the reset drops exactly the abandoned
+  // mutation: the expected revision survives only in the deleted branch's
+  // unreachable commit, while the creation stays reachable at HEAD.
   git(fixture.root, 'reset', '--hard', 'HEAD^');
   git(fixture.root, 'branch', '-D', 'abandoned-owner');
 
@@ -374,10 +382,18 @@ test('a private foreign publication blocks create and is reported until synchron
   assert.equal(resolved.exit, 0, JSON.stringify(resolved.envelope));
 });
 
-test('an uncommitted write blocks create in its own worktree with the commit remedy', async () => {
+test('an uncommitted create blocks create in its own worktree', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
-  const revision = await writeItem(fixture.root, fixture.ledger, 'first', writtenId);
+  // The write Git holds no revision for at all. Every later mutation of an item
+  // leaves an authorized predecessor at HEAD, so the creation is the one write
+  // whose absence from Git makes the item unreachable there.
+  const created = run(
+    fixture.root, 'create', '--ledger', fixture.ledger,
+    '--input', await createRequest(fixture.root, 'create-first.json', writtenId), '--json',
+  );
+  assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  const revision = created.envelope.result.item.revision;
 
   const blocked = run(
     fixture.root,
@@ -2085,6 +2101,11 @@ test('an authorized predecessor at HEAD does not block the next mutation', async
     '--json',
   );
   assert.equal(created.exit, 0, JSON.stringify(created.envelope));
+  // The creation is committed, exactly as every mutation is. Only the new
+  // item's path is staged, so the seed keeps its authorized predecessor at HEAD,
+  // which is the topology this vector is about.
+  git(fixture.root, 'add', `ledger/${secondId}.md`);
+  git(fixture.root, 'commit', '-qm', 'Add the created item');
 
   const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
   assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
