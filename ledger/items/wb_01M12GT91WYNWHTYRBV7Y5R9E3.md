@@ -7,7 +7,7 @@ kind: task
 priority: 2
 status: in-progress
 created: 2026-08-27
-updated: 2026-08-28
+updated: 2026-08-29
 provenance:
   source: "no-mistakes/01M12F0YXS2QA72BQTTFABB5M6/review"
   recorded_at: "2026-08-27T21:05:00Z"
@@ -89,3 +89,7 @@ Before proposing a mechanism, compare explicit identities: the normalized per-wo
 3. Define the typed diagnosis interface and public rendering rules before moving code.
 4. Resolve explicit worktree identity for row 6, including journal compatibility.
 5. Replace local inference only after the matrix is green; preserve the #173, #176, #177, and #179 decisions explicitly.
+
+## Deferred implementation observation — 2026-08-29
+
+`GIT_ENVIRONMENT` sanitization remains duplicated in `claim-store.js`, `git-reconciliation.js`, and `git-worktrees.js`, with equivalent inline filtering in `claim-prospective.js`. `git-autocommit.js` is not another copy: it filters the narrower retargeting-variable set. Task 8b deliberately did not invent a new internal module during the behavior-preserving classifier extraction because no existing seam reaches all four consumers. This is a maintainability risk if the full `GIT_*` exclusion policy changes; it is not a current safety or behavior defect. Any future consolidation must preserve the distinction from auto-commit's narrower filter and carry its own tests.
