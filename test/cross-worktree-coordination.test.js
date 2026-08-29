@@ -187,6 +187,16 @@ async function stripLatestWriterIdentity(root, itemId) {
   return writer;
 }
 
+// Scope decides what a finding refuses, and it is the coordinator's judgement
+// about the caller's own target, not a fact about the item. No published
+// finding carries it, on either refusal surface.
+function assertNoInternalScope(findings) {
+  assert.ok(findings.length > 0);
+  for (const finding of findings) {
+    assert.equal(Object.hasOwn(finding, 'scope'), false, JSON.stringify(finding));
+  }
+}
+
 test('a visible sibling worktree write does not block create elsewhere', async () => {
   const fixture = await twoWorktreeRepository();
   const writtenId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
@@ -500,6 +510,84 @@ test('a restored predecessor keeps known sibling owner evidence', async () => {
   assert.equal(finding.owner_commit, siblingCommit);
   assert.equal(Object.hasOwn(finding, 'owner_unavailable'), false);
   assert.match(finding.remediation, new RegExp(siblingCommit));
+});
+
+// The expected revision can be reachable from this worktree's own history and
+// still be another worktree's write. Merging the sibling's branch brings those
+// bytes to HEAD; restoring the predecessor leaves the working tree behind
+// them. There is no owner left to wait for, so the local bytes are simply
+// unauthorized, and that refuses every mutation rather than only its own item.
+test('a merged sibling revision restored to its predecessor reports unauthorized', async () => {
+  const fixture = await twoWorktreeRepository();
+  const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
+  const secondId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  await writeItem(fixture.root, fixture.ledger, 'second', secondId);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Add the unrelated item');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const original = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
+  const predecessor = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-merged-owner-predecessor.json',
+      seedId,
+      original.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(predecessor.exit, 0, JSON.stringify(predecessor.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Commit the authorized predecessor');
+  git(fixture.siblingRoot, 'merge', '-q', fixture.branch);
+
+  const sibling = run(
+    fixture.siblingRoot,
+    'inspect', '--ledger', fixture.siblingLedger, '--id', seedId, '--json',
+  );
+  const requestPath = path.join(fixture.siblingRoot, 'patch-merged-owner-latest.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: seedId,
+    expected_revision: sibling.envelope.result.item.revision,
+    date: '2026-08-16',
+    set: { title: 'Sibling latest' },
+  }));
+  const latest = run(
+    fixture.siblingRoot,
+    'patch', '--ledger', fixture.siblingLedger, '--input', requestPath, '--json',
+  );
+  assert.equal(latest.exit, 0, JSON.stringify(latest.envelope));
+  git(fixture.siblingRoot, 'add', 'ledger');
+  git(fixture.siblingRoot, 'commit', '-qm', 'Commit the expected sibling revision');
+  const siblingBranch = git(fixture.siblingRoot, 'rev-parse', '--abbrev-ref', 'HEAD');
+
+  git(fixture.root, 'merge', '-q', siblingBranch);
+  git(fixture.root, 'restore', '--source=HEAD^', '--', 'ledger/item.md');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
+  assert.equal(finding.reason, 'unauthorized-revision');
+  assert.equal(Object.hasOwn(finding, 'owner_ref'), false);
+  assert.equal(Object.hasOwn(finding, 'owner_unavailable'), false);
+  assertNoInternalScope(verified.envelope.result.findings);
+
+  const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
+  const unrelated = run(
+    fixture.root,
+    'patch', '--ledger', fixture.ledger,
+    '--input', await patchRequest(
+      fixture.root,
+      'patch-past-merged-owner.json',
+      secondId,
+      second.envelope.result.item.revision,
+    ),
+    '--json',
+  );
+  assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
+  assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
 });
 
 test('a committed unknown revision remains unauthorized when a sibling owns the expected revision', async () => {
@@ -1966,6 +2054,7 @@ test('an uncommitted same-branch regression remains unauthorized and blocks unre
   assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'unauthorized-revision');
+  assertNoInternalScope(verified.envelope.result.findings);
 
   const second = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', secondId, '--json');
   const unrelated = run(
@@ -1981,6 +2070,7 @@ test('an uncommitted same-branch regression remains unauthorized and blocks unre
   );
   assert.equal(unrelated.exit, 6, JSON.stringify(unrelated.envelope));
   assert.equal(unrelated.envelope.error.details.findings[0].reason, 'unauthorized-revision');
+  assertNoInternalScope(unrelated.envelope.error.details.findings);
 });
 
 test('a detached HEAD regression remains unauthorized and blocks unrelated work', async () => {
@@ -2126,6 +2216,7 @@ test('post-commit verification ignores an unrelated synchronization finding', as
   const finding = verified.envelope.result.findings.find((entry) => entry.item_id === seedId);
   assert.equal(finding.reason, 'worktree-synchronization-required');
   assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
+  assertNoInternalScope(verified.envelope.result.findings);
 });
 
 test('auto-commit still blocks a synchronization finding on its own target', async () => {

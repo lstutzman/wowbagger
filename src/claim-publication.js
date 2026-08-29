@@ -18,6 +18,12 @@ import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { findRevisionOwner, readGitHeadLedger, readGitTreeFile } from './git-reconciliation.js';
 import { publishClaimedCandidate, revisionFor } from './mutation.js';
+import {
+  blocksTarget,
+  classifyReconciliation,
+  normalizeRevision,
+  requiresOwnerEvidence,
+} from './reconciliation-classifier.js';
 import { validateLedger } from './validate.js';
 import {
   assertUniqueWorktreeIdentity,
@@ -403,6 +409,14 @@ export async function reconcileClaimJournal({
   ));
   const entries = [...replayed.entries];
   const findings = [];
+  // What each finding refuses is the coordinator's own judgement, never a
+  // published member, so it travels beside the findings rather than inside
+  // them: nothing has to remember to strip it back out.
+  const findingScopes = [];
+  const addFinding = (scope, finding) => {
+    findingScopes.push(scope);
+    findings.push(finding);
+  };
   const observedAt = advanceClockFloor(replayed.state, physicalNow);
   try {
     entries.push(await appendClaimEntry(journalPath, {
@@ -459,7 +473,7 @@ export async function reconcileClaimJournal({
         ?? intent.item_path
         ?? null;
       const pathLabel = expectedPath ?? `item ${intent.item_id}`;
-      findings.push({
+      addFinding('global', {
         code: 'legacy-mutation-outcome-unknown',
         item_id: intent.item_id,
         attempt_id: intent.attempt_id,
@@ -541,7 +555,8 @@ export async function reconcileClaimJournal({
       outcome,
     }));
     const unknownPath = itemPathRelativeToLedger(ledgerDirectory, item?.file);
-    findings.push({
+    // A resolved intent is news, not a barrier: it refuses nothing.
+    addFinding(outcome.stdout.state === 'unknown' ? 'global' : 'none', {
       code: outcome.stdout.state === 'unknown'
         ? 'publication-outcome-unknown'
         : 'pending-intent-resolved',
@@ -631,7 +646,7 @@ export async function reconcileClaimJournal({
     );
     if (activeMismatch?.earlier) {
       const pathLabel = expectedPath ?? `item ${itemId}`;
-      findings.push({
+      addFinding('global', {
         code: 'stale-write-detected',
         item_id: itemId,
         actual_revision: actualRevision,
@@ -650,13 +665,10 @@ export async function reconcileClaimJournal({
       });
       continue;
     }
-    // Who the journal says wrote the authorized revision, judged against who
-    // is asking. An entry from before writer identity existed, or a caller
-    // that cannot name itself, leaves the writer unknown.
-    const recordedWriter = latestAuthorized.writer_worktree_id ?? null;
-    const expectedWriter = recordedWriter === null || currentWorktreeId === null
-      ? 'unknown'
-      : recordedWriter === currentWorktreeId ? 'current' : 'other';
+    const expectedWriter = expectedWriterOf(
+      latestAuthorized.writer_worktree_id ?? null,
+      currentWorktreeId,
+    );
     const diagnosis = await reconciliationDiagnosis({
       ledgerDirectory,
       actualRevision,
@@ -665,15 +677,14 @@ export async function reconcileClaimJournal({
       expectedRevision,
       headRevision,
       expectedWriter,
-      workingTreeChanged,
     });
-    findings.push({
+    addFinding(diagnosis.scope, {
       code: 'stale-write-detected',
       item_id: itemId,
       actual_revision: workingTreeChanged ? actualRevision : headRevision,
       expected_revision: expectedRevision,
       observed_surface: workingTreeChanged ? 'working-tree' : 'git-head',
-      ...diagnosis,
+      ...diagnosis.finding,
       ...(record?.active ? {
         active_fence: {
           ledger_namespace: namespace,
@@ -706,7 +717,7 @@ export async function reconcileClaimJournal({
       ?? expected.item_path
       ?? null;
     const pathLabel = expectedPath ?? `item ${record.item_id}`;
-    findings.push({
+    addFinding('global', {
       code: earlier ? 'stale-write-detected' : 'revision-regression',
       item_id: record.item_id,
       actual_revision: actualRevision,
@@ -730,8 +741,8 @@ export async function reconcileClaimJournal({
     });
   }
 
-  const unsafe = findings.some((finding) => (
-    finding.code !== 'pending-intent-resolved' && blocksTarget(finding, targetItemId)
+  const unsafe = findings.some((finding, index) => (
+    blocksTarget(findingScopes[index], finding.item_id, targetItemId)
   ));
   const logPath = claimReconcileLogPath(path.resolve(ledgerDirectory), namespace);
   let logExists = true;
@@ -793,15 +804,6 @@ function itemPathRelativeToLedger(ledgerDirectory, file) {
   return path.relative(path.resolve(ledgerDirectory), file).split(path.sep).join('/');
 }
 
-// A mutation names the item it targets. Another item's unresolved publication
-// waits on a synchronization this mutation does not touch, so it reports as a
-// finding without refusing the write. A caller that names no target, such as
-// the `claim-verify` command, keeps every finding blocking.
-function blocksTarget(finding, targetItemId) {
-  if (targetItemId === null || finding.item_id === targetItemId) return true;
-  return finding.reason !== 'worktree-synchronization-required';
-}
-
 // Ownership is evidence, never a guess: an unreadable history or a missing
 // expected path leaves the revision unattributed instead of naming a ref.
 async function revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision) {
@@ -813,18 +815,66 @@ async function revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevi
   }
 }
 
-// One owner, one shape: only an active named worktree reaches this finding, and
-// the remediation names the same ref and commit the finding does.
-function namedOwnerFinding(owner, expectedPath) {
-  return {
-    reason: 'worktree-synchronization-required',
-    ...(expectedPath ? { expected_path: expectedPath } : {}),
-    owner_ref: owner.ref,
-    owner_commit: owner.commit,
-    remediation: `WAIT for owner ${owner.ref} to publish ${owner.commit}, then synchronize this worktree and run claim-verify.`,
-  };
+// The classifier decides which topology this is; the sentences stay here.
+// Member order is part of the published finding, so each remedy builds its own
+// shape rather than sharing a base object.
+function topologyFinding(decision, expectedPath, expectedRevision) {
+  const pathLabel = expectedPath ?? 'the item path';
+  const at = expectedPath ? { expected_path: expectedPath } : {};
+  switch (decision.remediation) {
+    case 'commit-in-git':
+      return {
+        reason: decision.reason,
+        ...at,
+        remediation: `Commit ${pathLabel} in Git, then run claim-verify.`,
+      };
+    case 'wait-for-named-owner':
+      return {
+        reason: decision.reason,
+        ...at,
+        owner_ref: decision.owner.ref,
+        owner_commit: decision.owner.commit,
+        remediation: `WAIT for owner ${decision.owner.ref} to publish ${decision.owner.commit}, then synchronize this worktree and run claim-verify.`,
+      };
+    case 'establish-ownership':
+      return {
+        reason: decision.reason,
+        ...at,
+        owner_unavailable: true,
+        remediation: `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
+      };
+    case 'await-owner-commit':
+      return {
+        reason: decision.reason,
+        ...at,
+        owner_unavailable: true,
+        remediation: `Ownership of ${pathLabel} revision ${expectedRevision} is not yet reachable; wait for the owning worktree to commit, then synchronize this worktree and run claim-verify.`,
+      };
+    // Two remedies, both named, in the order that makes the cost obvious. The
+    // field report behind item #113 read the single restore sentence as the
+    // only way out and discarded reviewed, merged work to obey it.
+    case 'restore-or-adopt':
+      return {
+        reason: decision.reason,
+        ...at,
+        remediation: `Restore the authorized revision at ${pathLabel}, then run claim-verify; that discards the edit. Or adopt the committed revision of ${pathLabel} with claim-adopt, then run claim-verify; that keeps the edit.`,
+      };
+    default:
+      throw new Error(`The reconciliation topology named no remedy: ${decision.remediation}.`);
+  }
 }
 
+// Who the journal says wrote the authorized revision, judged against who is
+// asking. An entry from before writer identity existed, or a caller that
+// cannot name itself, leaves the writer unknown.
+function expectedWriterOf(recordedWriter, currentWorktreeId) {
+  if (recordedWriter === null || currentWorktreeId === null) return 'unknown';
+  return recordedWriter === currentWorktreeId ? 'current' : 'other';
+}
+
+// Evidence in, scope and public finding out: the classifier rules on the
+// topology, and this gathers exactly the evidence it rules on, then renders
+// the sentence it prescribes.
 async function reconciliationDiagnosis({
   ledgerDirectory,
   actualRevision,
@@ -833,64 +883,22 @@ async function reconciliationDiagnosis({
   expectedRevision,
   headRevision,
   expectedWriter,
-  workingTreeChanged,
 }) {
-  const pathLabel = expectedPath ?? 'the item path';
-  // Two remedies, both named, in the order that makes the cost obvious. The
-  // field report behind item #113 read the single restore sentence as the only
-  // way out and discarded reviewed, merged work to obey it.
-  const unauthorizedRevision = {
-    reason: 'unauthorized-revision',
-    ...(expectedPath ? { expected_path: expectedPath } : {}),
-    remediation: `Restore the authorized revision at ${pathLabel}, then run claim-verify; that discards the edit. Or adopt the committed revision of ${pathLabel} with claim-adopt, then run claim-verify; that keeps the edit.`,
+  const revisions = {
+    workingTree: normalizeRevision(actualRevision, expectedRevision, authorizedRevisions),
+    head: normalizeRevision(headRevision, expectedRevision, authorizedRevisions),
   };
-  const hasOutOfProtocolLocalState = (
-    (actualRevision !== null && !authorizedRevisions.has(actualRevision))
-    || (headRevision !== null && !authorizedRevisions.has(headRevision))
-    || (actualRevision === null && headRevision !== null)
-  );
-  if (hasOutOfProtocolLocalState) return unauthorizedRevision;
-  let expectedOwner = null;
-  if (headRevision !== null && actualRevision === headRevision
-    && headRevision !== expectedRevision) {
-    expectedOwner = await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
-    if (expectedOwner.kind === 'named-sibling') return namedOwnerFinding(expectedOwner, expectedPath);
-  }
-  if (!workingTreeChanged && headRevision !== expectedRevision) {
-    return {
-      reason: 'git-finalization-required',
-      ...(expectedPath ? { expected_path: expectedPath } : {}),
-      remediation: `Commit ${pathLabel} in Git, then run claim-verify.`,
-    };
-  }
-  if (actualRevision === null && headRevision !== expectedRevision) {
-    const owner = await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
-    if (owner.kind === 'named-sibling') return namedOwnerFinding(owner, expectedPath);
-    return {
-      reason: 'worktree-synchronization-required',
-      ...(expectedPath ? { expected_path: expectedPath } : {}),
-      owner_unavailable: true,
-      remediation: `Ownership of ${pathLabel} revision ${expectedRevision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
-    };
-  }
-  if (authorizedRevisions.has(actualRevision)) {
-    expectedOwner ??= await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision);
-    if (expectedOwner.kind === 'named-sibling') return namedOwnerFinding(expectedOwner, expectedPath);
-    // Advice to wait for an owning worktree needs an owner that could still
-    // appear. When the journal names this worktree as the writer of the
-    // expected revision and no active worktree carries it, the successor exists
-    // nowhere but in the journal: there is nothing to synchronize from, and the
-    // local bytes are simply unauthorized.
-    if (expectedWriter !== 'current' && expectedOwner.kind !== 'current') {
-      return {
-        reason: 'worktree-synchronization-required',
-        ...(expectedPath ? { expected_path: expectedPath } : {}),
-        owner_unavailable: true,
-        remediation: `Ownership of ${pathLabel} revision ${expectedRevision} is not yet reachable; wait for the owning worktree to commit, then synchronize this worktree and run claim-verify.`,
-      };
-    }
-  }
-  return unauthorizedRevision;
+  const decision = classifyReconciliation({
+    ...revisions,
+    expectedOwner: requiresOwnerEvidence(revisions)
+      ? await revisionOwnerEvidence(ledgerDirectory, expectedPath, expectedRevision)
+      : null,
+    expectedWriter,
+  });
+  return {
+    scope: decision.scope,
+    finding: topologyFinding(decision, expectedPath, expectedRevision),
+  };
 }
 
 function activePublicationMismatch(entries, record, actualRevision, observedAt) {
