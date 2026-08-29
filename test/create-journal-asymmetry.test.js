@@ -45,6 +45,8 @@ const NAMESPACE = 'wbns_0123456789abcdef0123456789abcdef';
 const SEED_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
 const FIRST_ID = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
 const SECOND_ID = 'wb_01M01BFR000TXV22D7KZ6TQYH3';
+// A well-formed reference to an item no ledger here holds.
+const ABSENT_ID = 'wb_01M01BFR000TXV22D7KZ6TQYH4';
 
 // A provisioned single-item repository plus a sibling worktree branched from
 // the same commit. The sibling shares the Git common directory, and therefore
@@ -396,4 +398,61 @@ test('a stale revision of an item this checkout holds does not block create', as
   assert.equal(siblingCreate.exit, 0, JSON.stringify(siblingCreate.envelope));
   assert.equal(siblingCreate.envelope.state, 'committed');
   assert.equal(siblingCreate.envelope.result.item.core.number, 2);
+});
+
+// A refusal the create would have returned anyway must leave no attempt behind.
+// The request shape is well formed, so parsing accepts it; only whole-ledger
+// candidate validation can see that the dependency resolves to nothing. That
+// puts the check on the far side of request parsing and the near side of
+// `authorize`, and this vector is what holds it there.
+test('a candidate-invalid create publishes no item and opens no intent', async () => {
+  const fixture = await twoWorktreeRepository();
+  const before = await replayedEntries(fixture.root);
+  const requestPath = path.join(fixture.root, 'create-dangling-dependency.json');
+  await writeFile(requestPath, JSON.stringify({
+    id: FIRST_ID,
+    item: {
+      title: 'New item',
+      kind: 'task',
+      provenance: { source: 'test', recorded_at: '2026-08-16T00:00:00Z' },
+      depends_on: [ABSENT_ID],
+    },
+    body: 'New item\n',
+  }));
+
+  const refused = run(
+    fixture.root, 'create', '--ledger', fixture.ledger, '--input', requestPath, '--json',
+  );
+
+  // Exit 2 is the request-domain refusal: the ledger is untouched and the
+  // caller's own bytes are what has to change.
+  assert.equal(refused.exit, 2, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'candidate-invalid');
+  assert.equal(
+    refused.envelope.error.details.validation_errors.some(
+      (entry) => entry.code === 'unresolved-dependency',
+    ),
+    true,
+    JSON.stringify(refused.envelope.error.details.validation_errors),
+  );
+  await assert.rejects(
+    access(path.join(fixture.ledger, `${FIRST_ID}.md`)),
+    { code: 'ENOENT' },
+  );
+
+  // Nothing in the journal speaks for the requested identity: no intent, and
+  // therefore no terminal or abort resolving one. Reconciliation may still
+  // append its own clock, which names no item.
+  const after = await replayedEntries(fixture.root);
+  assert.deepEqual(after.filter((entry) => entry.item_id === FIRST_ID), []);
+  assert.equal(
+    after.some((entry) => entry.type === 'legacy-mutation-intent'
+      && entry.item_id === FIRST_ID),
+    false,
+  );
+  assert.deepEqual(
+    after.slice(before.length).map((entry) => entry.type).filter((type) => type !== 'clock'),
+    [],
+  );
 });

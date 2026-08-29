@@ -1,7 +1,8 @@
 // The supported commands' own commit sets and subjects.
 //
-// create commits the item alone; transition, parent-migrate, snooze, patch, and
-// publish-claimed commit the changed item plus exactly one reconciliation log.
+// Every supported command commits the changed item plus exactly one
+// reconciliation log, create included: a create is journal-visible from the
+// item's birth, so its allocation evidence rides in the same commit.
 // Claimed publication also proves that the internal claim-verify ran before
 // the envelope returned: its finalization row names the commit it created.
 import assert from 'node:assert/strict';
@@ -25,7 +26,7 @@ import {
 
 const CREATED_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GT55';
 
-test('create --auto-commit commits the created item alone', async () => {
+test('create --auto-commit commits the created item and its reconciliation log', async () => {
   const fixture = await provisionedLedger();
   const request = await requestFile(fixture, 'create.json', createRequest(CREATED_ID));
 
@@ -36,8 +37,8 @@ test('create --auto-commit commits the created item alone', async () => {
   const commit = git(fixture.root, 'rev-parse', 'HEAD');
   assert.equal(git(fixture.root, 'rev-parse', 'HEAD^'), fixture.head);
   assert.equal(git(fixture.root, 'log', '-1', '--format=%s'), 'wowbagger: create item #2');
-  assert.deepEqual(result.envelope.result.commit_paths, [`items/${CREATED_ID}.md`]);
-  assert.deepEqual(committedPaths(fixture, commit), [`items/${CREATED_ID}.md`]);
+  assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath, `items/${CREATED_ID}.md`]);
+  assert.deepEqual(committedPaths(fixture, commit), [fixture.logPath, `items/${CREATED_ID}.md`]);
   assert.equal(result.envelope.result.git_commit, commit);
   assert.equal(result.envelope.result.claim_verified, true);
   assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');

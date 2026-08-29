@@ -65,10 +65,13 @@ test('a committed create whose cleanup needs recovery keeps its error and gains 
   // The Git evidence is added beside them, and the commit really exists.
   const commit = git(clean.root, 'rev-parse', 'HEAD');
   assert.equal(flagged.envelope.error.details.git_commit, commit);
-  assert.deepEqual(flagged.envelope.error.details.commit_paths, [`items/${CREATED_ID}.md`]);
+  assert.deepEqual(
+    flagged.envelope.error.details.commit_paths,
+    [clean.logPath, `items/${CREATED_ID}.md`],
+  );
   assert.equal(flagged.envelope.error.details.claim_verified, true);
   assert.equal(git(clean.root, 'log', '-1', '--format=%s'), 'wowbagger: create item #2');
-  assert.deepEqual(committedPaths(clean, commit), [`items/${CREATED_ID}.md`]);
+  assert.deepEqual(committedPaths(clean, commit), [clean.logPath, `items/${CREATED_ID}.md`]);
 
   // The stale temporary file is outside the commit and still on disk for the
   // operator, exactly as the original error said.

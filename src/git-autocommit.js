@@ -119,17 +119,25 @@ async function finalize({
 }) {
   const { root, prefix } = placement;
   const logPath = ledgerRelative(ledgerDirectory, claimReconcileLogPath(path.resolve(ledgerDirectory), namespace));
-  const journalOwned = command !== 'create';
+  // Every mutation, create included, appends its own journal entries and
+  // rebuilds the derived reconciliation log, so every commit set carries that
+  // log alongside the item.
+  //
+  // Log dirt that predates the invocation is a separate question. A mutation on
+  // an existing item rebuilds residue its own prior claim operations left in
+  // this checkout; a create allocates a fresh identity and has no standing to
+  // absorb bytes that were already there, so it refuses instead.
+  const absorbsPriorLogDirt = command !== 'create';
 
   // Preflight, before any Wowbagger write. Any staged path and every dirty
-  // ledger path except the journal-owning command's derived log refuse: a broad
-  // commit would otherwise absorb foreign work.
+  // ledger path except an absorbable derived log refuse: a broad commit would
+  // otherwise take in foreign work.
   const before = await inspectWorktree(root, prefix);
   if (before.staged.length > 0) {
     return shape.preflightFailed('staged-paths-present', { staged_paths: bounded(before.staged) });
   }
   const foreignDirtyBefore = before.dirtyLedger.filter((entry) => (
-    !(journalOwned && entry === logPath)
+    !(absorbsPriorLogDirt && entry === logPath)
   ));
   if (foreignDirtyBefore.length > 0) {
     return shape.preflightFailed('ledger-not-clean', { dirty_paths: bounded(foreignDirtyBefore) });
@@ -165,13 +173,13 @@ async function finalize({
     });
   }
 
-  // Reconciliation rewrites the tracked log. Only a command that will commit
-  // that log may proceed with it dirty; create commits the item alone.
+  // Reconciliation rewrites the tracked log. Every command here will commit
+  // that log, so its own rewrite is never stray; anything else is.
   const afterVerify = await inspectWorktree(root, prefix);
   if (afterVerify.staged.length > 0) {
     return shape.preflightFailed('staged-paths-present', { staged_paths: bounded(afterVerify.staged) });
   }
-  const strayBefore = afterVerify.dirtyLedger.filter((entry) => !(journalOwned && entry === logPath));
+  const strayBefore = afterVerify.dirtyLedger.filter((entry) => entry !== logPath);
   if (strayBefore.length > 0) {
     return shape.preflightFailed('ledger-not-clean', { dirty_paths: bounded(strayBefore) });
   }
@@ -210,10 +218,10 @@ async function finalize({
   const itemChanged = await itemDiffersFromHead(root, prefix, published.path, published.revision);
   const commitSet = [
     ...(itemChanged ? [published.path] : []),
-    ...(journalOwned ? [logPath] : []),
+    logPath,
   ].sort(compareText);
   const subject = commitSubject(command, published.number, published.id);
-  const witness = journalOwned ? shape.terminalWitness(outcome, published) : null;
+  const witness = shape.terminalWitness(outcome, published);
   const context = {
     command,
     head,
@@ -232,7 +240,6 @@ async function finalize({
     context,
     commitSet,
     digests,
-    journalOwned,
     ledgerDirectory,
     logPath,
     ownArtifacts: shape.recoveryArtifactPaths(outcome),
@@ -287,7 +294,7 @@ async function finalize({
     gitCommonDir,
     namespace,
     targetItemId: published.id,
-    writeLogWhenEmpty: journalOwned,
+    writeLogWhenEmpty: true,
   });
   const reconciliation = reconciliationFailureReason(reconciled, commit.commit, context.operationId, published.id);
   if (reconciliation) {
@@ -305,7 +312,7 @@ async function finalize({
 // Every check that must hold between publication and staging. Returning a
 // reason here means the item is published and no Git write has happened yet.
 async function prepareCommitSet({
-  context, commitSet, digests, journalOwned, ledgerDirectory, logPath, ownArtifacts, prefix, root, witness,
+  context, commitSet, digests, ledgerDirectory, logPath, ownArtifacts, prefix, root, witness,
 }) {
   let itemBytes;
   try {
@@ -330,7 +337,6 @@ async function prepareCommitSet({
   ));
   if (stray.length > 0) return { stage: 'prepare-commit-set', reason: 'tree-changed' };
 
-  if (!journalOwned) return null;
   let logBytes;
   try {
     logBytes = await readFile(path.join(path.resolve(ledgerDirectory), logPath));
@@ -852,7 +858,6 @@ export async function finalizeFromRecoveryToken({ ledgerDirectory, token }) {
 
 async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, placement }) {
   const { root, prefix } = placement;
-  const journalOwned = payload.command !== 'create';
   const logPath = ledgerRelative(ledgerDirectory, claimReconcileLogPath(path.resolve(ledgerDirectory), namespace));
   const witness = payload.terminal_witness ?? null;
 
@@ -877,14 +882,15 @@ async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, 
     const itemChanged = await itemDiffersFromHead(root, prefix, derived.path, payload.published_revision);
     commitSet = [
       ...(itemChanged ? [derived.path] : []),
-      ...(journalOwned ? [logPath] : []),
+      logPath,
     ].sort(compareText);
   } else {
     commitSet = [...tokenPaths].sort(compareText);
   }
-  const allowedCommitSets = journalOwned
-    ? [[logPath], [derived.path, logPath]]
-    : [[derived.path]];
+  // A token is only ever issued by the auto-commit path above, where every
+  // command owns its reconciliation log, so recovery accepts the same two
+  // shapes for every command.
+  const allowedCommitSets = [[logPath], [derived.path, logPath]];
   const tokenMatchesMutation = allowedCommitSets.some((allowed) => sameSet(tokenPaths, allowed));
   if (payload.item_path !== derived.path
     || !tokenMatchesMutation
@@ -910,7 +916,7 @@ async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, 
   }
 
   const refusal = await finalizePreconditions({
-    commitSet, derived, digests, gitPaths, journalOwned, ledgerDirectory, logPath, payload, prefix, root, witness,
+    commitSet, derived, digests, gitPaths, ledgerDirectory, logPath, payload, prefix, root, witness,
   });
   if (refusal) return finalizeRefused(refusal.reason, refusal.details);
 
@@ -952,7 +958,7 @@ async function runFinalize({ gitCommonDir, ledgerDirectory, namespace, payload, 
 }
 
 async function finalizePreconditions({
-  commitSet, derived, digests, gitPaths, journalOwned, ledgerDirectory, logPath, payload, prefix, root, witness,
+  commitSet, derived, digests, gitPaths, ledgerDirectory, logPath, payload, prefix, root, witness,
 }) {
   let itemBytes;
   try {
@@ -973,7 +979,6 @@ async function finalizePreconditions({
   }
   const stray = observed.dirtyLedger.filter((entry) => !commitSet.includes(entry));
   if (stray.length > 0) return { reason: 'ledger-not-clean', details: { dirty_paths: bounded(stray) } };
-  if (!journalOwned) return null;
   let logBytes;
   try {
     logBytes = await readFile(path.join(path.resolve(ledgerDirectory), logPath));

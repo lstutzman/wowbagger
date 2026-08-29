@@ -2762,7 +2762,7 @@ by sending the flag, not by reading a version.
 
 Only the paths this invocation owns:
 
-| `create` | the created item |
+| `create` | the created item and one `<ledger>/.wowbagger/reconcile-<namespace>.md` |
 | `transition` | the changed item and one `<ledger>/.wowbagger/reconcile-<namespace>.md` |
 | `parent-migrate` | the changed item and one reconciliation log |
 | `snooze` | the changed item and one reconciliation log |
@@ -2774,13 +2774,11 @@ item bytes at `HEAD`. A byte-identical `parent-migrate`, `snooze`, or `patch`
 still records its decision in the reconciliation log, so its auto-commit set
 contains the log alone.
 
-`create` is journal-silent by design, so its commit set has no log. The
-pre-mutation and post-mutation verification steps do not materialize an empty
-log for `create`; this lets the first auto-commit run after namespace
-provisioning commit the created item without an extra metadata ceremony. For
-the other commands, the log must already carry this invocation's terminal
-entry before it may be staged; if it does not, the invocation reports
-`git-commit-failed` with `reason: "log-unavailable"`.
+`create` is journal-visible from the item's birth, so its commit set carries the
+reconciliation log alongside the created item. For every command, the log must
+already carry this invocation's terminal entry before it may be staged; if it
+does not, the invocation reports `git-commit-failed` with
+`reason: "log-unavailable"`.
 
 Commit subjects are fixed:
 
@@ -2839,8 +2837,9 @@ underlying verification reason, never on the generic message.
 The rule is deliberately strict rather than preserving foreign staged work in
 a temporary index. A journal-owning auto-commit validates and rebuilds the
 dirty derived reconciliation log from the authoritative journal, then commits
-it with the mutation. `create` still refuses a dirty reconciliation log because
-it does not own that path. Every other dirty ledger path refuses. Claim refusal
+it with the mutation. `create` still refuses a reconciliation log that was
+already dirty when it was invoked: it owns the log it writes, not residue that
+predates it. Every other dirty ledger path refuses. Claim refusal
 evidence is never suppressed: both the authoritative journal and its projected
 log retain the decision before a later command rebuilds or commits the log.
 

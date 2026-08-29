@@ -216,5 +216,25 @@ test('the first auto-commit works after provisioning and committing the namespac
 
   assert.equal(result.exit, 0, result.stdout);
   assert.equal(result.envelope.result.git_commit !== undefined, true);
+  // A create is journal-visible, so its commit owns exactly two paths: the new
+  // item and the namespace's reconciliation log carrying the create's terminal.
+  // This ledger configures no items directory, so the item lands at its root.
+  const namespace = (await readFile(
+    path.join(fixture.ledger, '.wowbagger', 'namespace'), 'utf8',
+  )).trim();
+  assert.deepEqual(result.envelope.result.commit_paths, [
+    `.wowbagger/reconcile-${namespace}.md`,
+    `${id}.md`,
+  ]);
+  assert.deepEqual(
+    git(
+      fixture.root, 'diff-tree', '--no-commit-id', '--name-only', '-r',
+      result.envelope.result.git_commit,
+    ).split('\n'),
+    [
+      `ledger/.wowbagger/reconcile-${namespace}.md`,
+      `ledger/${id}.md`,
+    ],
+  );
   assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
 });

@@ -13,6 +13,7 @@ import {
   ITEM_ID,
   SECOND_ITEM_ID,
   committedPaths,
+  createRequest,
   git,
   itemSource,
   ledgerFile,
@@ -56,6 +57,15 @@ async function transitionRefused(fixture) {
   ]);
 }
 
+const CREATED_ID = 'wb_01KZBMBEZKPE7D15HKW9Q3GT02';
+
+async function createRefused(fixture) {
+  const request = await requestFile(fixture, 'create.json', createRequest(CREATED_ID));
+  return refusedByHook(fixture, [
+    'create', '--ledger', fixture.ledger, '--input', request, '--json', '--auto-commit',
+  ]);
+}
+
 test('mutation-finalize completes the commit and claim-verify in one invocation', async () => {
   const fixture = await twoItems();
   const head = git(fixture.root, 'rev-parse', 'HEAD');
@@ -78,6 +88,31 @@ test('mutation-finalize completes the commit and claim-verify in one invocation'
   assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath, `items/${ITEM_ID}.md`]);
   assert.equal(result.envelope.result.claim_verified, true);
   assert.deepEqual(committedPaths(fixture, commit), [fixture.logPath, `items/${ITEM_ID}.md`]);
+  assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
+});
+
+// A create is journal-visible, so its interrupted auto-commit hands recovery the
+// same two-path token every other mutation does, and recovery commits both.
+test('mutation-finalize completes an interrupted journaled create', async () => {
+  const fixture = await twoItems();
+  const head = git(fixture.root, 'rev-parse', 'HEAD');
+  const token = await createRefused(fixture);
+  assert.deepEqual(
+    decodeToken(token).commit_set.map((entry) => entry.path).sort(),
+    [fixture.logPath, `items/${CREATED_ID}.md`],
+  );
+
+  const result = run(fixture.root, 'mutation-finalize', '--ledger', fixture.ledger, '--recovery-token', token, '--json');
+
+  assert.equal(result.exit, 0, result.stdout);
+  assert.equal(result.envelope.state, 'committed');
+  const commit = git(fixture.root, 'rev-parse', 'HEAD');
+  assert.equal(git(fixture.root, 'rev-parse', 'HEAD^'), head);
+  assert.equal(git(fixture.root, 'log', '-1', '--format=%s'), 'wowbagger: create item #3');
+  assert.equal(result.envelope.result.item_id, CREATED_ID);
+  assert.deepEqual(result.envelope.result.commit_paths, [fixture.logPath, `items/${CREATED_ID}.md`]);
+  assert.equal(result.envelope.result.claim_verified, true);
+  assert.deepEqual(committedPaths(fixture, commit), [fixture.logPath, `items/${CREATED_ID}.md`]);
   assert.equal(git(fixture.root, 'status', '--porcelain=v1', '--untracked-files=all'), '');
 });
 
