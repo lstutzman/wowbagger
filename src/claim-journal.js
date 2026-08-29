@@ -20,6 +20,8 @@ const JOURNAL_ENTRY_TYPES = new Set([
   'publish-intent',
   'revision-adoption',
 ]);
+// Every command the legacy mutation fence journals.
+const LEGACY_MUTATION_COMMANDS = new Set(['patch-v1', 'transition-v1', 'create-v1']);
 // The reconciliation log is a tracked derived artifact. Entry types that every
 // invocation appends, including refusals and read-only verification, stay out
 // of it so a mutation that changes nothing leaves the working tree unchanged.
@@ -286,7 +288,7 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.ledger_namespace === 'string'
       && (namespace === null || entry.ledger_namespace === namespace)
       && typeof entry.item_id === 'string'
-      && ['patch-v1', 'transition-v1', 'create-v1'].includes(entry.command)
+      && LEGACY_MUTATION_COMMANDS.has(entry.command)
       && (entry.command === 'create-v1'
         ? entry.expected_revision === null
         : typeof entry.expected_revision === 'string')
@@ -301,7 +303,7 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.ledger_namespace === 'string'
       && (namespace === null || entry.ledger_namespace === namespace)
       && typeof entry.item_id === 'string'
-      && ['patch-v1', 'transition-v1', 'create-v1'].includes(entry.command)
+      && LEGACY_MUTATION_COMMANDS.has(entry.command)
       && typeof entry.committed_revision === 'string'
       && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string')
       && (!Object.hasOwn(entry, 'writer_worktree_id')

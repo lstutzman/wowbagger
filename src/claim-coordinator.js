@@ -69,17 +69,13 @@ export async function withLegacyMutationFence(
         writeLogOnUnsafe: false,
         writeLogWhenEmpty: !create,
       });
-      if (reconciled.unsafe) {
-        return claimStoreUnavailable(responseCommand, 'publication-reconciliation-required', {
-          findings: reconciled.findings,
-        });
-      }
-      // A coordinated item this checkout does not hold carries a number nobody
+      // The extra create barrier promised above rides on the same refusal: a
+      // coordinated item this checkout does not hold carries a number nobody
       // here can read, so the next number this create would allocate may be one
       // a sibling worktree already published. A stale revision of an item that
       // is present hides no number: an item's number is immutable, so target
       // scoping above still lets that create through.
-      if (create && reconciled.missingCoordinatedItems.length > 0) {
+      if (reconciled.unsafe || (create && reconciled.missingCoordinatedItems.length > 0)) {
         return claimStoreUnavailable(responseCommand, 'publication-reconciliation-required', {
           findings: reconciled.findings,
         });
