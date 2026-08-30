@@ -7,12 +7,12 @@ kind: task
 priority: 1
 status: triage
 created: 2026-08-28
-updated: 2026-08-29
+updated: 2026-08-30
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
-related: []
+related: [ wb_01M14Y1NTXQPMQ270VT1WH6H17, wb_01M1986V8VYPCBTGVDDM7QCVPZ ]
 ---
 ## Problem
 
@@ -33,3 +33,9 @@ This is the same class as the globally linked alpha.10 checkout on this machine 
 ## Priority escalation — 2026-08-29
 
 Raised from priority 2 to priority 1 before the #181 alpha.14 hard cutover. Once one upgraded worktree writes the new create journal grammar, an alpha.13 worktree fails closed with generic `claim-store-unavailable` / `claim-store-unreadable` output and no hint that version drift caused it. The cutover therefore makes early, actionable skill/core version diagnosis materially more urgent.
+
+## Triage decision — 2026-08-30
+
+Accepted into backlog at priority 1. The alpha.14 hard cutover is live: an alpha.13 worktree encountering the new create grammar emits generic `claim-store-unavailable` / `claim-store-unreadable` output with no version hint. The Node 24 floor move in #188 will add another intentional compatibility boundary.
+
+First design slice: define one read-only preflight that compares installed skill distribution pin, required core contract, running core version, and installation provenance before mutation. It must produce exact upgrade or unlink/cache remediation without changing another repository. Do not soften version pins to turn drift into success.
