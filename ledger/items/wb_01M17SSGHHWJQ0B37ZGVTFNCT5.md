@@ -7,12 +7,12 @@ kind: task
 priority: 2
 status: triage
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-08-30
 provenance:
   source: "item #181 final review"
   recorded_at: "2026-08-29T22:25:00Z"
 depends_on: []
-related: [wb_01M14Y2VZW2ASKHYE42BGZ1PPK]
+related: [ wb_01M14Y2VZW2ASKHYE42BGZ1PPK ]
 ---
 ## Problem
 
@@ -28,3 +28,9 @@ This is not a #181 regression, but it is another case where contract text and ru
 - Audit every caller that maps `CLAIM_JOURNAL_CAPACITY` so claim, legacy mutation, publication, adoption, and verification surfaces agree deliberately.
 - Update contracts, installed skill guidance, adapter correlation, and release notes together where applicable.
 - Add current Node and Node 20 public regressions at both the entry-count and byte limits.
+
+## Triage decision — 2026-08-30
+
+Accepted into backlog at priority 2. The runtime fails closed, but the design promises `journal-capacity-exceeded` while the legacy coordinator emits `claim-store-unreadable`. Journaled create now consumes three entries per successful cycle, so capacity exhaustion is more reachable and the wrong reason can send recovery in the wrong direction.
+
+First implementation slice: reproduce both entry-count and byte-limit exhaustion through public create and patch seams before choosing which surface is authoritative. Audit every capacity mapper, then change runtime or prose as one reviewed contract decision.
