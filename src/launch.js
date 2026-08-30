@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 
 // The engine floor the package declares. A host that resolves its own Node
 // executable rather than reusing `process.execPath` must check it, because a
-// Node 18 executable will fail somewhere inside the core rather than at launch.
-export const MINIMUM_NODE_MAJOR = 20;
+// Node 22 executable will fail somewhere inside the core rather than at launch.
+export const MINIMUM_NODE_MAJOR = 24;
 
 // The absolute path of the core script. It is resolved from this module's own
 // URL, so it is correct for a global install, a local install, a workspace

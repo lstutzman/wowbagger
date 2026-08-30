@@ -26,9 +26,12 @@ shell: an absolute Node executable, the absolute `wowbagger.js` the package
 installed, an argument array, and `shell: false`. Neither path is discovered by
 searching a global npm directory, and neither is a platform command shim.
 
-Wowbagger requires Node.js 20 or later. The package declares that floor in
+Wowbagger requires Node.js 24 or later. The package declares that floor in
 `engines.node`, and the launch seam exports it as `MINIMUM_NODE_MAJOR` for a
 host that resolves its own runtime instead of reusing the one it is running on.
+
+The supported release matrix is Node 24.20.0. Node 26 is excluded until the
+separate Vitest incompatibility reported by Lee is resolved.
 
 ~~~js
 import { resolveCoreLaunch } from 'wowbagger';

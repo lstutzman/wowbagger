@@ -7,6 +7,11 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+- **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and
+  Node 22 no longer satisfy `engines.node`; Node 26 remains outside the
+  supported matrix because of the separate Vitest incompatibility reported by
+  Lee.
+
 ## 0.1.0-alpha.16 - 2026-08-30
 
 - Added `version-drift --json` to detect stale installed skill pins, core

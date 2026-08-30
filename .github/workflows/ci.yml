@@ -28,7 +28,7 @@ permissions:
 defaults:
   run:
     # The documented gate command globs its test files, and neither cmd.exe nor
-    # PowerShell expands a glob. Node 20's `--test` does not expand one either,
+    # PowerShell expands a glob. Node 24's `--test` does not expand one either,
     # so the shell has to. `bash` is Git Bash on the windows runner.
     shell: bash
 
@@ -45,13 +45,13 @@ jobs:
         include:
           - platform: linux
             os: ubuntu-latest
-            node: '20'
+            node: '24'
           - platform: win32
             os: windows-latest
-            node: '20'
+            node: '24'
           - platform: darwin
             os: macos-latest
-            node: '20'
+            node: '24'
     env:
       # Several fixtures commit to a Git repository they create themselves and
       # never set an identity, so on a runner with no global identity they
@@ -98,8 +98,8 @@ jobs:
       - name: install
         run: npm ci
 
-      # One Node per runner, so the two documented test commands collapse into
-      # this one.
+      # One Node 24 runtime per runner, so the two documented test commands
+      # collapse into this one.
       - name: unit suite
         run: node --test test/*.test.js
 

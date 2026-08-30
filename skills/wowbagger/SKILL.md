@@ -17,10 +17,14 @@ Install the core separately before using this skill:
 npm install -g wowbagger@0.1.0-alpha.16
 ```
 
-The core requires Node.js 20 or later. This plugin ships only agent
+The core requires Node.js 24 or later. This plugin ships only agent
 instructions; it does not bundle the core, an MCP server, a remote service, a
 hook, or a background process. It operates on the ledger and its Git working
 copy through the core's validated CLI.
+
+The supported runtime matrix is Node 24.20.0. Node 26 remains excluded until
+the separate Vitest incompatibility reported by Lee is resolved; do not certify
+Node 26 based on ambient availability.
 
 ## Before anything else: check the core
 

@@ -1181,18 +1181,20 @@ the finding as a ledger item rather than leaving it in a transcript.
 
 ### The verification gate
 
-Four commands. All four must pass, and the test commands run on **both** the
-current Node runtime and Node 20:
+Four commands. All four must pass, and the test commands run on **Node 24.20.0**:
 
 ```sh
-TMPDIR=/tmp node --test test/*.test.js
-TMPDIR=/tmp /opt/homebrew/opt/node@20/bin/node --test test/*.test.js
-TMPDIR=/tmp node spec/run-adapter-implementation.js
-node bin/wowbagger.js validate --ledger ledger --json
+TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node --test test/*.test.js
+TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node --pending-deprecation --throw-deprecation --test test/*.test.js
+TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node spec/run-adapter-implementation.js
+TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node bin/wowbagger.js validate --ledger ledger --json
 ```
 
 `TMPDIR=/tmp` is not optional: the default macOS temporary path makes the claim
-lock socket path too long. Substitute your own Node 20 binary path.
+lock socket path too long. Use an explicit Node 24.20.0 binary path.
+
+The supported runtime matrix is Node 24.20.0. Node 26 remains excluded until
+the separate Vitest incompatibility reported by Lee is resolved.
 
 `npm test`, `npm audit --omit=dev`, and `git diff --check` are useful alongside
 it; they are not a substitute for the four commands above.

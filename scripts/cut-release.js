@@ -31,8 +31,7 @@ import { countOccurrences, planVersionSites, verifyExactSets } from './lib/relea
 
 export const MANIFEST_PATH = 'scripts/release-version-sites.json';
 export const CHANGELOG_PATH = 'CHANGELOG.md';
-export const DEFAULT_RELEASE_BRANCH = 'main';
-export const DEFAULT_NODE20 = '/opt/homebrew/opt/node@20/bin/node';
+export const DEFAULT_NODE24 = '/opt/homebrew/opt/node@24/bin/node';
 
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 const verifyReleaseTagScript = fileURLToPath(new URL('./verify-release-tag.js', import.meta.url));
@@ -73,21 +72,26 @@ export function compareVersions(left, right) {
 
 // -------------------------------------------------------------------- gate --
 
-export function releaseGateSteps(cwd, { node20 = DEFAULT_NODE20 } = {}) {
+export function releaseGateSteps(cwd, { node24 = DEFAULT_NODE24 } = {}) {
   const env = { TMPDIR: '/tmp' };
   const tests = testFiles(cwd);
   return [
-    { name: 'tests (current Node)', command: process.execPath, args: ['--test', ...tests], env },
-    { name: 'tests (Node 20)', command: node20, args: ['--test', ...tests], env },
+    { name: 'tests (Node 24)', command: node24, args: ['--test', ...tests], env },
+    {
+      name: 'tests (Node 24 strict deprecations)',
+      command: node24,
+      args: ['--pending-deprecation', '--throw-deprecation', '--test', ...tests],
+      env,
+    },
     ...['claude-code', 'codex', 'opencode'].map((target) => ({
       name: `adapter implementation vectors (${target})`,
-      command: process.execPath,
+      command: node24,
       args: ['spec/run-adapter-implementation.js', '--target', target],
       env,
     })),
     {
       name: 'ledger validation',
-      command: process.execPath,
+      command: node24,
       args: ['bin/wowbagger.js', 'validate', '--ledger', 'ledger', '--json'],
       env,
     },
@@ -239,11 +243,10 @@ export function cutRelease({
   version,
   date,
   dryRun = false,
-  releaseBranch = DEFAULT_RELEASE_BRANCH,
-  node20 = DEFAULT_NODE20,
+  node24 = DEFAULT_NODE24,
   publishedVersions = defaultPublishedVersions,
   remoteTags = () => defaultRemoteTags(cwd),
-  runGate = (context) => runReleaseGate({ ...context, node20, log: context.log }),
+  runGate = (context) => runReleaseGate({ ...context, node24, log: context.log }),
   verifyTag = defaultVerifyTag,
   log = () => {},
 }) {

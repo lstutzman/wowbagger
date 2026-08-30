@@ -50,8 +50,14 @@ Neither pairing silently selects the other version's behavior.
 
 `node spec/run-adapter-implementation.js --target <adapter>` runs the shared
 normative vectors against the shipped engine for each adapter target before
-a tag is cut, alongside the full suite on Node 26 and Node 20 and
-`npm audit --omit=dev`. A target whose evidence regresses does not ship.
+a tag is cut, alongside the full suite on Node 24.20.0 and the strict
+deprecation gate on Node 24.20.0, plus `npm audit --omit=dev`. A target whose
+evidence regresses does not ship.
+
+The supported release matrix is Node 24.20.0 only. Node 26 is intentionally
+excluded until the separate Vitest incompatibility reported by Lee is resolved;
+Wowbagger does not use Vitest, but it does not certify Node 26 on that external
+constraint alone.
 
 The same release gate also runs `test/packaging.test.js`. It requires these
 distribution versions to equal the `package.json` version before publication:

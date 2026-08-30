@@ -46,14 +46,16 @@ Before substantive work:
 - Treat fixtures as normative when contract prose and a fixture differ.
 - Use `TMPDIR=/tmp` for every test command. The default macOS temporary path makes
   the lock socket path too long.
-- Verify on the current Node runtime and Node 20 when production code changes:
+- Verify on Node 24 when production code changes:
 
   ```sh
-  TMPDIR=/tmp node --test test/*.test.js
-  TMPDIR=/tmp /opt/homebrew/opt/node@20/bin/node --test test/*.test.js
-  TMPDIR=/tmp node spec/run-adapter-implementation.js
-  node bin/wowbagger.js validate --ledger ledger --json
+  TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node --test test/*.test.js
+  TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node --pending-deprecation --throw-deprecation --test test/*.test.js
+  TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node spec/run-adapter-implementation.js
+  TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node bin/wowbagger.js validate --ledger ledger --json
   ```
+- The supported runtime matrix is Node 24.20.0; Node 26 remains excluded until
+  Lee's separate Vitest incompatibility is resolved.
 
 - Never use `git stash`. Worktrees share one stash stack.
 - Use the `wowbagger` skill for ledger work. Claims are advisory until fenced claims
