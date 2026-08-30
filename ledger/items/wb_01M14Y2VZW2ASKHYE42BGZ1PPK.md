@@ -5,7 +5,7 @@ number: 185
 title: "Detect stale installed skill and core version drift"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
 related: [ wb_01M14Y1NTXQPMQ270VT1WH6H17, wb_01M1986V8VYPCBTGVDDM7QCVPZ ]
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept version-drift diagnosis as priority-one backlog work."
+    rationale: "The hard cutover is now deployed and its old-writer error is generic. #188 will introduce another deliberate version boundary, making early diagnosis time-sensitive."
 ---
 ## Problem
 
