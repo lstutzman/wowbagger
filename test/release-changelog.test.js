@@ -18,6 +18,9 @@ const changelogText = shipped('CHANGELOG.md');
 const workClaimContract = shipped('docs', 'work-claim-contract.md');
 const mutationContract = shipped('docs', 'mutation-contract.md');
 const installedSkill = shipped('skills', 'wowbagger', 'SKILL.md');
+const distributionVersion = JSON.parse(
+  readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
+).version;
 
 const PREAMBLE = '# Changelog\n\nBehaviour changes land here when they ship.\n\n';
 const PREVIOUS = '## 9.9.0-alpha.6 - 2026-08-17\n\n### Added\n\n- the previous release\n';
@@ -132,16 +135,21 @@ for (const [surface, text] of [
   });
 }
 
-// The unreleased notes are sliced by structure, not by the released version
-// below them: naming that version here would plant an occurrence the release
-// site manifest has to classify.
-const unreleasedNotes = (() => {
-  const start = changelogText.indexOf(' ## Unreleased ');
+// Before a cut, these checks read Unreleased. After the cut empties that
+// section, they follow package.json to the release section those bytes entered.
+// This keeps one assertion valid on both sides of the release transaction
+// without planting another literal distribution version in the repository.
+function changelogSection(heading) {
+  const start = changelogText.indexOf(` ## ${heading} `);
   const end = changelogText.indexOf(' ## ', start + 1);
-
-  assert.ok(start > 0 && end > start, 'the changelog must carry an Unreleased section');
+  assert.ok(start > 0 && end > start, `the changelog must carry ${heading}`);
   return changelogText.slice(start, end);
-})();
+}
+
+const unreleasedNotes = changelogSection('Unreleased');
+const shippingNotes = unreleasedNotes.trim() === '## Unreleased'
+  ? changelogSection(distributionVersion)
+  : unreleasedNotes;
 
 test('the changelog states the hard cutover with the evidence it rests on', () => {
   for (const literal of [
@@ -152,23 +160,23 @@ test('the changelog states the hard cutover with the evidence it rests on', () =
     'before the first alpha.14 create',
   ]) {
     assert.ok(
-      unreleasedNotes.includes(literal),
+      shippingNotes.includes(literal),
       `the release note must state ${JSON.stringify(literal)}`,
     );
   }
-  assert.match(unreleasedNotes, /no automatic migration/i);
-  assert.match(unreleasedNotes, /mixed-version grace period/i);
+  assert.match(shippingNotes, /no automatic migration/i);
+  assert.match(shippingNotes, /mixed-version grace period/i);
 });
 
 test('the changelog scopes batch creates and existing duplicates out of alpha.14', () => {
-  assert.match(unreleasedNotes, /no batch (?:mutation|operation)/i);
-  assert.match(unreleasedNotes, /create-then-commit loop/i);
-  assert.match(unreleasedNotes, /item #186/);
-  assert.match(unreleasedNotes, /item #182/);
+  assert.match(shippingNotes, /no batch (?:mutation|operation)/i);
+  assert.match(shippingNotes, /create-then-commit loop/i);
+  assert.match(shippingNotes, /item #186/);
+  assert.match(shippingNotes, /item #182/);
 });
 
 test('the changelog records the measured create cost without promising a duration', () => {
-  assert.match(unreleasedNotes, /no new Git roster or history traversal/i);
-  assert.match(unreleasedNotes, /two extra .*journal appends/i);
-  assert.match(unreleasedNotes, /65,536/);
+  assert.match(shippingNotes, /no new Git roster or history traversal/i);
+  assert.match(shippingNotes, /two extra .*journal appends/i);
+  assert.match(shippingNotes, /65,536/);
 });
