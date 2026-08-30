@@ -445,6 +445,12 @@ core, these are the changes most likely to touch you:
   `create` and refuses a caller-supplied one; `patch` refuses it because it is
   immutable identity. Keep a legacy identifier in a declared extension member or
   in the item body.
+
+- **Repair duplicate numbers through `ledger-repair` version 1.** Generate a
+  read-only proposal with `number-repair-proposal`, review every
+  `expected_revision` and `replacement_number`, then apply the complete mapping
+  with `number-repair`. The command preserves ULID identities and relations and
+  does not change core contract version 5.
 - **Delete your local ULID generator.** `wowbagger mint-id --json` prints a
   canonical ID; `--date YYYY-MM-DD` selects the creation date the ID must
   encode.

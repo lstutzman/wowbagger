@@ -1600,10 +1600,15 @@ A create has no authorized predecessor, so Git `HEAD` is the only surface that
 can carry its authorized bytes, and an uncommitted create raises the global
 `git-finalization-required` barrier for every later mutation. Commit each
 created item before the next mutating command. This release adds no batch
-mutation; the supported bulk pattern is the create-then-commit loop, and item
-#186 owns safe batch design. A ledger that already carries duplicate numbers is
-item #182's recovery work: it fails validation and refuses every mutation
-before allocation, and nothing here renumbers it.
+mutation; the supported bulk pattern remains the create-then-commit loop.
+A ledger that already carries duplicate numbers is repaired through the separate
+`ledger-repair` contract, not through core version 5 mutation. Run
+`number-repair-proposal --ledger <dir> --json`, review the complete mapping, then
+run `number-repair --ledger <dir> --input <repair.json> --json`. The repair
+command operates only when duplicate-number errors are the complete validation
+failure, preserves ULID identities and relation values, and publishes all
+affected items under the shared namespace fence. Arbitrary hand edits remain
+unsupported because they can damage IDs, paths, or references.
 
 **What this guarantees, and what it does not.** The fence closes the reported
 PropertyCompass2 collision: cooperating alpha.14 worktrees of one clone that

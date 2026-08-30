@@ -223,3 +223,35 @@ test('number-repair recovers staged candidates when the final terminal is absent
     await rm(fixture.root, { recursive: true, force: true });
   }
 });
+
+test('number-repair auto-commit records only repaired paths and reconciliation log', async () => {
+  const fixture = await duplicateLedger();
+  try {
+    execFileSync('git', ['init', '--quiet', fixture.root]);
+    execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: fixture.root });
+    execFileSync('git', ['config', 'user.name', 'Wowbagger Test'], { cwd: fixture.root });
+    const namespace = (await provisionNamespace(fixture.ledger)).namespace;
+    execFileSync('git', ['add', '.'], { cwd: fixture.root });
+    execFileSync('git', ['commit', '--quiet', '-m', 'seed duplicate ledger'], { cwd: fixture.root });
+    const proposal = await numberRepairProposal(fixture.ledger);
+    const result = await numberRepair({
+      repair_id: 'nr_20260830_0008',
+      ledger_snapshot_revision: proposal.stdout.result.ledger_snapshot_revision,
+      date: '2026-08-30',
+      changes: proposal.stdout.result.suggested_changes,
+    }, { ledgerDirectory: fixture.ledger, autoCommit: true });
+    assert.equal(result.exit, 0, JSON.stringify(result.stdout));
+    assert.match(result.stdout.result.git_commit, /^[0-9a-f]{40}$/);
+    const committedPaths = execFileSync(
+      'git',
+      ['show', '--format=', '--name-only', result.stdout.result.git_commit],
+      { cwd: fixture.root, encoding: 'utf8' },
+    ).split('\n').filter(Boolean).sort();
+    assert.deepEqual(committedPaths, [
+      `ledger/.wowbagger/reconcile-${namespace}.md`,
+      `ledger/items/${proposal.stdout.result.suggested_changes[0].item_id}.md`,
+    ]);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});

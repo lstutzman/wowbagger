@@ -7,6 +7,13 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+- **Duplicate-number recovery now has a separate `ledger-repair` contract
+  version 1.** Use the read-only `number-repair-proposal` command to review a
+  complete mapping, then apply it with `number-repair`. The repair path requires
+  duplicate-number errors to be the complete validation failure, preserves ULID
+  identities and relation values, uses the shared namespace fence, records
+  durable intent/final entries, and supports bounded auto-commit recovery.
+
 ## 0.1.0-alpha.14 - 2026-08-29
 
 ### Changed

@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { constants } from 'node:fs';
 import {
   lstat,
@@ -13,14 +15,21 @@ import path from 'node:path';
 import {
   appendClaimEntry,
   claimJournalPath,
+  claimReconcileLogPath,
   replayClaimJournal,
+  writeReconcileLog,
 } from './claim-journal.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
 import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './claim-store.js';
 import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { readNamespace } from './namespace.js';
 import { pointer, sortIssues } from './request.js';
+
 import { isCalendarDate, validateLedger } from './validate.js';
+const GIT_ENVIRONMENT = Object.fromEntries(
+  Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+);
+const execFileAsync = promisify(execFile);
 
 // The repair domain's own version. It is not the core contract version and not
 // the work-claim contract version; a future change to the repair request or the
@@ -526,6 +535,27 @@ export async function numberRepair(request, options = {}) {
         })),
         observed_at: new Date().toISOString(),
       });
+      let gitCommit = null;
+      if (options.autoCommit === true) {
+        const committed = await autoCommitRepair({
+          ledgerDirectory: options.ledgerDirectory,
+          gitCommonDir,
+          namespace,
+          journalPath,
+          repairId: request.repair_id,
+          changedItems,
+        });
+        if (!committed.ok) {
+          return refusal(
+            'number-repair',
+            6,
+            'ledger-repair-commit-failed',
+            'The repaired items were published, but Git commit failed.',
+            { recovery_token: committed.recovery_token },
+          );
+        }
+        gitCommit = committed.git_commit;
+      }
       return {
         exit: 0,
         stdout: {
@@ -538,7 +568,7 @@ export async function numberRepair(request, options = {}) {
             repair_id: request.repair_id,
             ledger_snapshot_revision: request.ledger_snapshot_revision,
             changed_items: changedItems,
-            git_commit: null,
+            git_commit: gitCommit,
           },
         },
       };
@@ -640,9 +670,152 @@ export async function numberRepairProposal(ledgerDirectory) {
         })),
         validation_errors: validation.errors,
       },
+
     },
   };
 }
+export function isNumberRepairRecoveryToken(token) {
+  const payload = decodeNumberRepairToken(token);
+  return payload?.command === 'number-repair';
+}
+
+export async function finalizeNumberRepairCommit({ ledgerDirectory, token }) {
+  const payload = decodeNumberRepairToken(token);
+  if (!payload || payload.command !== 'number-repair') {
+    return refusal(
+      'number-repair',
+      2,
+      'invalid-request',
+      'The number-repair recovery token is invalid.',
+      { reason: 'recovery-token-invalid' },
+    );
+  }
+  const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory, { failClosed: true });
+  const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
+  if (!gitCommonDir || namespace !== payload.ledger_namespace) {
+    return refusal(
+      'number-repair',
+      4,
+      'ledger-repair-commit-failed',
+      'The repair recovery token does not name this ledger namespace.',
+      { reason: 'ledger-namespace-unbound' },
+    );
+  }
+  const repoRoot = path.dirname(path.resolve(gitCommonDir));
+  const paths = payload.commit_set.map((entry) => entry.path).sort(compareText);
+  try {
+    await execFileAsync('git', ['add', '--', ...paths], { cwd: repoRoot, env: GIT_ENVIRONMENT });
+    const staged = await execFileAsync('git', ['diff', '--cached', '--name-only'], {
+      cwd: repoRoot,
+      env: GIT_ENVIRONMENT,
+    });
+    const stagedPaths = staged.stdout.split('\n').filter(Boolean).sort(compareText);
+    if (stagedPaths.length !== paths.length
+      || stagedPaths.some((entry, index) => entry !== paths[index])) {
+      return refusal(
+        'number-repair',
+        4,
+        'ledger-repair-commit-failed',
+        'The repair recovery commit set is not exact.',
+        { reason: 'commit-set-mismatch', expected_paths: paths, actual_paths: stagedPaths },
+      );
+    }
+    await execFileAsync(
+      'git',
+      ['commit', '-m', 'wowbagger: repair duplicate numbers'],
+      { cwd: repoRoot, env: GIT_ENVIRONMENT },
+    );
+    const head = await execFileAsync(
+      'git',
+      ['rev-parse', 'HEAD'],
+      { cwd: repoRoot, env: GIT_ENVIRONMENT },
+    );
+    return committedRepairResponse(payload.repair_id, [], head.stdout.trim());
+  } catch {
+    return refusal(
+      'number-repair',
+      6,
+      'ledger-repair-commit-failed',
+      'The repair recovery commit failed.',
+      { recovery_token: token },
+    );
+  }
+}
+
+function decodeNumberRepairToken(token) {
+  if (typeof token !== 'string' || token.length === 0) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
+    if (payload?.v !== 1
+      || payload.command !== 'number-repair'
+      || !REPAIR_ID.test(payload.repair_id)
+      || !REPAIR_STAGING_ID.test(payload.ledger_namespace)
+      || !Array.isArray(payload.commit_set)
+      || payload.commit_set.length === 0
+      || typeof payload.message !== 'string') return null;
+    if (payload.commit_set.some((entry) => (
+      !isPlainObject(entry)
+        || typeof entry.path !== 'string'
+        || !STAGING_RELATIVE_PATH.test(entry.path)
+        || entry.sha256 !== null
+    ))) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+async function autoCommitRepair({
+  ledgerDirectory,
+  gitCommonDir,
+  namespace,
+  journalPath,
+  repairId,
+  changedItems,
+}) {
+  const replayed = await replayClaimJournal(journalPath, namespace);
+  const logPath = claimReconcileLogPath(ledgerDirectory, namespace);
+  await writeReconcileLog(logPath, namespace, replayed.entries);
+  const ledgerRoot = path.resolve(ledgerDirectory);
+  const repoRoot = path.dirname(path.resolve(gitCommonDir));
+  const paths = [
+    ...changedItems.map((item) => path.relative(repoRoot, path.join(ledgerRoot, item.path)).split(path.sep).join('/')),
+    path.relative(repoRoot, logPath).split(path.sep).join('/'),
+  ].sort(compareText);
+  const token = Buffer.from(JSON.stringify({
+    v: 1,
+    command: 'number-repair',
+    ledger_namespace: namespace,
+    repair_id: repairId,
+    commit_set: paths.map((entry) => ({ path: entry, sha256: null })),
+    message: 'wowbagger: repair duplicate numbers',
+  }), 'utf8').toString('base64url');
+  try {
+    await execFileAsync('git', ['add', '--', ...paths], { cwd: repoRoot, env: GIT_ENVIRONMENT });
+    const staged = await execFileAsync('git', ['diff', '--cached', '--name-only'], {
+      cwd: repoRoot,
+      env: GIT_ENVIRONMENT,
+    });
+    const stagedPaths = staged.stdout.split('\n').filter(Boolean).sort(compareText);
+    if (stagedPaths.length !== paths.length
+      || stagedPaths.some((entry, index) => entry !== paths[index])) {
+      return { ok: false, recovery_token: token };
+    }
+    const commit = await execFileAsync(
+      'git',
+      ['commit', '-m', 'wowbagger: repair duplicate numbers'],
+      { cwd: repoRoot, env: GIT_ENVIRONMENT },
+    );
+    const head = await execFileAsync(
+      'git',
+      ['rev-parse', 'HEAD'],
+      { cwd: repoRoot, env: GIT_ENVIRONMENT },
+    );
+    return { ok: true, git_commit: head.stdout.trim(), output: commit.stdout };
+  } catch {
+    return { ok: false, recovery_token: token };
+  }
+}
+
 async function recoverPendingRepair(request, options) {
   const gitCommonDir = await resolveVerifiedGitCommonDir(options.ledgerDirectory, { failClosed: true });
   if (!gitCommonDir) return null;
@@ -760,7 +933,7 @@ async function recoverNumberRepair({
   return committedRepairResponse(intent.repair_id, items);
 }
 
-function committedRepairResponse(repairId, items) {
+function committedRepairResponse(repairId, items, gitCommit = null) {
   return {
     exit: 0,
     stdout: {
@@ -776,7 +949,7 @@ function committedRepairResponse(repairId, items) {
           path: item.item_path,
           revision: item.committed_revision,
         })),
-        git_commit: null,
+        git_commit: gitCommit,
       },
     },
   };

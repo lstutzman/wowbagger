@@ -662,12 +662,13 @@ refusal is the same exit 6 `claim-store-unavailable` with reason
 written; integrate the missing item, run `claim-verify` until it exits 0, and
 resend the same request, which then takes the next number.
 
-That fence stops new collisions; it does not repair old ones. A ledger that
-already carries duplicate numbers is item #182's recovery work: it fails
-`validate` and refuses every mutation until #182 ships. Never hand-edit a
-`number` to clear it — the edit skips the collision and reference checks every
-mutation runs and can leave dangling `depends_on`, `related`, and parent
-references that nothing reports.
+That fence stops new collisions; it does not repair old ones through core
+version 5 or claim operations. Use the separate `ledger-repair` contract:
+`number-repair-proposal --ledger <dir> --json` is read-only, and
+`number-repair --ledger <dir> --input <repair.json> --json` applies a reviewed
+complete mapping under the shared namespace fence. Number-only repair preserves
+ULID identities and relation values. Never hand-edit the ledger: arbitrary edits
+can damage IDs, paths, or references.
 
 Read `error.details.findings[0].reason` and act on the named item:
 

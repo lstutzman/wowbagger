@@ -1,29 +1,29 @@
-# Task 6 report: interrupted repair recovery
+# Task 6 report: interrupted repair and auto-commit recovery
 
 ## Result
 
-Added idempotent recovery for an unresolved `number-repair-intent`.
+Implemented unresolved repair recovery and explicit auto-commit finalization.
 
-- Recovery runs before the ordinary duplicate-only gate, so it can repair a partially or fully published ledger.
-- It reads and verifies the staged manifest under the namespace lock.
+- Recovery runs before the ordinary duplicate-only gate.
 - Expected old revisions are atomically replaced; already-published candidate revisions are accepted.
-- A third revision returns `ledger-repair-outcome-unknown` with `state: unknown` and leaves that path untouched.
+- A third revision returns `ledger-repair-outcome-unknown` with `state: unknown` and leaves the path untouched.
 - A valid recovered ledger receives exactly one `number-repair-final` terminal; repeated calls return the committed result without replaying publication.
-- Auto-commit and `mutation-finalize` token integration remain for the next task slice.
+- `--auto-commit` writes the derived reconciliation log and stages exactly the repaired item paths plus that log.
+- Git retargeting variables are stripped for commit operations.
+- Commit failures return a bounded repair recovery token.
+- `mutation-finalize` recognizes and completes repair recovery tokens without replaying item publication.
 
 ## TDD evidence
 
-- Recovery path covered with an intent and staged candidate present before any item publication; the call applies candidates and writes the terminal exactly once.
-- Existing apply and staging suites remain green.
+- Recovery test covers an intent and staged candidate before item publication.
+- Auto-commit test verifies the exact committed path set.
+- Existing apply, journal, and staging suites remain green.
 
 ## Verification
 
 ```text
-TMPDIR=/tmp node --test test/ledger-repair-apply.test.js test/ledger-repair-recovery.test.js
-12 passed
-
-TMPDIR=/tmp /opt/homebrew/opt/node@24/bin/node --test test/ledger-repair-apply.test.js test/ledger-repair-recovery.test.js
-12 passed
+TMPDIR=/tmp node --test test/ledger-repair-apply.test.js test/ledger-repair-recovery.test.js test/ledger-repair-contract.test.js
+37 passed
 ```
 
-Inline review found no Critical or Important issue. Native review dispatch was unavailable because the provider returned HTTP 429 before execution.
+Native review dispatch was unavailable because the provider returned HTTP 429 before execution. Inline review found and corrected path-root and token-result issues during focused execution; the final focused suite passed on current Node. Node24 verification remains part of the final gate.

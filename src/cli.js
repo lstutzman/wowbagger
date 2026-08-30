@@ -39,6 +39,8 @@ import { readGitTreeFile, readGitTreeLedger } from './git-reconciliation.js';
 import { finalizeFromRecoveryToken, withAutoCommit } from './git-autocommit.js';
 import { loadLedger } from './ledger.js';
 import {
+  finalizeNumberRepairCommit,
+  isNumberRepairRecoveryToken,
   ledgerRepairInvalidRequest,
   numberRepair,
   numberRepairProposal,
@@ -836,6 +838,13 @@ export async function runCli(argumentsList, { scenario } = {}) {
     const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
     if (parsedOptions.issues.length > 0) {
       writeClaimInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    if (isNumberRepairRecoveryToken(parsedOptions.options.recoveryToken)) {
+      writeClaimEnvelope(await finalizeNumberRepairCommit({
+        ledgerDirectory: parsedOptions.options.ledger,
+        token: parsedOptions.options.recoveryToken,
+      }));
       return;
     }
     writeClaimEnvelope(await finalizeFromRecoveryToken({
