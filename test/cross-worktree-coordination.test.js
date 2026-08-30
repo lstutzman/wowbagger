@@ -2354,7 +2354,7 @@ test('auto-commit still blocks a synchronization finding on its own target', asy
 // private Git directory rather than the shared common directory or the
 // tracked working tree. Writing it is a side effect of the first fenced
 // mutation, and it must leave `git status` exactly as it found it.
-test('a fenced patch creates a private worktree identity outside the working tree', async () => {
+test('a fenced patch creates a private worktree identity outside the working tree', { skip: process.platform === 'win32' && 'Windows does not preserve POSIX private-file modes' }, async () => {
   const fixture = await twoWorktreeRepository();
   const seedId = 'wb_01KZBMBEZKPE7D15HKW9Q3GSZV';
   const inspected = run(fixture.root, 'inspect', '--ledger', fixture.ledger, '--id', seedId, '--json');
@@ -2389,7 +2389,7 @@ test('a fenced patch creates a private worktree identity outside the working tre
 // the later rename leaves the earlier writer holding an ID the file no longer
 // contains. A writer that loses the race must be refused, not silently handed
 // a stale ID.
-test('two namespaces in one worktree cannot diverge the worktree identity', async () => {
+test('two namespaces in one worktree cannot diverge the worktree identity', { skip: process.platform === 'win32' && 'Windows does not preserve POSIX private-file modes' }, async () => {
   const fixture = await twoWorktreeRepository();
   const secondLedger = path.join(fixture.root, 'ledger-b');
   await mkdir(path.join(secondLedger, '.wowbagger'), { recursive: true });
@@ -2762,7 +2762,7 @@ async function unreadableRosterFixture() {
   return { ...fixture, roots: [fixture.root], seedId };
 }
 
-test('an unreadable worktree roster refuses verification, mutation, and auto-commit', async () => {
+test('an unreadable worktree roster refuses verification, mutation, and auto-commit', { skip: process.platform === 'win32' && 'Windows cannot make the Git directory unreadable with chmod' }, async () => {
   const fixture = await unreadableRosterFixture();
   const identityDiagnostic = { code: 'worktree-enumeration-failed' };
   const inspected = run(
@@ -2818,7 +2818,7 @@ test('an unreadable worktree roster refuses verification, mutation, and auto-com
   );
 });
 
-test('an unreadable worktree roster refuses publish-claimed and claim-adopt', async () => {
+test('an unreadable worktree roster refuses publish-claimed and claim-adopt', { skip: process.platform === 'win32' && 'Windows cannot make the Git directory unreadable with chmod' }, async () => {
   const fixture = await unreadableRosterFixture();
   const identityDiagnostic = { code: 'worktree-enumeration-failed' };
   const itemPath = path.join(fixture.ledger, 'item.md');
@@ -3070,14 +3070,14 @@ async function assertRosterRefusal(fixture, label, env) {
 
 // Git cannot answer the roster question at all. Evidence is unavailable, which
 // is not the same as evidence of no duplicate, so nothing classifies or writes.
-test('a failed worktree roster listing refuses verification and mutation', async () => {
+test('a failed worktree roster listing refuses verification and mutation', { skip: process.platform === 'win32' && 'Windows roster shims cannot replace the Git command' }, async () => {
   const fixture = await seededWorktreeRepository('listing-failed');
   await assertRosterRefusal(fixture, 'listing-failed', await gitRosterShim(null));
 });
 
 // Git reports a worktree live and its path is already gone: the race between
 // listing a roster and reading it. A vanished path is not an absent identity.
-test('a live worktree record with a vanished path refuses verification and mutation', async () => {
+test('a live worktree record with a vanished path refuses verification and mutation', { skip: process.platform === 'win32' && 'Windows roster shims cannot replace the Git command' }, async () => {
   const fixture = await seededWorktreeRepository('vanished-path');
   const ghost = path.join(await mkdtemp(path.join(tmpdir(), 'wb-ghost-')), 'gone');
   await assertRosterRefusal(fixture, 'vanished-path', await gitRosterShim([[
@@ -3101,7 +3101,7 @@ test('malformed identity bytes in a live sibling refuse verification and mutatio
 // with it, leaving nothing to collide and nothing to exclude — so the marker
 // comes from the roster while both identity files stay real. Production parses
 // that roster, resolves both private Git directories, and must still proceed.
-test('a prunable worktree carrying the same identity does not refuse anything', async () => {
+test('a prunable worktree carrying the same identity does not refuse anything', { skip: process.platform === 'win32' && 'Windows worktree pruning semantics differ' }, async () => {
   const fixture = await seededWorktreeRepository('prunable-duplicate');
   const duplicateId = '00000000-0000-4000-8000-000000000000';
   for (const at of [fixture.root, fixture.siblingRoot]) {
@@ -3145,7 +3145,7 @@ test('a prunable worktree carrying the same identity does not refuse anything', 
 // newline, and the newline-delimited spelling cannot report one. Both awkward
 // paths here are real checkouts Git created and reports, and every marker Git
 // can attach to a record appears exactly once.
-test('the worktree roster parses every marker and survives awkward paths', async () => {
+test('the worktree roster parses every marker and survives awkward paths', { skip: process.platform === 'win32' && 'Windows rejects newline path components' }, async () => {
   const home = await realpath(await mkdtemp(path.join(tmpdir(), 'wb-roster-')));
   const root = path.join(home, 'main');
   await mkdir(root);
