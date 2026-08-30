@@ -16,6 +16,7 @@ const surfaces = {
   'the README': read('README.md'),
   'the installed skill': read('skills/wowbagger/SKILL.md'),
 };
+const batchDecision = read('docs/design/2026-08-30-batch-create.md');
 
 test('every consumer-facing surface states the commit-per-mutation invariant', () => {
   for (const [name, source] of Object.entries(surfaces)) {
@@ -61,6 +62,28 @@ test('both installed skill loops carry the commit and claim-verify steps', () =>
       loop,
       /[Ww]rite, commit, `claim-verify`, next\s+write/,
       `${name} must spell out the ordered rule`,
+    );
+  }
+});
+
+test('bulk workflow permanently keeps serial auto-committed creates', () => {
+  assert.match(batchDecision, /Status:\*\* Accepted/);
+  assert.match(batchDecision, /will not add batch create/);
+  assert.match(batchDecision, /multi_item_atomicity: false/);
+  assert.match(batchDecision, /On the successful path/);
+  assert.match(batchDecision, /git-commit-failed/);
+  assert.match(batchDecision, /batch-only criteria not applicable/);
+  for (const name of [
+    'the mutation contract',
+    'the work-claim contract',
+    'the README',
+    'the installed skill',
+  ]) {
+    assert.match(surfaces[name], /permanent/i, `${name} must state the permanent decision`);
+    assert.match(
+      surfaces[name],
+      /serial[\s\S]{0,120}create --auto-commit|create --auto-commit[\s\S]{0,120}serial/,
+      `${name} must name the serial auto-commit workflow`,
     );
   }
 });

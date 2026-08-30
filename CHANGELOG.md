@@ -30,6 +30,11 @@ consolidation. The first tagged release inherits this file.
   metadata remains `owner: null` with `owner_diagnostic: "invalid-shape"`;
   mutual exclusion and refusal behavior are unchanged.
 
+- Batch create is permanently rejected for the direct-Markdown architecture.
+  `limits.multi_item_atomicity` remains `false`; serial
+  `create --auto-commit` calls in request order remain the supported bulk path,
+  with one invocation and one commit per item.
+
 ## 0.1.0-alpha.17 - 2026-08-30
 
 - **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and

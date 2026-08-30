@@ -2718,8 +2718,11 @@ the operating rule remains write, commit, `claim-verify`, next write.
 revision, so Git `HEAD` is the only surface that can carry its authorized
 bytes, and an uncommitted create raises the global `git-finalization-required`
 barrier for every later mutation, including the next create. Filing ten items
-is therefore ten create-then-commit cycles, not one commit at the end. This
-release adds no batch mutation; item #186 owns safe batch design.
+is therefore ten serial `create --auto-commit` cycles, not one commit at the
+end. The accepted batch-create decision permanently rejects a batch mutation
+for the direct-Markdown architecture and keeps
+`limits.multi_item_atomicity: false`; see
+[`docs/design/2026-08-30-batch-create.md`](design/2026-08-30-batch-create.md).
 
 The journal is bounded at 65,536 entries and 8,388,608 bytes. If capacity is
 known before a legacy create, transition, parent migration, snooze, or patch

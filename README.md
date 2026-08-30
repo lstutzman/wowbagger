@@ -791,8 +791,12 @@ repeat the refused command. A `worktree-synchronization-required` finding on an
 unrelated item does not block the requested mutation. The same finding on the
 target item, and every `unauthorized-revision` finding, remains blocking.
 
-Batch work is where this bites. Filing ten items means ten commits, not one
-commit at the end.
+Batch work is where this bites. Filing ten items means ten serial
+`create --auto-commit` calls and ten commits, not one batch commit. Wowbagger
+permanently rejects batch create for the direct-Markdown architecture:
+`limits.multi_item_atomicity` remains `false`, request order is the supported
+bulk order, and each create must finish or recover before the next begins. See
+the [batch-create decision](docs/design/2026-08-30-batch-create.md).
 
 ### Or fold the commit into the mutation
 

@@ -556,10 +556,10 @@ commit. With `--auto-commit`, `changed_paths` matches `commit_paths`, and
 `git_commit` proves the commit.
 
 Batch work is where this bites: filing ten items means ten commits, not one
-commit at the end. Tell the user that before starting a batch. There is no
-batch mutation to reach for — the create-then-commit loop is the supported bulk
-pattern, and item #186 is open to design a safe batch create. `--auto-commit`
-on each `create` is the shortest form of that loop.
+commit at the end. Tell the user that before starting. There is permanently no
+batch-create mutation in the direct-Markdown architecture; serial
+`create --auto-commit` calls are the supported bulk path. Run them in request
+order and do not start the next until the previous result or recovery is final.
 
 ### Or use --auto-commit and let one invocation do it
 

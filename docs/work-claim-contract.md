@@ -477,10 +477,11 @@ Git `HEAD` is the only surface that can hold its authorized bytes, and an
 uncommitted create reports the global `git-finalization-required` until it is
 committed. A `patch` or `transition` may instead occupy the documented
 authorized predecessor/successor window and run before its predecessor is
-committed, but that window is an accepted overlap, not a licence: commit every
-mutation before the next one. Alpha.14 ships no batch mutation. The supported
-bulk pattern is the create-then-commit loop, one commit per created item, and
-item #186 owns the design of a safe batch create.
+committed, but that window is an accepted overlap, not a license: commit every
+mutation before the next one. Batch create is permanently rejected for the
+direct-Markdown architecture. The supported bulk pattern is serial
+`create --auto-commit`, one invocation and one commit per successful item; see
+the [accepted batch-create decision](design/2026-08-30-batch-create.md).
 
 **Cost.** A provisioned create already took the namespace lock, replayed the
 journal, loaded the ledger, read Git `HEAD`, and reconciled. The fence changes
