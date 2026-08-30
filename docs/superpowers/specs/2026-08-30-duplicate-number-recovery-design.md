@@ -20,7 +20,8 @@ This design covers:
 - operation-level compare-and-swap, shared-worktree fencing, and no-clobber publication;
 - durable interruption and response-loss recovery;
 - auto-commit of the complete repair set;
-- exact current-Node and Node 24 public regressions.
+- exact current-Node and Node 24 public regressions;
+- correction of the published warning so it distinguishes unsafe arbitrary hand edits from safe number-only changes.
 
 This design does not widen ordinary `patch`, repair malformed YAML, repair invalid IDs or relations, provision missing extension declarations, or coordinate separate clones or machines. Those states refuse unchanged and remain separate work.
 
