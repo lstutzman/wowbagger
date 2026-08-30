@@ -5,7 +5,7 @@ number: 174
 title: "Recognize parent-migrate and snooze lock owners in lock diagnostics"
 kind: task
 priority: 3
-status: backlog
+status: in-progress
 created: 2026-08-27
 updated: 2026-08-30
 provenance:
