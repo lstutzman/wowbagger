@@ -16,7 +16,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { parseReconcileLog } from '../src/claim-journal.js';
+import { parseReconcileLog, writeReconcileLog } from '../src/claim-journal.js';
 import { withClaimLock } from '../src/claim-store.js';
 import { listWorktrees } from '../src/git-worktrees.js';
 import { ensureWorktreeIdentity } from '../src/worktree-identity.js';
@@ -1655,6 +1655,14 @@ test('a legacy successor without a recorded writer keeps advisory synchronizatio
       return JSON.stringify(entry);
     });
   await writeFile(journalPath, `${aged.join('\n')}\n`);
+  const reconcilePath = path.join(
+    fixture.ledger,
+    '.wowbagger',
+    `reconcile-${NAMESPACE}.md`,
+  );
+  await writeReconcileLog(reconcilePath, NAMESPACE, aged.map((line) => JSON.parse(line)));
+  git(fixture.root, 'add', reconcilePath);
+  git(fixture.root, 'commit', '-qm', 'Record legacy writerless evidence');
 
   const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
   assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));

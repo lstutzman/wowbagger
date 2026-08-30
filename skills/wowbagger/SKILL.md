@@ -557,9 +557,11 @@ commit. With `--auto-commit`, `changed_paths` matches `commit_paths`, and
 
 Batch work is where this bites: filing ten items means ten commits, not one
 commit at the end. Tell the user that before starting. There is permanently no
-batch-create mutation in the direct-Markdown architecture; serial
-`create --auto-commit` calls are the supported bulk path. Run them in request
-order and do not start the next until the previous result or recovery is final.
+batch mutation in the direct-Markdown architecture. The create-then-commit loop,
+implemented most briefly as serial `create --auto-commit` calls, is the
+supported bulk path. Ledger item #186 records this permanent decision. Run calls in
+request order and do not start the next until the previous result or recovery
+is final.
 
 ### Or use --auto-commit and let one invocation do it
 

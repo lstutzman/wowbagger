@@ -312,6 +312,22 @@
       "classification": "retained",
       "occurrences": 3,
       "applies_to_version": "0.1.0-alpha.10"
+    },
+    {
+      "file": "docs/handoffs/2026-08-30-project.md",
+      "kind": "anchored-text",
+      "anchor": "npm dist-tags: `latest` and `next` both point to `{version}`",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.17"
+    },
+    {
+      "file": "docs/handoffs/2026-08-30-project.md",
+      "kind": "anchored-text",
+      "anchor": "Shipped in `{version}`.",
+      "classification": "retained",
+      "occurrences": 1,
+      "applies_to_version": "0.1.0-alpha.17"
     }
   ]
 }

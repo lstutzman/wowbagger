@@ -35,6 +35,17 @@ consolidation. The first tagged release inherits this file.
   `create --auto-commit` calls in request order remain the supported bulk path,
   with one invocation and one commit per item.
 
+The alpha.14 hard cutover remains the baseline: `claim-store-unavailable`
+answers **The durable claim store is unavailable.** with
+`claim-store-unreadable`; upgrade every writer before the first alpha.14 create.
+There is no automatic migration or mixed-version grace period. There is no
+batch mutation. The create-then-commit loop, implemented most briefly as serial
+`create --auto-commit`, remains the supported bulk path. Ledger item #186 records the
+permanent no-batch decision, and item #182 owns existing duplicate numbers.
+The fence adds no new Git roster or history
+traversal and costs two extra fsync'd journal appends within the 65,536-entry
+limit.
+
 ## 0.1.0-alpha.17 - 2026-08-30
 
 - **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and
