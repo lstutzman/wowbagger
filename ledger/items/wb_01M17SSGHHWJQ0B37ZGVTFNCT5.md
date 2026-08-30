@@ -5,7 +5,7 @@ number: 187
 title: "Align journal capacity refusal reason with contract"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-29
 updated: 2026-08-30
 provenance:
