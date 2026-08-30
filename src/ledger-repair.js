@@ -4,8 +4,12 @@
 // separate from the core contract (version 5) and the work-claim contract
 // (version 1), so a repair request and a repair response are never read as
 // either of those.
+import { createHash } from 'node:crypto';
+import path from 'node:path';
+
+import { loadLedger } from './ledger.js';
 import { pointer, sortIssues } from './request.js';
-import { isCalendarDate } from './validate.js';
+import { isCalendarDate, validateLedger } from './validate.js';
 
 // The repair domain's own version. It is not the core contract version and not
 // the work-claim contract version; a future change to the repair request or the
@@ -77,8 +81,111 @@ export function numberRepair(request, options) {
 
 // The read-only proposal takes no request: the ledger it reads is the whole
 // input, and it changes nothing.
-export function numberRepairProposal(ledgerDirectory) {
-  return stageNotInstalled('number-repair-proposal');
+export async function numberRepairProposal(ledgerDirectory) {
+  const ledger = await loadLedger(ledgerDirectory);
+  const validation = validateLedger(ledger);
+  const duplicateErrors = validation.errors.filter((error) => error.code === 'duplicate-number');
+  if (duplicateErrors.length === 0
+    || validation.errors.some((error) => error.code !== 'duplicate-number')) {
+    return refusal(
+      'number-repair-proposal',
+      4,
+      'ledger-repair-not-applicable',
+      'The ledger is not blocked only by duplicate numbers.',
+      { validation_errors: validation.errors },
+    );
+  }
+
+  const groups = new Map();
+  for (const item of ledger.items) {
+    const number = item.data.number;
+    if (!Number.isSafeInteger(number) || number < 1) continue;
+    const members = groups.get(number) ?? [];
+    members.push(item);
+    groups.set(number, members);
+  }
+  const duplicateGroups = [...groups.entries()]
+    .filter(([, members]) => members.length > 1)
+    .sort(([left], [right]) => left - right)
+    .map(([number, members]) => ({
+      number,
+      item_ids: members.map((item) => item.data.id).sort(compareText),
+    }));
+  const affectedIds = new Set(duplicateGroups.flatMap((group) => group.item_ids));
+  const affectedItems = ledger.items
+    .filter((item) => affectedIds.has(item.data.id))
+    .sort((left, right) => compareText(left.data.id, right.data.id));
+  const highest = ledger.items.reduce(
+    (current, item) => Number.isSafeInteger(item.data.number)
+      ? Math.max(current, item.data.number)
+      : current,
+    0,
+  );
+  const preserved = new Set(
+    duplicateGroups.map((group) => group.item_ids.slice().sort(compareText)[0]),
+  );
+  const moved = affectedItems
+    .filter((item) => !preserved.has(item.data.id))
+    .sort((left, right) => compareText(left.data.id, right.data.id));
+  const suggestedChanges = moved.map((item, index) => ({
+    item_id: item.data.id,
+    expected_revision: revisionOf(item.bytes),
+    expected_number: item.data.number,
+    replacement_number: highest + index + 1,
+  }));
+
+  return {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'ledger-repair',
+      command: 'number-repair-proposal',
+      contract_version: LEDGER_REPAIR_CONTRACT_VERSION,
+      state: 'unchanged',
+      result: {
+        ledger_snapshot_revision: ledgerSnapshotRevision(ledgerDirectory, ledger),
+        duplicate_groups: duplicateGroups,
+        items: affectedItems.map((item) => ({
+          item_id: item.data.id,
+          path: path.relative(path.resolve(ledgerDirectory), item.file),
+          revision: revisionOf(item.bytes),
+          number: item.data.number,
+        })),
+        suggested_changes: suggestedChanges,
+        preserved_items: [...preserved].sort(compareText),
+        references: affectedItems.map((item) => ({
+          item_id: item.data.id,
+          depends_on: item.data.depends_on ?? [],
+          related: item.data.related ?? [],
+          parent: item.data.parent ?? null,
+        })),
+        validation_errors: validation.errors,
+      },
+    },
+  };
+}
+
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function revisionOf(bytes) {
+  return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+}
+
+function ledgerSnapshotRevision(ledgerDirectory, ledger) {
+  const root = path.resolve(ledgerDirectory);
+  const hash = createHash('sha256');
+  for (const item of ledger.items.slice().sort((left, right) => (
+    compareText(left.file, right.file)
+  ))) {
+    const relative = path.relative(root, item.file).split(path.sep).join('/');
+    hash.update(relative);
+    hash.update('\0');
+    hash.update(item.bytes);
+    hash.update('\0');
+  }
+  return `sha256:${hash.digest('hex')}`;
 }
 
 // The repair domain's own refusal envelope. A consumer dispatches on

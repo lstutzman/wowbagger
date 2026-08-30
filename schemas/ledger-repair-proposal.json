@@ -10,7 +10,7 @@
     "duplicate_groups",
     "items",
     "suggested_changes",
-    "references",
+    "preserved_items",
     "validation_errors"
   ],
   "properties": {
@@ -106,6 +106,15 @@
             "minimum": 1
           }
         }
+      }
+    },
+    "preserved_items": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Item IDs the proposal keeps at their current number.",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
       }
     },
     "references": {
