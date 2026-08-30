@@ -5,9 +5,10 @@ number: 185
 title: "Detect stale installed skill and core version drift"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-28
 updated: 2026-08-30
+completed: 2026-08-30
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-30
     summary: "Accept version-drift diagnosis as priority-one backlog work."
     rationale: "The hard cutover is now deployed and its old-writer error is generic. #188 will introduce another deliberate version boundary, making early diagnosis time-sensitive."
+  - action: complete
+    date: 2026-08-30
+    summary: "Ship version drift preflight."
+    rationale: "The full dual-runtime release gate and adapter oracle pass, and the preflight reports installed, required, running, and provenance values."
 ---
 ## Problem
 
