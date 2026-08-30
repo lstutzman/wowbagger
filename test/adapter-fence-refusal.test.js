@@ -183,6 +183,34 @@ test('forwards a verbatim active-claim-write-refused patch fence refusal', () =>
   assert.equal(bothEngines(patchInvocation(activeClaimWriteRefused('patch'))), null);
 });
 
+
+test('forwards lock-held details from parent-migrate and snooze owners', () => {
+  for (const operation of ['parent-migrate', 'snooze']) {
+    const refusal = {
+      ok: false,
+      command: 'create',
+      contract_version: 5,
+      state: 'unchanged',
+      error: {
+        code: 'lock-held',
+        message: 'The item is locked by another cooperative Wowbagger writer.',
+        details: {
+          id: CREATE_ID,
+          lock_path: `.wowbagger-locks/${CREATE_ID}.lock`,
+          owner: {
+            lock_version: 1,
+            item_id: CREATE_ID,
+            operation,
+            writer_id: 'fixture-owner',
+            started_at: '2030-01-11T09:00:00.000Z',
+          },
+          owner_diagnostic: null,
+        },
+      },
+    };
+    assert.equal(bothEngines(createInvocation(refusal, 4)), null, operation);
+  }
+});
 test('forwards a claim-store-unavailable refusal that names findings and remediation', () => {
   assert.equal(
     bothEngines(createInvocation(

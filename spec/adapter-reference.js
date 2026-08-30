@@ -16,6 +16,13 @@ const SAFE_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const NONCE = /^[A-Za-z0-9._-]{16,128}$/;
 const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
+const LOCK_OWNER_OPERATIONS = new Set([
+  'create',
+  'transition',
+  'parent-migrate',
+  'snooze',
+  'patch',
+]);
 // What the runner may say about the request it wrote to the core's standard
 // input. Only `delivered` means the core received the whole request.
 const INPUT_DELIVERY_STATES = ['delivered', 'failed', 'unread'];
@@ -2538,7 +2545,7 @@ function validLockHeldDetails(value) {
     && hasExactKeys(value.owner, ['lock_version', 'item_id', 'operation', 'writer_id', 'started_at'])
     && value.owner.lock_version === 1
     && value.owner.item_id === value.id
-    && new Set(['create', 'transition', 'patch']).has(value.owner.operation)
+    && LOCK_OWNER_OPERATIONS.has(value.owner.operation)
     && typeof value.owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(value.owner.writer_id)
     && isCoreRfc3339Utc(value.owner.started_at);

@@ -133,6 +133,77 @@ test('the number-index lock refuses a create that arrives while it is held', asy
   });
 });
 
+test('real parent-migrate and snooze holders report their operation to contenders', async () => {
+  const itemId = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
+  const parentId = 'wb_01Q4G4Q3G004HMASW9NF6YY094';
+  for (const operation of ['parent-migrate', 'snooze']) {
+    const source = triageSource(itemId);
+    const files = { [`${itemId}.md`]: source };
+    if (operation === 'parent-migrate') {
+      files[`${parentId}.md`] = triageSource(parentId).replace('kind: task', 'kind: epic');
+    }
+    await withLedger(files, async (ledger) => {
+      const revision = `sha256:${createHash('sha256').update(source).digest('hex')}`;
+      const holderRequest = path.join(path.dirname(ledger), `${operation}-holder.json`);
+      const transitionRequest = path.join(path.dirname(ledger), `${operation}-contender.json`);
+      await writeFile(holderRequest, JSON.stringify(operation === 'parent-migrate'
+        ? {
+          id: itemId,
+          expected_revision: revision,
+          expected_parent: null,
+          parent: parentId,
+          date: '2030-01-14',
+        }
+        : {
+          id: itemId,
+          expected_revision: revision,
+          snoozed_until: '2030-01-20',
+          date: '2030-01-14',
+        }));
+      await writeFile(transitionRequest, JSON.stringify({
+        id: itemId,
+        expected_revision: revision,
+        to_status: 'backlog',
+        date: '2030-01-14',
+        decision: {
+          summary: 'Accept the item.',
+          rationale: 'Exercise real lock contention.',
+        },
+      }));
+      const suffix = `owner-${operation}`;
+      const holder = runTestCli(
+        `pause-after-lock-acquired:${suffix}`,
+        operation,
+        '--ledger',
+        ledger,
+        '--input',
+        holderRequest,
+        '--json',
+      );
+      await waitForFile(path.join(ledger, `.wowbagger-test-${suffix}-acquired`));
+
+      const contender = parseOutput(await runCli(
+        'transition',
+        '--ledger',
+        ledger,
+        '--input',
+        transitionRequest,
+        '--json',
+      ));
+
+      await writeFile(path.join(ledger, `.wowbagger-test-${suffix}-allow-successor`), 'continue\n');
+      const held = parseOutput(await holder);
+
+      assert.equal(contender.ok, false, JSON.stringify(contender));
+      assert.equal(contender.error.code, 'lock-held');
+      assert.equal(contender.error.details.owner.operation, operation);
+      assert.equal(contender.error.details.owner_diagnostic, null);
+      assert.equal(held.ok, true, JSON.stringify(held));
+      await assertNoOwnArtifacts(ledger);
+    });
+  }
+});
+
 test('concurrent creates never share a number', async () => {
   // The invariant that holds under every interleaving, so it can be asserted
   // against two real racing processes: whichever of them commits, no two

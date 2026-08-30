@@ -25,6 +25,11 @@ consolidation. The first tagged release inherits this file.
   item bytes intact; genuine persistence failures and post-intent unknown
   outcomes retain their existing classifications.
 
+- Lock diagnostics now preserve valid `parent-migrate` and `snooze` owners,
+  matching the five-operation mutation contract. Unknown or malformed owner
+  metadata remains `owner: null` with `owner_diagnostic: "invalid-shape"`;
+  mutual exclusion and refusal behavior are unchanged.
+
 ## 0.1.0-alpha.17 - 2026-08-30
 
 - **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and
