@@ -258,6 +258,9 @@ not a fetch URL.
 | `bare-ready-result.json` | bare result | a `ready` success |
 | `ledger-mutation-refusal.json` | ledger-mutation 1 | the legacy-write fence refusals |
 | `report-config-v1.json` | report config 1 | `<ledger>/.wowbagger/report.json` at version 1 |
+| `ledger-repair-request.json` | ledger-repair 1 | the strict `number-repair` request |
+| `ledger-repair-proposal.json` | ledger-repair 1 | the read-only `number-repair-proposal` result |
+| `ledger-repair-response.json` | ledger-repair 1 | every `number-repair-proposal` and `number-repair` response |
 | `report-config-v2.json` | report config 2 | the same file at version 2, which names views |
 
 Every schema fixes its root members exactly and pins the version of its own

@@ -65,3 +65,5 @@ Task 5: complete (shared-fence invalid-ledger bypass, candidate successor valida
 Task 6: complete (unresolved intent recovery, third-revision-safe path behavior, exact auto-commit path set, bounded token emission, and `mutation-finalize` repair-token routing; focused current Node and Node24 suites pass).
 
 Task 7: complete (README, changelog, mutation contract, work-claim contract, and installed skill now describe ledger-repair v1 and correct the number-only relation-preservation warning).
+
+Full-suite correction: adding ledger-repair to the response-domain manifest and host schema inventory fixed the remaining existing documentation/domain coverage failures. Focused envelope, packaging, changelog, and host-contract tests pass.
