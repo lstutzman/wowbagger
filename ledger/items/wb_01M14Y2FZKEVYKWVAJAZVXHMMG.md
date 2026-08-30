@@ -5,7 +5,7 @@ number: 184
 title: "Scope claim verification away from unrelated active work"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
