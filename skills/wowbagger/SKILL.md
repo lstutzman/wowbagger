@@ -63,6 +63,17 @@ either pin to make a check pass.
 Run both commands once per session before the first ledger command, not before
 every command.
 
+Run the read-only drift preflight before the first ledger mutation:
+
+```sh
+wowbagger version-drift --json
+```
+
+It compares the installed skill pin with the required distribution and core
+contract, then compares those requirements with the running core. If it refuses,
+do not mutate the ledger. Update the stale package, plugin cache, or linked
+checkout named by `result.error.details.provenance`, then rerun the preflight.
+
 You drive the core as an agent, through the commands below. A UI plugin or
 another non-agent consumer drives it as a process instead: absolute Node
 executable, absolute `wowbagger.js`, argument array, `shell: false`. If the

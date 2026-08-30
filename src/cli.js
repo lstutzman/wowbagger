@@ -45,6 +45,7 @@ import {
   numberRepair,
   numberRepairProposal,
 } from './ledger-repair.js';
+import { inspectVersionDrift } from './version-drift.js';
 import {
   assertReportOutputOutsideLedger,
   buildReportModel,
@@ -138,7 +139,7 @@ const COMMAND_SUMMARIES = {
   'claim-sync': 'Import committed adoption evidence into the local claim journal.',
   'claim-adopt': 'Rule a committed out-of-protocol item revision legitimate.',
   'mutation-finalize': 'Complete the Git commit an auto-commit mutation could not establish.',
-  'number-repair-proposal': 'Propose the number changes that would repair a duplicate-number ledger.',
+  'version-drift': 'Check installed skill and running core version compatibility.',
   'number-repair': 'Apply a proposed duplicate-number repair to a ledger the mutation gate refuses.',
   provision: 'Provision a Git-backed work-claim namespace.',
   claim: 'Read and coordinate work claims for one ledger.',
@@ -167,7 +168,7 @@ const KNOWN_COMMANDS = new Set([
   'claim-sync',
   'claim-adopt',
   'mutation-finalize',
-  'number-repair-proposal',
+  'version-drift',
   'number-repair',
 ]);
 
@@ -200,6 +201,22 @@ export async function runCli(argumentsList, { scenario } = {}) {
 
   if (KNOWN_COMMANDS.has(command) && argumentsList[1] === '--help') {
     process.stdout.write(commandHelp(command));
+    return;
+  }
+
+  if (command === 'version-drift') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeInvalidRequest(command, parsedOptions.issues);
+      return;
+    }
+    writeClaimEnvelope(await inspectVersionDrift({
+      skillPath: parsedOptions.options.skill
+        ?? fileURLToPath(new URL('../skills/wowbagger/SKILL.md', import.meta.url)),
+      packagePath: fileURLToPath(new URL('../package.json', import.meta.url)),
+      runningDistribution: DISTRIBUTION_VERSION,
+      runningContractVersion: 5,
+    }));
     return;
   }
 
@@ -1375,29 +1392,31 @@ function parseContractOptions(command, argumentsList) {
   const options = {};
   const issues = [];
   const seen = new Set();
-  const valueFlags = command === 'inspect'
-    ? new Map([['--ledger', 'ledger'], ['--id', 'id'], ['--number', 'number'], ['--as-of', 'asOf']])
-    : command === 'report'
-      ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out'], ['--view', 'view']])
-      : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
-        || command === 'parent-migrate'
-        || command === 'snooze'
-        || command === 'extensions-provision'
-        || command === 'publish-claimed' || command === 'publication-read'
-        || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
-        || command === 'claim-release' || command === 'claim-adopt'
-        || command === 'number-repair'
-        ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
-        : command === 'mutation-finalize'
-          ? new Map([['--ledger', 'ledger'], ['--recovery-token', 'recoveryToken']])
-          : command === 'claim-merge-verify'
-            ? new Map([['--ledger', 'ledger'], ['--base', 'base'], ['--head', 'head']])
-            : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
-              || command === 'claim-sync' || command === 'number-repair-proposal'
-              ? new Map([['--ledger', 'ledger']])
-            : command === 'mint-id'
-              ? new Map([['--date', 'date']])
-              : new Map();
+  const valueFlags = command === 'version-drift'
+    ? new Map([['--skill', 'skill']])
+    : command === 'inspect'
+      ? new Map([['--ledger', 'ledger'], ['--id', 'id'], ['--number', 'number'], ['--as-of', 'asOf']])
+      : command === 'report'
+        ? new Map([['--ledger', 'ledger'], ['--as-of', 'asOf'], ['--out', 'out'], ['--view', 'view']])
+        : command === 'create' || command === 'transition' || command === 'patch' || command === 'list'
+          || command === 'parent-migrate'
+          || command === 'snooze'
+          || command === 'extensions-provision'
+          || command === 'publish-claimed' || command === 'publication-read'
+          || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
+          || command === 'claim-release' || command === 'claim-adopt'
+          || command === 'number-repair'
+          ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
+          : command === 'mutation-finalize'
+            ? new Map([['--ledger', 'ledger'], ['--recovery-token', 'recoveryToken']])
+            : command === 'claim-merge-verify'
+              ? new Map([['--ledger', 'ledger'], ['--base', 'base'], ['--head', 'head']])
+              : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
+                || command === 'claim-sync' || command === 'number-repair-proposal'
+                ? new Map([['--ledger', 'ledger']])
+                : command === 'mint-id'
+                  ? new Map([['--date', 'date']])
+                  : new Map();
   // Bare flags carry no value. `--auto-commit` is accepted only on the
   // commands whose Git finalization it folds in; `--workbench` only on the one
   const bareFlags = AUTO_COMMIT_COMMANDS.has(command)
@@ -1407,13 +1426,15 @@ function parseContractOptions(command, argumentsList) {
       : command === 'inspect'
         ? new Map([['--workbench', 'workbench']])
         : new Map();
-  const optionalFlags = command === 'mint-id'
-    ? new Set(['--date'])
-    : command === 'report'
-      ? new Set(['--out', '--view'])
-      : command === 'inspect'
-        ? new Set(['--id', '--number', '--as-of'])
-        : new Set();
+  const optionalFlags = command === 'version-drift'
+    ? new Set(['--skill'])
+    : command === 'mint-id'
+      ? new Set(['--date'])
+      : command === 'report'
+        ? new Set(['--out', '--view'])
+        : command === 'inspect'
+          ? new Set(['--id', '--number', '--as-of'])
+          : new Set();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--json') {
@@ -1949,6 +1970,9 @@ function usage(command) {
     return 'Usage: wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json';
   }
 
+  if (command === 'version-drift') {
+    return 'Usage: wowbagger version-drift [--skill <path>] --json';
+  }
   if (command === 'number-repair-proposal') {
     return 'Usage: wowbagger number-repair-proposal --ledger <dir> --json';
   }

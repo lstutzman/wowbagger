@@ -22,7 +22,7 @@ decisions:
   - action: complete
     date: 2026-08-30
     summary: "Ship fenced duplicate-number recovery."
-    rationale: "Release v0.1.0-alpha.15 passes the complete dual-runtime, adapter, validation, audit, and whitespace gates."
+    rationale: "The released package passes the complete dual-runtime, adapter, validation, audit, and whitespace gates."
 ---
 ## Problem
 

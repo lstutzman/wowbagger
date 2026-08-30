@@ -41,7 +41,8 @@
         "patch",
         "extensions-provision",
         "mint-id",
-        "report"
+        "report",
+        "version-drift"
       ],
       "root_member_shapes": {
         "read_success": [

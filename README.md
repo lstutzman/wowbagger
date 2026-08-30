@@ -451,6 +451,10 @@ core, these are the changes most likely to touch you:
   `expected_revision` and `replacement_number`, then apply the complete mapping
   with `number-repair`. The command preserves ULID identities and relations and
   does not change core contract version 5.
+
+- **Run `version-drift --json` before mutation.** It compares the installed
+  skill pin, required core contract, and running core, and names the stale
+  package, plugin cache, or linked checkout with remediation.
 - **Delete your local ULID generator.** `wowbagger mint-id --json` prints a
   canonical ID; `--date YYYY-MM-DD` selects the creation date the ID must
   encode.

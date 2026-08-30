@@ -25,7 +25,8 @@
             "inspect",
             "list",
             "mint-id",
-            "report"
+            "report",
+            "version-drift"
           ]
         },
         "contract_version": {
@@ -55,8 +56,8 @@
             "capabilities",
             "inspect",
             "list",
-            "mint-id",
-            "report"
+            "report",
+            "version-drift"
           ]
         },
         "contract_version": {

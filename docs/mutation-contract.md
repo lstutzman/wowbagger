@@ -402,6 +402,7 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `inspect` | core | core |
 | `list` | core | core |
 | `mint-id` | core | core |
+| `version-drift` | core | core |
 | `report` | core | core |
 | `create` | core | core, or ledger-mutation when the claim fence refuses |
 | `transition` | core | core, or ledger-mutation when the claim fence refuses |
