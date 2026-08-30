@@ -13,9 +13,10 @@ import path from 'node:path';
 import {
   appendClaimEntry,
   claimJournalPath,
+  replayClaimJournal,
 } from './claim-journal.js';
-import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './claim-store.js';
 import { loadLedger, parseLedgerItemSource } from './ledger.js';
+import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './claim-store.js';
 import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { readNamespace } from './namespace.js';
 import { pointer, sortIssues } from './request.js';
@@ -275,6 +276,8 @@ export async function numberRepair(request, options = {}) {
   if (issues.length > 0) {
     return ledgerRepairInvalidRequest('number-repair', issues);
   }
+  const pendingRecovery = await recoverPendingRepair(request, options);
+  if (pendingRecovery) return pendingRecovery;
   const ledger = await loadLedger(options.ledgerDirectory);
   const validation = validateLedger(ledger);
   const duplicateErrors = validation.errors.filter((error) => error.code === 'duplicate-number');
@@ -407,6 +410,24 @@ export async function numberRepair(request, options = {}) {
   const storePath = claimStorePath(gitCommonDir, namespace);
   try {
     return await withClaimLock(storePath, async () => {
+      const journalPath = claimJournalPath(gitCommonDir, namespace);
+      const replayed = await replayClaimJournal(journalPath, namespace);
+      const repairIntent = replayed.entries.find((entry) => (
+        entry.type === 'number-repair-intent' && entry.repair_id === request.repair_id
+      ));
+      const repairFinal = replayed.entries.find((entry) => (
+        entry.type === 'number-repair-final' && entry.repair_id === request.repair_id
+      ));
+      if (repairIntent && !repairFinal) {
+        return recoverNumberRepair({
+          gitCommonDir,
+          ledgerDirectory: options.ledgerDirectory,
+          namespace,
+          intent: repairIntent,
+          journalPath,
+        });
+      }
+      if (repairFinal) return committedRepairResponse(request.repair_id, repairFinal.items);
       const current = await loadLedger(options.ledgerDirectory);
       const currentSnapshot = ledgerSnapshotRevision(options.ledgerDirectory, current);
       if (currentSnapshot !== request.ledger_snapshot_revision) {
@@ -436,7 +457,6 @@ export async function numberRepair(request, options = {}) {
         ledgerSnapshotRevision: request.ledger_snapshot_revision,
         candidates: candidates.items,
       });
-      const journalPath = claimJournalPath(gitCommonDir, namespace);
       await appendClaimEntry(journalPath, {
         type: 'number-repair-intent',
         repair_id: request.repair_id,
@@ -607,6 +627,7 @@ export async function numberRepairProposal(ledgerDirectory) {
           item_id: item.data.id,
           path: path.relative(path.resolve(ledgerDirectory), item.file),
           revision: revisionOf(item.bytes),
+
           number: item.data.number,
         })),
         suggested_changes: suggestedChanges,
@@ -618,6 +639,162 @@ export async function numberRepairProposal(ledgerDirectory) {
           parent: item.data.parent ?? null,
         })),
         validation_errors: validation.errors,
+      },
+    },
+  };
+}
+async function recoverPendingRepair(request, options) {
+  const gitCommonDir = await resolveVerifiedGitCommonDir(options.ledgerDirectory, { failClosed: true });
+  if (!gitCommonDir) return null;
+  const namespace = await readNamespace(options.ledgerDirectory);
+  if (!namespace) return null;
+  const journalPath = claimJournalPath(gitCommonDir, namespace);
+  const replayed = await replayClaimJournal(journalPath, namespace);
+  const intent = replayed.entries.find((entry) => (
+    entry.type === 'number-repair-intent' && entry.repair_id === request.repair_id
+  ));
+  if (!intent) return null;
+  const final = replayed.entries.find((entry) => (
+    entry.type === 'number-repair-final' && entry.repair_id === request.repair_id
+  ));
+  if (final) return committedRepairResponse(request.repair_id, final.items);
+  try {
+    return await withClaimLock(
+      claimStorePath(gitCommonDir, namespace),
+      () => recoverNumberRepair({
+        gitCommonDir,
+        ledgerDirectory: options.ledgerDirectory,
+        namespace,
+        intent,
+        journalPath,
+      }),
+    );
+  } catch (error) {
+    if (error?.code === 'CLAIM_LOCK_HELD') {
+      return refusal(
+        'number-repair',
+        4,
+        'lock-held',
+        'The ledger namespace is locked by another writer.',
+        { reason: 'claim-store-locked' },
+      );
+    }
+    throw error;
+  }
+}
+
+async function recoverNumberRepair({
+  gitCommonDir,
+  ledgerDirectory,
+  namespace,
+  intent,
+  journalPath,
+}) {
+  let staged;
+  try {
+    staged = await readStagedNumberRepair({
+      gitCommonDir,
+      namespace,
+      repairId: intent.repair_id,
+    });
+  } catch (error) {
+    return outcomeUnknown(
+      intent.repair_id,
+      'Repair intent exists but its staged candidates cannot be read.',
+      { reason: error.reason ?? 'staging-unavailable' },
+    );
+  }
+  if (staged.manifest.ledger_snapshot_revision !== intent.ledger_snapshot_revision) {
+    return outcomeUnknown(
+      intent.repair_id,
+      'Repair intent and staged manifest disagree about the ledger snapshot.',
+      { reason: 'staging-snapshot-mismatch' },
+    );
+  }
+  const current = await loadLedger(ledgerDirectory);
+  const currentById = new Map(current.items.map((item) => [item.data.id, item]));
+  const stagedById = new Map(staged.candidates.map((candidate) => [candidate.item_id, candidate]));
+  for (const entry of intent.items) {
+    const candidate = stagedById.get(entry.item_id);
+    const item = currentById.get(entry.item_id);
+    const currentRevision = item ? revisionOf(item.bytes) : null;
+    if (!candidate || currentRevision === null) {
+      return outcomeUnknown(intent.repair_id, 'A staged repair item is not present in the ledger.', {
+        item_id: entry.item_id,
+        reason: 'candidate-item-missing',
+      });
+    }
+    if (currentRevision === candidate.candidate_revision) continue;
+    if (currentRevision !== entry.expected_revision) {
+      return outcomeUnknown(intent.repair_id, 'A repair target contains a third revision.', {
+        item_id: entry.item_id,
+        reason: 'third-revision',
+        expected_revision: entry.expected_revision,
+        actual_revision: currentRevision,
+      });
+    }
+    await atomicReplace(item.file, candidate.candidate_bytes);
+  }
+  const repaired = await loadLedger(ledgerDirectory);
+  const validation = validateLedger(repaired);
+  if (!validation.valid) {
+    return outcomeUnknown(intent.repair_id, 'Recovered repair candidates do not form a valid ledger.', {
+      reason: 'successor-invalid',
+      validation_errors: validation.errors,
+    });
+  }
+  const items = intent.items.map((entry) => ({
+    item_id: entry.item_id,
+    item_path: entry.item_path,
+    candidate_revision: entry.candidate_revision,
+    committed_revision: entry.candidate_revision,
+  }));
+  await appendClaimEntry(journalPath, {
+    type: 'number-repair-final',
+    repair_id: intent.repair_id,
+    ledger_namespace: namespace,
+    staging_id: intent.staging_id,
+    items,
+    observed_at: new Date().toISOString(),
+  });
+  return committedRepairResponse(intent.repair_id, items);
+}
+
+function committedRepairResponse(repairId, items) {
+  return {
+    exit: 0,
+    stdout: {
+      ok: true,
+      namespace: 'ledger-repair',
+      command: 'number-repair',
+      contract_version: LEDGER_REPAIR_CONTRACT_VERSION,
+      state: 'committed',
+      result: {
+        repair_id: repairId,
+        changed_items: items.map((item) => ({
+          item_id: item.item_id,
+          path: item.item_path,
+          revision: item.committed_revision,
+        })),
+        git_commit: null,
+      },
+    },
+  };
+}
+
+function outcomeUnknown(repairId, message, details) {
+  return {
+    exit: 6,
+    stdout: {
+      ok: false,
+      namespace: 'ledger-repair',
+      command: 'number-repair',
+      contract_version: LEDGER_REPAIR_CONTRACT_VERSION,
+      state: 'unknown',
+      error: {
+        code: 'ledger-repair-outcome-unknown',
+        message,
+        details: { repair_id: repairId, ...details },
       },
     },
   };

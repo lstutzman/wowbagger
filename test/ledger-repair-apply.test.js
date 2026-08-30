@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { appendClaimEntry, claimJournalPath } from '../src/claim-journal.js';
 import { loadLedger } from '../src/ledger.js';
-import { numberRepair, numberRepairProposal } from '../src/ledger-repair.js';
-import { provisionNamespace } from '../src/namespace.js';
+import {
+  numberRepair,
+  numberRepairProposal,
+  stageNumberRepairCandidates,
+} from '../src/ledger-repair.js';
+import { provisionNamespace, readNamespace } from '../src/namespace.js';
 import { validateLedger } from '../src/validate.js';
 
 function item(id, number, title) {
@@ -158,6 +164,61 @@ test('number-repair bypasses invalid-ledger mutation gate under the shared fence
       repaired.items.map((candidate) => candidate.data.number).sort((left, right) => left - right),
       [7, 8],
     );
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('number-repair recovers staged candidates when the final terminal is absent', async () => {
+  const fixture = await duplicateLedger();
+  try {
+    execFileSync('git', ['init', '--quiet', fixture.root]);
+    await provisionNamespace(fixture.ledger);
+    const proposal = await numberRepairProposal(fixture.ledger);
+    const change = proposal.stdout.result.suggested_changes[0];
+    const loaded = await loadLedger(fixture.ledger);
+    const sourceItem = loaded.items.find((candidate) => candidate.data.id === change.item_id);
+    const candidateBytes = Buffer.from(
+      sourceItem.bytes.toString('utf8').replace(/^number:[ \t]*7[ \t]*$/m, 'number: 8'),
+    );
+    const candidateRevision = `sha256:${createHash('sha256').update(candidateBytes).digest('hex')}`;
+    const namespace = await readNamespace(fixture.ledger);
+    await stageNumberRepairCandidates({
+      gitCommonDir: path.join(fixture.root, '.git'),
+      namespace,
+      repairId: 'nr_20260830_0007',
+      ledgerSnapshotRevision: proposal.stdout.result.ledger_snapshot_revision,
+      candidates: [{
+        item_id: change.item_id,
+        path: `items/${change.item_id}.md`,
+        candidate_revision: candidateRevision,
+        candidate_bytes: candidateBytes,
+      }],
+    });
+    await appendClaimEntry(claimJournalPath(path.join(fixture.root, '.git'), namespace), {
+      type: 'number-repair-intent',
+      repair_id: 'nr_20260830_0007',
+      ledger_namespace: namespace,
+      ledger_snapshot_revision: proposal.stdout.result.ledger_snapshot_revision,
+      date: '2026-08-30',
+      staging_id: 'nr_20260830_0007',
+      items: [{
+        item_id: change.item_id,
+        item_path: `items/${change.item_id}.md`,
+        expected_revision: change.expected_revision,
+        expected_number: change.expected_number,
+        replacement_number: change.replacement_number,
+        candidate_revision: candidateRevision,
+      }],
+    });
+    const result = await numberRepair({
+      repair_id: 'nr_20260830_0007',
+      ledger_snapshot_revision: proposal.stdout.result.ledger_snapshot_revision,
+      date: '2026-08-30',
+      changes: proposal.stdout.result.suggested_changes,
+    }, { ledgerDirectory: fixture.ledger });
+    assert.equal(result.exit, 0, JSON.stringify(result.stdout));
+    assert.equal(validateLedger(await loadLedger(fixture.ledger)).valid, true);
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }

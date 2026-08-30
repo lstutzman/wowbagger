@@ -61,3 +61,5 @@ Task 3: complete (stale snapshot/item witnesses, complete duplicate mapping, and
 Task 4: complete (journal intent/final pairing and durable no-follow staging with manifest/digest verification; current Node and Node24 focused suites pass; inline review substituted after native review rate-limit failure).
 
 Task 5: complete (shared-fence invalid-ledger bypass, candidate successor validation, atomic publication, reread, and final journal entry; current Node and Node24 focused suites pass; inline review substituted after native review rate-limit failure).
+
+Task 6: partial (unresolved intent recovery and third-revision-safe behavior pass on current Node and Node24; auto-commit token integration remains).
