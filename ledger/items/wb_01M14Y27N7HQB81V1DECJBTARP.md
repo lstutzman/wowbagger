@@ -5,7 +5,7 @@ number: 183
 title: "Make standard tags safely mutable on existing ledgers"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept safe tags mutability as priority-two backlog work."
+    rationale: "Real mirrored items have stale tags, but the ledger remains valid and titles, bodies, and dependencies can still be corrected. A sanctioned migration is needed without bypassing extension safety."
 ---
 ## Problem
 
