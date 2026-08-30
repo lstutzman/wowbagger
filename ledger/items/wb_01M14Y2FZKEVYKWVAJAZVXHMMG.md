@@ -4,10 +4,10 @@ id: wb_01M14Y2FZKEVYKWVAJAZVXHMMG
 number: 184
 title: "Scope claim verification away from unrelated active work"
 kind: task
-priority: 1
+priority: 2
 status: triage
 created: 2026-08-28
-updated: 2026-08-29
+updated: 2026-08-30
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
@@ -36,3 +36,9 @@ Determine whether current behavior is a Wowbagger defect reachable through ordin
 #178 does not close this item. It preserved `claim-verify` as a repository-wide diagnostic: any blocking finding anywhere still makes verification exit nonzero. #178 made every item-reconciling mutation caller consume the same worktree evidence and preserved target-scoped mutation and auto-commit availability for genuine unrelated synchronization, but that does not make the consumer's required global verify-exit-0 gate attainable while unrelated findings remain.
 
 The hypothesis that this field failure was already covered by #178 was tested and rejected. This item remains triage for a dedicated design: item-scoped verification, target-aware input, or repository-wide success with structured foreign warnings, while retaining a strict whole-repository mode. Task 9 of #178 documents the current distinction so consumers do not confuse successful target-scoped mutation proof with a globally clean claim store.
+
+## Triage decision — 2026-08-30
+
+Accepted into backlog at priority 2. A safe workflow exists today, but it requires a consumer change: PropertyCompass2 must stop treating repository-wide `claim-verify` exit 0 as the success gate for one item. Target-scoped mutation and auto-commit success remain authoritative; unrelated findings stay visible and are reported instead of forced clean. The missing capability is an automatable successful scoped-verification result.
+
+First design slice: compare item-scoped verification, target-aware input, and repository-wide success with structured foreign warnings against the #172/#178/#179 topology rules. Preserve one strict whole-repository mode and prove target findings still fail.
