@@ -2235,6 +2235,21 @@ test('an unknown sibling revision remains unauthorized and blocks unrelated work
     (await readFile(siblingSeed, 'utf8')).replace('title: "Seed"', 'title: "Unauthorized"'),
   );
 
+  const targeted = run(
+    fixture.siblingRoot,
+    'claim-verify',
+    '--ledger',
+    fixture.siblingLedger,
+    '--id',
+    secondId,
+    '--json',
+  );
+  assert.equal(targeted.exit, 6, JSON.stringify(targeted.envelope));
+  const globalFinding = targeted.envelope.result.findings
+    .find((entry) => entry.item_id === seedId);
+  assert.equal(globalFinding.reason, 'unauthorized-revision');
+  assert.equal(globalFinding.blocks_verification_scope, true);
+
   const second = run(fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', secondId, '--json');
   assert.equal(second.exit, 0, JSON.stringify(second.envelope));
   const unrelated = run(
@@ -2304,6 +2319,39 @@ test('post-commit verification ignores an unrelated synchronization finding', as
   assert.equal(finding.reason, 'worktree-synchronization-required');
   assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
   assertNoInternalScope(verified.envelope.result.findings);
+
+  const unrelatedScope = run(
+    fixture.siblingRoot,
+    'claim-verify',
+    '--ledger',
+    fixture.siblingLedger,
+    '--id',
+    secondId,
+    '--json',
+  );
+  assert.equal(unrelatedScope.exit, 0, JSON.stringify(unrelatedScope.envelope));
+  assert.deepEqual(unrelatedScope.envelope.result.verification_scope, {
+    mode: 'target-item',
+    item_id: secondId,
+  });
+  const visibleUnrelated = unrelatedScope.envelope.result.findings
+    .find((entry) => entry.item_id === seedId);
+  assert.equal(visibleUnrelated.reason, 'worktree-synchronization-required');
+  assert.equal(visibleUnrelated.blocks_verification_scope, false);
+
+  const owningScope = run(
+    fixture.siblingRoot,
+    'claim-verify',
+    '--ledger',
+    fixture.siblingLedger,
+    '--id',
+    seedId,
+    '--json',
+  );
+  assert.equal(owningScope.exit, 6, JSON.stringify(owningScope.envelope));
+  const visibleTarget = owningScope.envelope.result.findings
+    .find((entry) => entry.item_id === seedId);
+  assert.equal(visibleTarget.blocks_verification_scope, true);
 });
 
 test('auto-commit still blocks a synchronization finding on its own target', async () => {

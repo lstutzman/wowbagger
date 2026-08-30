@@ -13,6 +13,11 @@ consolidation. The first tagged release inherits this file.
   `string-list` authority, preserve all item bytes, and publish one canonical
   no-clobber declaration.
 
+- `claim-verify` now accepts optional `--id <item>` for target-scoped
+  verification while retaining strict repository-wide behavior when omitted.
+  All findings remain visible with `blocks_verification_scope`; work-claim API
+  version is now 3 while the legacy envelope marker remains 1.
+
 ## 0.1.0-alpha.17 - 2026-08-30
 
 - **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and

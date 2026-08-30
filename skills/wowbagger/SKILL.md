@@ -740,17 +740,14 @@ An enumeration failure means a registered worktree path could not be read. The
 identity itself is an opaque UUID a worktree writes once into its private Git
 directory. Never create, copy, or edit it.
 
-**`claim-verify` is repository-wide, and a clean mutation does not make it
-exit 0.** It names no target, so any blocking finding anywhere in the
-repository keeps it at exit 6 — including a finding on an item belonging to
-work you have nothing to do with. On a repository with live sibling worktrees
-you may commit every one of your own mutations and still never see
-`claim-verify` exit 0. That is current behavior; item #184 is open in triage to
-decide the supported verification surface. When the remaining findings all name
-items you are not working on, say so and stop; do not hand-edit an item, and do
-not run `claim-adopt` on a sibling's item to force exit 0. Adoption moves the
-coordinator's authorized revision and is not a way to silence someone else's
-finding.
+**Choose verification scope deliberately.** Bare
+`claim-verify --ledger <dir> --json` is strict repository diagnosis: any
+blocking finding anywhere keeps it at exit 6. After working one item, use
+`claim-verify --ledger <dir> --id <item> --json`. It keeps every repository
+finding visible and marks each with `blocks_verification_scope`, but unrelated
+target-scoped findings do not fail that item's gate. Global barriers still
+fail every target. Never adopt or hand-edit a sibling's item to force either
+scope clean.
 
 Adoption is per item and per revision explicit. Name the item and both
 revisions, take them from the finding, and commit the edited bytes first:
@@ -793,7 +790,7 @@ Use the claimed write path as one complete loop:
    not in an accessible Git checkout. Stop before mutation.
 2. Run `provision` once for the ledger. Keep its `ledger_namespace`.
 3. Run `claim capabilities --ledger <dir> --json` again. Require
-   `result.operations.work_claim.api_version: 2`. Do not compare the claim
+   `result.operations.work_claim.api_version: 3`. Do not compare the claim
    response's top-level `contract_version` with the core version; it is the
    legacy claim-envelope marker. Stop if the namespace is absent or the mode is
    not `merge-coordinated`.
@@ -808,12 +805,12 @@ Use the claimed write path as one complete loop:
    branch. Do this now, not at the end of a batch. Acceptance of another command
    does not prove this mutation is durable, and a blocking finding still
    refuses that command.
-9. Run `claim-verify` after the commit or merge. It finalizes the Git outcome,
-   repairs response-loss cases, and reports later revision drift. Require exit
-   0 before the next mutating command; exit 6 means findings remain, so act on
-   each `remediation` string and run it again. If every remaining finding names
-   an item you are not working on, that is the repository-wide scope described
-   above, not a failure of your work: report it instead of forcing exit 0.
+9. Run `claim-verify --ledger <dir> --id <item> --json` after the commit or
+   merge. It finalizes the Git outcome, repairs response-loss cases, and reports
+   later revision drift. Require exit 0 before the next mutating command; exit
+   6 means findings block this item, so act on each blocking finding's
+   `remediation` and run it again. Unrelated nonblocking findings remain
+   visible for repository diagnosis.
 10. Release the claim with its current observed state.
 11. Run `validate` and show the resulting diff.
 
@@ -836,10 +833,11 @@ response envelopes, refusal precedence, and recovery rules.
 6. `validate`, then show the diff.
 7. On a provisioned ledger, commit the ledger change now:
    `git add <dir> && git commit`.
-8. On a provisioned ledger, run `claim-verify --ledger <dir> --json` and
-   require exit 0 before the next `create`, `transition`, `parent-migrate`,
-   `snooze`, `patch`, or `publish-claimed`. Findings that name only unrelated
-   items are repository-wide scope; report them rather than forcing exit 0.
+8. On a provisioned ledger, run
+   `claim-verify --ledger <dir> --id <item> --json` and require exit 0 before
+   the next `create`, `transition`, `parent-migrate`, `snooze`, `patch`, or
+   `publish-claimed`. Use bare verification separately for strict
+   repository-wide diagnosis.
 
 Write, commit, `claim-verify`, next write. The unclaimed loop obeys the same
 rule as the claimed one, because both run through the same coordinator. Steps 7

@@ -98,6 +98,8 @@ test('claim-verify rolls forward a pending publication whose candidate bytes are
   assert.equal(verified.envelope.command, 'claim-verify');
   assert.equal(verified.envelope.state, 'committed');
   assert.deepEqual(verified.envelope.result.findings.map(({ code }) => code), ['pending-intent-resolved']);
+  assert.deepEqual(verified.envelope.result.verification_scope, { mode: 'repository' });
+  assert.equal(verified.envelope.result.findings[0].blocks_verification_scope, false);
 
   const readPath = path.join(fixture.root, 'read.json');
   await writeFile(readPath, JSON.stringify({

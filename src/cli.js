@@ -94,6 +94,7 @@ import { readWorktreeIdentity } from './worktree-identity.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 5;
+const ITEM_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const AUTO_COMMIT_COMMANDS = new Set([
   'create',
   'transition',
@@ -697,6 +698,12 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeClaimInvalidRequest(command, parsedOptions.issues);
       return;
     }
+    if (parsedOptions.options.id !== undefined && !ITEM_ID.test(parsedOptions.options.id)) {
+      writeClaimInvalidRequest(command, [
+        issue('/arguments', 'invalid-value', 'Argument --id must be a canonical Wowbagger item ID.'),
+      ]);
+      return;
+    }
     const ledgerDirectory = parsedOptions.options.ledger;
     const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory);
     const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
@@ -710,6 +717,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       ledgerDirectory,
       gitCommonDir,
       namespace,
+      targetItemId: parsedOptions.options.id ?? null,
     }));
     return;
   }
@@ -1458,9 +1466,11 @@ function parseContractOptions(command, argumentsList) {
             ? new Map([['--ledger', 'ledger'], ['--recovery-token', 'recoveryToken']])
             : command === 'claim-merge-verify'
               ? new Map([['--ledger', 'ledger'], ['--base', 'base'], ['--head', 'head']])
-              : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
-                || command === 'claim-sync' || command === 'number-repair-proposal'
-                ? new Map([['--ledger', 'ledger']])
+              : command === 'claim-verify'
+                ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
+                : command === 'provision' || command === 'claim-capabilities'
+                  || command === 'claim-sync' || command === 'number-repair-proposal'
+                  ? new Map([['--ledger', 'ledger']])
                 : command === 'mint-id'
                   ? new Map([['--date', 'date']])
                   : new Map();
@@ -1481,7 +1491,9 @@ function parseContractOptions(command, argumentsList) {
         ? new Set(['--out', '--view'])
         : command === 'inspect'
           ? new Set(['--id', '--number', '--as-of'])
-          : new Set();
+          : command === 'claim-verify'
+            ? new Set(['--id'])
+            : new Set();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--json') {
@@ -2001,7 +2013,7 @@ function usage(command) {
     return 'Usage: wowbagger claim-adopt --ledger <dir> --input <request.json> --json';
   }
   if (command === 'claim-verify') {
-    return 'Usage: wowbagger claim-verify --ledger <dir> --json';
+    return 'Usage: wowbagger claim-verify --ledger <dir> [--id <wb_...>] --json';
   }
   if (command === 'snooze') {
     return 'Usage: wowbagger snooze --ledger <dir> --input <request.json> --json [--auto-commit]';

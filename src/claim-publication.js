@@ -409,6 +409,7 @@ export async function reconcileClaimJournal({
   ));
   const entries = [...replayed.entries];
   const findings = [];
+  const findingScopes = [];
   // What each finding refuses is the coordinator's own judgement, never a
   // published member, so the scope rules on the write as the finding is
   // recorded and never becomes a member something has to strip back out.
@@ -416,6 +417,7 @@ export async function reconcileClaimJournal({
   const addFinding = (scope, finding) => {
     unsafe ||= blocksTarget(scope, finding.item_id, targetItemId);
     findings.push(finding);
+    findingScopes.push(scope);
   };
   const observedAt = advanceClockFloor(replayed.state, physicalNow);
   try {
@@ -772,6 +774,7 @@ export async function reconcileClaimJournal({
   return {
     entries,
     findings,
+    findingScopes,
     gitHead,
     headItems,
     // Every coordinated item the journal knows and this working ledger does not
@@ -1021,7 +1024,17 @@ export async function verifyClaimJournal({
           result: {
             ledger_namespace: namespace,
             observed_at: reconciled.observedAt,
-            findings: reconciled.findings,
+            verification_scope: targetItemId === null
+              ? { mode: 'repository' }
+              : { mode: 'target-item', item_id: targetItemId },
+            findings: reconciled.findings.map((finding, index) => ({
+              ...finding,
+              blocks_verification_scope: blocksTarget(
+                reconciled.findingScopes[index],
+                finding.item_id,
+                targetItemId,
+              ),
+            })),
             ledger_validation: ledgerValidationReport(reconciled.ledger),
             publications: publicationStatuses(reconciled.entries),
           },

@@ -191,11 +191,11 @@ and stops.
 
 The bootstrap wire, adapter approval, instruction, handoff, and fixture-format
 versions are separate version domains and remain version 1. The adapter
-contract remains version 2. The work-claim API moves to 2 with this release,
-for its own reason stated in
-[the work-claim contract](work-claim-contract.md), section 6: the item-source
-refusal replaces the version 1 error that an oversized candidate used to
-receive.
+contract remains version 2. The work-claim API moved to 2 with this core
+release because the item-source refusal replaced the version 1 error that an
+oversized publication candidate used to receive. It later moved to 3 for
+target-scoped `claim-verify`; the current value is always negotiated from
+capabilities, never inferred from the core version.
 
 Version negotiation uses distinct existing fields. A core consumer MUST read
 the top-level `contract_version` from `capabilities --json`. A work-claim
@@ -259,7 +259,7 @@ and stops.
 
 The bootstrap wire, adapter approval, instruction, handoff, and fixture-format
 versions are separate version domains and remain version 1. The adapter
-contract remains version 2 and the work-claim API remains version 2. The list
+contract remains version 2 and the work-claim API remains version 3. The list
 query and the workbench projection each have their own version domain,
 `query_version` and `projection_version`, both `1`: a consumer negotiates them
 through `result.operations.list.query_version` and
@@ -692,7 +692,7 @@ capability paths; all omitted paths retain their version 1 values:
 | `result.operations.list` | `{"supported":true,"write_scope":"none","cas_scope":"none","query_version":1}` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
 | `result.operations.report` | `{"supported":true,"write_scope":"derived-output","config_versions":[1,2],"named_views":true}` |
-| `result.operations.work_claim.api_version` | `2` |
+| `result.operations.work_claim.api_version` | `3` |
 | `result.limits.max_item_source_bytes` | `8388608` |
 | `result.limits.default_list_page_size` | `50` |
 | `result.limits.max_list_page_size` | `200` |
@@ -800,14 +800,13 @@ repository. The serialization is scoped to the item: a recorded `transition` or
 item* with exit 6 `claim-store-unavailable`, reason
 `publication-reconciliation-required`, until the writing commit is visible in
 the blocked checkout. A mutation targeting an unrelated item still runs, and
-the sibling's finding remains visible. Own uncommitted work and
-out-of-protocol revisions are global barriers and refuse every mutation. A
-repository-wide `claim-verify` names no target, so it reports exit 6 while any
-item carries a blocking finding, including an unrelated one: a successful
-mutation is therefore not proof of a globally clean claim store. See
-[the work-claim contract](work-claim-contract.md), section 3.2, for the scopes
-and for the open item #184 that owns the verification-surface decision. Clones
-do not share the common directory, so
+the sibling's finding remains visible. Own uncommitted work and out-of-protocol
+revisions are global barriers and refuse every mutation. Bare `claim-verify`
+reports exit 6 while any item carries a blocking finding.
+`claim-verify --id <item>` keeps every finding visible but returns success when
+only unrelated target-scoped findings remain; global findings still block.
+See [the work-claim contract](work-claim-contract.md), section 3.2, for the
+scope rules. Clones do not share the common directory, so
 `limits.cross_clone_coordination: false` carries no such consequence.
 
 That serialization is discoverable, per ledger, at

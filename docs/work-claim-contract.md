@@ -1,11 +1,11 @@
 # Work-claim contract
 
 Status: accepted protocol design. The standalone Wowbagger CLI implements the
-version 2 claim operations and the merge-coordinated Git-journal profile for
+version 3 claim operations and the merge-coordinated Git-journal profile for
 provisioned Git-backed ledgers. The no-I/O reference model and conformance
 fixtures remain the oracle for the strict fenced protocol.
 
-This document defines version 2 of the transport-neutral work-claim and
+This document defines version 3 of the transport-neutral work-claim and
 claimed-publication API, plus the merge-coordinated capability profile. The
 words MUST, MUST NOT, SHOULD, and MAY are normative. JSON examples show objects
 before compact serialization; a CLI prints exactly one compact JSON object
@@ -22,6 +22,21 @@ MUST NOT be compared with the `contract_version` from core
 Generic consumers migrate without a wire change: they first identify the
 work-claim envelope by `namespace: "work-claim"`, then require the advertised
 `api_version`.
+
+### Version 3
+
+Version 3 retains every version 2 request, response, state, exit, fencing, and
+recovery rule except for targeted verification. `claim-verify` accepts optional
+`--id <wb_...>` without requiring that item to exist in the local checkout.
+Bare verification remains strict repository-wide mode.
+
+Every success result adds `verification_scope`: `{"mode":"repository"}` for
+the bare command, or `{"mode":"target-item","item_id":"wb_..."}` for a target.
+Every returned finding adds `blocks_verification_scope`. Target mode keeps all
+repository findings visible but derives `ok`, exit status, and `state` only
+from findings that block that target. Global safety findings still block every
+target. This additive response and new CLI input move the negotiated API while
+the top-level claim-envelope `contract_version` remains `1`.
 
 ### Version 2
 
@@ -192,7 +207,7 @@ most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
     "operations": {
       "work_claim": {
         "supported": true,
-        "api_version": 2,
+        "api_version": 3,
         "mode": "fenced",
         "claim_protected_publication": true,
         "fencing_enforced_at": "ledger-publication-commit-boundary",
@@ -282,7 +297,7 @@ A provisioned Git-journal backend MAY instead report:
   "operations": {
     "work_claim": {
       "supported": true,
-      "api_version": 2,
+      "api_version": 3,
       "mode": "merge-coordinated",
       "claim_protected_publication": true,
       "fencing_enforced_at": "git-history-reconciliation",
@@ -327,8 +342,9 @@ the local working tree and the local Git HEAD. A revision written in another
 worktree is absent in both, so reconciliation reports
 `stale-write-detected` and the mutation refuses with exit 6
 `claim-store-unavailable`, reason `publication-reconciliation-required` only
-when the mutation targets that item. `claim-verify` remains repository-wide and
-reports every unresolved finding.
+when the mutation targets that item. Bare `claim-verify` remains
+repository-wide. `claim-verify --id <item>` reports every unresolved finding
+but blocks only on that target and global safety barriers.
 
 The plain statement: **a recorded private write in one worktree blocks
 mutations targeting that item, not unrelated item mutations in sibling
@@ -1191,13 +1207,14 @@ process MAY recover the lock only when the operating system reports that owner
 process as absent. A live or malformed lock remains `claim-store-unavailable`;
 elapsed time alone never authorizes lock recovery.
 
-`claim-verify` takes the ledger path and no request body. Under the namespace
-lock, it replays the journal, advances and persists the clock floor, and
-reconciles pending intents against the exact item revision. It also compares
-successful publications with Git `HEAD`. When `HEAD` contains the committed
-revision, it appends one idempotent `publish-finalization` entry that records
-the Git commit. It writes a per-namespace reconciliation log outside the shared
-journal; that log is a derived audit artifact, not authority.
+`claim-verify` takes the ledger path, optional target item ID, and no request
+body. The target ID is syntax-validated without requiring local item presence.
+Under the namespace lock, it replays the journal, advances and persists the
+clock floor, and reconciles pending intents against exact item revisions. It
+also compares successful publications with Git `HEAD`. When `HEAD` contains a
+committed revision, it appends one idempotent `publish-finalization` entry that
+records the Git commit. It writes a per-namespace reconciliation log outside
+the shared journal; that log is a derived audit artifact, not authority.
 
 The log projects only journal entries that record a decision. `clock` and
 `publish-finalization` entries are never projected. A command therefore writes
@@ -1232,15 +1249,19 @@ not a claim finding, and a caller MUST NOT treat it as one. It is the honest
 statement that a clean claim answer is not a clear road, and the caller must
 repair validation before the next mutation will run.
 
-A clean verification returns exit 0 and `state: "committed"`. This state
-describes durable coordinator reconciliation, not Git finalization of every
+A verification result always names `verification_scope`, and every finding
+states `blocks_verification_scope`. Bare mode treats every blocking repository
+finding as blocking. Target mode keeps unrelated target-scoped findings
+visible but nonblocking; findings classified as global still block. A clean
+scope returns exit 0 and `state: "committed"`. This state describes durable
+coordinator reconciliation, not Git finalization of every successful
 publication; callers must inspect each `result.publications` row's
 `git_finalized` and `git_commit`. Findings named `pending-intent-resolved` are
-clean recovery. Any `legacy-mutation-outcome-unknown`,
-`publication-outcome-unknown`, `revision-regression`, or `stale-write-detected`
-finding returns exit 6 and `state: "unknown"`. A caller MUST stop publication
-work and inspect those findings. Repeating verification MUST NOT duplicate a
-publication finalization.
+visible and nonblocking. Any blocking `legacy-mutation-outcome-unknown`,
+`publication-outcome-unknown`, `revision-regression`, or
+`stale-write-detected` finding returns exit 6 and `state: "unknown"`. A caller
+MUST stop publication work and inspect those findings. Repeating verification
+MUST NOT duplicate a publication finalization.
 
 Every finding that blocks a mutation MUST carry a `remediation` string, and
 that string MUST name both the action to take and `claim-verify`. It MUST also

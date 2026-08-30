@@ -19,10 +19,9 @@ export const CORE_COMMAND_ORDER = Object.freeze([
   'capabilities', 'create', 'inspect', 'patch', 'ready', 'transition', 'validate',
 ]);
 export const CORE_CONTRACT_VERSION = 5;
-// The work-claim API lives in its own version domain. It moved to 2 with the
-// item-source refusal that replaced publish-claimed's version 1 error for an
-// oversized candidate.
-export const WORK_CLAIM_API_VERSION = 2;
+// Work-claim API lives in its own version domain. Version 3 adds optional
+// target-scoped claim verification while preserving strict bare verification.
+export const WORK_CLAIM_API_VERSION = 3;
 // The report configuration versions this core accepts. Version 1 remains
 // supported unchanged; version 2 names views.
 export const REPORT_CONFIG_VERSIONS = Object.freeze([1, 2]);

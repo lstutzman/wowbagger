@@ -35,7 +35,7 @@ const WORKBENCH_PROJECTION_VERSION = 1;
 const MAX_WORKBENCH_TITLE_CHARACTERS = 120;
 const MAX_WORKBENCH_COLLECTION_ENTRIES = 50;
 const MAX_WORKBENCH_RESPONSE_BYTES = 65536;
-const WORK_CLAIM_API_VERSION = 2;
+const WORK_CLAIM_API_VERSION = 3;
 // The report configuration versions the contract requires this core to accept:
 // version 1 unchanged, version 2 naming views.
 const REPORT_CONFIG_VERSIONS = [1, 2];

@@ -1477,7 +1477,7 @@ error registry. It changes only this versioned surface:
 The core capability probe adapter contract version 2 requires is core
 contract version 5. It adds exactly
 `operations.patch: {"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}`,
-`operations.work_claim.api_version: 2`, and
+`operations.work_claim.api_version: 3`, and
 `limits.max_item_source_bytes: 8388608` as the first member of
 `limits`.
 Its mutation backend scope is always

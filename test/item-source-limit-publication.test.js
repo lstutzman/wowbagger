@@ -207,22 +207,22 @@ test('the publication transport bound refuses one byte past it', async () => {
   assert.equal(refused.envelope.error.message, 'The request does not match publish-claimed version 1.');
 });
 
-// The oversized-candidate response replaced the version 1 error the work-claim
-// contract pinned for that input, so version 1 consumers must fail closed.
-test('the work-claim API negotiates version 2', async () => {
+// Target-scoped claim verification adds a version 3 request and response
+// surface. Version 2 consumers must fail closed instead of guessing.
+test('the work-claim API negotiates version 3', async () => {
   const fixture = await publicationFixture();
 
   const capabilities = run(fixture.root, 'claim', 'capabilities', '--ledger', fixture.ledger, '--json');
 
   assert.equal(capabilities.exit, 0);
-  assert.equal(capabilities.envelope.result.operations.work_claim.api_version, 2);
+  assert.equal(capabilities.envelope.result.operations.work_claim.api_version, 3);
 });
 
 test('core capabilities negotiates the same work-claim API version', () => {
   const capabilities = run(process.cwd(), 'capabilities', '--json');
 
   assert.equal(capabilities.exit, 0);
-  assert.equal(capabilities.envelope.result.operations.work_claim.api_version, 2);
+  assert.equal(capabilities.envelope.result.operations.work_claim.api_version, 3);
 });
 
 test('publish-claimed measures the candidate before validating it as a ledger', async () => {

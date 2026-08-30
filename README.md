@@ -623,7 +623,7 @@ npm ci
 ./bin/wowbagger.js claim read --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim renew --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim release --ledger path/to/ledger --input request.json --json
-./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
+./bin/wowbagger.js claim-verify --ledger path/to/ledger [--id wb_...] --json
 ```
 
 `validate` writes exactly one JSON result to standard output. A valid ledger
@@ -716,9 +716,11 @@ command asks you to parse the Markdown by hand:
   refusal carries `error.details.item`, the complete snapshot of the item you
   asked for, whenever no validation error names that item's path. A faulted
   item is withheld; `validate` already names its repair.
-- `claim-verify --json` reports `result.ledger_validation`. Exit 0 with
-  `findings: []` and `ledger_validation.valid: false` says the claim journal is
-  consistent and validation alone is blocking every mutation.
+- `claim-verify --json` reports `result.ledger_validation`. Bare verification
+  is strict repository-wide mode; `--id <item>` keeps all findings visible but
+  fails only for that item and global barriers. Exit 0 with an invalid
+  `ledger_validation` still means claim state is clean but validation blocks
+  mutation.
 
 ### Work claims
 
@@ -765,7 +767,7 @@ The loop that works:
 ```sh
 ./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
 git add path/to/ledger && git commit -m "Record the mutation"
-./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
+./bin/wowbagger.js claim-verify --ledger path/to/ledger --id wb_... --json
 ./bin/wowbagger.js transition --ledger path/to/ledger --input next.json --json
 ```
 

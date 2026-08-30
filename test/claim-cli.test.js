@@ -60,6 +60,66 @@ test('claim capabilities stay advisory for a fake git directory', async () => {
   assert.equal(capabilities.envelope.result.operations.work_claim.mode, 'advisory');
 });
 
+test('claim-verify accepts a canonical target item and echoes its scope', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  assert.equal(provisioned.exit, 0, JSON.stringify(provisioned.envelope));
+  const itemId = 'wb_01Q4837BM01W70T30B184GG1R6';
+
+  const verified = await capture([
+    'claim-verify',
+    '--ledger',
+    ledger,
+    '--id',
+    itemId,
+    '--json',
+  ]);
+
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.verification_scope, {
+    mode: 'target-item',
+    item_id: itemId,
+  });
+  assert.deepEqual(verified.envelope.result.findings, []);
+});
+
+test('claim-verify rejects malformed, missing, and repeated target arguments', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  assert.equal(provisioned.exit, 0, JSON.stringify(provisioned.envelope));
+  const itemId = 'wb_01Q4837BM01W70T30B184GG1R6';
+  const cases = [
+    {
+      argumentsList: ['--id', 'not-an-item'],
+      code: 'invalid-value',
+    },
+    {
+      argumentsList: ['--id'],
+      code: 'missing-argument',
+    },
+    {
+      argumentsList: ['--id', itemId, '--id', itemId],
+      code: 'repeated-argument',
+    },
+  ];
+
+  for (const entry of cases) {
+    const result = await capture([
+      'claim-verify',
+      '--ledger',
+      ledger,
+      ...entry.argumentsList,
+      '--json',
+    ]);
+
+    assert.equal(result.exit, 2, JSON.stringify(result.envelope));
+    assert.equal(result.envelope.error.code, 'invalid-request');
+    assert.equal(result.envelope.error.details.issues[0].code, entry.code);
+  }
+});
+
 test('a claim acquired through the CLI is visible to a later read', async () => {
   const root = await repository();
   const provisioned = await capture(['provision', '--ledger', path.join(root, 'ledger'), '--json']);
@@ -298,7 +358,7 @@ test('claim capabilities reports the contract-shaped envelope, distinct from top
       operations: {
         work_claim: {
           supported: true,
-          api_version: 2,
+          api_version: 3,
           mode: 'advisory',
           claim_protected_publication: false,
           fencing_enforced_at: 'none',
@@ -329,7 +389,7 @@ test('a provisioned namespace advertises merge-coordinated claim capabilities', 
   });
   assert.deepEqual(capabilities.envelope.result.operations.work_claim, {
     supported: true,
-    api_version: 2,
+    api_version: 3,
     mode: 'merge-coordinated',
     claim_protected_publication: true,
     fencing_enforced_at: 'git-history-reconciliation',

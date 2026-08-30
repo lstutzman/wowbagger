@@ -2,7 +2,7 @@ export function resolveWorkClaimCapability({ gitCommonDir, namespace = null }) {
   if (!gitCommonDir) {
     return {
       supported: false,
-      api_version: 2,
+      api_version: 3,
       mode: 'advisory',
       claim_protected_publication: false,
       fencing_enforced_at: 'none',
@@ -12,7 +12,7 @@ export function resolveWorkClaimCapability({ gitCommonDir, namespace = null }) {
   if (!namespace) {
     return {
       supported: true,
-      api_version: 2,
+      api_version: 3,
       mode: 'advisory',
       claim_protected_publication: false,
       fencing_enforced_at: 'none',
@@ -21,7 +21,7 @@ export function resolveWorkClaimCapability({ gitCommonDir, namespace = null }) {
   }
   return {
     supported: true,
-    api_version: 2,
+    api_version: 3,
     mode: 'merge-coordinated',
     claim_protected_publication: true,
     fencing_enforced_at: 'git-history-reconciliation',
