@@ -1041,7 +1041,7 @@ async function finalizeVerified({
 
 function commitFailedInWorkClaim(payload, commitSet, digests, failure) {
   return workClaimError('git-commit-failed',
-    'The item is published, but its Git commit was not established.', 'unchanged', 6, {
+    'The item is published, but its Git commit was not established.', 'committed', 6, {
       ledger_namespace: payload.ledger_namespace,
       item_id: payload.item_id,
       published_revision: payload.published_revision,

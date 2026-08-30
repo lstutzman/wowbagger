@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import {
   appendClaimEntry,
+  assertClaimJournalCapacity,
   claimJournalPath,
   claimReconcileLogPath,
+  isClaimJournalCapacityError,
   isProjectedJournalEntry,
   parseReconcileLog,
   replayClaimEntries,
@@ -153,7 +156,11 @@ export async function readPublicationOutcome({ gitCommonDir, namespace, request 
   } catch (error) {
     return publicationReadError(request, 'claim-store-unavailable',
       'The durable claim store is unavailable.', {
-        reason: error?.code === 'CLAIM_LOCK_HELD' ? 'claim-store-locked' : 'claim-store-unreadable',
+        reason: error?.code === 'CLAIM_LOCK_HELD'
+          ? 'claim-store-locked'
+          : isClaimJournalCapacityError(error)
+            ? 'journal-capacity-exceeded'
+            : 'claim-store-unreadable',
       }, 6);
   }
 }
@@ -167,6 +174,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
   }
 
   const storePath = claimStorePath(gitCommonDir, namespace);
+  let intentAppended = false;
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
     return await withClaimLock(storePath, async (namespaceLock) => {
@@ -213,6 +221,14 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           writeLogOnUnsafe: false,
         });
       } catch (error) {
+        if (isClaimJournalCapacityError(error)) {
+          return publicationError(request, 'claim-store-unavailable',
+            'The durable claim store is unavailable.', {
+              reason: 'journal-capacity-exceeded',
+              ledger_namespace: request.ledger_namespace,
+              item_id: request.item_id,
+            }, 6);
+        }
         if (error?.code !== 'CLOCK_FLOOR_PERSISTENCE_FAILED') throw error;
         return publicationError(request, 'clock-floor-persistence-failed',
           'The authoritative clock floor could not be persisted.', {
@@ -261,8 +277,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           }, 4);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath, currentWorktreeId);
       }
-      await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
-      const intent = await appendClaimEntry(journalPath, {
+      const intentEntry = {
         type: 'publish-intent',
         operation_id: request.operation_id,
         operation_digest: operationDigest(request),
@@ -273,8 +288,42 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         floor: observedAt,
         writer_worktree_id: currentWorktreeId,
         state: 'pending',
+      };
+      const terminalEntry = (outcome) => ({
+        type: 'publish-final',
+        operation_id: request.operation_id,
+        operation_digest: operationDigest(request),
+        ledger_namespace: request.ledger_namespace,
+        item_id: request.item_id,
+        writer_worktree_id: currentWorktreeId,
+        outcome,
       });
+      const itemPath = ledgerSnapshot.items.find((item) => item.data.id === request.item_id)?.path;
+      const possibleTerminals = [
+        terminalEntry(publicationSuccess(request, record, observedAt, itemPath, namespace)),
+        terminalEntry(publicationUnknown(request)),
+        terminalEntry(publicationError(request, 'ledger-revision-conflict',
+          'The durable ledger revision no longer matches this publication.', {
+            ledger_namespace: request.ledger_namespace,
+            item_id: request.item_id,
+            expected_revision: request.expected_revision,
+            actual_revision: request.expected_revision,
+          }, 4)),
+      ];
+      const largestTerminal = possibleTerminals.reduce((largest, candidate) => (
+        Buffer.byteLength(JSON.stringify(candidate)) > Buffer.byteLength(JSON.stringify(largest))
+          ? candidate
+          : largest
+      ));
+      await assertClaimJournalCapacity(journalPath, [
+        intentEntry,
+        { type: 'clock', now: observedAt, floor: observedAt },
+        largestTerminal,
+      ]);
+      await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
+      const intent = await appendClaimEntry(journalPath, intentEntry);
       entries.push(intent);
+      intentAppended = true;
       await publicationTestCheckpoint(scenario, 'after-publish-intent', ledgerDirectory);
       const mutation = await publishClaimedCandidate({
         ledgerDirectory, request, scenario, ledgerSnapshot, namespaceLock, storePath,
@@ -295,6 +344,11 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         reason: 'claim-store-locked',
       }, 6);
     }
+    if (!intentAppended && isClaimJournalCapacityError(error)) {
+      return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
+        reason: 'journal-capacity-exceeded',
+      }, 6);
+    }
     // An identity the coordination domain cannot resolve is a store this
     // command could not read, not a mutation whose outcome is unknown: it
     // refused before it appended an intent or touched an item byte.
@@ -302,6 +356,11 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
       return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
         reason: 'claim-store-unreadable',
         ...identityDiagnosticDetails(error),
+      }, 6);
+    }
+    if (!intentAppended) {
+      return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
+        reason: 'claim-store-unreadable',
       }, 6);
     }
     return publicationUnknown(request);
@@ -315,7 +374,6 @@ export async function hydrateClaimJournalFromHead({
   replayed,
   persist = true,
 }) {
-  if (replayed.entries.length > 0) return replayed;
   let log;
   try {
     log = await readGitTreeFile(
@@ -337,19 +395,26 @@ export async function hydrateClaimJournalFromHead({
     }
     bySequence.set(entry.seq, entry);
   }
+  for (const entry of committed) {
+    if (entry.seq > replayed.entries.length) continue;
+    if (!isDeepStrictEqual(replayed.entries[entry.seq - 1], entry)) {
+      throw hydrationError('local-journal-diverges-from-committed-log');
+    }
+  }
   const maxSequence = Math.max(...bySequence.keys());
+  if (replayed.entries.length >= maxSequence) return replayed;
   const fallbackTime = committed
     .map((entry) => entry.observed_at ?? entry.physical_now)
     .find((value) => typeof value === 'string')
     ?? '1970-01-01T00:00:00.000Z';
-  const hydratedEntries = [];
-  for (let sequence = 1; sequence <= maxSequence; sequence += 1) {
+  const missingEntries = [];
+  for (let sequence = replayed.entries.length + 1; sequence <= maxSequence; sequence += 1) {
     const entry = bySequence.get(sequence);
     if (entry) {
       const { seq, ...withoutSequence } = entry;
-      hydratedEntries.push(withoutSequence);
+      missingEntries.push(withoutSequence);
     } else {
-      hydratedEntries.push({
+      missingEntries.push({
         type: 'clock',
         now: fallbackTime,
         floor: fallbackTime,
@@ -357,13 +422,20 @@ export async function hydrateClaimJournalFromHead({
     }
   }
   if (!persist) {
+    const entries = [
+      ...replayed.entries,
+      ...missingEntries.map((entry, index) => ({
+        seq: replayed.entries.length + index + 1,
+        ...entry,
+      })),
+    ];
     return {
-      state: replayClaimEntries(hydratedEntries, namespace),
-      entries: hydratedEntries,
+      state: replayClaimEntries(entries, namespace),
+      entries,
     };
   }
   const journalPath = claimJournalPath(gitCommonDir, namespace);
-  for (const entry of hydratedEntries) {
+  for (const entry of missingEntries) {
     await appendClaimEntry(journalPath, entry);
   }
   return replayClaimJournal(journalPath, namespace);
@@ -409,6 +481,7 @@ export async function reconcileClaimJournal({
   ));
   const entries = [...replayed.entries];
   const findings = [];
+  const findingScopes = [];
   // What each finding refuses is the coordinator's own judgement, never a
   // published member, so the scope rules on the write as the finding is
   // recorded and never becomes a member something has to strip back out.
@@ -416,6 +489,7 @@ export async function reconcileClaimJournal({
   const addFinding = (scope, finding) => {
     unsafe ||= blocksTarget(scope, finding.item_id, targetItemId);
     findings.push(finding);
+    findingScopes.push(scope);
   };
   const observedAt = advanceClockFloor(replayed.state, physicalNow);
   try {
@@ -772,6 +846,7 @@ export async function reconcileClaimJournal({
   return {
     entries,
     findings,
+    findingScopes,
     gitHead,
     headItems,
     // Every coordinated item the journal knows and this working ledger does not
@@ -1021,7 +1096,17 @@ export async function verifyClaimJournal({
           result: {
             ledger_namespace: namespace,
             observed_at: reconciled.observedAt,
-            findings: reconciled.findings,
+            verification_scope: targetItemId === null
+              ? { mode: 'repository' }
+              : { mode: 'target-item', item_id: targetItemId },
+            findings: reconciled.findings.map((finding, index) => ({
+              ...finding,
+              blocks_verification_scope: blocksTarget(
+                reconciled.findingScopes[index],
+                finding.item_id,
+                targetItemId,
+              ),
+            })),
             ledger_validation: ledgerValidationReport(reconciled.ledger),
             publications: publicationStatuses(reconciled.entries),
           },
@@ -1043,7 +1128,9 @@ export async function verifyClaimJournal({
           details: {
             reason: error?.code === 'CLAIM_LOCK_HELD'
               ? 'claim-store-locked'
-              : 'claim-store-unreadable',
+              : isClaimJournalCapacityError(error)
+                ? 'journal-capacity-exceeded'
+                : 'claim-store-unreadable',
             ...identityDiagnosticDetails(error),
           },
         },
@@ -1138,18 +1225,26 @@ export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespa
         contract_version: 1,
         state: 'unchanged',
         error: {
-          code: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
-            ? 'clock-floor-persistence-failed'
-            : 'claim-store-unavailable',
-          message: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
-            ? 'The authoritative clock floor could not be persisted.'
-            : 'The durable claim store is unavailable.',
-          details: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED' ? {} : {
-            reason: error?.code === 'CLAIM_LOCK_HELD'
-              ? 'claim-store-locked'
-              : 'claim-store-unreadable',
-            ...identityDiagnosticDetails(error),
-          },
+          code: isClaimJournalCapacityError(error)
+            ? 'claim-store-unavailable'
+            : error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+              ? 'clock-floor-persistence-failed'
+              : 'claim-store-unavailable',
+          message: isClaimJournalCapacityError(error)
+            ? 'The durable claim store is unavailable.'
+            : error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+              ? 'The authoritative clock floor could not be persisted.'
+              : 'The durable claim store is unavailable.',
+          details: isClaimJournalCapacityError(error)
+            ? { reason: 'journal-capacity-exceeded' }
+            : error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+              ? {}
+              : {
+                reason: error?.code === 'CLAIM_LOCK_HELD'
+                  ? 'claim-store-locked'
+                  : 'claim-store-unreadable',
+                ...identityDiagnosticDetails(error),
+              },
         },
       },
     };

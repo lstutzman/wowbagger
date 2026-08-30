@@ -65,6 +65,29 @@ a ledger without the file has no patchable extension member at all. It is
 read from the ledger the caller named, and it is committed and reviewed like
 every other piece of ledger structure.
 
+## Bootstrap an existing ledger
+
+If items already carry a consumer-owned field, authorize it through the
+explicit bootstrap command rather than writing `.wowbagger/extensions.json`
+by hand:
+
+```json
+{"members":{"tags":"string-list"}}
+```
+
+```sh
+wowbagger extensions-provision --ledger <dir> --input declaration.json --json --dry-run
+wowbagger extensions-provision --ledger <dir> --input declaration.json --json
+```
+
+The request selects each member and type; the core never infers authority from
+one item. It requires a valid complete ledger, validates every occurrence of
+each selected member, and reports the number of occurrences. A selected member
+does not need to appear on every item, but it must appear at least once. Dry-run
+writes nothing. Publication writes one canonical declaration without changing
+any item byte and refuses to overwrite a different declaration. Commit only
+the generated declaration before the first corresponding `patch`.
+
 ## Absence
 
 A missing `--ledger` is a usage error before any read. A `--ledger` naming

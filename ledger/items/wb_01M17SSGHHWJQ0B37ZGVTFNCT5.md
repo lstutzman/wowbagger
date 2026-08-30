@@ -5,9 +5,10 @@ number: 187
 title: "Align journal capacity refusal reason with contract"
 kind: task
 priority: 2
-status: backlog
+status: done
 created: 2026-08-29
 updated: 2026-08-30
+completed: 2026-08-30
 provenance:
   source: "item #181 final review"
   recorded_at: "2026-08-29T22:25:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-30
     summary: "Accept journal-capacity contract alignment at priority two."
     rationale: "The failure is safe but the documented and emitted recovery reasons disagree. Journaled create increases the practical relevance of the capacity boundary."
+  - action: complete
+    date: 2026-08-30
+    summary: "Preserve journal-capacity refusal semantics."
+    rationale: "All public mappers preserve journal-capacity-exceeded before publication, publication reserves crash-recovery capacity, post-intent unknown outcomes remain honest, and entry and byte boundaries pass the full Node 24 gates."
 ---
 ## Problem
 

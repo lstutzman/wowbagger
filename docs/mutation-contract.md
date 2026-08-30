@@ -191,11 +191,11 @@ and stops.
 
 The bootstrap wire, adapter approval, instruction, handoff, and fixture-format
 versions are separate version domains and remain version 1. The adapter
-contract remains version 2. The work-claim API moves to 2 with this release,
-for its own reason stated in
-[the work-claim contract](work-claim-contract.md), section 6: the item-source
-refusal replaces the version 1 error that an oversized candidate used to
-receive.
+contract remains version 2. The work-claim API moved to 2 with this core
+release because the item-source refusal replaced the version 1 error that an
+oversized publication candidate used to receive. It later moved to 3 for
+target-scoped `claim-verify`; the current value is always negotiated from
+capabilities, never inferred from the core version.
 
 Version negotiation uses distinct existing fields. A core consumer MUST read
 the top-level `contract_version` from `capabilities --json`. A work-claim
@@ -259,7 +259,7 @@ and stops.
 
 The bootstrap wire, adapter approval, instruction, handoff, and fixture-format
 versions are separate version domains and remain version 1. The adapter
-contract remains version 2 and the work-claim API remains version 2. The list
+contract remains version 2 and the work-claim API remains version 3. The list
 query and the workbench projection each have their own version domain,
 `query_version` and `projection_version`, both `1`: a consumer negotiates them
 through `result.operations.list.query_version` and
@@ -692,7 +692,7 @@ capability paths; all omitted paths retain their version 1 values:
 | `result.operations.list` | `{"supported":true,"write_scope":"none","cas_scope":"none","query_version":1}` |
 | `result.operations.patch` | `{"supported":true,"write_scope":"single-item","cas_scope":"exact-byte-sha256"}` |
 | `result.operations.report` | `{"supported":true,"write_scope":"derived-output","config_versions":[1,2],"named_views":true}` |
-| `result.operations.work_claim.api_version` | `2` |
+| `result.operations.work_claim.api_version` | `3` |
 | `result.limits.max_item_source_bytes` | `8388608` |
 | `result.limits.default_list_page_size` | `50` |
 | `result.limits.max_list_page_size` | `200` |
@@ -800,14 +800,13 @@ repository. The serialization is scoped to the item: a recorded `transition` or
 item* with exit 6 `claim-store-unavailable`, reason
 `publication-reconciliation-required`, until the writing commit is visible in
 the blocked checkout. A mutation targeting an unrelated item still runs, and
-the sibling's finding remains visible. Own uncommitted work and
-out-of-protocol revisions are global barriers and refuse every mutation. A
-repository-wide `claim-verify` names no target, so it reports exit 6 while any
-item carries a blocking finding, including an unrelated one: a successful
-mutation is therefore not proof of a globally clean claim store. See
-[the work-claim contract](work-claim-contract.md), section 3.2, for the scopes
-and for the open item #184 that owns the verification-surface decision. Clones
-do not share the common directory, so
+the sibling's finding remains visible. Own uncommitted work and out-of-protocol
+revisions are global barriers and refuse every mutation. Bare `claim-verify`
+reports exit 6 while any item carries a blocking finding.
+`claim-verify --id <item>` keeps every finding visible but returns success when
+only unrelated target-scoped findings remain; global findings still block.
+See [the work-claim contract](work-claim-contract.md), section 3.2, for the
+scope rules. Clones do not share the common directory, so
 `limits.cross_clone_coordination: false` carries no such consequence.
 
 That serialization is discoverable, per ledger, at
@@ -1325,12 +1324,6 @@ one of too-large, invalid-utf8, duplicate-key, invalid-json, or invalid-shape.
 Valid metadata returns owner and owner_diagnostic null. Raw invalid bytes are
 never returned.
 
-Known limitation: lock-owner diagnostics currently recognize only `create`,
-`transition`, and `patch`. A real `parent-migrate` or `snooze` lock therefore
-returns `owner: null` with `owner_diagnostic: "invalid-shape"`. The exclusive
-lock-file creation has already failed before metadata is read, so the concurrent
-mutation still refuses with `lock-held`; mutual exclusion is unaffected. Item
-#174 tracks restoring the omitted owner details.
 
 Locks are never removed automatically merely because started_at is old. Manual
 recovery follows ADR 0003.
@@ -2259,6 +2252,27 @@ before it can correct anything. `validate` is therefore unchanged by this file,
 and an item whose extension member disagrees with the declaration is still a
 valid item — it is simply an item a patch can correct.
 
+**Provisioning a declaration on an existing ledger.**
+
+`extensions-provision --ledger <dir> --input <request> --json [--dry-run]`
+accepts an explicit non-empty `members` mapping in the same version-1 member
+and type vocabulary. It never infers a type from stored values. Before it
+proposes anything, it requires the complete ledger to validate. For each
+selected member, it validates every stored occurrence against the selected
+type, requires at least one occurrence, and reports that occurrence count.
+The member need not appear on every item. Empty `string-list` values are valid;
+scalars, null, maps, nested lists, and lists containing non-strings conflict
+with `string-list`.
+
+Dry-run returns the canonical declaration bytes and writes nothing. Publication
+creates exactly `.wowbagger/extensions.json` with no-clobber semantics.
+Repeating the identical declaration is idempotent; a different existing
+declaration is `extension-declaration-conflict`, exit 4, `unchanged`.
+Neither form changes an item byte or revision, records a claim-journal entry,
+or creates an item revision. The generated declaration is committed before
+the first patch that uses it. Anchors and aliases remain item-specific patch
+preconditions and do not prevent declaration provisioning.
+
 Absence is fail-closed and total. A ledger with no `extensions.json` has **no**
 patchable extension member, and a `set.extensions` request against it is
 refused `patch-precondition-failed`, exit 2, `unchanged`, with one
@@ -2704,15 +2718,26 @@ the operating rule remains write, commit, `claim-verify`, next write.
 revision, so Git `HEAD` is the only surface that can carry its authorized
 bytes, and an uncommitted create raises the global `git-finalization-required`
 barrier for every later mutation, including the next create. Filing ten items
-is therefore ten create-then-commit cycles, not one commit at the end. This
-release adds no batch mutation; item #186 owns safe batch design.
+is therefore ten serial `create --auto-commit` cycles, not one commit at the
+end. The accepted batch-create decision permanently rejects a batch mutation
+for the direct-Markdown architecture and keeps
+`limits.multi_item_atomicity: false`; see
+[`docs/design/2026-08-30-batch-create.md`](design/2026-08-30-batch-create.md).
+
+The journal is bounded at 65,536 entries and 8,388,608 bytes. If capacity is
+known before a legacy create, transition, parent migration, snooze, or patch
+intent is published, the command returns exit 6 `claim-store-unavailable`,
+reason `journal-capacity-exceeded`, and `unchanged`. Existing journal bytes
+remain an exact prefix and no item byte is written. A genuinely unreadable
+journal retains `claim-store-unreadable`; an indeterminate outcome after an
+intent retains its outcome-unknown classification.
 
 The loop that works:
 
 ~~~sh
 wowbagger create --ledger <dir> --input request.json --json
 git add <dir> && git commit -m "Record the mutation"
-wowbagger claim-verify --ledger <dir> --json
+wowbagger claim-verify --ledger <dir> --id <item> --json
 wowbagger transition --ledger <dir> --input next.json --json
 ~~~
 
@@ -2785,9 +2810,12 @@ For every blocking finding:
    named worktree owner is established, there is no commit left to wait for:
    inspect that reachable history, then restore or explicitly adopt reviewed
    bytes.
-2. Run `wowbagger claim-verify --ledger <dir> --json`.
-3. Exit 0 with `state: "committed"` means the ledger is reconciled and the next
-   mutating command may run. Exit 6 means findings remain; repeat from step 1.
+2. Run `wowbagger claim-verify --ledger <dir> --id <finding.item_id> --json`
+   for each affected item. Use the bare command only for strict repository
+   diagnosis.
+3. Exit 0 with `state: "committed"` means that item is reconciled and its next
+   mutating command may run. Exit 6 means blocking findings remain; repeat from
+   step 1.
 
 The reasons a `stale-write-detected` finding can carry, and the other blocking
 finding codes, are enumerated in the [work-claim

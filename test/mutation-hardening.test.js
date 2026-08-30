@@ -757,6 +757,13 @@ test('lock diagnostics distinguish invalid UTF-8 from invalid metadata shape', a
       writer_id: 'bad-timestamp',
       started_at: '2030-99-99T99:99:99Z',
     }))],
+    ['invalid-shape', Buffer.from(JSON.stringify({
+      lock_version: 1,
+      item_id: id,
+      operation: 'unknown-command',
+      writer_id: 'unknown-operation',
+      started_at: '2030-01-16T12:00:00.000Z',
+    }))],
   ];
 
   for (const [expectedDiagnostic, lockBytes] of cases) {
@@ -785,6 +792,44 @@ test('lock diagnostics distinguish invalid UTF-8 from invalid metadata shape', a
       assert.equal(output.error.code, 'lock-held');
       assert.equal(output.error.details.owner, null);
       assert.equal(output.error.details.owner_diagnostic, expectedDiagnostic);
+    });
+  }
+});
+
+test('lock diagnostics recognize parent migration and snooze owners', async () => {
+  const id = 'wb_01Q4G4Q3G004HMASW9NF6YY093';
+  for (const operation of ['parent-migrate', 'snooze']) {
+    await withLedger({ [`${id}.md`]: triageSource(id) }, async (ledger) => {
+      const inspected = runCli('inspect', '--ledger', ledger, '--id', id, '--json');
+      const revision = JSON.parse(inspected.stdout).result.item.revision;
+      const lockDirectory = path.join(ledger, '.wowbagger-locks');
+      const requestPath = path.join(path.dirname(ledger), `transition-${operation}.json`);
+      await mkdir(lockDirectory);
+      await writeFile(path.join(lockDirectory, `${id}.lock`), JSON.stringify({
+        lock_version: 1,
+        item_id: id,
+        operation,
+        writer_id: 'fixture-owner',
+        started_at: '2030-01-16T12:00:00.000Z',
+      }));
+      await writeFile(requestPath, JSON.stringify({
+        id,
+        expected_revision: revision,
+        to_status: 'backlog',
+        date: '2030-01-16',
+        decision: {
+          summary: 'Accept the locked item.',
+          rationale: 'Exercise diagnostic classification only.',
+        },
+      }));
+
+      const result = runCli('transition', '--ledger', ledger, '--input', requestPath, '--json');
+      const output = JSON.parse(result.stdout);
+
+      assert.equal(result.status, 4, result.stderr);
+      assert.equal(output.error.code, 'lock-held');
+      assert.equal(output.error.details.owner.operation, operation);
+      assert.equal(output.error.details.owner_diagnostic, null);
     });
   }
 });

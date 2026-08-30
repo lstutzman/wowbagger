@@ -1,11 +1,11 @@
 # Work-claim contract
 
 Status: accepted protocol design. The standalone Wowbagger CLI implements the
-version 2 claim operations and the merge-coordinated Git-journal profile for
+version 3 claim operations and the merge-coordinated Git-journal profile for
 provisioned Git-backed ledgers. The no-I/O reference model and conformance
 fixtures remain the oracle for the strict fenced protocol.
 
-This document defines version 2 of the transport-neutral work-claim and
+This document defines version 3 of the transport-neutral work-claim and
 claimed-publication API, plus the merge-coordinated capability profile. The
 words MUST, MUST NOT, SHOULD, and MAY are normative. JSON examples show objects
 before compact serialization; a CLI prints exactly one compact JSON object
@@ -22,6 +22,21 @@ MUST NOT be compared with the `contract_version` from core
 Generic consumers migrate without a wire change: they first identify the
 work-claim envelope by `namespace: "work-claim"`, then require the advertised
 `api_version`.
+
+### Version 3
+
+Version 3 retains every version 2 request, response, state, exit, fencing, and
+recovery rule except for targeted verification. `claim-verify` accepts optional
+`--id <wb_...>` without requiring that item to exist in the local checkout.
+Bare verification remains strict repository-wide mode.
+
+Every success result adds `verification_scope`: `{"mode":"repository"}` for
+the bare command, or `{"mode":"target-item","item_id":"wb_..."}` for a target.
+Every returned finding adds `blocks_verification_scope`. Target mode keeps all
+repository findings visible but derives `ok`, exit status, and `state` only
+from findings that block that target. Global safety findings still block every
+target. This additive response and new CLI input move the negotiated API while
+the top-level claim-envelope `contract_version` remains `1`.
 
 ### Version 2
 
@@ -192,7 +207,7 @@ most `18446744073709551615`. Epochs never wrap, decrement, or get reused.
     "operations": {
       "work_claim": {
         "supported": true,
-        "api_version": 2,
+        "api_version": 3,
         "mode": "fenced",
         "claim_protected_publication": true,
         "fencing_enforced_at": "ledger-publication-commit-boundary",
@@ -282,7 +297,7 @@ A provisioned Git-journal backend MAY instead report:
   "operations": {
     "work_claim": {
       "supported": true,
-      "api_version": 2,
+      "api_version": 3,
       "mode": "merge-coordinated",
       "claim_protected_publication": true,
       "fencing_enforced_at": "git-history-reconciliation",
@@ -327,8 +342,9 @@ the local working tree and the local Git HEAD. A revision written in another
 worktree is absent in both, so reconciliation reports
 `stale-write-detected` and the mutation refuses with exit 6
 `claim-store-unavailable`, reason `publication-reconciliation-required` only
-when the mutation targets that item. `claim-verify` remains repository-wide and
-reports every unresolved finding.
+when the mutation targets that item. Bare `claim-verify` remains
+repository-wide. `claim-verify --id <item>` reports every unresolved finding
+but blocks only on that target and global safety barriers.
 
 The plain statement: **a recorded private write in one worktree blocks
 mutations targeting that item, not unrelated item mutations in sibling
@@ -461,10 +477,11 @@ Git `HEAD` is the only surface that can hold its authorized bytes, and an
 uncommitted create reports the global `git-finalization-required` until it is
 committed. A `patch` or `transition` may instead occupy the documented
 authorized predecessor/successor window and run before its predecessor is
-committed, but that window is an accepted overlap, not a licence: commit every
-mutation before the next one. Alpha.14 ships no batch mutation. The supported
-bulk pattern is the create-then-commit loop, one commit per created item, and
-item #186 owns the design of a safe batch create.
+committed, but that window is an accepted overlap, not a license: commit every
+mutation before the next one. Batch create is permanently rejected for the
+direct-Markdown architecture. The supported bulk pattern is serial
+`create --auto-commit`, one invocation and one commit per successful item; see
+the [accepted batch-create decision](design/2026-08-30-batch-create.md).
 
 **Cost.** A provisioned create already took the namespace lock, replayed the
 journal, loaded the ledger, read Git `HEAD`, and reconciled. The fence changes
@@ -474,8 +491,15 @@ appends. The durable cost is journal growth: each successful create adds one
 intent and one committed terminal, so with no other activity the
 65,536-entry limit permits at most 21,845 three-entry create cycles and the
 8 MiB byte limit may bind first. Other claim and mutation activity lowers that
-ceiling. Capacity is checked before publication and fails closed. Journal
-compaction is not part of this change.
+ceiling. Capacity is checked before publication and fails closed with exit 6
+`claim-store-unavailable`, reason `journal-capacity-exceeded`, and `unchanged`;
+no current-operation intent, terminal, or item byte is published. The same
+reason applies to claim lifecycle, verification, adoption, publication reads,
+and every legacy mutation while capacity is known before publication. A
+genuine persistence failure remains `clock-floor-persistence-failed`, and an
+ambiguous outcome after an intent remains an outcome-unknown refusal. Journal
+history is never truncated, and automatic compaction is not part of this
+contract.
 
 A ledger that already carries duplicate numbers is item #182 recovery work and
 is repaired through the separate `ledger-repair` contract, not through claim
@@ -659,35 +683,23 @@ a new UUID, and the removed UUID stays in journal history attributing nothing.
    authority after review. When it says ownership cannot be established from
    reachable refs, inspect reachable or dangling commits and remedy it the same
    way. In neither inspection case do you copy peer working-tree bytes.
-5. Run `claim-verify --ledger <dir> --json` in the blocked worktree and require
-   exit 0.
+5. Run `claim-verify --ledger <dir> --id <finding.item_id> --json` in the
+   blocked worktree and require exit 0.
 6. Resume the affected item.
 
 Auto-commit applies this target scope both before and after its Git commit. A
 successful mutation requires a valid ledger and no findings blocking the target
-item, not a globally empty findings list. Nonblocking findings remain available
-to `claim-verify`, where a caller that names no target still sees every finding.
+item, not a globally empty findings list. Nonblocking findings remain visible
+in targeted verification.
 
 **A target-scoped success is not a globally clean claim store.** The two scopes
 answer different questions and a caller MUST NOT substitute one for the other.
-A mutation, and auto-commit inside it, requires only that no finding blocks its
-own target item. `claim-verify` names no target, so every unresolved finding
-blocks it: exit 6 there is the repository-wide answer, and it stays exit 6
-while any item in the repository carries a blocking finding, including one
-belonging to work this caller has nothing to do with. A cooperating worker can
-therefore commit every one of its own mutations while `claim-verify` never
-reaches exit 0, because a sibling worktree's unpublished item is visible from
-every checkout that shares the common directory.
-
-That is current behavior, not a settled design. Item #184 is open in triage to
-choose the supported surface — item-scoped verification, target-aware input, or
-repository-wide success with structured foreign-work warnings, while keeping a
-strict whole-repository mode. Until it ships, an automated gate that demands a
-globally clean `claim-verify` is unsatisfiable in a repository with live
-sibling work. Gate on the mutation's own refusal, and read a repository-wide
-`claim-verify` as the diagnostic it is. Do not hand-edit an item or run
-`claim-adopt` to reach exit 0: adoption moves the coordinator's authorized
-revision and is not a way to silence a sibling's finding.
+`claim-verify --id <item>` keeps every finding visible, marks each with
+`blocks_verification_scope`, and derives its exit from that item plus global
+barriers. Bare `claim-verify` remains strict repository diagnosis and exits 6
+while any item carries a blocking finding. A cooperating worker can therefore
+finish its own item while bare verification still reports sibling work. Do not
+hand-edit or adopt a sibling's item to force either scope clean.
 
 `claim-verify` in the writing worktree finalizes that worktree's own state; it
 does not make a sibling checkout able to see the item. Synchronization or
@@ -1191,13 +1203,14 @@ process MAY recover the lock only when the operating system reports that owner
 process as absent. A live or malformed lock remains `claim-store-unavailable`;
 elapsed time alone never authorizes lock recovery.
 
-`claim-verify` takes the ledger path and no request body. Under the namespace
-lock, it replays the journal, advances and persists the clock floor, and
-reconciles pending intents against the exact item revision. It also compares
-successful publications with Git `HEAD`. When `HEAD` contains the committed
-revision, it appends one idempotent `publish-finalization` entry that records
-the Git commit. It writes a per-namespace reconciliation log outside the shared
-journal; that log is a derived audit artifact, not authority.
+`claim-verify` takes the ledger path, optional target item ID, and no request
+body. The target ID is syntax-validated without requiring local item presence.
+Under the namespace lock, it replays the journal, advances and persists the
+clock floor, and reconciles pending intents against exact item revisions. It
+also compares successful publications with Git `HEAD`. When `HEAD` contains a
+committed revision, it appends one idempotent `publish-finalization` entry that
+records the Git commit. It writes a per-namespace reconciliation log outside
+the shared journal; that log is a derived audit artifact, not authority.
 
 The log projects only journal entries that record a decision. `clock` and
 `publish-finalization` entries are never projected. A command therefore writes
@@ -1232,15 +1245,19 @@ not a claim finding, and a caller MUST NOT treat it as one. It is the honest
 statement that a clean claim answer is not a clear road, and the caller must
 repair validation before the next mutation will run.
 
-A clean verification returns exit 0 and `state: "committed"`. This state
-describes durable coordinator reconciliation, not Git finalization of every
+A verification result always names `verification_scope`, and every finding
+states `blocks_verification_scope`. Bare mode treats every blocking repository
+finding as blocking. Target mode keeps unrelated target-scoped findings
+visible but nonblocking; findings classified as global still block. A clean
+scope returns exit 0 and `state: "committed"`. This state describes durable
+coordinator reconciliation, not Git finalization of every successful
 publication; callers must inspect each `result.publications` row's
 `git_finalized` and `git_commit`. Findings named `pending-intent-resolved` are
-clean recovery. Any `legacy-mutation-outcome-unknown`,
-`publication-outcome-unknown`, `revision-regression`, or `stale-write-detected`
-finding returns exit 6 and `state: "unknown"`. A caller MUST stop publication
-work and inspect those findings. Repeating verification MUST NOT duplicate a
-publication finalization.
+visible and nonblocking. Any blocking `legacy-mutation-outcome-unknown`,
+`publication-outcome-unknown`, `revision-regression`, or
+`stale-write-detected` finding returns exit 6 and `state: "unknown"`. A caller
+MUST stop publication work and inspect those findings. Repeating verification
+MUST NOT duplicate a publication finalization.
 
 Every finding that blocks a mutation MUST carry a `remediation` string, and
 that string MUST name both the action to take and `claim-verify`. It MUST also
@@ -1446,9 +1463,10 @@ merge-coordinated backend returns when reconciliation found blocking findings,
 and it is the reason an uncommitted prior mutation produces. **`claim-verify`
 is its reconciliation procedure.** The envelope also carries
 `details.findings`; act on each finding's `remediation` string, then run
-`wowbagger claim-verify --ledger <dir> --json` and require exit 0 before
-repeating the refused command. Nothing else reconciles the journal, and no
-other verb is needed.
+`wowbagger claim-verify --ledger <dir> --id <finding.item_id> --json` for the
+affected item and require exit 0 before repeating that item's refused command.
+Use bare verification only for strict repository diagnosis. Nothing else
+reconciles the journal, and no other verb is needed.
 
 This code was added after the version 1 vectors were written. It is additive:
 it names a condition the original text did not model, changes no existing code,

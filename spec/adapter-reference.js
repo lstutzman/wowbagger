@@ -16,6 +16,13 @@ const SAFE_ID = /^[A-Za-z0-9._-]{1,128}$/;
 const NONCE = /^[A-Za-z0-9._-]{16,128}$/;
 const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
+const LOCK_OWNER_OPERATIONS = new Set([
+  'create',
+  'transition',
+  'parent-migrate',
+  'snooze',
+  'patch',
+]);
 // What the runner may say about the request it wrote to the core's standard
 // input. Only `delivered` means the core received the whole request.
 const INPUT_DELIVERY_STATES = ['delivered', 'failed', 'unread'];
@@ -35,7 +42,7 @@ const WORKBENCH_PROJECTION_VERSION = 1;
 const MAX_WORKBENCH_TITLE_CHARACTERS = 120;
 const MAX_WORKBENCH_COLLECTION_ENTRIES = 50;
 const MAX_WORKBENCH_RESPONSE_BYTES = 65536;
-const WORK_CLAIM_API_VERSION = 2;
+const WORK_CLAIM_API_VERSION = 3;
 // The report configuration versions the contract requires this core to accept:
 // version 1 unchanged, version 2 naming views.
 const REPORT_CONFIG_VERSIONS = [1, 2];
@@ -2538,7 +2545,7 @@ function validLockHeldDetails(value) {
     && hasExactKeys(value.owner, ['lock_version', 'item_id', 'operation', 'writer_id', 'started_at'])
     && value.owner.lock_version === 1
     && value.owner.item_id === value.id
-    && new Set(['create', 'transition', 'patch']).has(value.owner.operation)
+    && LOCK_OWNER_OPERATIONS.has(value.owner.operation)
     && typeof value.owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(value.owner.writer_id)
     && isCoreRfc3339Utc(value.owner.started_at);

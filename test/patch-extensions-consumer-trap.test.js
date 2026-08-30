@@ -27,6 +27,7 @@ const DECLARATION = `${JSON.stringify({
   extensions_version: 1,
   members: { external_id: 'string' },
 }, null, 2)}\n`;
+const TAGS_DECLARATION = '{"extensions_version":1,"members":{"tags":"string-list"}}\n';
 
 function run(cwd, ...argumentsList) {
   const result = spawnSync(process.execPath, [CLI, ...argumentsList], { cwd, encoding: 'utf8' });
@@ -55,7 +56,7 @@ function frontmatter(source) {
 
 // A provisioned ledger that declares exactly one patchable extension member,
 // committed like every other piece of ledger structure.
-async function provisionedRepository() {
+async function provisionedRepository({ declare = true } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'wb-extensions-trap-'));
   git(root, 'init', '-q');
   git(root, 'config', 'user.email', 'test@example.com');
@@ -64,9 +65,13 @@ async function provisionedRepository() {
   await mkdir(ledger);
   const provisioned = run(root, 'provision', '--ledger', ledger, '--json');
   assert.equal(provisioned.exit, 0, JSON.stringify(provisioned.envelope));
-  await writeFile(path.join(ledger, '.wowbagger', 'extensions.json'), DECLARATION);
+  if (declare) {
+    await writeFile(path.join(ledger, '.wowbagger', 'extensions.json'), DECLARATION);
+  }
   git(root, 'add', '.');
-  git(root, 'commit', '-qm', 'Provision the ledger and declare its extension members');
+  git(root, 'commit', '-qm', declare
+    ? 'Provision the ledger and declare its extension members'
+    : 'Provision the ledger');
   return { ledger, root };
 }
 
@@ -187,3 +192,87 @@ for (const [label, seeded, handEdit] of [
     assert.equal(next.envelope.state, 'committed');
   });
 }
+
+test('existing tagged mirror bootstraps its declaration before correcting tags in band', async () => {
+  const fixture = await provisionedRepository({ declare: false });
+  const authorized = await mirroredItem(fixture, { tags: ['partners'] });
+
+  const domainCorrection = run(fixture.root, 'patch', '--ledger', fixture.ledger, '--input',
+    await requestFile(fixture.root, 'patch-domain.json', {
+      id: ITEM_ID,
+      expected_revision: authorized,
+      date: '2026-08-17',
+      set: {
+        title: 'Corrected external card mirror',
+        body: 'Corrected mirrored content.\n',
+      },
+    }), '--json');
+  assert.equal(domainCorrection.exit, 0, JSON.stringify(domainCorrection.envelope));
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Correct mirror domain fields');
+
+  const provisionRequest = await requestFile(fixture.root, 'provision-tags.json', {
+    members: { tags: 'string-list' },
+  });
+  const dryRun = run(
+    fixture.root,
+    'extensions-provision',
+    '--ledger',
+    fixture.ledger,
+    '--input',
+    provisionRequest,
+    '--json',
+    '--dry-run',
+  );
+  assert.equal(dryRun.exit, 0, JSON.stringify(dryRun.envelope));
+  assert.equal(dryRun.envelope.result.source, TAGS_DECLARATION);
+
+  const provisioned = run(
+    fixture.root,
+    'extensions-provision',
+    '--ledger',
+    fixture.ledger,
+    '--input',
+    provisionRequest,
+    '--json',
+  );
+  assert.equal(provisioned.exit, 0, JSON.stringify(provisioned.envelope));
+  assert.equal(
+    await readFile(path.join(fixture.ledger, '.wowbagger', 'extensions.json'), 'utf8'),
+    TAGS_DECLARATION,
+  );
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Authorize mirrored tags');
+
+  const inspected = run(
+    fixture.root,
+    'inspect',
+    '--ledger',
+    fixture.ledger,
+    '--id',
+    ITEM_ID,
+    '--json',
+  );
+  assert.equal(inspected.exit, 0, JSON.stringify(inspected.envelope));
+  const patched = run(fixture.root, 'patch', '--ledger', fixture.ledger, '--input',
+    await requestFile(fixture.root, 'patch-tags.json', {
+      id: ITEM_ID,
+      expected_revision: inspected.envelope.result.item.revision,
+      date: '2026-08-17',
+      set: { extensions: { tags: ['corrected'] } },
+    }), '--json');
+  assert.equal(patched.exit, 0, JSON.stringify(patched.envelope));
+  const source = Buffer.from(patched.envelope.result.item.source_base64, 'base64').toString('utf8');
+  assert.deepEqual(frontmatter(source).tags, ['corrected']);
+  git(fixture.root, 'add', 'ledger');
+  git(fixture.root, 'commit', '-qm', 'Correct mirror tags through patch');
+
+  const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(verified.envelope.result.findings, []);
+  assert.equal(verified.envelope.result.ledger_validation.valid, true);
+
+  const next = await createNext(fixture);
+  assert.equal(next.exit, 0, JSON.stringify(next.envelope));
+  assert.equal(next.envelope.state, 'committed');
+});

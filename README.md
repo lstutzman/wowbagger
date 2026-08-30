@@ -100,7 +100,8 @@ cooperating writers; they are not exclusive locks.
 
 ## Start here
 
-Install the core CLI, then verify it. The core requires Node.js 20 or later:
+Install the core CLI, then verify it. The supported runtime is Node.js 24; Node
+26 remains excluded because of the separate Vitest incompatibility:
 
 ```sh
 npm install -g wowbagger@0.1.0-alpha.17   # exact plugin-matched release
@@ -168,21 +169,45 @@ names — `create` publishes into an existing directory and does not make one.
 Nothing is renamed after a create. This repository dogfoods that binding: its
 own items live in [`ledger/items/`](ledger/items/).
 
-If your items mirror an external tracker and carry your own identifier fields,
-declare them now too. `<ledger>/.wowbagger/extensions.json` is what makes a
-consumer-owned extension member patchable:
+If your items will mirror an external tracker and carry consumer-owned fields,
+declare those fields **before the first item**. The declaration makes each
+named extension member patchable:
 
 ```sh
 echo '{"extensions_version":1,"members":{"external_id":"string"}}' \
   > path/to/ledger/.wowbagger/extensions.json
 ```
 
-Each member declares one value type — `string`, `integer`, `boolean`, or
-`string-list`. **A ledger without that file has no patchable extension member at
-all**, and a `set.extensions` patch against it is refused by name. The
-declaration authorizes a write; it never describes the ledger, so `validate`
-does not read it. Both files are ledger setup, not runner configuration: commit
-them.
+Each member declares one value type: `string`, `integer`, `boolean`, or
+`string-list`. A ledger without the file has no patchable extension member,
+and `set.extensions` refuses the missing declaration by name. The declaration
+authorizes writes; it does not define item validity, so `validate` does not
+read it. Commit the declaration with the other ledger setup.
+
+If an existing ledger already carries extension values, do not create the
+declaration by hand. Select every member and type explicitly in a request,
+review a dry run, then publish the same proposal:
+
+```json
+{"members":{"tags":"string-list"}}
+```
+
+```sh
+wowbagger extensions-provision --ledger path/to/ledger \
+  --input declaration.json --json --dry-run
+wowbagger extensions-provision --ledger path/to/ledger \
+  --input declaration.json --json
+git add path/to/ledger/.wowbagger/extensions.json
+git commit -m "Declare patchable ledger extensions"
+```
+
+The command first requires a valid complete ledger. It validates every
+occurrence of each selected member, reports occurrence counts, changes no item
+bytes, and publishes one canonical declaration without overwriting a different
+one. Commit that file before the first corresponding `patch`, inspect the
+target for its current revision, then use `set.extensions.tags`. An item that
+writes the selected member with a YAML anchor or alias remains
+`extension-anchored` and requires a reviewed hand-edit.
 
 Cores at `0.1.0-alpha.4` and earlier ignore the layout file and publish every
 item at the ledger root.
@@ -565,7 +590,8 @@ approval never rides the bootstrap request, which the model controls;
 
 ## Core commands
 
-The current core requires Node.js 20 or later. From a Wowbagger checkout,
+The current core requires Node.js 24. Node 26 is not in the supported matrix.
+From a Wowbagger checkout,
 `./bin/wowbagger.js --help` prints the full command inventory,
 `./bin/wowbagger.js <command> --help` prints that command's usage, and
 `./bin/wowbagger.js --version` prints the installed package version. The
@@ -599,7 +625,7 @@ npm ci
 ./bin/wowbagger.js claim read --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim renew --ledger path/to/ledger --input request.json --json
 ./bin/wowbagger.js claim release --ledger path/to/ledger --input request.json --json
-./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
+./bin/wowbagger.js claim-verify --ledger path/to/ledger [--id wb_...] --json
 ```
 
 `validate` writes exactly one JSON result to standard output. A valid ledger
@@ -692,9 +718,11 @@ command asks you to parse the Markdown by hand:
   refusal carries `error.details.item`, the complete snapshot of the item you
   asked for, whenever no validation error names that item's path. A faulted
   item is withheld; `validate` already names its repair.
-- `claim-verify --json` reports `result.ledger_validation`. Exit 0 with
-  `findings: []` and `ledger_validation.valid: false` says the claim journal is
-  consistent and validation alone is blocking every mutation.
+- `claim-verify --json` reports `result.ledger_validation`. Bare verification
+  is strict repository-wide mode; `--id <item>` keeps all findings visible but
+  fails only for that item and global barriers. Exit 0 with an invalid
+  `ledger_validation` still means claim state is clean but validation blocks
+  mutation.
 
 ### Work claims
 
@@ -741,7 +769,7 @@ The loop that works:
 ```sh
 ./bin/wowbagger.js create --ledger path/to/ledger --input request.json --json
 git add path/to/ledger && git commit -m "Record the mutation"
-./bin/wowbagger.js claim-verify --ledger path/to/ledger --json
+./bin/wowbagger.js claim-verify --ledger path/to/ledger --id wb_... --json
 ./bin/wowbagger.js transition --ledger path/to/ledger --input next.json --json
 ```
 
@@ -765,8 +793,12 @@ repeat the refused command. A `worktree-synchronization-required` finding on an
 unrelated item does not block the requested mutation. The same finding on the
 target item, and every `unauthorized-revision` finding, remains blocking.
 
-Batch work is where this bites. Filing ten items means ten commits, not one
-commit at the end.
+Batch work is where this bites. Filing ten items means ten serial
+`create --auto-commit` calls and ten commits, not one batch commit. Wowbagger
+permanently rejects batch create for the direct-Markdown architecture:
+`limits.multi_item_atomicity` remains `false`, request order is the supported
+bulk order, and each create must finish or recover before the next begins. See
+the [batch-create decision](docs/design/2026-08-30-batch-create.md).
 
 ### Or fold the commit into the mutation
 

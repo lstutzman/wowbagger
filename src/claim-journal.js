@@ -35,6 +35,18 @@ export function isProjectedJournalEntry(entry) {
   return !UNPROJECTED_ENTRY_TYPES.has(entry.type);
 }
 
+export function isClaimJournalCapacityError(error) {
+  const seen = new Set();
+  for (let current = error; current && typeof current === 'object'; current = current.cause) {
+    if (seen.has(current)) return false;
+    seen.add(current);
+    if (current.code === 'CLAIM_JOURNAL_CAPACITY'
+      || current.reason === 'journal-capacity-exceeded') {
+      return true;
+    }
+  }
+  return false;
+}
 export function claimJournalPath(commonDir, namespace) {
   return path.join(commonDir, 'wowbagger', namespace, 'journal.ndjson');
 }
@@ -105,7 +117,8 @@ export async function writeReconcileLog(logPath, namespace, entries) {
     '',
   ].join('\n');
   if (Buffer.byteLength(content) > MAX_RECONCILE_LOG_BYTES) throw journalCapacityExceeded();
-  await mkdir(path.dirname(logPath), { recursive: true });
+  const directory = path.dirname(logPath);
+  await ensureDirectoryNoFollow(directory);
   const handle = await openNoFollow(logPath,
     constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC);
   try {
@@ -145,6 +158,22 @@ export function parseReconcileLog(source, namespace) {
     }
   }
   return entries;
+}
+
+async function ensureDirectoryNoFollow(directory) {
+  let info;
+  try {
+    info = await lstat(directory);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    await mkdir(directory);
+    info = await lstat(directory);
+  }
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    const error = new Error(`refusing non-directory reconciliation path ${directory}`);
+    error.code = 'ELOOP';
+    throw error;
+  }
 }
 
 // O_NOFOLLOW is undefined on win32, so the no-follow guarantee falls back to

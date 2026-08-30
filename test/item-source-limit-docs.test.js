@@ -37,6 +37,15 @@ test('the advertised limit is the number every contract states', () => {
     'the mutation contract capability delta must state the advertised work-claim API version',
   );
   assert.ok(
+    mutationContract.includes(`work-claim API remains version ${capability.operations.work_claim.api_version}`),
+    'the current core-version section must state the current work-claim API version',
+  );
+  assert.equal(
+    mutationContract.includes('work-claim API remains version 2'),
+    false,
+    'the normative contract must not retain the superseded current-version claim',
+  );
+  assert.ok(
     adapterContract.includes(`| Independently probed core \`contract_version\` | Exactly \`${version}\` |`),
     'the adapter contract must require the emitted core version',
   );

@@ -26,6 +26,13 @@ import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
 import { JsonNumber, parseJsonRequest, pointer, sortIssues } from './request.js';
 import { isCalendarDate, isRfc3339Utc, validateLedger } from './validate.js';
 
+const LOCK_OWNER_OPERATIONS = new Set([
+  'create',
+  'transition',
+  'parent-migrate',
+  'snooze',
+  'patch',
+]);
 const REQUIRED_CORE_FIELDS = [
   'schema_version',
   'id',
@@ -2066,7 +2073,7 @@ function validLockOwner(owner, file) {
   }
   return isJsonInteger(owner.lock_version, 1)
     && owner.item_id === expectedId
-    && (owner.operation === 'create' || owner.operation === 'transition' || owner.operation === 'patch')
+    && LOCK_OWNER_OPERATIONS.has(owner.operation)
     && typeof owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(owner.writer_id)
     && isRfc3339Utc(owner.started_at);

@@ -18,6 +18,13 @@ const WOWBAGGER_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
 const CANONICAL_UINT64 = /^(0|[1-9][0-9]*)$/;
 const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
+const LOCK_OWNER_OPERATIONS = new Set([
+  'create',
+  'transition',
+  'parent-migrate',
+  'snooze',
+  'patch',
+]);
 const MESSAGES = Object.freeze({
   'mutation-outcome-unknown': 'The mutation may have been applied; inspect current state before retrying.',
   'output-limit-exceeded': 'The core output exceeded the requested bound.',
@@ -1133,7 +1140,7 @@ function validLockHeldDetails(value) {
     && hasExactMembers(value.owner, ['lock_version', 'item_id', 'operation', 'writer_id', 'started_at'])
     && value.owner.lock_version === 1
     && value.owner.item_id === value.id
-    && new Set(['create', 'transition', 'patch']).has(value.owner.operation)
+    && LOCK_OWNER_OPERATIONS.has(value.owner.operation)
     && typeof value.owner.writer_id === 'string'
     && /^[\x21-\x7e]{1,128}$/.test(value.owner.writer_id)
     && isCoreRfc3339Utc(value.owner.started_at);

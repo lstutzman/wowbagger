@@ -16,7 +16,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { parseReconcileLog } from '../src/claim-journal.js';
+import { parseReconcileLog, writeReconcileLog } from '../src/claim-journal.js';
 import { withClaimLock } from '../src/claim-store.js';
 import { listWorktrees } from '../src/git-worktrees.js';
 import { ensureWorktreeIdentity } from '../src/worktree-identity.js';
@@ -1655,6 +1655,14 @@ test('a legacy successor without a recorded writer keeps advisory synchronizatio
       return JSON.stringify(entry);
     });
   await writeFile(journalPath, `${aged.join('\n')}\n`);
+  const reconcilePath = path.join(
+    fixture.ledger,
+    '.wowbagger',
+    `reconcile-${NAMESPACE}.md`,
+  );
+  await writeReconcileLog(reconcilePath, NAMESPACE, aged.map((line) => JSON.parse(line)));
+  git(fixture.root, 'add', reconcilePath);
+  git(fixture.root, 'commit', '-qm', 'Record legacy writerless evidence');
 
   const verified = run(fixture.root, 'claim-verify', '--ledger', fixture.ledger, '--json');
   assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
@@ -2235,6 +2243,21 @@ test('an unknown sibling revision remains unauthorized and blocks unrelated work
     (await readFile(siblingSeed, 'utf8')).replace('title: "Seed"', 'title: "Unauthorized"'),
   );
 
+  const targeted = run(
+    fixture.siblingRoot,
+    'claim-verify',
+    '--ledger',
+    fixture.siblingLedger,
+    '--id',
+    secondId,
+    '--json',
+  );
+  assert.equal(targeted.exit, 6, JSON.stringify(targeted.envelope));
+  const globalFinding = targeted.envelope.result.findings
+    .find((entry) => entry.item_id === seedId);
+  assert.equal(globalFinding.reason, 'unauthorized-revision');
+  assert.equal(globalFinding.blocks_verification_scope, true);
+
   const second = run(fixture.siblingRoot, 'inspect', '--ledger', fixture.siblingLedger, '--id', secondId, '--json');
   assert.equal(second.exit, 0, JSON.stringify(second.envelope));
   const unrelated = run(
@@ -2304,6 +2327,39 @@ test('post-commit verification ignores an unrelated synchronization finding', as
   assert.equal(finding.reason, 'worktree-synchronization-required');
   assert.equal(finding.owner_ref, `refs/heads/${fixture.branch}`);
   assertNoInternalScope(verified.envelope.result.findings);
+
+  const unrelatedScope = run(
+    fixture.siblingRoot,
+    'claim-verify',
+    '--ledger',
+    fixture.siblingLedger,
+    '--id',
+    secondId,
+    '--json',
+  );
+  assert.equal(unrelatedScope.exit, 0, JSON.stringify(unrelatedScope.envelope));
+  assert.deepEqual(unrelatedScope.envelope.result.verification_scope, {
+    mode: 'target-item',
+    item_id: secondId,
+  });
+  const visibleUnrelated = unrelatedScope.envelope.result.findings
+    .find((entry) => entry.item_id === seedId);
+  assert.equal(visibleUnrelated.reason, 'worktree-synchronization-required');
+  assert.equal(visibleUnrelated.blocks_verification_scope, false);
+
+  const owningScope = run(
+    fixture.siblingRoot,
+    'claim-verify',
+    '--ledger',
+    fixture.siblingLedger,
+    '--id',
+    seedId,
+    '--json',
+  );
+  assert.equal(owningScope.exit, 6, JSON.stringify(owningScope.envelope));
+  const visibleTarget = owningScope.envelope.result.findings
+    .find((entry) => entry.item_id === seedId);
+  assert.equal(visibleTarget.blocks_verification_scope, true);
 });
 
 test('auto-commit still blocks a synchronization finding on its own target', async () => {

@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, open, writeFile } from 'node:fs/promises';
+import { access, link, mkdir, open, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,6 +8,7 @@ import { resolveClaimBackend, resolveWorkClaimCapability } from './claim-capabil
 import {
   appendClaimEntry,
   claimJournalPath,
+  isClaimJournalCapacityError,
   claimReconcileLogPath,
   parseReconcileLog,
   replayClaimJournal,
@@ -94,6 +96,7 @@ import { readWorktreeIdentity } from './worktree-identity.js';
 
 const CLAIM_OPERATIONS = { read: claimRead, acquire: claimAcquire, renew: claimRenew, release: claimRelease };
 const MUTATION_CONTRACT_VERSION = 5;
+const ITEM_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const AUTO_COMMIT_COMMANDS = new Set([
   'create',
   'transition',
@@ -422,8 +425,25 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeInvalidRequest(command, parsedRequest.issues);
       return;
     }
+    const ledger = await loadLedger(parsedOptions.options.ledger);
+    const validation = validateLedger(ledger);
+    if (!validation.valid) {
+      process.stdout.write(`${JSON.stringify({
+        ok: false,
+        command,
+        contract_version: MUTATION_CONTRACT_VERSION,
+        state: 'unchanged',
+        error: {
+          code: 'ledger-invalid',
+          message: 'The configured ledger is invalid.',
+          details: { validation_errors: validation.errors },
+        },
+      })}\n`);
+      process.exitCode = 3;
+      return;
+    }
     const proposal = proposeExtensionDeclaration({
-      ledger: await loadLedger(parsedOptions.options.ledger),
+      ledger,
       members: parsedRequest.value?.members,
     });
     if (!proposal.ok) {
@@ -457,33 +477,71 @@ export async function runCli(argumentsList, { scenario } = {}) {
       })}\n`);
       return;
     }
+    const sameDeclaration = (declaration) => declaration
+      && Object.keys(declaration.members).length === Object.keys(proposal.declaration.members).length
+      && Object.entries(proposal.declaration.members)
+        .every(([name, type]) => declaration.members[name] === type);
+    const refuseConflict = () => {
+      process.stdout.write(`${JSON.stringify({
+        ok: false,
+        command,
+        contract_version: MUTATION_CONTRACT_VERSION,
+        state: 'unchanged',
+        error: {
+          code: 'extension-declaration-conflict',
+          message: 'The ledger already carries a different extension declaration.',
+          details: { output: '.wowbagger/extensions.json' },
+        },
+      })}\n`);
+      process.exitCode = 4;
+    };
     const existing = await loadExtensionDeclaration(parsedOptions.options.ledger);
     if (existing.declared) {
-      const same = existing.declaration
-        && JSON.stringify(existing.declaration) === JSON.stringify(proposal.declaration);
-      if (!same) {
-        process.stdout.write(`${JSON.stringify({
-          ok: false,
-          command,
-          contract_version: MUTATION_CONTRACT_VERSION,
-          state: 'unchanged',
-          error: {
-            code: 'extension-declaration-conflict',
-            message: 'The ledger already carries a different extension declaration.',
-            details: { output: '.wowbagger/extensions.json' },
-          },
-        })}\n`);
-        process.exitCode = 4;
+      if (!sameDeclaration(existing.declaration)) {
+        refuseConflict();
         return;
       }
     } else {
       await mkdir(path.dirname(output), { recursive: true });
-      const handle = await open(output, 'wx');
+      if (scenario === 'extension-provision-concurrent-same') {
+        await writeFile(
+          output,
+          '{\n  "extensions_version": 1,\n  "members": {"tags":"string-list"}\n}\n',
+          { flag: 'wx' },
+        );
+      } else if (scenario === 'extension-provision-concurrent-different') {
+        await writeFile(
+          output,
+          '{"extensions_version":1,"members":{"tier":"string"}}\n',
+          { flag: 'wx' },
+        );
+      }
+      const temporary = path.join(path.dirname(output), `.extensions-${randomUUID()}.tmp`);
+      const handle = await open(temporary, 'wx');
       try {
         await handle.writeFile(proposal.source, 'utf8');
         await handle.sync();
       } finally {
         await handle.close();
+      }
+      try {
+        await extensionProvisionCheckpoint(scenario, parsedOptions.options.ledger);
+        try {
+          await link(temporary, output);
+        } catch (error) {
+          if (error?.code !== 'EEXIST') throw error;
+          const winner = await loadExtensionDeclaration(parsedOptions.options.ledger);
+          if (!winner.declared || !sameDeclaration(winner.declaration)) {
+            refuseConflict();
+            return;
+          }
+        }
+      } finally {
+        try {
+          await unlink(temporary);
+        } catch (error) {
+          if (error?.code !== 'ENOENT') throw error;
+        }
       }
     }
     process.stdout.write(`${JSON.stringify({
@@ -650,6 +708,12 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeClaimInvalidRequest(command, parsedOptions.issues);
       return;
     }
+    if (parsedOptions.options.id !== undefined && !ITEM_ID.test(parsedOptions.options.id)) {
+      writeClaimInvalidRequest(command, [
+        issue('/arguments', 'invalid-value', 'Argument --id must be a canonical Wowbagger item ID.'),
+      ]);
+      return;
+    }
     const ledgerDirectory = parsedOptions.options.ledger;
     const gitCommonDir = await resolveVerifiedGitCommonDir(ledgerDirectory);
     const namespace = gitCommonDir ? await readNamespace(ledgerDirectory) : null;
@@ -663,6 +727,7 @@ export async function runCli(argumentsList, { scenario } = {}) {
       ledgerDirectory,
       gitCommonDir,
       namespace,
+      targetItemId: parsedOptions.options.id ?? null,
     }));
     return;
   }
@@ -1411,9 +1476,11 @@ function parseContractOptions(command, argumentsList) {
             ? new Map([['--ledger', 'ledger'], ['--recovery-token', 'recoveryToken']])
             : command === 'claim-merge-verify'
               ? new Map([['--ledger', 'ledger'], ['--base', 'base'], ['--head', 'head']])
-              : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
-                || command === 'claim-sync' || command === 'number-repair-proposal'
-                ? new Map([['--ledger', 'ledger']])
+              : command === 'claim-verify'
+                ? new Map([['--ledger', 'ledger'], ['--id', 'id']])
+                : command === 'provision' || command === 'claim-capabilities'
+                  || command === 'claim-sync' || command === 'number-repair-proposal'
+                  ? new Map([['--ledger', 'ledger']])
                 : command === 'mint-id'
                   ? new Map([['--date', 'date']])
                   : new Map();
@@ -1434,7 +1501,9 @@ function parseContractOptions(command, argumentsList) {
         ? new Set(['--out', '--view'])
         : command === 'inspect'
           ? new Set(['--id', '--number', '--as-of'])
-          : new Set();
+          : command === 'claim-verify'
+            ? new Set(['--id'])
+            : new Set();
   for (let index = 0; index < argumentsList.length; index += 1) {
     const argument = argumentsList[index];
     if (argument === '--json') {
@@ -1467,6 +1536,7 @@ function parseContractOptions(command, argumentsList) {
       continue;
     }
     seen.add(argument);
+
     const value = argumentsList[index + 1];
     if (!value || value.startsWith('--')) {
       issues.push(argumentIssue(index + 1, 'missing-argument', `Argument ${argument} requires a value.`));
@@ -1505,6 +1575,23 @@ function parseContractOptions(command, argumentsList) {
   return { options, issues: sortIssues(issues) };
 }
 
+async function extensionProvisionCheckpoint(scenario, ledgerDirectory) {
+  if (scenario !== 'extension-provision-pause-before-link') return;
+  const reached = path.join(ledgerDirectory, '.wowbagger-test-extension-provision-reached');
+  const allowed = path.join(ledgerDirectory, '.wowbagger-test-extension-provision-continue');
+  await writeFile(reached, 'reached\n');
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      await access(allowed);
+      return;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting to continue extension declaration publication.');
+}
 // `--auto-commit` is the only bare flag beyond `--json`, and it changes what
 // happens after the mutation, never the mutation itself.
 function autoCommitted(command, options, run, scenario, operationId = null, targetItemId = null) {
@@ -1729,8 +1816,11 @@ async function runClaimCommand(claimCommand, argumentsList) {
         persist: false,
       });
       writeClaimEnvelope(operation(replayed.state, request, new Date().toISOString()).envelope);
-    } catch {
-      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-unreadable'));
+    } catch (error) {
+      writeClaimEnvelope(claimStoreUnavailable(
+        claimCommand,
+        isClaimJournalCapacityError(error) ? 'journal-capacity-exceeded' : 'claim-store-unreadable',
+      ));
     }
     return;
   }
@@ -1822,6 +1912,10 @@ async function runClaimCommand(claimCommand, argumentsList) {
   } catch (error) {
     if (error?.code === 'CLAIM_LOCK_HELD') {
       writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-locked'));
+      return;
+    }
+    if (isClaimJournalCapacityError(error)) {
+      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'journal-capacity-exceeded'));
       return;
     }
     if (error?.code === 'CLAIM_STORE_UNREADABLE') {
@@ -1954,7 +2048,7 @@ function usage(command) {
     return 'Usage: wowbagger claim-adopt --ledger <dir> --input <request.json> --json';
   }
   if (command === 'claim-verify') {
-    return 'Usage: wowbagger claim-verify --ledger <dir> --json';
+    return 'Usage: wowbagger claim-verify --ledger <dir> [--id <wb_...>] --json';
   }
   if (command === 'snooze') {
     return 'Usage: wowbagger snooze --ledger <dir> --input <request.json> --json [--auto-commit]';

@@ -575,3 +575,27 @@ test('adoption refuses when the authoritative clock floor cannot be persisted', 
   const replayed = await replayClaimJournal(journalPath, fixture.namespace);
   assert.deepEqual(replayed.entries.filter((entry) => entry.type === 'revision-adoption'), []);
 });
+
+test('adoption reports journal capacity before evaluating its revision witness', async () => {
+  const fixture = await blockedByUnauthorizedRevision();
+  const journalPath = claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace);
+  const clock = '2030-01-11T09:00:00.000Z';
+  const entries = Array.from({ length: 65537 }, (_, index) => JSON.stringify({
+    seq: index + 1,
+    type: 'clock',
+    now: clock,
+    floor: clock,
+  }));
+  await writeFile(journalPath, `${entries.join('\n')}\n`);
+
+  const refused = run(
+    fixture.root,
+    'claim-adopt', '--ledger', fixture.ledger, '--input', await adoptRequest(fixture), '--json',
+  );
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.command, 'claim-adopt');
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'journal-capacity-exceeded');
+});

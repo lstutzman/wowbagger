@@ -7,6 +7,45 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+- Existing ledgers can safely authorize standard `tags` corrections through
+  `extensions-provision`: dry-run and publication now require a valid complete
+  ledger, validate every historical occurrence against explicit
+  `string-list` authority, preserve all item bytes, and publish one canonical
+  no-clobber declaration.
+
+- `claim-verify` now accepts optional `--id <item>` for target-scoped
+  verification while retaining strict repository-wide behavior when omitted.
+  All findings remain visible with `blocks_verification_scope`; work-claim API
+  version is now 3 while the legacy envelope marker remains 1.
+
+- Journal-capacity exhaustion now preserves the public
+  `journal-capacity-exceeded` discriminator across claim, verification,
+  adoption, publication, and legacy mutation paths. Pre-publication refusals
+  remain exit 6 `claim-store-unavailable`, `unchanged`, with prior journal and
+  item bytes intact; genuine persistence failures and post-intent unknown
+  outcomes retain their existing classifications.
+
+- Lock diagnostics now preserve valid `parent-migrate` and `snooze` owners,
+  matching the five-operation mutation contract. Unknown or malformed owner
+  metadata remains `owner: null` with `owner_diagnostic: "invalid-shape"`;
+  mutual exclusion and refusal behavior are unchanged.
+
+- Batch create is permanently rejected for the direct-Markdown architecture.
+  `limits.multi_item_atomicity` remains `false`; serial
+  `create --auto-commit` calls in request order remain the supported bulk path,
+  with one invocation and one commit per item.
+
+The alpha.14 hard cutover remains the baseline: `claim-store-unavailable`
+answers **The durable claim store is unavailable.** with
+`claim-store-unreadable`; upgrade every writer before the first alpha.14 create.
+There is no automatic migration or mixed-version grace period. There is no
+batch mutation. The create-then-commit loop, implemented most briefly as serial
+`create --auto-commit`, remains the supported bulk path. Ledger item #186 records the
+permanent no-batch decision, and item #182 owns existing duplicate numbers.
+The fence adds no new Git roster or history
+traversal and costs two extra fsync'd journal appends within the 65,536-entry
+limit.
+
 ## 0.1.0-alpha.17 - 2026-08-30
 
 - **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and

@@ -218,6 +218,15 @@ upgrade this worktree to continue**, and say so to the user: the old binary is
 immutable and can never print better guidance. (Item #185 is open for general
 version-drift detection.)
 
+Do not confuse that with a full journal. Exit 6
+`claim-store-unavailable` with reason `journal-capacity-exceeded` means the
+65,536-entry or 8,388,608-byte bound was reached before publication. State is
+unchanged and prior history stays intact. Do not upgrade, truncate, compact, or
+hand-edit the journal; no automatic recovery verb exists. Report the capacity
+refusal as the blocker. A real persistence failure remains
+`clock-floor-persistence-failed`, and uncertainty after an intent remains an
+outcome-unknown refusal.
+
 Say what the fix does and does not cover. It closes the reported
 PropertyCompass2 collision: cooperating alpha.14 worktrees of one clone that
 share one Git common directory can no longer commit two items carrying the same
@@ -459,7 +468,7 @@ On a **provisioned** ledger (`claim capabilities` reports
 ```sh
 wowbagger create --ledger <dir> --input request.json --json
 git add <dir> && git commit -m "Record the mutation"
-wowbagger claim-verify --ledger <dir> --json
+wowbagger claim-verify --ledger <dir> --id <item> --json
 wowbagger transition --ledger <dir> --input next.json --json
 ```
 
@@ -467,7 +476,7 @@ The claim store reconciles every recorded mutation with Git `HEAD` and the
 working tree. It refuses the next mutation when it finds an
 `unauthorized-revision`, requires Git finalization, or requires synchronization
 for the target item. A synchronization finding on an unrelated item remains
-visible to `claim-verify` but does not block that command.
+visible to targeted `claim-verify` without blocking that item.
 
 One exact window is nonblocking: an existing item's latest authorized
 working-tree bytes with an earlier authorized revision at `HEAD`. That
@@ -486,18 +495,28 @@ what each finding's `remediation` string says (it names the path), run
 `claim-verify` until it exits 0, then repeat the refused command. Never hand-
 edit a ledger file to get past it.
 
-For migrated ledgers, run the explicit extension declaration workflow before
-managed corrections:
+For an existing ledger, bootstrap patch authority before managed corrections.
+For standard tags, `declaration.json` is:
+
+```json
+{"members":{"tags":"string-list"}}
+```
+
+Review the proposal, then publish the same declaration:
 
 ```sh
 wowbagger extensions-provision --ledger <dir> --input declaration.json --json --dry-run
 wowbagger extensions-provision --ledger <dir> --input declaration.json --json
 ```
 
-The request must name each member and one supported type explicitly. The core
-validates that every selected member exists across the complete ledger with the
-declared type; it never infers authority from one item. Commit the generated
-`.wowbagger/extensions.json` before the first `patch` that uses those members.
+The request names every selected member and type explicitly. The core requires
+a valid complete ledger, validates every occurrence of each selected member,
+and reports occurrence counts; a member need not appear on every item, but it
+must appear at least once. Dry-run writes nothing. Publication creates one
+canonical declaration without changing item bytes and refuses to overwrite a
+different declaration. Commit only `.wowbagger/extensions.json`, inspect the
+target again, then patch `set.extensions.tags`. A YAML anchor or alias on that
+item still refuses `extension-anchored`.
 
 To detach or reparent an item without recreating its identity, use the
 CAS-fenced relation migration:
@@ -537,10 +556,12 @@ commit. With `--auto-commit`, `changed_paths` matches `commit_paths`, and
 `git_commit` proves the commit.
 
 Batch work is where this bites: filing ten items means ten commits, not one
-commit at the end. Tell the user that before starting a batch. There is no
-batch mutation to reach for — the create-then-commit loop is the supported bulk
-pattern, and item #186 is open to design a safe batch create. `--auto-commit`
-on each `create` is the shortest form of that loop.
+commit at the end. Tell the user that before starting. There is permanently no
+batch mutation in the direct-Markdown architecture. The create-then-commit loop,
+implemented most briefly as serial `create --auto-commit` calls, is the
+supported bulk path. Ledger item #186 records this permanent decision. Run calls in
+request order and do not start the next until the previous result or recovery
+is final.
 
 ### Or use --auto-commit and let one invocation do it
 
@@ -631,7 +652,7 @@ wowbagger provision --ledger <dir> --json
 wowbagger claim capabilities --ledger <dir> --json
 wowbagger claim read|acquire|renew|release --ledger <dir> --input request.json --json
 wowbagger publish-claimed --ledger <dir> --input request.json --json [--auto-commit]
-wowbagger claim-verify --ledger <dir> --json
+wowbagger claim-verify --ledger <dir> [--id <item>] --json
 wowbagger claim-sync --ledger <dir> --json
 wowbagger claim-merge-verify --ledger <dir> --base <ref> --head <ref> --json
 ```
@@ -730,17 +751,14 @@ An enumeration failure means a registered worktree path could not be read. The
 identity itself is an opaque UUID a worktree writes once into its private Git
 directory. Never create, copy, or edit it.
 
-**`claim-verify` is repository-wide, and a clean mutation does not make it
-exit 0.** It names no target, so any blocking finding anywhere in the
-repository keeps it at exit 6 — including a finding on an item belonging to
-work you have nothing to do with. On a repository with live sibling worktrees
-you may commit every one of your own mutations and still never see
-`claim-verify` exit 0. That is current behavior; item #184 is open in triage to
-decide the supported verification surface. When the remaining findings all name
-items you are not working on, say so and stop; do not hand-edit an item, and do
-not run `claim-adopt` on a sibling's item to force exit 0. Adoption moves the
-coordinator's authorized revision and is not a way to silence someone else's
-finding.
+**Choose verification scope deliberately.** Bare
+`claim-verify --ledger <dir> --json` is strict repository diagnosis: any
+blocking finding anywhere keeps it at exit 6. After working one item, use
+`claim-verify --ledger <dir> --id <item> --json`. It keeps every repository
+finding visible and marks each with `blocks_verification_scope`, but unrelated
+target-scoped findings do not fail that item's gate. Global barriers still
+fail every target. Never adopt or hand-edit a sibling's item to force either
+scope clean.
 
 Adoption is per item and per revision explicit. Name the item and both
 revisions, take them from the finding, and commit the edited bytes first:
@@ -783,7 +801,7 @@ Use the claimed write path as one complete loop:
    not in an accessible Git checkout. Stop before mutation.
 2. Run `provision` once for the ledger. Keep its `ledger_namespace`.
 3. Run `claim capabilities --ledger <dir> --json` again. Require
-   `result.operations.work_claim.api_version: 2`. Do not compare the claim
+   `result.operations.work_claim.api_version: 3`. Do not compare the claim
    response's top-level `contract_version` with the core version; it is the
    legacy claim-envelope marker. Stop if the namespace is absent or the mode is
    not `merge-coordinated`.
@@ -798,12 +816,12 @@ Use the claimed write path as one complete loop:
    branch. Do this now, not at the end of a batch. Acceptance of another command
    does not prove this mutation is durable, and a blocking finding still
    refuses that command.
-9. Run `claim-verify` after the commit or merge. It finalizes the Git outcome,
-   repairs response-loss cases, and reports later revision drift. Require exit
-   0 before the next mutating command; exit 6 means findings remain, so act on
-   each `remediation` string and run it again. If every remaining finding names
-   an item you are not working on, that is the repository-wide scope described
-   above, not a failure of your work: report it instead of forcing exit 0.
+9. Run `claim-verify --ledger <dir> --id <item> --json` after the commit or
+   merge. It finalizes the Git outcome, repairs response-loss cases, and reports
+   later revision drift. Require exit 0 before the next mutating command; exit
+   6 means findings block this item, so act on each blocking finding's
+   `remediation` and run it again. Unrelated nonblocking findings remain
+   visible for repository diagnosis.
 10. Release the claim with its current observed state.
 11. Run `validate` and show the resulting diff.
 
@@ -826,10 +844,11 @@ response envelopes, refusal precedence, and recovery rules.
 6. `validate`, then show the diff.
 7. On a provisioned ledger, commit the ledger change now:
    `git add <dir> && git commit`.
-8. On a provisioned ledger, run `claim-verify --ledger <dir> --json` and
-   require exit 0 before the next `create`, `transition`, `parent-migrate`,
-   `snooze`, `patch`, or `publish-claimed`. Findings that name only unrelated
-   items are repository-wide scope; report them rather than forcing exit 0.
+8. On a provisioned ledger, run
+   `claim-verify --ledger <dir> --id <item> --json` and require exit 0 before
+   the next `create`, `transition`, `parent-migrate`, `snooze`, `patch`, or
+   `publish-claimed`. Use bare verification separately for strict
+   repository-wide diagnosis.
 
 Write, commit, `claim-verify`, next write. The unclaimed loop obeys the same
 rule as the claimed one, because both run through the same coordinator. Steps 7

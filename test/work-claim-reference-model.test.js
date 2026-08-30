@@ -176,7 +176,7 @@ test('reference model marks an alternate bypass path unsafe for exclusive dispat
         operations: {
           work_claim: {
             supported: true,
-            api_version: 2,
+            api_version: 3,
             mode: 'advisory',
             claim_protected_publication: false,
             fencing_enforced_at: 'none',

@@ -489,6 +489,7 @@ test('claim-verify resolves an interrupted create as committed when its candidat
     reason: 'git-finalization-required',
     expected_path: itemPath,
     remediation: `Commit ${itemPath} in Git, then run claim-verify.`,
+    blocks_verification_scope: true,
   }]);
   git(fixture.root, 'add', 'ledger');
   git(fixture.root, 'commit', '-qm', 'Commit the recovered create');
@@ -538,6 +539,7 @@ test('an unknown create outcome stays global until the item path is restored', a
     candidate_revision: sha256(candidate),
     expected_path: itemPath,
     remediation: `Restore ${itemPath} to the expected or candidate revision recorded for attempt ${attemptId}, then run claim-verify.`,
+    blocks_verification_scope: true,
   }]);
   // Bytes nobody authorized resolve nothing: the journal gains only the clock
   // floor every invocation records, and the attempt stays open.
@@ -736,6 +738,7 @@ test('claim-verify explains that a new authorized item still needs Git finalizat
     reason: 'git-finalization-required',
     expected_path: `${itemId}.md`,
     remediation: `Commit ${itemId}.md in Git, then run claim-verify.`,
+    blocks_verification_scope: true,
   }]);
   // Committing it is the escape the remediation names.
   git(fixture.root, 'add', 'ledger');
@@ -832,6 +835,7 @@ test('claim-verify names the configured item path when another worktree needs sy
     expected_path: `items/${itemId}.md`,
     owner_unavailable: true,
     remediation: `Ownership of items/${itemId}.md revision ${transitioned.envelope.result.item.revision} cannot be established from reachable refs; inspect reachable or dangling commits, restore or explicitly adopt reviewed bytes, then run claim-verify.`,
+    blocks_verification_scope: true,
   }]);
 });
 

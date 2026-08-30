@@ -199,7 +199,7 @@ function capabilities(backend) {
         operations: {
           work_claim: {
             supported: true,
-            api_version: 2,
+            api_version: 3,
             mode: safe ? 'fenced' : 'advisory',
             claim_protected_publication: safe,
             fencing_enforced_at: safe ? 'ledger-publication-commit-boundary' : 'none',

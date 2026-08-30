@@ -966,7 +966,7 @@
       "domain": "work-claim",
       "command": "mutation-finalize",
       "exit": 6,
-      "state": "unchanged",
+      "state": "committed",
       "error_code": "git-commit-failed",
       "root_members": [
         "ok",
