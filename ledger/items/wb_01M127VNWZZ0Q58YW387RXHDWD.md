@@ -5,9 +5,10 @@ number: 174
 title: "Recognize parent-migrate and snooze lock owners in lock diagnostics"
 kind: task
 priority: 3
-status: in-progress
+status: done
 created: 2026-08-27
 updated: 2026-08-30
+completed: 2026-08-30
 provenance:
   source: "alpha.11-release-documentation-audit"
   recorded_at: "2026-08-27T18:45:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-30
     summary: "Accept lock-owner diagnostic fidelity at priority three."
     rationale: "The lock still excludes concurrent writers safely. The defect only degrades diagnosis, so it ranks below stranded recovery, runtime support, and active data-maintenance gaps."
+  - action: complete
+    date: 2026-08-30
+    summary: "Recognize parent migration and snooze lock owners."
+    rationale: "Core, adapter, and independent oracle use the five-operation vocabulary; real command contention reports exact owners; unknown metadata stays restrictive; full Node 24 gates pass."
 ---
 ## Problem
 
