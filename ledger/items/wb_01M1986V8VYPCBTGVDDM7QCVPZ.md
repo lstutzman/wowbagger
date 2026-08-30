@@ -5,7 +5,7 @@ number: 188
 title: "Move supported runtime and release gates to Node 24"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-30
 updated: 2026-08-30
 provenance:
