@@ -4,10 +4,10 @@ id: wb_01M17MW3XEJFNK36S1TA652JSF
 number: 186
 title: "Design safe batch create allocation and publication"
 kind: task
-priority: 2
+priority: 3
 status: triage
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-08-30
 provenance:
   source: "item #181 batch workflow decision"
   recorded_at: "2026-08-29T18:30:00Z"
@@ -35,3 +35,9 @@ Alpha.14 intentionally requires each create to be committed before the next crea
 
 - A valid design outcome is `no batch operation`: document create-then-commit in a loop as the supported bulk-import pattern if that is safer than a new atomic surface.
 - Any batch operation must preserve the #181 guarantee exactly. Holding one namespace lock for N allocations must be at least as safe as N sequential fenced creates; batching may not weaken candidate validation, publication fencing, or recovery semantics.
+
+## Triage decision — 2026-08-30
+
+Accepted into backlog at priority 3. Five fixture families proved that batching creates before one commit is intuitive, but alpha.14 already provides the safe create-then-commit loop and `--auto-commit`. This is ergonomics with a supported path, not a missing safety capability.
+
+First design slice: make the no-batch outcome compete honestly against one-fence multi-item publication. No implementation begins until allocation ordering, complete-ledger validation, partial failure, lost response, idempotency, and one Git commit set are specified without weakening #181.
