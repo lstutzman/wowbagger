@@ -5,7 +5,7 @@ number: 185
 title: "Detect stale installed skill and core version drift"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
