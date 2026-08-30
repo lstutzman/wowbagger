@@ -7,6 +7,12 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+- Existing ledgers can safely authorize standard `tags` corrections through
+  `extensions-provision`: dry-run and publication now require a valid complete
+  ledger, validate every historical occurrence against explicit
+  `string-list` authority, preserve all item bytes, and publish one canonical
+  no-clobber declaration.
+
 ## 0.1.0-alpha.17 - 2026-08-30
 
 - **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and

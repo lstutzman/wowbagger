@@ -2259,6 +2259,27 @@ before it can correct anything. `validate` is therefore unchanged by this file,
 and an item whose extension member disagrees with the declaration is still a
 valid item — it is simply an item a patch can correct.
 
+**Provisioning a declaration on an existing ledger.**
+
+`extensions-provision --ledger <dir> --input <request> --json [--dry-run]`
+accepts an explicit non-empty `members` mapping in the same version-1 member
+and type vocabulary. It never infers a type from stored values. Before it
+proposes anything, it requires the complete ledger to validate. For each
+selected member, it validates every stored occurrence against the selected
+type, requires at least one occurrence, and reports that occurrence count.
+The member need not appear on every item. Empty `string-list` values are valid;
+scalars, null, maps, nested lists, and lists containing non-strings conflict
+with `string-list`.
+
+Dry-run returns the canonical declaration bytes and writes nothing. Publication
+creates exactly `.wowbagger/extensions.json` with no-clobber semantics.
+Repeating the identical declaration is idempotent; a different existing
+declaration is `extension-declaration-conflict`, exit 4, `unchanged`.
+Neither form changes an item byte or revision, records a claim-journal entry,
+or creates an item revision. The generated declaration is committed before
+the first patch that uses it. Anchors and aliases remain item-specific patch
+preconditions and do not prevent declaration provisioning.
+
 Absence is fail-closed and total. A ledger with no `extensions.json` has **no**
 patchable extension member, and a `set.extensions` request against it is
 refused `patch-precondition-failed`, exit 2, `unchanged`, with one

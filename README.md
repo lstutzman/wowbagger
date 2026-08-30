@@ -168,21 +168,45 @@ names — `create` publishes into an existing directory and does not make one.
 Nothing is renamed after a create. This repository dogfoods that binding: its
 own items live in [`ledger/items/`](ledger/items/).
 
-If your items mirror an external tracker and carry your own identifier fields,
-declare them now too. `<ledger>/.wowbagger/extensions.json` is what makes a
-consumer-owned extension member patchable:
+If your items will mirror an external tracker and carry consumer-owned fields,
+declare those fields **before the first item**. The declaration makes each
+named extension member patchable:
 
 ```sh
 echo '{"extensions_version":1,"members":{"external_id":"string"}}' \
   > path/to/ledger/.wowbagger/extensions.json
 ```
 
-Each member declares one value type — `string`, `integer`, `boolean`, or
-`string-list`. **A ledger without that file has no patchable extension member at
-all**, and a `set.extensions` patch against it is refused by name. The
-declaration authorizes a write; it never describes the ledger, so `validate`
-does not read it. Both files are ledger setup, not runner configuration: commit
-them.
+Each member declares one value type: `string`, `integer`, `boolean`, or
+`string-list`. A ledger without the file has no patchable extension member,
+and `set.extensions` refuses the missing declaration by name. The declaration
+authorizes writes; it does not define item validity, so `validate` does not
+read it. Commit the declaration with the other ledger setup.
+
+If an existing ledger already carries extension values, do not create the
+declaration by hand. Select every member and type explicitly in a request,
+review a dry run, then publish the same proposal:
+
+```json
+{"members":{"tags":"string-list"}}
+```
+
+```sh
+wowbagger extensions-provision --ledger path/to/ledger \
+  --input declaration.json --json --dry-run
+wowbagger extensions-provision --ledger path/to/ledger \
+  --input declaration.json --json
+git add path/to/ledger/.wowbagger/extensions.json
+git commit -m "Declare patchable ledger extensions"
+```
+
+The command first requires a valid complete ledger. It validates every
+occurrence of each selected member, reports occurrence counts, changes no item
+bytes, and publishes one canonical declaration without overwriting a different
+one. Commit that file before the first corresponding `patch`, inspect the
+target for its current revision, then use `set.extensions.tags`. An item that
+writes the selected member with a YAML anchor or alias remains
+`extension-anchored` and requires a reviewed hand-edit.
 
 Cores at `0.1.0-alpha.4` and earlier ignore the layout file and publish every
 item at the ledger root.

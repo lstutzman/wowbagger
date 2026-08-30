@@ -422,8 +422,25 @@ export async function runCli(argumentsList, { scenario } = {}) {
       writeInvalidRequest(command, parsedRequest.issues);
       return;
     }
+    const ledger = await loadLedger(parsedOptions.options.ledger);
+    const validation = validateLedger(ledger);
+    if (!validation.valid) {
+      process.stdout.write(`${JSON.stringify({
+        ok: false,
+        command,
+        contract_version: MUTATION_CONTRACT_VERSION,
+        state: 'unchanged',
+        error: {
+          code: 'ledger-invalid',
+          message: 'The configured ledger is invalid.',
+          details: { validation_errors: validation.errors },
+        },
+      })}\n`);
+      process.exitCode = 3;
+      return;
+    }
     const proposal = proposeExtensionDeclaration({
-      ledger: await loadLedger(parsedOptions.options.ledger),
+      ledger,
       members: parsedRequest.value?.members,
     });
     if (!proposal.ok) {
@@ -457,33 +474,63 @@ export async function runCli(argumentsList, { scenario } = {}) {
       })}\n`);
       return;
     }
+    const sameDeclaration = (declaration) => declaration
+      && Object.keys(declaration.members).length === Object.keys(proposal.declaration.members).length
+      && Object.entries(proposal.declaration.members)
+        .every(([name, type]) => declaration.members[name] === type);
+    const refuseConflict = () => {
+      process.stdout.write(`${JSON.stringify({
+        ok: false,
+        command,
+        contract_version: MUTATION_CONTRACT_VERSION,
+        state: 'unchanged',
+        error: {
+          code: 'extension-declaration-conflict',
+          message: 'The ledger already carries a different extension declaration.',
+          details: { output: '.wowbagger/extensions.json' },
+        },
+      })}\n`);
+      process.exitCode = 4;
+    };
     const existing = await loadExtensionDeclaration(parsedOptions.options.ledger);
     if (existing.declared) {
-      const same = existing.declaration
-        && JSON.stringify(existing.declaration) === JSON.stringify(proposal.declaration);
-      if (!same) {
-        process.stdout.write(`${JSON.stringify({
-          ok: false,
-          command,
-          contract_version: MUTATION_CONTRACT_VERSION,
-          state: 'unchanged',
-          error: {
-            code: 'extension-declaration-conflict',
-            message: 'The ledger already carries a different extension declaration.',
-            details: { output: '.wowbagger/extensions.json' },
-          },
-        })}\n`);
-        process.exitCode = 4;
+      if (!sameDeclaration(existing.declaration)) {
+        refuseConflict();
         return;
       }
     } else {
       await mkdir(path.dirname(output), { recursive: true });
-      const handle = await open(output, 'wx');
+      if (scenario === 'extension-provision-concurrent-same') {
+        await writeFile(
+          output,
+          '{\n  "extensions_version": 1,\n  "members": {"tags":"string-list"}\n}\n',
+          { flag: 'wx' },
+        );
+      } else if (scenario === 'extension-provision-concurrent-different') {
+        await writeFile(
+          output,
+          '{"extensions_version":1,"members":{"tier":"string"}}\n',
+          { flag: 'wx' },
+        );
+      }
+      let handle;
       try {
-        await handle.writeFile(proposal.source, 'utf8');
-        await handle.sync();
-      } finally {
-        await handle.close();
+        handle = await open(output, 'wx');
+      } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+        const winner = await loadExtensionDeclaration(parsedOptions.options.ledger);
+        if (!winner.declared || !sameDeclaration(winner.declaration)) {
+          refuseConflict();
+          return;
+        }
+      }
+      if (handle) {
+        try {
+          await handle.writeFile(proposal.source, 'utf8');
+          await handle.sync();
+        } finally {
+          await handle.close();
+        }
       }
     }
     process.stdout.write(`${JSON.stringify({

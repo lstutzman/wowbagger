@@ -486,18 +486,28 @@ what each finding's `remediation` string says (it names the path), run
 `claim-verify` until it exits 0, then repeat the refused command. Never hand-
 edit a ledger file to get past it.
 
-For migrated ledgers, run the explicit extension declaration workflow before
-managed corrections:
+For an existing ledger, bootstrap patch authority before managed corrections.
+For standard tags, `declaration.json` is:
+
+```json
+{"members":{"tags":"string-list"}}
+```
+
+Review the proposal, then publish the same declaration:
 
 ```sh
 wowbagger extensions-provision --ledger <dir> --input declaration.json --json --dry-run
 wowbagger extensions-provision --ledger <dir> --input declaration.json --json
 ```
 
-The request must name each member and one supported type explicitly. The core
-validates that every selected member exists across the complete ledger with the
-declared type; it never infers authority from one item. Commit the generated
-`.wowbagger/extensions.json` before the first `patch` that uses those members.
+The request names every selected member and type explicitly. The core requires
+a valid complete ledger, validates every occurrence of each selected member,
+and reports occurrence counts; a member need not appear on every item, but it
+must appear at least once. Dry-run writes nothing. Publication creates one
+canonical declaration without changing item bytes and refuses to overwrite a
+different declaration. Commit only `.wowbagger/extensions.json`, inspect the
+target again, then patch `set.extensions.tags`. A YAML anchor or alias on that
+item still refuses `extension-anchored`.
 
 To detach or reparent an item without recreating its identity, use the
 CAS-fenced relation migration:
