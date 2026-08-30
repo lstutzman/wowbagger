@@ -32,6 +32,7 @@ import { countOccurrences, planVersionSites, verifyExactSets } from './lib/relea
 export const MANIFEST_PATH = 'scripts/release-version-sites.json';
 export const CHANGELOG_PATH = 'CHANGELOG.md';
 export const DEFAULT_NODE24 = '/opt/homebrew/opt/node@24/bin/node';
+export const DEFAULT_RELEASE_BRANCH = 'main';
 
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 const verifyReleaseTagScript = fileURLToPath(new URL('./verify-release-tag.js', import.meta.url));
