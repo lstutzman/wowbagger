@@ -477,14 +477,14 @@ intent and one committed terminal, so with no other activity the
 ceiling. Capacity is checked before publication and fails closed. Journal
 compaction is not part of this change.
 
-A ledger that already carries duplicate numbers is repaired through the separate
-`ledger-repair` contract, not through claim operations. Run
-`number-repair-proposal --ledger <dir> --json`, review the complete mapping, then
-run `number-repair --ledger <dir> --input <repair.json> --json`. The repair
-command runs only when duplicate-number errors are the complete validation
-failure, preserves ULID identities and relation values, and publishes all
-affected items under the shared namespace fence. Arbitrary hand edits remain
-unsupported because they can damage IDs, paths, or references.
+A ledger that already carries duplicate numbers is item #182 recovery work and
+is repaired through the separate `ledger-repair` contract, not through claim
+operations. Run `number-repair-proposal --ledger <dir> --json`, review the
+complete mapping, then run `number-repair --ledger <dir> --input <repair.json>
+--json`. The repair command runs only when duplicate-number errors are the
+complete validation failure, preserves ULID identities and relation values, and
+publishes all affected items under the shared namespace fence. Arbitrary hand
+edits remain unsupported because they can damage IDs, paths, or references.
 
 **What alpha.14 guarantees, and what it does not.** Alpha.14 closes the
 reported PropertyCompass2 collision: cooperating alpha.14 worktrees of one

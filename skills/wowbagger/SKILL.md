@@ -663,12 +663,13 @@ written; integrate the missing item, run `claim-verify` until it exits 0, and
 resend the same request, which then takes the next number.
 
 That fence stops new collisions; it does not repair old ones through core
-version 5 or claim operations. Use the separate `ledger-repair` contract:
-`number-repair-proposal --ledger <dir> --json` is read-only, and
-`number-repair --ledger <dir> --input <repair.json> --json` applies a reviewed
-complete mapping under the shared namespace fence. Number-only repair preserves
-ULID identities and relation values. Never hand-edit the ledger: arbitrary edits
-can damage IDs, paths, or references.
+version 5 or claim operations. Existing duplicate numbers are item #182
+recovery work. Use the separate `ledger-repair` contract:
+`number-repair-proposal --ledger <dir> --json` is read-only and writes no item
+file; `number-repair --ledger <dir> --input <repair.json> --json` applies a
+reviewed complete mapping under the shared namespace fence. Number-only repair
+preserves ULID identities and relation values. Never hand-edit the ledger:
+arbitrary edits can damage IDs, paths, or references.
 
 Read `error.details.findings[0].reason` and act on the named item:
 

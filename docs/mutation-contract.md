@@ -1601,8 +1601,9 @@ can carry its authorized bytes, and an uncommitted create raises the global
 `git-finalization-required` barrier for every later mutation. Commit each
 created item before the next mutating command. This release adds no batch
 mutation; the supported bulk pattern remains the create-then-commit loop.
-A ledger that already carries duplicate numbers is repaired through the separate
-`ledger-repair` contract, not through core version 5 mutation. Run
+A ledger that already carries duplicate numbers is item #182 recovery work and
+is repaired through the separate `ledger-repair` contract, not through core
+version 5 mutation. Run
 `number-repair-proposal --ledger <dir> --json`, review the complete mapping, then
 run `number-repair --ledger <dir> --input <repair.json> --json`. The repair
 command operates only when duplicate-number errors are the complete validation
