@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.16 - 2026-08-30
+
 - Added `version-drift --json` to detect stale installed skill pins, core
   contract versions, and package provenance before ledger mutation.
 
