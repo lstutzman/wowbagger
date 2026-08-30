@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { runCli } from './support.js';
+
+const currentDistribution = JSON.parse(
+  readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
+).version;
 
 test('version-drift reports a stale skill before mutation', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wowbagger-version-drift-'));
@@ -26,8 +31,8 @@ test('version-drift reports a stale skill before mutation', async () => {
     assert.equal(envelope.command, 'version-drift');
     assert.equal(envelope.contract_version, 5);
     assert.equal(envelope.error.details.installed_distribution, '0.1.0-alpha.6');
-    assert.equal(envelope.error.details.required_distribution, '0.1.0-alpha.15');
-    assert.equal(envelope.error.details.running_distribution, '0.1.0-alpha.15');
+    assert.equal(envelope.error.details.required_distribution, currentDistribution);
+    assert.equal(envelope.error.details.running_distribution, currentDistribution);
     assert.equal(envelope.error.details.installed_contract_version, 3);
     assert.equal(envelope.error.details.required_contract_version, 5);
     assert.equal(envelope.error.details.running_contract_version, 5);
@@ -47,7 +52,7 @@ test('version-drift detects a newer incompatible skill contract', async () => {
       'name: wowbagger',
       '---',
       '',
-      'This skill requires distribution version: `0.1.0-alpha.15` and core `contract_version: 6`.',
+      `This skill requires distribution version: \`${currentDistribution}\` and core \`contract_version: 6\`.`,
       '',
     ].join('\n'));
     const { inspectVersionDrift } = await import('../src/version-drift.js');
@@ -75,6 +80,6 @@ test('version-drift succeeds when skill and core versions match', () => {
   assert.equal(envelope.ok, true);
   assert.equal(envelope.command, 'version-drift');
   assert.equal(envelope.contract_version, 5);
-  assert.equal(envelope.result.installed_distribution, '0.1.0-alpha.15');
+  assert.equal(envelope.result.installed_distribution, currentDistribution);
   assert.equal(envelope.result.installed_contract_version, 5);
 });
