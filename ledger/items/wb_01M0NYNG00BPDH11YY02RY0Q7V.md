@@ -7,7 +7,7 @@ kind: task
 priority: 3
 status: in-progress
 created: 2026-08-23
-updated: 2026-08-23
+updated: 2026-08-30
 provenance:
   source: "claude-plugin-submission"
   recorded_at: "2026-08-23T12:00:00Z"
@@ -19,7 +19,6 @@ decisions:
     summary: "Accept the submitted Claude plugin directory work for review."
     rationale: "The public repository was submitted through Claude Console with Claude Code selected. The form confirmed submission for review; marketplace acceptance remains pending."
 ---
-
 Submit the public Wowbagger GitHub repository to Anthropic's Claude plugin directory after setup guidance and smoke testing pass.
 
 Acceptance criteria:
@@ -35,10 +34,14 @@ Installer contract:
 - Codex and other agents use `npx skills@latest add lstutzman/wowbagger --skill wowbagger`.
 - The managed plugin and editable skill routes are exclusive; documentation must warn users not to install both.
 
-
 Submission outcome (2026-08-23):
 - Submitted the public repository through Claude Console's plugin-directory form: https://platform.claude.com/plugins/submit
 - Repository submitted: https://github.com/lstutzman/wowbagger
 - Plugin name: Wowbagger; platform selected: Claude Code; license: MIT.
 - Console confirmation: "Plugin submitted for review." The submissions page shows a new submission from just now.
 - Current state: awaiting Anthropic review and marketplace inclusion. Do not mark complete until acceptance is confirmed or returned findings are recorded.
+
+Triage review (2026-08-30):
+- Priority: 3.
+- State: external review pending; no repository implementation is currently unblocked.
+- Next evidence: marketplace acceptance or exact returned findings, then verify the managed install route or file a corrective follow-up item.
