@@ -5,7 +5,7 @@ number: 188
 title: "Move supported runtime and release gates to Node 24"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-30
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-30T12:00:00Z"
 depends_on: []
 related: [ wb_01M14Y2VZW2ASKHYE42BGZ1PPK ]
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept the Node 24 runtime-floor migration."
+    rationale: "Node 20 is end-of-life and Node 24.20.0 has complete local compatibility evidence. The supported and tested floor should stop certifying an unsupported runtime."
 ---
 ## Problem
 
