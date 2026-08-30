@@ -268,7 +268,7 @@ test('an overwrite of a created, committed item refuses from the item\'s birth',
   );
 });
 
-test('a create that authorizes but cannot publish records a replayable abort', async () => {
+test('a create that authorizes but cannot publish records a replayable abort', { skip: process.platform === 'win32' && 'Windows does not enforce POSIX mode bits' }, async () => {
   const fixture = await twoWorktreeRepository();
   // The lock directory is the only thing create writes outside the item path,
   // so it exists before the ledger directory goes read-only. The create then
