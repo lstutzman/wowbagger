@@ -7,12 +7,12 @@ kind: task
 priority: 1
 status: triage
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
-related: []
+related: [ wb_01M14Y1NTXQPMQ270VT1WH6H17 ]
 ---
 ## Problem
 
@@ -31,3 +31,9 @@ Lee selected the newer advertising business work for reassignment. PropertyCompa
 - Check references, extension bindings, and projections that may persist the human number; never assume number is identity.
 - Integrate claim reconciliation, response-loss handling, changed paths, auto-commit, recovery tokens, and audit evidence.
 - Provide a dry-run or inspectable proposal before mutation and public tests for stale witness, collision, ambiguous outcome, and successful repair.
+
+## Triage decision — 2026-08-30
+
+Accepted into backlog at priority 1. Alpha.14 prevents new same-clone duplicate numbers and repairs none; the PropertyCompass2 emergency repair was an unsafe manual renumber plus adoption. This is the only open item with a user already stranded behind an invalid ledger and no supported recovery.
+
+First design slice: specify a read-only repair proposal that runs only when the ledger's blocking fault set is duplicate-number, names every affected item and reference, chooses or validates replacement numbers, and proves the complete successor ledger before any write. Do not widen ordinary patch and do not legitimize manual source edits.
