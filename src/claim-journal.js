@@ -35,6 +35,18 @@ export function isProjectedJournalEntry(entry) {
   return !UNPROJECTED_ENTRY_TYPES.has(entry.type);
 }
 
+export function isClaimJournalCapacityError(error) {
+  const seen = new Set();
+  for (let current = error; current && typeof current === 'object'; current = current.cause) {
+    if (seen.has(current)) return false;
+    seen.add(current);
+    if (current.code === 'CLAIM_JOURNAL_CAPACITY'
+      || current.reason === 'journal-capacity-exceeded') {
+      return true;
+    }
+  }
+  return false;
+}
 export function claimJournalPath(commonDir, namespace) {
   return path.join(commonDir, 'wowbagger', namespace, 'journal.ndjson');
 }

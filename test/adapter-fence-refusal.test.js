@@ -203,6 +203,16 @@ test('forwards a claim-store-unavailable refusal whose reason carries no finding
   );
 });
 
+test('forwards journal capacity as a deterministic unchanged refusal', () => {
+  assert.equal(
+    bothEngines(createInvocation(
+      claimStoreUnavailable('create', { reason: 'journal-capacity-exceeded' }),
+      6,
+    )),
+    null,
+  );
+});
+
 test('keeps an unknown-state claim-store-unavailable refusal an unknown mutation outcome', () => {
   const result = bothEngines(createInvocation(
     claimStoreUnavailable('create', {

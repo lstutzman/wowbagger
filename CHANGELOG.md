@@ -18,6 +18,13 @@ consolidation. The first tagged release inherits this file.
   All findings remain visible with `blocks_verification_scope`; work-claim API
   version is now 3 while the legacy envelope marker remains 1.
 
+- Journal-capacity exhaustion now preserves the public
+  `journal-capacity-exceeded` discriminator across claim, verification,
+  adoption, publication, and legacy mutation paths. Pre-publication refusals
+  remain exit 6 `claim-store-unavailable`, `unchanged`, with prior journal and
+  item bytes intact; genuine persistence failures and post-intent unknown
+  outcomes retain their existing classifications.
+
 ## 0.1.0-alpha.17 - 2026-08-30
 
 - **Breaking:** raise the supported Node.js floor from 20 to 24. Node 20 and

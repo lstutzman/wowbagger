@@ -7,6 +7,7 @@ import { resolveClaimBackend, resolveWorkClaimCapability } from './claim-capabil
 import {
   appendClaimEntry,
   claimJournalPath,
+  isClaimJournalCapacityError,
   claimReconcileLogPath,
   parseReconcileLog,
   replayClaimJournal,
@@ -1788,8 +1789,11 @@ async function runClaimCommand(claimCommand, argumentsList) {
         persist: false,
       });
       writeClaimEnvelope(operation(replayed.state, request, new Date().toISOString()).envelope);
-    } catch {
-      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-unreadable'));
+    } catch (error) {
+      writeClaimEnvelope(claimStoreUnavailable(
+        claimCommand,
+        isClaimJournalCapacityError(error) ? 'journal-capacity-exceeded' : 'claim-store-unreadable',
+      ));
     }
     return;
   }
@@ -1881,6 +1885,10 @@ async function runClaimCommand(claimCommand, argumentsList) {
   } catch (error) {
     if (error?.code === 'CLAIM_LOCK_HELD') {
       writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'claim-store-locked'));
+      return;
+    }
+    if (isClaimJournalCapacityError(error)) {
+      writeClaimEnvelope(claimStoreUnavailable(claimCommand, 'journal-capacity-exceeded'));
       return;
     }
     if (error?.code === 'CLAIM_STORE_UNREADABLE') {

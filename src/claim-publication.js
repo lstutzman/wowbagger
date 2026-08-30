@@ -4,8 +4,10 @@ import path from 'node:path';
 
 import {
   appendClaimEntry,
+  assertClaimJournalCapacity,
   claimJournalPath,
   claimReconcileLogPath,
+  isClaimJournalCapacityError,
   isProjectedJournalEntry,
   parseReconcileLog,
   replayClaimEntries,
@@ -153,7 +155,11 @@ export async function readPublicationOutcome({ gitCommonDir, namespace, request 
   } catch (error) {
     return publicationReadError(request, 'claim-store-unavailable',
       'The durable claim store is unavailable.', {
-        reason: error?.code === 'CLAIM_LOCK_HELD' ? 'claim-store-locked' : 'claim-store-unreadable',
+        reason: error?.code === 'CLAIM_LOCK_HELD'
+          ? 'claim-store-locked'
+          : isClaimJournalCapacityError(error)
+            ? 'journal-capacity-exceeded'
+            : 'claim-store-unreadable',
       }, 6);
   }
 }
@@ -167,6 +173,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
   }
 
   const storePath = claimStorePath(gitCommonDir, namespace);
+  let intentAppended = false;
   const journalPath = claimJournalPath(gitCommonDir, namespace);
   try {
     return await withClaimLock(storePath, async (namespaceLock) => {
@@ -213,6 +220,14 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           writeLogOnUnsafe: false,
         });
       } catch (error) {
+        if (isClaimJournalCapacityError(error)) {
+          return publicationError(request, 'claim-store-unavailable',
+            'The durable claim store is unavailable.', {
+              reason: 'journal-capacity-exceeded',
+              ledger_namespace: request.ledger_namespace,
+              item_id: request.item_id,
+            }, 6);
+        }
         if (error?.code !== 'CLOCK_FLOOR_PERSISTENCE_FAILED') throw error;
         return publicationError(request, 'clock-floor-persistence-failed',
           'The authoritative clock floor could not be persisted.', {
@@ -261,8 +276,7 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           }, 4);
         return persistTerminal(entries, journalPath, ledgerDirectory, namespace, request, outcome, replayed.state, storePath, currentWorktreeId);
       }
-      await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
-      const intent = await appendClaimEntry(journalPath, {
+      const intentEntry = {
         type: 'publish-intent',
         operation_id: request.operation_id,
         operation_digest: operationDigest(request),
@@ -273,8 +287,38 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         floor: observedAt,
         writer_worktree_id: currentWorktreeId,
         state: 'pending',
+      };
+      const terminalEntry = (outcome) => ({
+        type: 'publish-final',
+        operation_id: request.operation_id,
+        operation_digest: operationDigest(request),
+        ledger_namespace: request.ledger_namespace,
+        item_id: request.item_id,
+        writer_worktree_id: currentWorktreeId,
+        outcome,
       });
+      const itemPath = ledgerSnapshot.items.find((item) => item.data.id === request.item_id)?.path;
+      const possibleTerminals = [
+        terminalEntry(publicationSuccess(request, record, observedAt, itemPath, namespace)),
+        terminalEntry(publicationUnknown(request)),
+        terminalEntry(publicationError(request, 'ledger-revision-conflict',
+          'The durable ledger revision no longer matches this publication.', {
+            ledger_namespace: request.ledger_namespace,
+            item_id: request.item_id,
+            expected_revision: request.expected_revision,
+            actual_revision: request.expected_revision,
+          }, 4)),
+      ];
+      const largestTerminal = possibleTerminals.reduce((largest, candidate) => (
+        Buffer.byteLength(JSON.stringify(candidate)) > Buffer.byteLength(JSON.stringify(largest))
+          ? candidate
+          : largest
+      ));
+      await assertClaimJournalCapacity(journalPath, [intentEntry, largestTerminal]);
+      await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
+      const intent = await appendClaimEntry(journalPath, intentEntry);
       entries.push(intent);
+      intentAppended = true;
       await publicationTestCheckpoint(scenario, 'after-publish-intent', ledgerDirectory);
       const mutation = await publishClaimedCandidate({
         ledgerDirectory, request, scenario, ledgerSnapshot, namespaceLock, storePath,
@@ -293,6 +337,11 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
     if (error?.code === 'CLAIM_LOCK_HELD') {
       return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
         reason: 'claim-store-locked',
+      }, 6);
+    }
+    if (!intentAppended && isClaimJournalCapacityError(error)) {
+      return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
+        reason: 'journal-capacity-exceeded',
       }, 6);
     }
     // An identity the coordination domain cannot resolve is a store this
@@ -1056,7 +1105,9 @@ export async function verifyClaimJournal({
           details: {
             reason: error?.code === 'CLAIM_LOCK_HELD'
               ? 'claim-store-locked'
-              : 'claim-store-unreadable',
+              : isClaimJournalCapacityError(error)
+                ? 'journal-capacity-exceeded'
+                : 'claim-store-unreadable',
             ...identityDiagnosticDetails(error),
           },
         },
@@ -1151,18 +1202,26 @@ export async function adoptItemRevision({ ledgerDirectory, gitCommonDir, namespa
         contract_version: 1,
         state: 'unchanged',
         error: {
-          code: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
-            ? 'clock-floor-persistence-failed'
-            : 'claim-store-unavailable',
-          message: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
-            ? 'The authoritative clock floor could not be persisted.'
-            : 'The durable claim store is unavailable.',
-          details: error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED' ? {} : {
-            reason: error?.code === 'CLAIM_LOCK_HELD'
-              ? 'claim-store-locked'
-              : 'claim-store-unreadable',
-            ...identityDiagnosticDetails(error),
-          },
+          code: isClaimJournalCapacityError(error)
+            ? 'claim-store-unavailable'
+            : error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+              ? 'clock-floor-persistence-failed'
+              : 'claim-store-unavailable',
+          message: isClaimJournalCapacityError(error)
+            ? 'The durable claim store is unavailable.'
+            : error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+              ? 'The authoritative clock floor could not be persisted.'
+              : 'The durable claim store is unavailable.',
+          details: isClaimJournalCapacityError(error)
+            ? { reason: 'journal-capacity-exceeded' }
+            : error?.code === 'CLOCK_FLOOR_PERSISTENCE_FAILED'
+              ? {}
+              : {
+                reason: error?.code === 'CLAIM_LOCK_HELD'
+                  ? 'claim-store-locked'
+                  : 'claim-store-unreadable',
+                ...identityDiagnosticDetails(error),
+              },
         },
       },
     };

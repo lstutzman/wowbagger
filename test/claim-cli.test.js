@@ -549,3 +549,46 @@ test('a corrupted claim journal returns claim-store-unavailable, not a crash', a
   assert.equal(refused.envelope.error.details.reason, 'claim-store-unreadable');
   assert.equal(refused.envelope.state, 'unchanged');
 });
+
+test('claim read and verify report journal capacity without calling the store unreadable', async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const journalPath = path.join(root, '.git', 'wowbagger', namespace, 'journal.ndjson');
+  await mkdir(path.dirname(journalPath), { recursive: true });
+  const clock = '2030-01-11T09:00:00.000Z';
+  const entries = Array.from({ length: 65537 }, (_, index) => JSON.stringify({
+    seq: index + 1,
+    type: 'clock',
+    now: clock,
+    floor: clock,
+  }));
+  await writeFile(journalPath, `${entries.join('\n')}\n`);
+  const request = path.join(root, 'read-over-capacity.json');
+  await writeFile(request, JSON.stringify({
+    ledger_namespace: namespace,
+    item_id: 'wb_01Q4837BM01W70T30B184GG1R6',
+  }));
+
+  const refused = await capture([
+    'claim',
+    'read',
+    '--ledger',
+    ledger,
+    '--input',
+    request,
+    '--json',
+  ]);
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'journal-capacity-exceeded');
+  assert.equal(refused.envelope.state, 'unchanged');
+
+  const verified = await capture(['claim-verify', '--ledger', ledger, '--json']);
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(verified.envelope.error.details.reason, 'journal-capacity-exceeded');
+  assert.equal(verified.envelope.state, 'unchanged');
+});

@@ -5,6 +5,7 @@ import {
   appendClaimEntry,
   assertClaimJournalCapacity,
   claimJournalPath,
+  isClaimJournalCapacityError,
   claimReconcileLogPath,
   replayClaimJournal,
   writeReconcileLog,
@@ -222,9 +223,17 @@ export async function withLegacyMutationFence(
         : outcome;
     });
   } catch (error) {
-    return claimStoreUnavailable(responseCommand, error?.code === 'CLAIM_LOCK_HELD'
+    const reason = error?.code === 'CLAIM_LOCK_HELD'
       ? 'claim-store-locked'
-      : 'claim-store-unreadable', identityDiagnosticDetails(error), intent ? 'unknown' : 'unchanged');
+      : !intent && isClaimJournalCapacityError(error)
+        ? 'journal-capacity-exceeded'
+        : 'claim-store-unreadable';
+    return claimStoreUnavailable(
+      responseCommand,
+      reason,
+      identityDiagnosticDetails(error),
+      intent ? 'unknown' : 'unchanged',
+    );
   }
 }
 

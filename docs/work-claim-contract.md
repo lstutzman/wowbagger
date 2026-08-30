@@ -490,8 +490,15 @@ appends. The durable cost is journal growth: each successful create adds one
 intent and one committed terminal, so with no other activity the
 65,536-entry limit permits at most 21,845 three-entry create cycles and the
 8 MiB byte limit may bind first. Other claim and mutation activity lowers that
-ceiling. Capacity is checked before publication and fails closed. Journal
-compaction is not part of this change.
+ceiling. Capacity is checked before publication and fails closed with exit 6
+`claim-store-unavailable`, reason `journal-capacity-exceeded`, and `unchanged`;
+no current-operation intent, terminal, or item byte is published. The same
+reason applies to claim lifecycle, verification, adoption, publication reads,
+and every legacy mutation while capacity is known before publication. A
+genuine persistence failure remains `clock-floor-persistence-failed`, and an
+ambiguous outcome after an intent remains an outcome-unknown refusal. Journal
+history is never truncated, and automatic compaction is not part of this
+contract.
 
 A ledger that already carries duplicate numbers is item #182 recovery work and
 is repaired through the separate `ledger-repair` contract, not through claim

@@ -2727,12 +2727,20 @@ barrier for every later mutation, including the next create. Filing ten items
 is therefore ten create-then-commit cycles, not one commit at the end. This
 release adds no batch mutation; item #186 owns safe batch design.
 
+The journal is bounded at 65,536 entries and 8,388,608 bytes. If capacity is
+known before a legacy create, transition, parent migration, snooze, or patch
+intent is published, the command returns exit 6 `claim-store-unavailable`,
+reason `journal-capacity-exceeded`, and `unchanged`. Existing journal bytes
+remain an exact prefix and no item byte is written. A genuinely unreadable
+journal retains `claim-store-unreadable`; an indeterminate outcome after an
+intent retains its outcome-unknown classification.
+
 The loop that works:
 
 ~~~sh
 wowbagger create --ledger <dir> --input request.json --json
 git add <dir> && git commit -m "Record the mutation"
-wowbagger claim-verify --ledger <dir> --json
+wowbagger claim-verify --ledger <dir> --id <item> --json
 wowbagger transition --ledger <dir> --input next.json --json
 ~~~
 

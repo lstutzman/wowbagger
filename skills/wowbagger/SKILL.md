@@ -218,6 +218,15 @@ upgrade this worktree to continue**, and say so to the user: the old binary is
 immutable and can never print better guidance. (Item #185 is open for general
 version-drift detection.)
 
+Do not confuse that with a full journal. Exit 6
+`claim-store-unavailable` with reason `journal-capacity-exceeded` means the
+65,536-entry or 8,388,608-byte bound was reached before publication. State is
+unchanged and prior history stays intact. Do not upgrade, truncate, compact, or
+hand-edit the journal; no automatic recovery verb exists. Report the capacity
+refusal as the blocker. A real persistence failure remains
+`clock-floor-persistence-failed`, and uncertainty after an intent remains an
+outcome-unknown refusal.
+
 Say what the fix does and does not cover. It closes the reported
 PropertyCompass2 collision: cooperating alpha.14 worktrees of one clone that
 share one Git common directory can no longer commit two items carrying the same

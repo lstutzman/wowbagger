@@ -254,24 +254,41 @@ test('publish-claimed rejects a request for another ledger namespace', async () 
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
 });
 
-test('publish-claimed reports clock persistence failure before publication when the journal is full', async () => {
+test('publish-claimed reserves terminal capacity before publishing item bytes', async () => {
   const fixture = await publicationFixture();
   const journalPath = path.join(fixture.root, '.git', 'wowbagger', fixture.namespace, 'journal.ndjson');
-  const entries = Array.from({ length: 65536 }, (_, index) => JSON.stringify({
+  const entries = Array.from({ length: 65533 }, (_, index) => JSON.stringify({
     seq: index + 1,
     type: 'clock',
     now: '2030-01-11T09:00:00.000Z',
     floor: '2030-01-11T09:00:00.000Z',
-  })).join('\n');
-  await writeFile(journalPath, `${entries}\n`);
+  }));
+  entries.push(JSON.stringify({
+    seq: 65534,
+    type: 'claim',
+    command: 'acquire',
+    physical_now: fixture.claim.issued_at,
+    request: {
+      ledger_namespace: fixture.namespace,
+      item_id: fixture.itemId,
+      owner_id: fixture.claim.owner_id,
+      lease_duration_ms: 300000,
+      expected: { last_epoch: '0', active: null },
+    },
+  }));
+  await writeFile(journalPath, `${entries.join('\n')}\n`);
+  const journalBefore = await readFile(journalPath);
 
   const published = await capture([
     'publish-claimed', '--ledger', fixture.ledger, '--input', fixture.requestPath, '--json',
   ]);
 
   assert.equal(published.exit, 6, JSON.stringify(published.envelope));
-  assert.equal(published.envelope.error.code, 'clock-floor-persistence-failed');
+  assert.equal(published.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(published.envelope.error.details.reason, 'journal-capacity-exceeded');
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+  const journalAfter = await readFile(journalPath);
+  assert.deepEqual(journalAfter.subarray(0, journalBefore.length), journalBefore);
 });
 
 test('publish-claimed returns the stored terminal envelope for an identical retry', async () => {
@@ -629,6 +646,7 @@ test('legacy patch does not publish when its journal authorization cannot be res
     floor: clock,
   }));
   await writeFile(journalPath, `${entries.join('\n')}\n`);
+  const journalBefore = await readFile(journalPath);
   const patchPath = path.join(fixture.root, 'patch-full-journal.json');
   await writeFile(patchPath, JSON.stringify({
     id: fixture.itemId,
@@ -644,7 +662,10 @@ test('legacy patch does not publish when its journal authorization cannot be res
   assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
   assert.equal(refused.envelope.state, 'unchanged');
   assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'journal-capacity-exceeded');
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+  const journalAfter = await readFile(journalPath);
+  assert.deepEqual(journalAfter.subarray(0, journalBefore.length), journalBefore);
 });
 
 test('legacy patch reserves journal capacity for crash recovery before publishing', async () => {
@@ -657,6 +678,7 @@ test('legacy patch reserves journal capacity for crash recovery before publishin
     floor: '2030-01-11T09:00:00.000Z',
   })).join('\n');
   await writeFile(journalPath, `${entries}\n`);
+  const journalBefore = await readFile(journalPath);
   const patchPath = path.join(fixture.root, 'legacy-capacity-reserve-patch.json');
   await writeFile(patchPath, JSON.stringify({
     id: fixture.itemId,
@@ -672,7 +694,105 @@ test('legacy patch reserves journal capacity for crash recovery before publishin
   assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
   assert.equal(refused.envelope.state, 'unchanged');
   assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'journal-capacity-exceeded');
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+  const journalAfter = await readFile(journalPath);
+  assert.deepEqual(journalAfter.subarray(0, journalBefore.length), journalBefore);
+});
+
+test('legacy create reports entry capacity before publishing a new item', async () => {
+  const fixture = await publicationFixture();
+  const journalPath = claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace);
+  const clock = '2030-01-11T09:00:00.000Z';
+  const entries = Array.from({ length: 65535 }, (_, index) => JSON.stringify({
+    seq: index + 1,
+    type: 'clock',
+    now: clock,
+    floor: clock,
+  }));
+  await writeFile(journalPath, `${entries.join('\n')}\n`);
+  const journalBefore = await readFile(journalPath);
+  const itemId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+  const createPath = path.join(fixture.root, 'create-over-entry-capacity.json');
+  await writeFile(createPath, JSON.stringify({
+    id: itemId,
+    item: {
+      title: 'Capacity target',
+      kind: 'task',
+      provenance: {
+        source: 'test',
+        recorded_at: '2026-08-17T00:00:00Z',
+      },
+      depends_on: [],
+    },
+    body: 'capacity target\n',
+  }));
+
+  const refused = await capture([
+    'create', '--ledger', fixture.ledger, '--input', createPath, '--json',
+  ]);
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+  assert.equal(refused.envelope.command, 'create-v1');
+  assert.equal(refused.envelope.state, 'unchanged');
+  assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+  assert.equal(refused.envelope.error.details.reason, 'journal-capacity-exceeded');
+  await assert.rejects(readFile(path.join(fixture.ledger, `${itemId}.md`)), { code: 'ENOENT' });
+  const journalAfter = await readFile(journalPath);
+  assert.deepEqual(journalAfter.subarray(0, journalBefore.length), journalBefore);
+});
+
+test('legacy create and patch report byte capacity without changing item bytes', async () => {
+  for (const command of ['create', 'patch']) {
+    const fixture = await publicationFixture();
+    const journalPath = claimJournalPath(path.join(fixture.root, '.git'), fixture.namespace);
+    const oversized = `${JSON.stringify({
+      seq: 1,
+      type: 'clock',
+      now: '2030-01-11T09:00:00.000Z',
+      floor: '2030-01-11T09:00:00.000Z',
+      padding: 'x'.repeat(8 * 1024 * 1024),
+    })}\n`;
+    await writeFile(journalPath, oversized);
+    const journalBefore = await readFile(journalPath);
+    const itemId = 'wb_01M01BFR000TXV22D7KZ6TQYH2';
+    const requestPath = path.join(fixture.root, `${command}-over-byte-capacity.json`);
+    const request = command === 'create'
+      ? {
+        id: itemId,
+        item: {
+          title: 'Capacity target',
+          kind: 'task',
+          provenance: {
+            source: 'test',
+            recorded_at: '2026-08-17T00:00:00Z',
+          },
+          depends_on: [],
+        },
+        body: 'capacity target\n',
+      }
+      : {
+        id: fixture.itemId,
+        expected_revision: `sha256:${createHash('sha256').update(fixture.before).digest('hex')}`,
+        date: '2026-08-11',
+        set: { priority: 3 },
+      };
+    await writeFile(requestPath, JSON.stringify(request));
+
+    const refused = await capture([
+      command, '--ledger', fixture.ledger, '--input', requestPath, '--json',
+    ]);
+
+    assert.equal(refused.exit, 6, JSON.stringify(refused.envelope));
+    assert.equal(refused.envelope.state, 'unchanged');
+    assert.equal(refused.envelope.error.code, 'claim-store-unavailable');
+    assert.equal(refused.envelope.error.details.reason, 'journal-capacity-exceeded');
+    assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+    if (command === 'create') {
+      await assert.rejects(readFile(path.join(fixture.ledger, `${itemId}.md`)), { code: 'ENOENT' });
+    }
+    assert.deepEqual(await readFile(journalPath), journalBefore);
+  }
 });
 
 test('legacy create refuses an item identity with fenced claim history', async () => {
