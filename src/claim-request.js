@@ -4,6 +4,7 @@
 // requestSchemaError encodes for the reference model — production code must not
 // depend on test code, so the rules are duplicated here rather than imported.
 import { pointer } from './request.js';
+import { validateLedgerRepairRequest } from './ledger-repair.js';
 
 const NAMESPACE_ID = /^wbns_[a-f0-9]{32}$/;
 const ITEM_ID = /^wb_[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -24,7 +25,15 @@ const REQUIRED_MEMBERS = {
 // Returns an array of {path, code, message} issues (empty when the request is valid).
 // The request must already be JSON-parsed and deep-normalized (plain objects/arrays,
 // JsonNumber unwrapped) — this module only checks shape, not JSON syntax.
+//
+// `number-repair` is a ledger-repair request, not a work-claim one. It is
+// answered here because the claim journal validates every entry it replays
+// through this seam, so a repair request the journal accepts must be the exact
+// request the command accepts. Its members are the repair domain's own.
 export function validateClaimRequest(operation, request) {
+  if (operation === 'number-repair') {
+    return validateLedgerRepairRequest(request);
+  }
   const required = REQUIRED_MEMBERS[operation];
   if (!isPlainObject(request)) {
     return [problem([], 'invalid-type', `The ${operation} request must be a JSON object.`)];

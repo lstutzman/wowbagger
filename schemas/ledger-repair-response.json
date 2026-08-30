@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/ledger-repair-response.json",
+  "title": "ledger-repair responses, contract version 1",
+  "description": "Every `number-repair-proposal` and `number-repair` --json response. The root carries a `namespace` member: dispatch on `namespace` before reading any version field. `contract_version` is the repair domain's own version 1 — the core contract version and the work-claim contract version are separate and unchanged by it. A future change to the request or the repaired source shape requires a new repair contract version rather than a silent reinterpretation of version 1.",
+  "type": "object",
+  "oneOf": [
+    {
+      "title": "repair success",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "result"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "namespace": {
+          "const": "ledger-repair"
+        },
+        "command": {
+          "enum": [
+            "number-repair-proposal",
+            "number-repair"
+          ]
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "state": {
+          "enum": [
+            "unchanged",
+            "committed"
+          ],
+          "description": "A proposal changes nothing, so it is always `unchanged`. An applied repair is `committed`."
+        },
+        "result": {
+          "type": "object",
+          "description": "The proposal result is the ledger-repair-proposal schema. The apply result names the repair ID, the snapshot it was applied against, the changed items, and the Git commit when one was established."
+        }
+      }
+    },
+    {
+      "title": "repair refusal",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "namespace",
+        "command",
+        "contract_version",
+        "state",
+        "error"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "namespace": {
+          "const": "ledger-repair"
+        },
+        "command": {
+          "enum": [
+            "number-repair-proposal",
+            "number-repair"
+          ]
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "state": {
+          "enum": [
+            "unchanged",
+            "unknown"
+          ],
+          "description": "`unchanged` states that no ledger byte was written. `unknown` is reserved for an outcome this core could not resolve; it never accompanies a refusal raised before any write was attempted."
+        },
+        "error": {
+          "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/error"
+        }
+      }
+    }
+  ]
+}

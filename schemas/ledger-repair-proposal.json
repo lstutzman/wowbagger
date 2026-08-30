@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/ledger-repair-proposal.json",
+  "title": "number-repair-proposal result, ledger-repair version 1",
+  "description": "The `result` member of a successful `number-repair-proposal` response. The proposal is read-only: it reads the raw items of a ledger whose complete error set is duplicate numbers and computes the mapping that would repair it, writing nothing. The caller confirms or replaces `suggested_changes` and submits them as a `number-repair` request, which validates every witness again under the repair lock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ledger_snapshot_revision",
+    "duplicate_groups",
+    "items",
+    "suggested_changes",
+    "references",
+    "validation_errors"
+  ],
+  "properties": {
+    "ledger_snapshot_revision": {
+      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision",
+      "description": "The digest over the complete relevant source bytes this proposal was computed from. A repair request replays it so a changed ledger is a conflict rather than a surprise."
+    },
+    "duplicate_groups": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per duplicated number, naming every item that carries it. A repair request must resolve every group.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "number",
+          "item_ids"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "item_ids": {
+            "type": "array",
+            "minItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+            }
+          }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Every item in a duplicate group, with the configured path and exact source revision a repair request witnesses.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "path",
+          "revision",
+          "number"
+        ],
+        "properties": {
+          "item_id": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The item's configured path, relative to the ledger directory."
+          },
+          "revision": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+          },
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "suggested_changes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The computed mapping, in the exact shape of the `changes` member of a number-repair request. Each group keeps the number on its lexicographically smallest ULID and moves the rest above the current maximum number.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "expected_revision",
+          "expected_number",
+          "replacement_number"
+        ],
+        "properties": {
+          "item_id": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+          },
+          "expected_revision": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+          },
+          "expected_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "replacement_number": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "references": {
+      "type": "array",
+      "description": "The affected items' relations, exactly as the source carries them. Relations are ULIDs, so a number repair preserves them; they are reported so a caller can confirm that nothing identity-bearing is being rewritten.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "depends_on",
+          "related",
+          "parent"
+        ],
+        "properties": {
+          "item_id": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+            }
+          },
+          "related": {
+            "type": "array",
+            "items": {
+              "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+            }
+          },
+          "parent": {
+            "oneOf": [
+              {
+                "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "validation_errors": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The complete current validation errors. A proposal is produced only when every one of them is a duplicate-number error; any other error returns ledger-repair-not-applicable instead.",
+      "items": {
+        "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/validationError"
+      }
+    }
+  }
+}

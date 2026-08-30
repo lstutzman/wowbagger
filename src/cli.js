@@ -39,6 +39,11 @@ import { readGitTreeFile, readGitTreeLedger } from './git-reconciliation.js';
 import { finalizeFromRecoveryToken, withAutoCommit } from './git-autocommit.js';
 import { loadLedger } from './ledger.js';
 import {
+  ledgerRepairInvalidRequest,
+  numberRepair,
+  numberRepairProposal,
+} from './ledger-repair.js';
+import {
   assertReportOutputOutsideLedger,
   buildReportModel,
   failureCause,
@@ -93,6 +98,7 @@ const AUTO_COMMIT_COMMANDS = new Set([
   'snooze',
   'patch',
   'publish-claimed',
+  'number-repair',
 ]);
 // The report failures this command states. A code outside the set is an
 // unexpected condition, never a classification the command can pass through.
@@ -130,6 +136,8 @@ const COMMAND_SUMMARIES = {
   'claim-sync': 'Import committed adoption evidence into the local claim journal.',
   'claim-adopt': 'Rule a committed out-of-protocol item revision legitimate.',
   'mutation-finalize': 'Complete the Git commit an auto-commit mutation could not establish.',
+  'number-repair-proposal': 'Propose the number changes that would repair a duplicate-number ledger.',
+  'number-repair': 'Apply a proposed duplicate-number repair to a ledger the mutation gate refuses.',
   provision: 'Provision a Git-backed work-claim namespace.',
   claim: 'Read and coordinate work claims for one ledger.',
   'claim-verify': 'Reconcile the durable claim journal with ledger bytes and Git.',
@@ -157,6 +165,8 @@ const KNOWN_COMMANDS = new Set([
   'claim-sync',
   'claim-adopt',
   'mutation-finalize',
+  'number-repair-proposal',
+  'number-repair',
 ]);
 
 const CLAIM_SUBCOMMAND_SUMMARIES = {
@@ -835,6 +845,47 @@ export async function runCli(argumentsList, { scenario } = {}) {
     return;
   }
 
+  // The proposal is request-free and read-only: the ledger is its whole input.
+  if (command === 'number-repair-proposal') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeClaimEnvelope(ledgerRepairInvalidRequest(command, parsedOptions.issues));
+      return;
+    }
+    writeClaimEnvelope(await numberRepairProposal(parsedOptions.options.ledger));
+    return;
+  }
+
+  if (command === 'number-repair') {
+    const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
+    if (parsedOptions.issues.length > 0) {
+      writeClaimEnvelope(ledgerRepairInvalidRequest(command, parsedOptions.issues));
+      return;
+    }
+    let bytes;
+    try {
+      bytes = await requestSource(parsedOptions.options.input);
+    } catch {
+      writeClaimEnvelope(ledgerRepairInvalidRequest(command, [
+        issue('/input', 'invalid-value', 'Request input could not be read.'),
+      ]));
+      return;
+    }
+    const parsedRequest = parseJsonRequest(bytes);
+    if (parsedRequest.issues.length > 0) {
+      writeClaimEnvelope(ledgerRepairInvalidRequest(command, parsedRequest.issues));
+      return;
+    }
+    // normalizeJsonValue rebuilds the tree into plain objects with every
+    // JsonNumber unwrapped, so the exact-member check cannot be slipped past
+    // with a `__proto__` member and the number witnesses compare as numbers.
+    writeClaimEnvelope(await numberRepair(normalizeJsonValue(parsedRequest.value), {
+      ledgerDirectory: parsedOptions.options.ledger,
+      autoCommit: parsedOptions.options.autoCommit === true,
+    }));
+    return;
+  }
+
   if (command === 'claim-adopt') {
     const parsedOptions = parseContractOptions(command, argumentsList.slice(1));
     if (parsedOptions.issues.length > 0) {
@@ -1326,13 +1377,14 @@ function parseContractOptions(command, argumentsList) {
         || command === 'publish-claimed' || command === 'publication-read'
         || command === 'claim-read' || command === 'claim-acquire' || command === 'claim-renew'
         || command === 'claim-release' || command === 'claim-adopt'
+        || command === 'number-repair'
         ? new Map([['--ledger', 'ledger'], ['--input', 'input']])
         : command === 'mutation-finalize'
           ? new Map([['--ledger', 'ledger'], ['--recovery-token', 'recoveryToken']])
           : command === 'claim-merge-verify'
             ? new Map([['--ledger', 'ledger'], ['--base', 'base'], ['--head', 'head']])
             : command === 'provision' || command === 'claim-capabilities' || command === 'claim-verify'
-              || command === 'claim-sync'
+              || command === 'claim-sync' || command === 'number-repair-proposal'
               ? new Map([['--ledger', 'ledger']])
             : command === 'mint-id'
               ? new Map([['--date', 'date']])
@@ -1886,6 +1938,14 @@ function usage(command) {
 
   if (command === 'mutation-finalize') {
     return 'Usage: wowbagger mutation-finalize --ledger <dir> --recovery-token <token> --json';
+  }
+
+  if (command === 'number-repair-proposal') {
+    return 'Usage: wowbagger number-repair-proposal --ledger <dir> --json';
+  }
+
+  if (command === 'number-repair') {
+    return 'Usage: wowbagger number-repair --ledger <dir> --input <json-file|-> --json [--auto-commit]';
   }
 
   if (command === 'claim') {

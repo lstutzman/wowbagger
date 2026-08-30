@@ -93,6 +93,24 @@
       "summary": "Legacy-write fence refusals in the ledger-mutation namespace."
     },
     {
+      "file": "ledger-repair-proposal.json",
+      "domain": "ledger-repair",
+      "version": 1,
+      "summary": "The read-only duplicate-number repair proposal result."
+    },
+    {
+      "file": "ledger-repair-request.json",
+      "domain": "ledger-repair",
+      "version": 1,
+      "summary": "The strict number-repair request, covering the complete duplicate set."
+    },
+    {
+      "file": "ledger-repair-response.json",
+      "domain": "ledger-repair",
+      "version": 1,
+      "summary": "Every ledger-repair response: the proposal and apply envelopes at repair version 1."
+    },
+    {
       "file": "report-config-v1.json",
       "domain": "report-config",
       "version": 1,

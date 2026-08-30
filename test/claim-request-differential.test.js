@@ -185,3 +185,34 @@ assertBothReject('claim-adopt', 'from_revision equal to to_revision', {
   ...validAdopt,
   to_revision: validAdopt.from_revision,
 });
+
+// ---- the ledger-repair boundary ----
+//
+// `validateClaimRequest` also answers the `number-repair` operation, because
+// the claim journal validates every entry it replays through that one seam.
+// That must not widen any work-claim operation: a repair request is a
+// ledger-repair request, and the reference model — the independent oracle for
+// the work-claim contract — has no such operation at all.
+const validNumberRepair = {
+  repair_id: 'nr_20260830_0001',
+  ledger_snapshot_revision: `sha256:${'a'.repeat(64)}`,
+  date: '2026-08-30',
+  changes: [{
+    item_id: ITEM,
+    expected_revision: `sha256:${'b'.repeat(64)}`,
+    expected_number: 7,
+    replacement_number: 8,
+  }],
+};
+
+for (const operation of ['read', 'acquire', 'renew', 'release', 'claim-adopt']) {
+  assertBothReject(operation, 'a ledger-repair request shape', validNumberRepair);
+}
+
+test('number-repair: the work-claim reference model has no such operation (control)', () => {
+  assert.throws(() => runReferenceVector({
+    initial: initialState(),
+    actions: [{ operation: 'work-claim.number-repair', request: validNumberRepair, physical_now: NOW }],
+  }), /unsupported reference operation: work-claim\.number-repair/);
+  assert.deepEqual(validateClaimRequest('number-repair', validNumberRepair), []);
+});

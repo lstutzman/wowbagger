@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lstutzman/wowbagger/schemas/ledger-repair-request.json",
+  "title": "number-repair request, ledger-repair version 1",
+  "description": "The strict JSON request `number-repair` reads from stdin or a host-created request file. One request covers the complete duplicate set: a partial mapping is refused, because moving one group cannot produce a valid complete ledger while another group remains. Each change carries the witnesses the apply path compares under the repair lock. `ledger-repair` is its own contract version, separate from the core contract version and the work-claim contract version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repair_id",
+    "ledger_snapshot_revision",
+    "date",
+    "changes"
+  ],
+  "properties": {
+    "repair_id": {
+      "type": "string",
+      "pattern": "^nr_[0-9]{8}_[0-9]{4}$",
+      "description": "The bounded recovery key: `nr_`, the repair date, and a four-digit sequence within that date. An interrupted apply is resumed by this ID rather than retried blindly."
+    },
+    "ledger_snapshot_revision": {
+      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision",
+      "description": "The complete-snapshot witness the proposal was computed against. A changed snapshot is a conflict, never a repair applied to bytes the caller never read."
+    },
+    "date": {
+      "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/isoDate"
+    },
+    "changes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per moved item. No `item_id` repeats, because an item moves once, and no `replacement_number` repeats, because two items cannot land on one number. An empty list is an invalid request rather than a no-op.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "expected_revision",
+          "expected_number",
+          "replacement_number"
+        ],
+        "properties": {
+          "item_id": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/itemId"
+          },
+          "expected_revision": {
+            "$ref": "https://github.com/lstutzman/wowbagger/schemas/common.json#/$defs/revision"
+          },
+          "expected_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The number the item carries now, compared as an integer. It is a witness, not a label."
+          },
+          "replacement_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The number the item is moved to. The apply path refuses a collision with any item that is not being moved."
+          }
+        }
+      }
+    }
+  }
+}
