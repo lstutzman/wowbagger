@@ -30,8 +30,8 @@ agent to use those guarantees instead of hand-editing your Markdown.
 
 **Start here:** [install the core and set up a ledger](#start-here).
 
-> **Status: beta, published, and self-hosted.** `0.1.0-alpha.17` is on npm under
-> the `next` tag and on this repository's `v0.1.0-alpha.17` tag. It is the
+> **Status: beta, published, and self-hosted.** `0.5.0-beta.0` is on npm under
+> the `next` tag and on this repository's `v0.5.0-beta.0` tag. It is the
 > version this repository runs its own backlog on. The API remains pre-stable
 > and can change before the first stable release.
 >
@@ -77,7 +77,7 @@ Wowbagger is the core authority for a Git-native work ledger. Use it instead
 of editing ledger Markdown by hand.
 
 ```sh
-wowbagger --version                 # require 0.1.0-alpha.17
+wowbagger --version                 # require 0.5.0-beta.0
 wowbagger capabilities --json       # require contract_version: 5
 wowbagger validate --ledger ledger --json
 wowbagger ready --ledger ledger --as-of YYYY-MM-DD --json
@@ -104,10 +104,10 @@ Install the core CLI, then verify it. The supported runtime is Node.js 24; Node
 26 remains excluded because of the separate Vitest incompatibility:
 
 ```sh
-npm install -g wowbagger@0.1.0-alpha.17   # exact plugin-matched release
+npm install -g wowbagger@0.5.0-beta.0   # exact plugin-matched release
 # or, from this release's Git tag:
-# npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.17
-wowbagger --version         # 0.1.0-alpha.17
+# npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0
+wowbagger --version         # 0.5.0-beta.0
 wowbagger capabilities --json              # must report contract_version: 5
 ```
 
@@ -350,7 +350,7 @@ two supported install routes:
   registry requires a `latest` tag), so a bare install resolves to the same
   bytes.
 - **git tag** —
-  `npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.17` installs this
+  `npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0` installs this
   release. Installing at a ref installs the core and every adapter that ref
   carries.
 
@@ -422,7 +422,7 @@ Upgrade the pieces you installed:
 
 ```sh
 npm install -g wowbagger@next                  # public npm registry
-npm install -g github:lstutzman/wowbagger#v0.1.0-alpha.17  # immutable Git release
+npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0  # immutable Git release
 git pull && npm ci                            # or: a direct checkout
 ```
 

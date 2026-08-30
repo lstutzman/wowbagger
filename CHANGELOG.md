@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.5.0-beta.0 - 2026-08-30
+
 - Promote Wowbagger from alpha to beta while keeping `next` as the documented
   prerelease channel and `latest` mirrored to the same newest prerelease.
 
