@@ -2,6 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { validateClaimRequest } from './claim-request.js';
+import { isCalendarDate } from './validate.js';
 
 import { advanceClockFloor, claimAcquire, claimRelease, claimRenew } from './claim-operations.js';
 import { emptyClaimState } from './claim-store.js';
@@ -16,9 +17,10 @@ const JOURNAL_ENTRY_TYPES = new Set([
   'legacy-mutation-abort',
   'legacy-mutation-intent',
   'publish-final',
-  'publish-finalization',
   'publish-intent',
   'revision-adoption',
+  'number-repair-intent',
+  'number-repair-final',
 ]);
 // Every command the legacy mutation fence journals.
 const LEGACY_MUTATION_COMMANDS = new Set(['patch-v1', 'transition-v1', 'create-v1']);
@@ -180,6 +182,8 @@ async function readJournalEntries(journalPath, namespace = null) {
   if (lines.length > MAX_JOURNAL_ENTRIES) throw journalCapacityExceeded();
   const entries = lines.map((line) => JSON.parse(line));
   const createAttempts = new Map();
+  const repairIntents = new Map();
+  const repairFinals = new Set();
   for (let index = 0; index < entries.length; index += 1) {
     if (!Number.isSafeInteger(entries[index]?.seq) || entries[index].seq !== index + 1) {
       throw journalInvalid('non-contiguous-sequence');
@@ -191,6 +195,9 @@ async function readJournalEntries(journalPath, namespace = null) {
       throw journalInvalid('invalid-entry');
     }
     if (!validCreateResolution(entries[index], createAttempts)) {
+      throw journalInvalid('invalid-entry');
+    }
+    if (!validRepairResolution(entries[index], repairIntents, repairFinals)) {
       throw journalInvalid('invalid-entry');
     }
   }
@@ -338,6 +345,12 @@ function validJournalEntry(entry, namespace) {
       && typeof entry.git_commit === 'string'
       && (!Object.hasOwn(entry, 'item_path') || typeof entry.item_path === 'string');
   }
+  if (entry.type === 'number-repair-intent') {
+    return validRepairIntent(entry, namespace);
+  }
+  if (entry.type === 'number-repair-final') {
+    return validRepairFinal(entry, namespace);
+  }
   if (entry.type === 'publish-intent') {
     return typeof entry.operation_id === 'string'
       && typeof entry.operation_digest === 'string'
@@ -365,6 +378,73 @@ function validJournalEntry(entry, namespace) {
     && typeof entry.item_id === 'string'
     && typeof entry.committed_revision === 'string'
     && typeof entry.git_commit === 'string';
+}
+
+const REPAIR_ID = /^nr_\d{8}_\d{4}$/;
+const REPAIR_ITEM_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
+const REPAIR_REVISION = /^sha256:[0-9a-f]{64}$/;
+const REPAIR_STAGING_ID = /^[A-Za-z0-9_-]{1,80}$/;
+
+function validRepairIntent(entry, namespace) {
+  return REPAIR_ID.test(entry.repair_id)
+    && typeof entry.ledger_namespace === 'string'
+    && (namespace === null || entry.ledger_namespace === namespace)
+    && REPAIR_REVISION.test(entry.ledger_snapshot_revision)
+    && isCalendarDate(entry.date)
+    && REPAIR_STAGING_ID.test(entry.staging_id)
+    && validRepairItems(entry.items, { includeExpected: true });
+}
+
+function validRepairFinal(entry, namespace) {
+  return REPAIR_ID.test(entry.repair_id)
+    && typeof entry.ledger_namespace === 'string'
+    && (namespace === null || entry.ledger_namespace === namespace)
+    && REPAIR_STAGING_ID.test(entry.staging_id)
+    && typeof entry.observed_at === 'string'
+    && validRepairItems(entry.items, { includeCommitted: true });
+}
+
+function validRepairItems(items, options) {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  const seen = new Set();
+  for (const item of items) {
+    if (!isRecord(item)
+      || !REPAIR_ITEM_ID.test(item.item_id)
+      || seen.has(item.item_id)
+      || typeof item.item_path !== 'string'
+      || !REPAIR_REVISION.test(item.candidate_revision)) {
+      return false;
+    }
+    if (options.includeExpected
+      && (!REPAIR_REVISION.test(item.expected_revision)
+        || !Number.isSafeInteger(item.expected_number)
+        || item.expected_number < 1
+        || !Number.isSafeInteger(item.replacement_number)
+        || item.replacement_number < 1)) {
+      return false;
+    }
+    if (options.includeCommitted && !REPAIR_REVISION.test(item.committed_revision)) return false;
+    seen.add(item.item_id);
+  }
+  return true;
+}
+
+function validRepairResolution(entry, intents, finals) {
+  if (entry.type === 'number-repair-intent') {
+    if (intents.has(entry.repair_id)) return false;
+    intents.set(entry.repair_id, entry);
+    return true;
+  }
+  if (entry.type !== 'number-repair-final') return true;
+  const intent = intents.get(entry.repair_id);
+  if (!intent || finals.has(entry.repair_id) || intent.staging_id !== entry.staging_id) return false;
+  const expected = new Map(intent.items.map((item) => [item.item_id, item.candidate_revision]));
+  if (entry.items.length !== expected.size) return false;
+  for (const item of entry.items) {
+    if (expected.get(item.item_id) !== item.candidate_revision) return false;
+  }
+  finals.add(entry.repair_id);
+  return true;
 }
 
 // A journal-fenced create is only meaningful as a pair: the terminal that ends

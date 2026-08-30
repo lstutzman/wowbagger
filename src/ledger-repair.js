@@ -4,8 +4,11 @@
 // separate from the core contract (version 5) and the work-claim contract
 // (version 1), so a repair request and a repair response are never read as
 // either of those.
-import { createHash } from 'node:crypto';
+import { constants } from 'node:fs';
+import { lstat, mkdir, open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+
+import { createHash } from 'node:crypto';
 
 import { loadLedger } from './ledger.js';
 import { pointer, sortIssues } from './request.js';
@@ -27,6 +30,194 @@ const REPAIR_ID = /^nr_\d{8}_\d{4}$/;
 const ITEM_ID = /^wb_[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const REVISION = /^sha256:[0-9a-f]{64}$/;
 
+
+const STAGING_ID = /^[A-Za-z0-9_-]{1,80}$/;
+const STAGING_RELATIVE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+$/;
+
+export function repairStagingPath(gitCommonDir, namespace, repairId) {
+  assertStagingSegment(namespace, 'namespace');
+  assertStagingSegment(repairId, 'repair_id');
+  return path.join(
+    path.resolve(gitCommonDir),
+    'wowbagger',
+    namespace,
+    'repairs',
+    repairId,
+  );
+}
+
+export async function stageNumberRepairCandidates({
+  gitCommonDir,
+  namespace,
+  repairId,
+  ledgerSnapshotRevision,
+  candidates,
+}) {
+  assertStagingSegment(namespace, 'namespace');
+  assertStagingSegment(repairId, 'repair_id');
+  if (!REVISION.test(ledgerSnapshotRevision) || !Array.isArray(candidates) || candidates.length === 0) {
+    throw stagingInvalid('manifest-shape');
+  }
+  const root = repairStagingPath(gitCommonDir, namespace, repairId);
+  const candidatesRoot = path.join(root, 'candidates');
+  await ensureStagingDirectory(candidatesRoot, path.resolve(gitCommonDir));
+  const manifestCandidates = [];
+  const seenPaths = new Set();
+  const seenItems = new Set();
+  for (const candidate of candidates) {
+    if (!isPlainObject(candidate)
+      || !ITEM_ID.test(candidate.item_id)
+      || seenItems.has(candidate.item_id)
+      || typeof candidate.path !== 'string'
+      || !STAGING_RELATIVE_PATH.test(candidate.path)
+      || seenPaths.has(candidate.path)
+      || !REVISION.test(candidate.candidate_revision)
+      || !Buffer.isBuffer(candidate.candidate_bytes)) {
+      throw stagingInvalid('candidate-shape');
+    }
+    const candidatePath = path.join(candidatesRoot, candidate.path);
+    await ensureStagingDirectory(path.dirname(candidatePath), path.resolve(gitCommonDir));
+    await writeExclusive(candidatePath, candidate.candidate_bytes);
+    manifestCandidates.push({
+      item_id: candidate.item_id,
+      path: candidate.path,
+      candidate_revision: candidate.candidate_revision,
+      sha256: revisionOf(candidate.candidate_bytes),
+      size: candidate.candidate_bytes.byteLength,
+    });
+    seenPaths.add(candidate.path);
+    seenItems.add(candidate.item_id);
+  }
+  const manifest = {
+    schema_version: 1,
+    repair_id: repairId,
+    ledger_snapshot_revision: ledgerSnapshotRevision,
+    candidates: manifestCandidates,
+  };
+  await writeExclusive(
+    path.join(root, 'manifest.json'),
+    Buffer.from(`${JSON.stringify(manifest)}\n`),
+  );
+  await syncDirectory(root);
+  return manifest;
+}
+
+export async function readStagedNumberRepair({
+  gitCommonDir,
+  namespace,
+  repairId,
+}) {
+  const root = repairStagingPath(gitCommonDir, namespace, repairId);
+  const manifestPath = path.join(root, 'manifest.json');
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch (error) {
+    throw stagingInvalid(error?.code === 'ENOENT' ? 'staging-absent' : 'manifest-unreadable');
+  }
+  if (!isPlainObject(manifest)
+    || manifest.schema_version !== 1
+    || manifest.repair_id !== repairId
+    || !REVISION.test(manifest.ledger_snapshot_revision)
+    || !Array.isArray(manifest.candidates)
+    || manifest.candidates.length === 0) {
+    throw stagingInvalid('manifest-shape');
+  }
+  const candidates = [];
+  const seenPaths = new Set();
+  for (const entry of manifest.candidates) {
+    if (!isPlainObject(entry)
+      || !ITEM_ID.test(entry.item_id)
+      || typeof entry.path !== 'string'
+      || !STAGING_RELATIVE_PATH.test(entry.path)
+      || seenPaths.has(entry.path)
+      || !REVISION.test(entry.candidate_revision)
+      || entry.sha256 !== entry.candidate_revision
+      || !Number.isSafeInteger(entry.size)
+      || entry.size < 0) {
+      throw stagingInvalid('manifest-candidate');
+    }
+    const candidatePath = path.join(root, 'candidates', entry.path);
+    let bytes;
+    try {
+      bytes = await readFile(candidatePath);
+      const info = await stat(candidatePath);
+      if (!info.isFile()) throw stagingInvalid('candidate-not-file');
+    } catch (error) {
+      if (error?.code === 'LEDGER_REPAIR_STAGING_INVALID') throw error;
+      throw stagingInvalid('candidate-absent');
+    }
+    if (bytes.byteLength !== entry.size || revisionOf(bytes) !== entry.candidate_revision) {
+      throw stagingInvalid('candidate-digest-mismatch');
+    }
+    candidates.push({ ...entry, candidate_bytes: bytes });
+    seenPaths.add(entry.path);
+  }
+  return { manifest, candidates };
+}
+
+function assertStagingSegment(value, field) {
+  if (typeof value !== 'string' || !STAGING_ID.test(value)) {
+    throw stagingInvalid(`invalid-${field}`);
+  }
+}
+
+async function ensureStagingDirectory(directory, boundary) {
+  const relative = path.relative(boundary, directory);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) throw stagingInvalid('path-traversal');
+  let current = boundary;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    await mkdir(current, { recursive: true });
+    const info = await lstat(current);
+    if (!info.isDirectory() || info.isSymbolicLink()) throw stagingInvalid('symlink-directory');
+  }
+}
+
+async function writeExclusive(file, bytes) {
+  let handle;
+  try {
+    handle = await openNoFollow(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL);
+    await handle.writeFile(bytes);
+    await handle.sync();
+  } catch (error) {
+    if (error?.code === 'EEXIST') throw stagingInvalid('staging-already-exists');
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+  await syncDirectory(path.dirname(file));
+}
+
+async function openNoFollow(file, flags) {
+  if (constants.O_NOFOLLOW !== undefined) return open(file, flags | constants.O_NOFOLLOW);
+  const info = await lstat(file).catch((error) => {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (info?.isSymbolicLink()) throw stagingInvalid('symlink-file');
+  return open(file, flags);
+}
+
+async function syncDirectory(directory) {
+  let handle;
+  try {
+    handle = await open(directory, 'r');
+    await handle.sync();
+  } catch (error) {
+    if (['EISDIR', 'EINVAL', 'ENOSYS', 'ENOTSUP', 'EOPNOTSUPP', 'EPERM'].includes(error?.code)) return;
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+}
+
+function stagingInvalid(reason) {
+  const error = new Error('ledger repair staging is invalid');
+  error.code = 'LEDGER_REPAIR_STAGING_INVALID';
+  error.reason = reason;
+  return error;
+}
 // Returns an array of {path, code, message} issues, sorted, and empty when the
 // request is valid. The request must already be JSON-parsed and
 // deep-normalized (plain objects/arrays, JsonNumber unwrapped) — this checks

@@ -57,3 +57,5 @@ Task 2 dispatch attempt 1 failed before edits with provider rate-limit `429`; no
 Task 2 dispatch attempt 1 failed before edits with provider rate-limit `429`; inline implementation followed.
 Task 2: complete (commits d5f36f1..2313dcf, inline review; proposal tests current Node and Node24 pass; duplicate-only gate mutation failed and source restored).
 Task 3: complete (stale snapshot/item witnesses, complete duplicate mapping, and replacement collision refusals; current Node and Node24 focused suites pass; inline review substituted after native review rate-limit failure).
+
+Task 4: complete (journal intent/final pairing and durable no-follow staging with manifest/digest verification; current Node and Node24 focused suites pass; inline review substituted after native review rate-limit failure).
