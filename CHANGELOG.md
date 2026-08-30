@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.14 - 2026-08-29
+
 ### Changed
 
 - **Upgrading is a hard cutover: upgrade every writer in one Git coordination

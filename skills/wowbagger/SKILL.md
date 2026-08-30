@@ -14,7 +14,7 @@ publish something.
 Install the core separately before using this skill:
 
 ```sh
-npm install -g wowbagger@0.1.0-alpha.13
+npm install -g wowbagger@0.1.0-alpha.14
 ```
 
 The core requires Node.js 20 or later. This plugin ships only agent
@@ -34,9 +34,9 @@ wowbagger capabilities --json
 
 Read the plain distribution version from the first command and the top-level
 `contract_version` from the second. **This skill requires distribution version
-`0.1.0-alpha.13` and core `contract_version: 5`.**
+`0.1.0-alpha.14` and core `contract_version: 5`.**
 
-The distribution pin names the published `0.1.0-alpha.13` release; the cut that
+The distribution pin names the published `0.1.0-alpha.14` release; the cut that
 publishes core `contract_version: 5` moves it. Earlier cores report
 `contract_version: 3` or lower and lack behavior this skill requires, including
 the bounded item source, so the version check refuses them. Do not soften
