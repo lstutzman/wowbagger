@@ -17,6 +17,7 @@ const JOURNAL_ENTRY_TYPES = new Set([
   'legacy-mutation-abort',
   'legacy-mutation-intent',
   'publish-final',
+  'publish-finalization',
   'publish-intent',
   'revision-adoption',
   'number-repair-intent',
