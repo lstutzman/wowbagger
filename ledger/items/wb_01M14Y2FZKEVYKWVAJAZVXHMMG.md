@@ -5,7 +5,7 @@ number: 184
 title: "Scope claim verification away from unrelated active work"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
 related: [ wb_01M0XNVN00ABNA2SZ7WHM0FRX7, wb_01M12GT91WYNWHTYRBV7Y5R9E3, wb_01M13SBJHZABPX0QTNCFEGYMWM ]
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept scoped verification design at priority two."
+    rationale: "The field report is real, but alpha.14 provides a safe manual workflow once the consumer stops using global verify exit 0 as a per-item gate. The remaining gap is a supported automation surface, not blocked mutation."
 ---
 ## Problem
 
