@@ -50,7 +50,7 @@ export async function listWorktrees(directory) {
     const value = boundary === -1 ? '' : field.slice(boundary + 1);
     if (name === 'worktree') {
       record = {
-        path: value,
+        path: path.normalize(value),
         head: null,
         branch: null,
         detached: false,
