@@ -7,6 +7,9 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+- Promote Wowbagger from alpha to beta while keeping `next` as the documented
+  prerelease channel and `latest` mirrored to the same newest prerelease.
+
 - Existing ledgers can safely authorize standard `tags` corrections through
   `extensions-provision`: dry-run and publication now require a valid complete
   ledger, validate every historical occurrence against explicit

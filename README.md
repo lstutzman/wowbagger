@@ -30,10 +30,10 @@ agent to use those guarantees instead of hand-editing your Markdown.
 
 **Start here:** [install the core and set up a ledger](#start-here).
 
-> **Status: alpha, published, and self-hosted.** `0.1.0-alpha.17` is on npm under
+> **Status: beta, published, and self-hosted.** `0.1.0-alpha.17` is on npm under
 > the `next` tag and on this repository's `v0.1.0-alpha.17` tag. It is the
-> version this repository runs its own backlog on. The API is not frozen and the
-> version will move before a stable release.
+> version this repository runs its own backlog on. The API remains pre-stable
+> and can change before the first stable release.
 >
 > **Install with `@next`.** Every published release is a prerelease. The
 > registry requires a `latest` dist-tag, so `latest` mirrors `next` — a bare

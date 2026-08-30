@@ -150,16 +150,15 @@ Never report a release as shipped after only the local cut.
 
 ## The prerelease channel policy
 
-While every published release is `0.1.0-alpha.*` the target state is
-**`latest` mirroring `next`**: both dist-tags name the newest published
-prerelease, with `0.1.0-alpha.1` deprecated (deprecated, never unpublished — an
-existing installation keeps working and warns on the next install). The
-first-choice policy was no `latest` tag at all, so a bare install fails loudly;
-the registry refused it — `npm dist-tag rm wowbagger latest` returns E400
-(verified live 2026-08-17), because npm mandates every package carry a
-`latest`. Given that forced tag, the current prerelease is strictly better than
-the dead first alpha it used to serve. `wowbagger@next` stays the documented
-install.
+While releases remain prereleases, the target state is **`latest` mirroring
+`next`**: both dist-tags name the newest published prerelease.
+`0.1.0-alpha.1` remains deprecated (deprecated, never unpublished — an existing
+installation keeps working and warns on the next install). The first-choice
+policy was no `latest` tag at all, so a bare install fails loudly; the registry
+refused it — `npm dist-tag rm wowbagger latest` returns E400 (verified live
+2026-08-17), because npm mandates every package carry `latest`. Given that
+forced tag, the current prerelease is strictly better than the dead first alpha
+it used to serve. `wowbagger@next` stays the documented install.
 
 `scripts/release-channels.js` encodes that policy:
 

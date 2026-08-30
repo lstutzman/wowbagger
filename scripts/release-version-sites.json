@@ -54,7 +54,7 @@
     {
       "file": "README.md",
       "kind": "anchored-text",
-      "anchor": "**Status: alpha, published, and self-hosted.** `{version}` is on npm under",
+      "anchor": "**Status: beta, published, and self-hosted.** `{version}` is on npm under",
       "classification": "mutable",
       "occurrences": 1
     },
