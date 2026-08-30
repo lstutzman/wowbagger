@@ -7,7 +7,7 @@ kind: task
 priority: 2
 status: triage
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
@@ -28,3 +28,9 @@ Current Wowbagger deliberately requires an extension declaration, so this may be
 - The path must validate all existing tag values, commit one explicit declaration, and avoid hand-editing item bytes.
 - Teach the installed skill and consumer docs how to discover, provision, and patch tags before mirrors drift.
 - Add a consumer trap test: create tagged item on a ledger without a declaration, make a later domain correction, and update tags through the sanctioned path with no unauthorized-revision aftermath.
+
+## Triage decision — 2026-08-30
+
+Accepted into backlog at priority 2. Eight PropertyCompass2 mirrors retain obsolete tags because their ledger predates an extension declaration. The current safety rule is correct but offers no sanctioned bootstrap for existing values, so this is a real data-maintenance gap rather than immediate ledger corruption.
+
+First design slice: inventory historical tag YAML shapes and compare two explicit choices — standard patchable tags or a declaration-bootstrap command. Either path must validate every existing value before enabling mutation and must leave item bytes untouched until a complete proposal is accepted.
