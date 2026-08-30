@@ -5,7 +5,7 @@ number: 187
 title: "Align journal capacity refusal reason with contract"
 kind: task
 priority: 2
-status: triage
+status: backlog
 created: 2026-08-29
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-29T22:25:00Z"
 depends_on: []
 related: [ wb_01M14Y2VZW2ASKHYE42BGZ1PPK ]
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept journal-capacity contract alignment at priority two."
+    rationale: "The failure is safe but the documented and emitted recovery reasons disagree. Journaled create increases the practical relevance of the capacity boundary."
 ---
 ## Problem
 
