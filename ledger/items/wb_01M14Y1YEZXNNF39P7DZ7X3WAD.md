@@ -5,7 +5,7 @@ number: 182
 title: "Add fenced recovery for duplicate immutable numbers"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-28T19:38:40Z"
 depends_on: []
 related: [ wb_01M14Y1NTXQPMQ270VT1WH6H17 ]
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept duplicate-number recovery as the top backlog item."
+    rationale: "Alpha.14 prevents new collisions but leaves existing invalid ledgers blocked. PropertyCompass2 required unsafe out-of-band recovery, so this is the sharpest current user gap."
 ---
 ## Problem
 
