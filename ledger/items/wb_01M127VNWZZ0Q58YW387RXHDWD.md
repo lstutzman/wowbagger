@@ -5,7 +5,7 @@ number: 174
 title: "Recognize parent-migrate and snooze lock owners in lock diagnostics"
 kind: task
 priority: 3
-status: triage
+status: backlog
 created: 2026-08-27
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-27T18:45:00Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept lock-owner diagnostic fidelity at priority three."
+    rationale: "The lock still excludes concurrent writers safely. The defect only degrades diagnosis, so it ranks below stranded recovery, runtime support, and active data-maintenance gaps."
 ---
 ## Problem
 
