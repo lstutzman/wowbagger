@@ -5,7 +5,7 @@ number: 186
 title: "Design safe batch create allocation and publication"
 kind: task
 priority: 3
-status: triage
+status: backlog
 created: 2026-08-29
 updated: 2026-08-30
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-29T18:30:00Z"
 depends_on: []
 related: [ wb_01M14Y1NTXQPMQ270VT1WH6H17 ]
+decisions:
+  - action: accept
+    date: 2026-08-30
+    summary: "Accept batch-create design as priority-three backlog work."
+    rationale: "Bulk creation is awkward but supported safely through create-then-commit. A batch surface is optional and must not outrank current stranded-user or platform-support work."
 ---
 ## Problem
 
