@@ -311,6 +311,53 @@ test('publish-claimed keeps pre-intent infrastructure failures unchanged', async
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
 });
 
+test('reserved recovery capacity resolves an interrupted publication intent at the boundary', async () => {
+  const fixture = await publicationFixture();
+  const journalPath = path.join(fixture.root, '.git', 'wowbagger', fixture.namespace, 'journal.ndjson');
+  const entries = Array.from({ length: 65531 }, (_, index) => JSON.stringify({
+    seq: index + 1,
+    type: 'clock',
+    now: '2030-01-11T09:00:00.000Z',
+    floor: '2030-01-11T09:00:00.000Z',
+  }));
+  entries.push(JSON.stringify({
+    seq: 65532,
+    type: 'claim',
+    command: 'acquire',
+    physical_now: fixture.claim.issued_at,
+    request: {
+      ledger_namespace: fixture.namespace,
+      item_id: fixture.itemId,
+      owner_id: fixture.claim.owner_id,
+      lease_duration_ms: 300000,
+      expected: { last_epoch: '0', active: null },
+    },
+  }));
+  await writeFile(journalPath, `${entries.join('\n')}\n`);
+  const request = JSON.parse(await readFile(fixture.requestPath, 'utf8'));
+
+  const interrupted = await publishClaimed({
+    ledgerDirectory: fixture.ledger,
+    gitCommonDir: path.join(fixture.root, '.git'),
+    namespace: fixture.namespace,
+    request,
+    scenario: 'fail:after-publish-intent',
+  });
+
+  assert.equal(interrupted.exit, 6, JSON.stringify(interrupted.stdout));
+  assert.equal(interrupted.stdout.state, 'unknown');
+  const verified = await capture(['claim-verify', '--ledger', fixture.ledger, '--json']);
+  assert.equal(verified.exit, 0, JSON.stringify(verified.envelope));
+  assert.deepEqual(
+    verified.envelope.result.findings.map(({ code }) => code),
+    ['pending-intent-resolved'],
+  );
+  const replayed = await replayClaimJournal(journalPath, fixture.namespace);
+  assert.equal(replayed.entries.length, 65536);
+  assert.equal(replayed.entries.at(-1).type, 'publish-final');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
+});
+
 test('publish-claimed returns the stored terminal envelope for an identical retry', async () => {
   const fixture = await publicationFixture();
   const command = ['publish-claimed', '--ledger', fixture.ledger, '--input', fixture.requestPath, '--json'];
