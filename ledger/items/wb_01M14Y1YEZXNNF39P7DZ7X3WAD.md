@@ -5,7 +5,7 @@ number: 182
 title: "Add fenced recovery for duplicate immutable numbers"
 kind: task
 priority: 1
-status: backlog
+status: in-progress
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
