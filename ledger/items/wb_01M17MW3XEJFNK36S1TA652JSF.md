@@ -5,9 +5,10 @@ number: 186
 title: "Design safe batch create allocation and publication"
 kind: task
 priority: 3
-status: in-progress
+status: done
 created: 2026-08-29
 updated: 2026-08-30
+completed: 2026-08-30
 provenance:
   source: "item #181 batch workflow decision"
   recorded_at: "2026-08-29T18:30:00Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-30
     summary: "Accept batch-create design as priority-three backlog work."
     rationale: "Bulk creation is awkward but supported safely through create-then-commit. A batch surface is optional and must not outrank current stranded-user or platform-support work."
+  - action: complete
+    date: 2026-08-30
+    summary: "Permanently reject batch create for direct Markdown."
+    rationale: "Serial create --auto-commit preserves honest one-item atomicity, recovery, numbering, and Git review. Batch-wide atomicity requires a different storage protocol; the accepted decision records all conditional criteria as not applicable."
 ---
 ## Problem
 
