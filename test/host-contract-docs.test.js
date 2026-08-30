@@ -48,7 +48,7 @@ test('the host contract ships and every consumer surface points at it', () => {
 });
 
 test('the host contract states the shell-free launch requirement exactly', () => {
-  assert.match(flatHostContract, /Node\.js 20 or later/);
+  assert.match(flatHostContract, /Node\.js 24 or later/);
   assert.match(flatHostContract, /absolute Node executable/i);
   assert.match(flatHostContract, /absolute `wowbagger\.js`/i);
   assert.match(flatHostContract, /argument array/i);
