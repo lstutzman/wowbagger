@@ -122,7 +122,7 @@ test('an installed consumer resolves the core script and its own package.json', 
   assert.equal(observed.exists, true);
   assert.equal(observed.sameAsSubpath, true);
   assert.equal(observed.name, 'wowbagger');
-  assert.equal(observed.engines, '>=20');
+  assert.equal(observed.engines, '>=24');
 });
 
 test('the resolved launch tuple runs the core without a shell', () => {

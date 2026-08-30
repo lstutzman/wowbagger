@@ -12,6 +12,16 @@ consolidation. The first tagged release inherits this file.
   supported matrix because of the separate Vitest incompatibility reported by
   Lee.
 
+The alpha.14 hard cutover remains the baseline: `claim-store-unavailable`
+answers **The durable claim store is unavailable.** with
+`claim-store-unreadable`; upgrade every writer before the first alpha.14 create.
+There is no automatic migration or mixed-version grace period. There is no
+batch mutation, the create-then-commit loop remains supported, item #186 owns
+batch design, and item #182 owns existing duplicate numbers. The fence adds no
+new Git roster or history traversal and costs two extra fsync'd journal appends
+within the 65,536-entry limit.
+
+
 ## 0.1.0-alpha.16 - 2026-08-30
 
 - Added `version-drift --json` to detect stale installed skill pins, core
