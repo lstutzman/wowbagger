@@ -608,7 +608,7 @@ Review specifically:
 
 - [ ] **Step 3: Cut alpha.14 atomically**
 
-Move the Unreleased entries into `0.1.0-alpha.14`, including #181, the reachable-unowned remediation correction, and literal hard-cutover guidance. Update all four distribution version sites together. Run release-site, packaging, current Node, Node 20, adapter, ledger, audit, and diff gates again.
+Move the Unreleased entries into the alpha.14 release section, including #181, the reachable-unowned remediation correction, and literal hard-cutover guidance. Update all four distribution version sites together. Run release-site, packaging, current Node, Node 20, adapter, ledger, audit, and diff gates again.
 
 - [ ] **Step 4: Publish and verify alpha.14**
 
