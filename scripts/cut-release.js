@@ -243,6 +243,7 @@ export function cutRelease({
   version,
   date,
   dryRun = false,
+  releaseBranch = DEFAULT_RELEASE_BRANCH,
   node24 = DEFAULT_NODE24,
   publishedVersions = defaultPublishedVersions,
   remoteTags = () => defaultRemoteTags(cwd),
