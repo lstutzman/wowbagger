@@ -468,7 +468,7 @@ On a **provisioned** ledger (`claim capabilities` reports
 ```sh
 wowbagger create --ledger <dir> --input request.json --json
 git add <dir> && git commit -m "Record the mutation"
-wowbagger claim-verify --ledger <dir> --json
+wowbagger claim-verify --ledger <dir> --id <item> --json
 wowbagger transition --ledger <dir> --input next.json --json
 ```
 
@@ -476,7 +476,7 @@ The claim store reconciles every recorded mutation with Git `HEAD` and the
 working tree. It refuses the next mutation when it finds an
 `unauthorized-revision`, requires Git finalization, or requires synchronization
 for the target item. A synchronization finding on an unrelated item remains
-visible to `claim-verify` but does not block that command.
+visible to targeted `claim-verify` without blocking that item.
 
 One exact window is nonblocking: an existing item's latest authorized
 working-tree bytes with an earlier authorized revision at `HEAD`. That
@@ -650,7 +650,7 @@ wowbagger provision --ledger <dir> --json
 wowbagger claim capabilities --ledger <dir> --json
 wowbagger claim read|acquire|renew|release --ledger <dir> --input request.json --json
 wowbagger publish-claimed --ledger <dir> --input request.json --json [--auto-commit]
-wowbagger claim-verify --ledger <dir> --json
+wowbagger claim-verify --ledger <dir> [--id <item>] --json
 wowbagger claim-sync --ledger <dir> --json
 wowbagger claim-merge-verify --ledger <dir> --base <ref> --head <ref> --json
 ```

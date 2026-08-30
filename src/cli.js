@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, open, writeFile } from 'node:fs/promises';
+import { access, link, mkdir, open, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -515,23 +516,31 @@ export async function runCli(argumentsList, { scenario } = {}) {
           { flag: 'wx' },
         );
       }
-      let handle;
+      const temporary = path.join(path.dirname(output), `.extensions-${randomUUID()}.tmp`);
+      const handle = await open(temporary, 'wx');
       try {
-        handle = await open(output, 'wx');
-      } catch (error) {
-        if (error?.code !== 'EEXIST') throw error;
-        const winner = await loadExtensionDeclaration(parsedOptions.options.ledger);
-        if (!winner.declared || !sameDeclaration(winner.declaration)) {
-          refuseConflict();
-          return;
-        }
+        await handle.writeFile(proposal.source, 'utf8');
+        await handle.sync();
+      } finally {
+        await handle.close();
       }
-      if (handle) {
+      try {
+        await extensionProvisionCheckpoint(scenario, parsedOptions.options.ledger);
         try {
-          await handle.writeFile(proposal.source, 'utf8');
-          await handle.sync();
-        } finally {
-          await handle.close();
+          await link(temporary, output);
+        } catch (error) {
+          if (error?.code !== 'EEXIST') throw error;
+          const winner = await loadExtensionDeclaration(parsedOptions.options.ledger);
+          if (!winner.declared || !sameDeclaration(winner.declaration)) {
+            refuseConflict();
+            return;
+          }
+        }
+      } finally {
+        try {
+          await unlink(temporary);
+        } catch (error) {
+          if (error?.code !== 'ENOENT') throw error;
         }
       }
     }
@@ -1527,6 +1536,7 @@ function parseContractOptions(command, argumentsList) {
       continue;
     }
     seen.add(argument);
+
     const value = argumentsList[index + 1];
     if (!value || value.startsWith('--')) {
       issues.push(argumentIssue(index + 1, 'missing-argument', `Argument ${argument} requires a value.`));
@@ -1565,6 +1575,23 @@ function parseContractOptions(command, argumentsList) {
   return { options, issues: sortIssues(issues) };
 }
 
+async function extensionProvisionCheckpoint(scenario, ledgerDirectory) {
+  if (scenario !== 'extension-provision-pause-before-link') return;
+  const reached = path.join(ledgerDirectory, '.wowbagger-test-extension-provision-reached');
+  const allowed = path.join(ledgerDirectory, '.wowbagger-test-extension-provision-continue');
+  await writeFile(reached, 'reached\n');
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    try {
+      await access(allowed);
+      return;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting to continue extension declaration publication.');
+}
 // `--auto-commit` is the only bare flag beyond `--json`, and it changes what
 // happens after the mutation, never the mutation itself.
 function autoCommitted(command, options, run, scenario, operationId = null, targetItemId = null) {

@@ -2810,9 +2810,12 @@ For every blocking finding:
    named worktree owner is established, there is no commit left to wait for:
    inspect that reachable history, then restore or explicitly adopt reviewed
    bytes.
-2. Run `wowbagger claim-verify --ledger <dir> --json`.
-3. Exit 0 with `state: "committed"` means the ledger is reconciled and the next
-   mutating command may run. Exit 6 means findings remain; repeat from step 1.
+2. Run `wowbagger claim-verify --ledger <dir> --id <finding.item_id> --json`
+   for each affected item. Use the bare command only for strict repository
+   diagnosis.
+3. Exit 0 with `state: "committed"` means that item is reconciled and its next
+   mutating command may run. Exit 6 means blocking findings remain; repeat from
+   step 1.
 
 The reasons a `stale-write-detected` finding can carry, and the other blocking
 finding codes, are enumerated in the [work-claim

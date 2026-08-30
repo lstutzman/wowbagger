@@ -100,7 +100,8 @@ cooperating writers; they are not exclusive locks.
 
 ## Start here
 
-Install the core CLI, then verify it. The core requires Node.js 20 or later:
+Install the core CLI, then verify it. The supported runtime is Node.js 24; Node
+26 remains excluded because of the separate Vitest incompatibility:
 
 ```sh
 npm install -g wowbagger@0.1.0-alpha.17   # exact plugin-matched release
@@ -589,7 +590,8 @@ approval never rides the bootstrap request, which the model controls;
 
 ## Core commands
 
-The current core requires Node.js 20 or later. From a Wowbagger checkout,
+The current core requires Node.js 24. Node 26 is not in the supported matrix.
+From a Wowbagger checkout,
 `./bin/wowbagger.js --help` prints the full command inventory,
 `./bin/wowbagger.js <command> --help` prints that command's usage, and
 `./bin/wowbagger.js --version` prints the installed package version. The

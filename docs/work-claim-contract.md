@@ -683,35 +683,23 @@ a new UUID, and the removed UUID stays in journal history attributing nothing.
    authority after review. When it says ownership cannot be established from
    reachable refs, inspect reachable or dangling commits and remedy it the same
    way. In neither inspection case do you copy peer working-tree bytes.
-5. Run `claim-verify --ledger <dir> --json` in the blocked worktree and require
-   exit 0.
+5. Run `claim-verify --ledger <dir> --id <finding.item_id> --json` in the
+   blocked worktree and require exit 0.
 6. Resume the affected item.
 
 Auto-commit applies this target scope both before and after its Git commit. A
 successful mutation requires a valid ledger and no findings blocking the target
-item, not a globally empty findings list. Nonblocking findings remain available
-to `claim-verify`, where a caller that names no target still sees every finding.
+item, not a globally empty findings list. Nonblocking findings remain visible
+in targeted verification.
 
 **A target-scoped success is not a globally clean claim store.** The two scopes
 answer different questions and a caller MUST NOT substitute one for the other.
-A mutation, and auto-commit inside it, requires only that no finding blocks its
-own target item. `claim-verify` names no target, so every unresolved finding
-blocks it: exit 6 there is the repository-wide answer, and it stays exit 6
-while any item in the repository carries a blocking finding, including one
-belonging to work this caller has nothing to do with. A cooperating worker can
-therefore commit every one of its own mutations while `claim-verify` never
-reaches exit 0, because a sibling worktree's unpublished item is visible from
-every checkout that shares the common directory.
-
-That is current behavior, not a settled design. Item #184 is open in triage to
-choose the supported surface — item-scoped verification, target-aware input, or
-repository-wide success with structured foreign-work warnings, while keeping a
-strict whole-repository mode. Until it ships, an automated gate that demands a
-globally clean `claim-verify` is unsatisfiable in a repository with live
-sibling work. Gate on the mutation's own refusal, and read a repository-wide
-`claim-verify` as the diagnostic it is. Do not hand-edit an item or run
-`claim-adopt` to reach exit 0: adoption moves the coordinator's authorized
-revision and is not a way to silence a sibling's finding.
+`claim-verify --id <item>` keeps every finding visible, marks each with
+`blocks_verification_scope`, and derives its exit from that item plus global
+barriers. Bare `claim-verify` remains strict repository diagnosis and exits 6
+while any item carries a blocking finding. A cooperating worker can therefore
+finish its own item while bare verification still reports sibling work. Do not
+hand-edit or adopt a sibling's item to force either scope clean.
 
 `claim-verify` in the writing worktree finalizes that worktree's own state; it
 does not make a sibling checkout able to see the item. Synchronization or
@@ -1475,9 +1463,10 @@ merge-coordinated backend returns when reconciliation found blocking findings,
 and it is the reason an uncommitted prior mutation produces. **`claim-verify`
 is its reconciliation procedure.** The envelope also carries
 `details.findings`; act on each finding's `remediation` string, then run
-`wowbagger claim-verify --ledger <dir> --json` and require exit 0 before
-repeating the refused command. Nothing else reconciles the journal, and no
-other verb is needed.
+`wowbagger claim-verify --ledger <dir> --id <finding.item_id> --json` for the
+affected item and require exit 0 before repeating that item's refused command.
+Use bare verification only for strict repository diagnosis. Nothing else
+reconciles the journal, and no other verb is needed.
 
 This code was added after the version 1 vectors were written. It is additive:
 it names a condition the original text did not model, changes no existing code,

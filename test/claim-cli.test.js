@@ -1,7 +1,7 @@
 // test/claim-cli.test.js
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -591,4 +591,24 @@ test('claim read and verify report journal capacity without calling the store un
   assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
   assert.equal(verified.envelope.error.details.reason, 'journal-capacity-exceeded');
   assert.equal(verified.envelope.state, 'unchanged');
+});
+
+test('claim-verify refuses a symlinked metadata directory without writing outside the ledger', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const root = await repository();
+  const ledger = path.join(root, 'ledger');
+  const provisioned = await capture(['provision', '--ledger', ledger, '--json']);
+  const namespace = provisioned.envelope.result.ledger_namespace;
+  const metadata = path.join(ledger, '.wowbagger');
+  const outside = path.join(root, 'outside-metadata');
+  await rename(metadata, outside);
+  await symlink(outside, metadata, 'dir');
+  const outsideLog = path.join(outside, `reconcile-${namespace}.md`);
+
+  const verified = await capture(['claim-verify', '--ledger', ledger, '--json']);
+
+  assert.equal(verified.exit, 6, JSON.stringify(verified.envelope));
+  assert.equal(verified.envelope.error.code, 'claim-store-unavailable');
+  await assert.rejects(stat(outsideLog), { code: 'ENOENT' });
 });

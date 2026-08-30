@@ -11,6 +11,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { appendClaimEntry, claimJournalPath, replayClaimJournal } from '../src/claim-journal.js';
+import { publishClaimed } from '../src/claim-publication.js';
 import { resolveGitCommonDir } from '../src/claim-store.js';
 
 
@@ -257,14 +258,14 @@ test('publish-claimed rejects a request for another ledger namespace', async () 
 test('publish-claimed reserves terminal capacity before publishing item bytes', async () => {
   const fixture = await publicationFixture();
   const journalPath = path.join(fixture.root, '.git', 'wowbagger', fixture.namespace, 'journal.ndjson');
-  const entries = Array.from({ length: 65533 }, (_, index) => JSON.stringify({
+  const entries = Array.from({ length: 65532 }, (_, index) => JSON.stringify({
     seq: index + 1,
     type: 'clock',
     now: '2030-01-11T09:00:00.000Z',
     floor: '2030-01-11T09:00:00.000Z',
   }));
   entries.push(JSON.stringify({
-    seq: 65534,
+    seq: 65533,
     type: 'claim',
     command: 'acquire',
     physical_now: fixture.claim.issued_at,
@@ -289,6 +290,25 @@ test('publish-claimed reserves terminal capacity before publishing item bytes', 
   assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
   const journalAfter = await readFile(journalPath);
   assert.deepEqual(journalAfter.subarray(0, journalBefore.length), journalBefore);
+});
+
+test('publish-claimed keeps pre-intent infrastructure failures unchanged', async () => {
+  const fixture = await publicationFixture();
+  const request = JSON.parse(await readFile(fixture.requestPath, 'utf8'));
+
+  const refused = await publishClaimed({
+    ledgerDirectory: fixture.ledger,
+    gitCommonDir: path.join(fixture.root, '.git'),
+    namespace: fixture.namespace,
+    request,
+    scenario: 'fail:before-publish-intent',
+  });
+
+  assert.equal(refused.exit, 6, JSON.stringify(refused.stdout));
+  assert.equal(refused.stdout.state, 'unchanged');
+  assert.equal(refused.stdout.error.code, 'claim-store-unavailable');
+  assert.equal(refused.stdout.error.details.reason, 'claim-store-unreadable');
+  assert.deepEqual(await readFile(fixture.itemPath), fixture.before);
 });
 
 test('publish-claimed returns the stored terminal envelope for an identical retry', async () => {

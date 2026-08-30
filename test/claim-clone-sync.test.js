@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { git, patchRequest, provisionedLedger, requestFile, run } from './auto-commit-fixture.js';
 import { parseReconcileLog } from '../src/claim-journal.js';
 
@@ -46,7 +46,7 @@ test('committed hydration rejects sequence beyond journal capacity', () => {
   });
 });
 
-test('claim read hydrates committed claim history in a fresh clone', async () => {
+test('claim read completes partial committed hydration in a fresh clone', async () => {
   const fixture = await provisionedLedger();
   const acquire = await requestFile(fixture, 'acquire.json', {
     ledger_namespace: fixture.namespace,
@@ -65,6 +65,20 @@ test('claim read hydrates committed claim history in a fresh clone', async () =>
 
   const cloneRoot = path.join(fixture.base, 'claim-clone');
   git(fixture.root, 'clone', '-q', fixture.root, cloneRoot);
+  const journalPath = path.join(
+    cloneRoot,
+    '.git',
+    'wowbagger',
+    fixture.namespace,
+    'journal.ndjson',
+  );
+  await mkdir(path.dirname(journalPath), { recursive: true });
+  await writeFile(journalPath, `${JSON.stringify({
+    seq: 1,
+    type: 'clock',
+    now: '2030-01-11T09:00:00.000Z',
+    floor: '2030-01-11T09:00:00.000Z',
+  })}\n`);
   const readRequest = path.join(cloneRoot, 'read.json');
   await writeFile(readRequest, JSON.stringify({
     ledger_namespace: fixture.namespace,

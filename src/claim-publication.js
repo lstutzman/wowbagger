@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import {
   appendClaimEntry,
@@ -314,7 +315,11 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
           ? candidate
           : largest
       ));
-      await assertClaimJournalCapacity(journalPath, [intentEntry, largestTerminal]);
+      await assertClaimJournalCapacity(journalPath, [
+        intentEntry,
+        { type: 'clock', now: observedAt, floor: observedAt },
+        largestTerminal,
+      ]);
       await publicationTestCheckpoint(scenario, 'before-publish-intent', ledgerDirectory);
       const intent = await appendClaimEntry(journalPath, intentEntry);
       entries.push(intent);
@@ -353,6 +358,11 @@ export async function publishClaimed({ ledgerDirectory, gitCommonDir, namespace,
         ...identityDiagnosticDetails(error),
       }, 6);
     }
+    if (!intentAppended) {
+      return publicationError(request, 'claim-store-unavailable', 'The durable claim store is unavailable.', {
+        reason: 'claim-store-unreadable',
+      }, 6);
+    }
     return publicationUnknown(request);
   }
 }
@@ -364,7 +374,6 @@ export async function hydrateClaimJournalFromHead({
   replayed,
   persist = true,
 }) {
-  if (replayed.entries.length > 0) return replayed;
   let log;
   try {
     log = await readGitTreeFile(
@@ -386,19 +395,26 @@ export async function hydrateClaimJournalFromHead({
     }
     bySequence.set(entry.seq, entry);
   }
+  for (const entry of committed) {
+    if (entry.seq > replayed.entries.length) continue;
+    if (!isDeepStrictEqual(replayed.entries[entry.seq - 1], entry)) {
+      throw hydrationError('local-journal-diverges-from-committed-log');
+    }
+  }
   const maxSequence = Math.max(...bySequence.keys());
+  if (replayed.entries.length >= maxSequence) return replayed;
   const fallbackTime = committed
     .map((entry) => entry.observed_at ?? entry.physical_now)
     .find((value) => typeof value === 'string')
     ?? '1970-01-01T00:00:00.000Z';
-  const hydratedEntries = [];
-  for (let sequence = 1; sequence <= maxSequence; sequence += 1) {
+  const missingEntries = [];
+  for (let sequence = replayed.entries.length + 1; sequence <= maxSequence; sequence += 1) {
     const entry = bySequence.get(sequence);
     if (entry) {
       const { seq, ...withoutSequence } = entry;
-      hydratedEntries.push(withoutSequence);
+      missingEntries.push(withoutSequence);
     } else {
-      hydratedEntries.push({
+      missingEntries.push({
         type: 'clock',
         now: fallbackTime,
         floor: fallbackTime,
@@ -406,13 +422,20 @@ export async function hydrateClaimJournalFromHead({
     }
   }
   if (!persist) {
+    const entries = [
+      ...replayed.entries,
+      ...missingEntries.map((entry, index) => ({
+        seq: replayed.entries.length + index + 1,
+        ...entry,
+      })),
+    ];
     return {
-      state: replayClaimEntries(hydratedEntries, namespace),
-      entries: hydratedEntries,
+      state: replayClaimEntries(entries, namespace),
+      entries,
     };
   }
   const journalPath = claimJournalPath(gitCommonDir, namespace);
-  for (const entry of hydratedEntries) {
+  for (const entry of missingEntries) {
     await appendClaimEntry(journalPath, entry);
   }
   return replayClaimJournal(journalPath, namespace);

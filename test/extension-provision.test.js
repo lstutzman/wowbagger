@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { access, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { spawn, spawnSync } from 'node:child_process';
+import { access, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +54,34 @@ function runCliScenario(scenario, ...argumentsList) {
     encoding: 'utf8',
     env: { ...process.env, WOWBAGGER_TEST_SCENARIO: scenario },
   });
+}
+
+function runCliScenarioAsync(scenario, ...argumentsList) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [RUNNER, ...argumentsList], {
+      env: { ...process.env, WOWBAGGER_TEST_SCENARIO: scenario },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+    child.on('error', reject);
+    child.on('close', (status) => resolve({
+      status,
+      stdout: Buffer.concat(stdout).toString('utf8'),
+      stderr: Buffer.concat(stderr).toString('utf8'),
+    }));
+  });
+}
+
+async function waitForPath(target) {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    if (await pathExists(target)) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for ${target}`);
 }
 
 function ledger(items) {
@@ -355,6 +383,48 @@ test('provision refuses a different declaration won by a concurrent writer', asy
       winner,
     );
     assert.equal(await readFile(path.join(ledger, `${BLOCK_ITEM}.md`), 'utf8'), item);
+  });
+});
+
+test('concurrent identical provisions expose only complete declaration bytes', async () => {
+  const item = itemSource({
+    id: BLOCK_ITEM,
+    created: '2030-01-20',
+    tags: ['tags: [bug]'],
+  });
+  await withLedger({ [`${BLOCK_ITEM}.md`]: item }, async (ledger) => {
+    const requestPath = await writeRequest(ledger);
+    const argumentsList = [
+      'extensions-provision',
+      '--ledger',
+      ledger,
+      '--input',
+      requestPath,
+      '--json',
+    ];
+    const holder = runCliScenarioAsync('extension-provision-pause-before-link', ...argumentsList);
+    await waitForPath(path.join(ledger, '.wowbagger-test-extension-provision-reached'));
+    const output = path.join(ledger, '.wowbagger', 'extensions.json');
+    assert.equal(await pathExists(output), false);
+
+    const winner = runCli(...argumentsList);
+    assert.equal(winner.status, 0, winner.stderr || winner.stdout);
+    await writeFile(
+      path.join(ledger, '.wowbagger-test-extension-provision-continue'),
+      'continue\n',
+    );
+    const completed = await holder;
+
+    assert.equal(completed.status, 0, completed.stderr || completed.stdout);
+    assert.equal(
+      await readFile(output, 'utf8'),
+      '{"extensions_version":1,"members":{"tags":"string-list"}}\n',
+    );
+    assert.deepEqual(
+      (await readdir(path.join(ledger, '.wowbagger')))
+        .filter((entry) => entry.startsWith('.extensions-')),
+      [],
+    );
   });
 });
 
