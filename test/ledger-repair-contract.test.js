@@ -296,19 +296,16 @@ test('number-repair-proposal command: a request input is not an accepted argumen
   });
 });
 
-// The request contract and the response domain are one commit's worth of the
-// repair; the ledger reading, proposal, staging, and publication stages are
-// not installed in this build. A well-formed request must therefore pass the
-// contract and stop at the stage boundary rather than be answered as invalid,
-// and `--auto-commit` must be accepted on the apply command rather than
-// refused as an unknown argument.
-test('number-repair command: a well-formed request passes the contract and stops at the stage boundary', async () => {
+// The request contract and the empirical invalid-ledger gate are installed.
+// A well-formed request against this valid fixture is refused as not
+// applicable; `--auto-commit` remains accepted on the apply command.
+test('number-repair command: a well-formed request refuses a valid ledger', async () => {
   await withLedger({ 'request.json': JSON.stringify(validRepairRequest()) }, async (ledger) => {
     const result = runCli(
       'number-repair', '--ledger', ledger, '--input', path.join(ledger, 'request.json'), '--json', '--auto-commit',
     );
 
-    assert.equal(result.status, 6, result.stderr);
+    assert.equal(result.status, 4, result.stderr);
     assert.deepEqual(JSON.parse(result.stdout), {
       ok: false,
       namespace: 'ledger-repair',
@@ -316,9 +313,9 @@ test('number-repair command: a well-formed request passes the contract and stops
       contract_version: 1,
       state: 'unchanged',
       error: {
-        code: 'capability-unavailable',
-        message: 'This build implements ledger-repair version 1 request validation only.',
-        details: { reason: 'repair-stage-not-installed' },
+        code: 'ledger-repair-not-applicable',
+        message: 'The ledger is not blocked only by duplicate numbers.',
+        details: { validation_errors: [] },
       },
     });
   });

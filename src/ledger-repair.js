@@ -71,10 +71,122 @@ export function validateLedgerRepairRequest(request) {
 // The mutating apply entrypoint. The request contract is enforced here rather
 // than in the CLI so the seam a host calls and the seam the command calls
 // refuse identically.
-export function numberRepair(request, options) {
+export async function numberRepair(request, options = {}) {
   const issues = validateLedgerRepairRequest(request);
   if (issues.length > 0) {
     return ledgerRepairInvalidRequest('number-repair', issues);
+  }
+  const ledger = await loadLedger(options.ledgerDirectory);
+  const validation = validateLedger(ledger);
+  const duplicateErrors = validation.errors.filter((error) => error.code === 'duplicate-number');
+  if (duplicateErrors.length === 0
+    || validation.errors.some((error) => error.code !== 'duplicate-number')) {
+    return refusal(
+      'number-repair',
+      4,
+      'ledger-repair-not-applicable',
+      'The ledger is not blocked only by duplicate numbers.',
+      { validation_errors: validation.errors },
+    );
+  }
+  const actualSnapshot = ledgerSnapshotRevision(options.ledgerDirectory, ledger);
+  if (actualSnapshot !== request.ledger_snapshot_revision) {
+    return refusal(
+      'number-repair',
+      4,
+      'ledger-repair-revision-conflict',
+      'The ledger changed after the repair proposal was generated.',
+      {
+        expected_snapshot_revision: request.ledger_snapshot_revision,
+        actual_snapshot_revision: actualSnapshot,
+      },
+    );
+  }
+  const itemsById = new Map(ledger.items.map((item) => [item.data.id, item]));
+  for (const change of request.changes) {
+    const item = itemsById.get(change.item_id);
+    if (!item
+      || revisionOf(item.bytes) !== change.expected_revision
+      || item.data.number !== change.expected_number) {
+      return refusal(
+        'number-repair',
+        4,
+        'ledger-repair-revision-conflict',
+        'A repair item witness no longer matches the ledger.',
+        {
+          item_id: change.item_id,
+          expected_revision: change.expected_revision,
+          actual_revision: item ? revisionOf(item.bytes) : null,
+          expected_number: change.expected_number,
+          actual_number: item?.data.number ?? null,
+        },
+      );
+    }
+  }
+  const expectedChangedIds = new Set();
+  const groupedItems = new Map();
+  for (const item of ledger.items) {
+    const number = item.data.number;
+    if (!Number.isSafeInteger(number) || number < 1) continue;
+    const members = groupedItems.get(number) ?? [];
+    members.push(item);
+    groupedItems.set(number, members);
+  }
+  for (const members of groupedItems.values()) {
+    if (members.length < 2) continue;
+    for (const item of members.sort((left, right) => compareText(left.data.id, right.data.id)).slice(1)) {
+      expectedChangedIds.add(item.data.id);
+    }
+  }
+  const requestedChangedIds = new Set(request.changes.map((change) => change.item_id));
+  const missingItemIds = [...expectedChangedIds]
+    .filter((itemId) => !requestedChangedIds.has(itemId))
+    .sort(compareText);
+  const unexpectedItemIds = [...requestedChangedIds]
+    .filter((itemId) => !expectedChangedIds.has(itemId))
+    .sort(compareText);
+  if (missingItemIds.length > 0 || unexpectedItemIds.length > 0) {
+    return refusal(
+      'number-repair',
+      4,
+      'ledger-repair-mapping-incomplete',
+      'The repair mapping must include exactly the movable item from every duplicate group.',
+      { missing_item_ids: missingItemIds, unexpected_item_ids: unexpectedItemIds },
+    );
+  }
+  const occupiedNumbers = new Map(
+    ledger.items.map((item) => [item.data.number, item.data.id]),
+  );
+  const replacementOwners = new Map();
+  for (const change of request.changes) {
+    const occupiedBy = occupiedNumbers.get(change.replacement_number);
+    if (occupiedBy && (occupiedBy === change.item_id || !changedIds.has(occupiedBy))) {
+      return refusal(
+        'number-repair',
+        4,
+        'ledger-repair-number-collision',
+        'A replacement number belongs to an unchanged ledger item.',
+        {
+          item_id: change.item_id,
+          replacement_number: change.replacement_number,
+          occupied_by: occupiedBy,
+        },
+      );
+    }
+    const previous = replacementOwners.get(change.replacement_number);
+    if (previous) {
+      return refusal(
+        'number-repair',
+        4,
+        'ledger-repair-number-collision',
+        'Multiple repair items request the same replacement number.',
+        {
+          replacement_number: change.replacement_number,
+          item_ids: [previous, change.item_id],
+        },
+      );
+    }
+    replacementOwners.set(change.replacement_number, change.item_id);
   }
   return stageNotInstalled('number-repair');
 }
