@@ -5,9 +5,10 @@ number: 182
 title: "Add fenced recovery for duplicate immutable numbers"
 kind: task
 priority: 1
-status: in-progress
+status: done
 created: 2026-08-28
 updated: 2026-08-30
+completed: 2026-08-30
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-30
     summary: "Accept duplicate-number recovery as the top backlog item."
     rationale: "Alpha.14 prevents new collisions but leaves existing invalid ledgers blocked. PropertyCompass2 required unsafe out-of-band recovery, so this is the sharpest current user gap."
+  - action: complete
+    date: 2026-08-30
+    summary: "Ship fenced duplicate-number recovery."
+    rationale: "Release v0.1.0-alpha.15 passes the complete dual-runtime, adapter, validation, audit, and whitespace gates."
 ---
 ## Problem
 
