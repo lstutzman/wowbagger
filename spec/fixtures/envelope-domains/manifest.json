@@ -137,6 +137,34 @@
         ]
       }
     },
+    "ledger-repair": {
+      "namespace": "ledger-repair",
+      "prose_name": "ledger-repair",
+      "contract_version": 1,
+      "version_source": "contract_version of number-repair-proposal or number-repair",
+      "commands": [
+        "number-repair-proposal",
+        "number-repair"
+      ],
+      "root_member_shapes": {
+        "mutation_success": [
+          "ok",
+          "namespace",
+          "command",
+          "contract_version",
+          "state",
+          "result"
+        ],
+        "mutation_error": [
+          "ok",
+          "namespace",
+          "command",
+          "contract_version",
+          "state",
+          "error"
+        ]
+      }
+    },
     "ledger-publication": {
       "namespace": "ledger-publication",
       "prose_name": "ledger-publication",

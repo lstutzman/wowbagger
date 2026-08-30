@@ -376,6 +376,7 @@ answer in two domains.
 | work-claim | `work-claim` | 1, the legacy envelope marker | `result.operations.work_claim.api_version` of `claim capabilities --json` |
 | ledger-publication | `ledger-publication` | 1, the legacy envelope marker | the same work-claim `api_version` |
 | ledger-mutation | `ledger-mutation` | 1, the legacy envelope marker | the same work-claim `api_version` |
+| ledger-repair | `ledger-repair` | 1 | `contract_version` of `number-repair-proposal` or `number-repair` |
 | bare result | absent, and no `ok` member either | none | none |
 
 The rule has three steps:
@@ -415,7 +416,8 @@ legacy claim-envelope marker, and a consumer must never compare it with the core
 | `claim-sync` | work-claim | work-claim |
 | `claim-adopt` | work-claim | work-claim |
 | `mutation-finalize` | work-claim | work-claim |
-| `claim verify` | ledger-publication, `command: "read"` | ledger-publication |
+| `number-repair-proposal` | ledger-repair | ledger-repair |
+| `number-repair` | ledger-repair | ledger-repair |
 | `publish-claimed` | ledger-publication | ledger-publication |
 
 **Exact root members**
