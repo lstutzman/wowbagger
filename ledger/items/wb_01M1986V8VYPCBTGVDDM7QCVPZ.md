@@ -12,7 +12,7 @@ provenance:
   source: "Node 24 migration investigation"
   recorded_at: "2026-08-30T12:00:00Z"
 depends_on: []
-related: []
+related: [ wb_01M14Y2VZW2ASKHYE42BGZ1PPK ]
 ---
 ## Problem
 
@@ -39,3 +39,9 @@ Lee stated that another project has found a Vitest/Node 26 incompatibility. Trea
 - State the install-breaking consequence in CHANGELOG and release notes: users on Node 20/22 no longer satisfy the package engine.
 - Add `.nvmrc` or the repository's chosen equivalent pin for developer shells without changing the machine-wide default as part of the repository change.
 - Run full Linux, Windows, and macOS Node 24 CI plus local Node 24.20.0 full, strict-deprecation, adapter, ledger, audit, and cold-install gates before release.
+
+## Triage decision — 2026-08-30
+
+Accepted into backlog at priority 1. Node 20 is already end-of-life, while the machine-wide Node 24.20.0 probe passed 1,819 tests, the strict pending-and-throw deprecation gate, adapter conformance, ledger validation, audit, and a cold npm 11 install. Lee's Node 26/Vitest incompatibility remains a stated external constraint, not a Wowbagger reproduction.
+
+First implementation slice: write failing tests for the published engine floor, exported minimum major, CI matrix, and release-runtime selection; then move those surfaces to Node 24 without touching historical gate records or the machine default. Node 26 remains excluded until Lee's external constraint is cleared.
