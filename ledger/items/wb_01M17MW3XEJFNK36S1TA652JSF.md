@@ -5,7 +5,7 @@ number: 186
 title: "Design safe batch create allocation and publication"
 kind: task
 priority: 3
-status: backlog
+status: in-progress
 created: 2026-08-29
 updated: 2026-08-30
 provenance:
