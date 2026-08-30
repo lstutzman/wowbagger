@@ -5,9 +5,10 @@ number: 183
 title: "Make standard tags safely mutable on existing ledgers"
 kind: task
 priority: 2
-status: in-progress
+status: done
 created: 2026-08-28
 updated: 2026-08-30
+completed: 2026-08-30
 provenance:
   source: "PropertyCompass2 field failures"
   recorded_at: "2026-08-28T19:38:40Z"
@@ -18,6 +19,10 @@ decisions:
     date: 2026-08-30
     summary: "Accept safe tags mutability as priority-two backlog work."
     rationale: "Real mirrored items have stale tags, but the ledger remains valid and titles, bodies, and dependencies can still be corrected. A sanctioned migration is needed without bypassing extension safety."
+  - action: complete
+    date: 2026-08-30
+    summary: "Complete safe existing-ledger tag provisioning."
+    rationale: "The bootstrap validates the complete ledger and historical tag shapes, publishes atomically without item-byte edits, documents the consumer flow, and passes the full Node 24 gates."
 ---
 ## Problem
 
