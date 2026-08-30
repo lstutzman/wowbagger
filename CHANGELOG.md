@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.1.0-alpha.15 - 2026-08-30
+
 - **Duplicate-number recovery now has a separate `ledger-repair` contract
   version 1.** Use the read-only `number-repair-proposal` command to review a
   complete mapping, then apply it with `number-repair`. The repair path requires
