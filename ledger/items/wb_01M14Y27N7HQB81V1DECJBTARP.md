@@ -5,7 +5,7 @@ number: 183
 title: "Make standard tags safely mutable on existing ledgers"
 kind: task
 priority: 2
-status: backlog
+status: in-progress
 created: 2026-08-28
 updated: 2026-08-30
 provenance:
