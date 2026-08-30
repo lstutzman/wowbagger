@@ -1,16 +1,23 @@
-// src/ledger-repair.js
-// The `ledger-repair` domain at contract version 1: duplicate-number recovery
-// for a ledger the ordinary mutation gate refuses. The domain is deliberately
-// separate from the core contract (version 5) and the work-claim contract
-// (version 1), so a repair request and a repair response are never read as
-// either of those.
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, stat } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+} from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 
-import { createHash } from 'node:crypto';
-
-import { loadLedger } from './ledger.js';
+import {
+  appendClaimEntry,
+  claimJournalPath,
+} from './claim-journal.js';
+import { claimStorePath, resolveVerifiedGitCommonDir, withClaimLock } from './claim-store.js';
+import { loadLedger, parseLedgerItemSource } from './ledger.js';
+import { MAX_ITEM_SOURCE_BYTES } from './limits.js';
+import { readNamespace } from './namespace.js';
 import { pointer, sortIssues } from './request.js';
 import { isCalendarDate, validateLedger } from './validate.js';
 
@@ -72,7 +79,8 @@ export async function stageNumberRepairCandidates({
       || !STAGING_RELATIVE_PATH.test(candidate.path)
       || seenPaths.has(candidate.path)
       || !REVISION.test(candidate.candidate_revision)
-      || !Buffer.isBuffer(candidate.candidate_bytes)) {
+      || !Buffer.isBuffer(candidate.candidate_bytes)
+      || candidate.candidate_bytes.byteLength > MAX_ITEM_SOURCE_BYTES) {
       throw stagingInvalid('candidate-shape');
     }
     const candidatePath = path.join(candidatesRoot, candidate.path);
@@ -140,9 +148,9 @@ export async function readStagedNumberRepair({
     const candidatePath = path.join(root, 'candidates', entry.path);
     let bytes;
     try {
+      const info = await lstat(candidatePath);
+      if (!info.isFile() || info.isSymbolicLink()) throw stagingInvalid('candidate-not-file');
       bytes = await readFile(candidatePath);
-      const info = await stat(candidatePath);
-      if (!info.isFile()) throw stagingInvalid('candidate-not-file');
     } catch (error) {
       if (error?.code === 'LEDGER_REPAIR_STAGING_INVALID') throw error;
       throw stagingInvalid('candidate-absent');
@@ -345,6 +353,7 @@ export async function numberRepair(request, options = {}) {
       { missing_item_ids: missingItemIds, unexpected_item_ids: unexpectedItemIds },
     );
   }
+  const changedIds = new Set(request.changes.map((change) => change.item_id));
   const occupiedNumbers = new Map(
     ledger.items.map((item) => [item.data.number, item.data.id]),
   );
@@ -379,7 +388,153 @@ export async function numberRepair(request, options = {}) {
     }
     replacementOwners.set(change.replacement_number, change.item_id);
   }
-  return stageNotInstalled('number-repair');
+  const gitCommonDir = await resolveVerifiedGitCommonDir(options.ledgerDirectory, { failClosed: true });
+  if (!gitCommonDir) return refusal(
+    'number-repair',
+    5,
+    'capability-unavailable',
+    'Duplicate repair requires a verified Git common directory.',
+    { reason: 'git-directory-not-found' },
+  );
+  const namespace = await readNamespace(options.ledgerDirectory);
+  if (!namespace) return refusal(
+    'number-repair',
+    5,
+    'capability-unavailable',
+    'Duplicate repair requires a provisioned ledger namespace.',
+    { reason: 'ledger-namespace-unbound' },
+  );
+  const storePath = claimStorePath(gitCommonDir, namespace);
+  try {
+    return await withClaimLock(storePath, async () => {
+      const current = await loadLedger(options.ledgerDirectory);
+      const currentSnapshot = ledgerSnapshotRevision(options.ledgerDirectory, current);
+      if (currentSnapshot !== request.ledger_snapshot_revision) {
+        return refusal(
+          'number-repair',
+          4,
+          'ledger-repair-revision-conflict',
+          'The ledger changed while the repair was waiting for the namespace fence.',
+          {
+            expected_snapshot_revision: request.ledger_snapshot_revision,
+            actual_snapshot_revision: currentSnapshot,
+          },
+        );
+      }
+      const candidates = buildRepairCandidates(current, request, options.ledgerDirectory);
+      if (candidates.error) return refusal(
+        'number-repair',
+        4,
+        candidates.error.code,
+        candidates.error.message,
+        candidates.error.details,
+      );
+      const staging = await stageNumberRepairCandidates({
+        gitCommonDir,
+        namespace,
+        repairId: request.repair_id,
+        ledgerSnapshotRevision: request.ledger_snapshot_revision,
+        candidates: candidates.items,
+      });
+      const journalPath = claimJournalPath(gitCommonDir, namespace);
+      await appendClaimEntry(journalPath, {
+        type: 'number-repair-intent',
+        repair_id: request.repair_id,
+        ledger_namespace: namespace,
+        ledger_snapshot_revision: request.ledger_snapshot_revision,
+        date: request.date,
+        staging_id: request.repair_id,
+        items: candidates.items.map((candidate) => ({
+          item_id: candidate.item_id,
+          item_path: candidate.path,
+          expected_revision: candidate.expected_revision,
+          expected_number: candidate.expected_number,
+          replacement_number: candidate.replacement_number,
+          candidate_revision: candidate.candidate_revision,
+        })),
+      });
+      for (const candidate of candidates.items) {
+        await atomicReplace(
+          path.join(path.resolve(options.ledgerDirectory), candidate.path),
+          candidate.candidate_bytes,
+        );
+      }
+      const published = await loadLedger(options.ledgerDirectory);
+      const publishedValidation = validateLedger(published);
+      if (!publishedValidation.valid) {
+        return refusal(
+          'number-repair',
+          6,
+          'ledger-repair-successor-invalid',
+          'The repaired ledger failed validation after publication.',
+          { validation_errors: publishedValidation.errors },
+        );
+      }
+      const publishedById = new Map(published.items.map((item) => [item.data.id, item]));
+      const rereadMismatch = candidates.items.find((candidate) => (
+        revisionOf(publishedById.get(candidate.item_id)?.bytes ?? Buffer.alloc(0))
+          !== candidate.candidate_revision
+      ));
+      if (rereadMismatch) {
+        return refusal(
+          'number-repair',
+          6,
+          'ledger-repair-successor-invalid',
+          'A published candidate did not match its staged bytes.',
+          {
+            item_id: rereadMismatch.item_id,
+            expected_revision: rereadMismatch.candidate_revision,
+            actual_revision: revisionOf(publishedById.get(rereadMismatch.item_id)?.bytes ?? Buffer.alloc(0)),
+          },
+        );
+      }
+      const changedItems = candidates.items.map((candidate) => ({
+        item_id: candidate.item_id,
+        path: candidate.path,
+        revision: candidate.candidate_revision,
+      }));
+      await appendClaimEntry(journalPath, {
+        type: 'number-repair-final',
+        repair_id: request.repair_id,
+        ledger_namespace: namespace,
+        staging_id: staging.repair_id,
+        items: changedItems.map((item) => ({
+          item_id: item.item_id,
+          item_path: item.path,
+          candidate_revision: item.revision,
+          committed_revision: item.revision,
+        })),
+        observed_at: new Date().toISOString(),
+      });
+      return {
+        exit: 0,
+        stdout: {
+          ok: true,
+          namespace: 'ledger-repair',
+          command: 'number-repair',
+          contract_version: LEDGER_REPAIR_CONTRACT_VERSION,
+          state: 'committed',
+          result: {
+            repair_id: request.repair_id,
+            ledger_snapshot_revision: request.ledger_snapshot_revision,
+            changed_items: changedItems,
+            git_commit: null,
+          },
+        },
+      };
+    });
+  } catch (error) {
+    if (error?.code === 'CLAIM_LOCK_HELD') {
+      return refusal(
+        'number-repair',
+        4,
+        'lock-held',
+        'The ledger namespace is locked by another writer.',
+        { reason: 'claim-store-locked' },
+      );
+    }
+    throw error;
+  }
 }
 
 // The read-only proposal takes no request: the ledger it reads is the whole
@@ -468,6 +623,91 @@ export async function numberRepairProposal(ledgerDirectory) {
   };
 }
 
+function buildRepairCandidates(ledger, request, ledgerDirectory) {
+  const itemsById = new Map(ledger.items.map((item) => [item.data.id, item]));
+  const candidates = [];
+  for (const change of request.changes) {
+    const item = itemsById.get(change.item_id);
+    const source = item?.bytes?.toString('utf8');
+    const numberLines = source?.match(/^number:[ \t]*[0-9]+[ \t]*$/gm) ?? [];
+    if (!item || numberLines.length !== 1) {
+      return {
+        error: {
+          code: 'ledger-repair-successor-invalid',
+          message: 'An affected item does not contain one canonical number scalar.',
+          details: { item_id: change.item_id },
+        },
+      };
+    }
+    const candidateSource = source.replace(
+      numberLines[0],
+      `number: ${change.replacement_number}`,
+    );
+    const parsed = parseLedgerItemSource(candidateSource);
+    if (parsed.error) {
+      return {
+        error: {
+          code: 'ledger-repair-successor-invalid',
+          message: 'A candidate item could not be parsed.',
+          details: { item_id: change.item_id, validation_errors: [parsed.error] },
+        },
+      };
+    }
+    candidates.push({
+      item_id: change.item_id,
+      path: path.relative(path.resolve(ledgerDirectory), item.file)
+        .split(path.sep).join('/'),
+      expected_revision: change.expected_revision,
+      expected_number: change.expected_number,
+      replacement_number: change.replacement_number,
+      candidate_revision: revisionOf(Buffer.from(candidateSource)),
+      candidate_bytes: Buffer.from(candidateSource),
+    });
+  }
+  const candidateById = new Map(candidates.map((candidate) => [candidate.item_id, candidate]));
+  const candidateItems = ledger.items.map((item) => {
+    const candidate = candidateById.get(item.data.id);
+    if (!candidate) return item;
+    const parsed = parseLedgerItemSource(candidate.candidate_bytes.toString('utf8'));
+    return { ...item, bytes: candidate.candidate_bytes, data: parsed.data, body: parsed.body };
+  });
+  const successor = validateLedger({ ...ledger, items: candidateItems });
+  if (!successor.valid) {
+    return {
+      error: {
+        code: 'ledger-repair-successor-invalid',
+        message: 'The proposed number changes do not produce a valid ledger.',
+        details: { validation_errors: successor.errors },
+      },
+    };
+  }
+  return { items: candidates };
+}
+
+async function atomicReplace(target, bytes) {
+  const info = await lstat(target);
+  if (!info.isFile() || info.isSymbolicLink()) {
+    const error = new Error('repair target is not a regular file');
+    error.code = 'LEDGER_REPAIR_TARGET_INVALID';
+    throw error;
+  }
+  const temporary = `${target}.${process.pid}.${randomUUID()}.candidate`;
+  await writeExclusive(temporary, bytes);
+  try {
+    await rename(temporary, target);
+    await syncDirectory(path.dirname(target));
+  } finally {
+    await rmIfExists(temporary);
+  }
+}
+async function rmIfExists(file) {
+  try {
+    await rm(file, { force: true });
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
 function compareText(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -498,20 +738,6 @@ export function ledgerRepairInvalidRequest(command, issues) {
   return refusal(command, 2, 'invalid-request', `The ${command} request is invalid.`, { issues });
 }
 
-// This build carries the ledger-repair version 1 request and response
-// contracts, not the ledger reading, proposal, staging, and publication stages
-// the two commands otherwise perform. The refusal states that rather than
-// answering as though a repair had been considered: `state` is `unchanged`
-// because nothing was read and nothing was written.
-function stageNotInstalled(command) {
-  return refusal(
-    command,
-    6,
-    'capability-unavailable',
-    'This build implements ledger-repair version 1 request validation only.',
-    { reason: 'repair-stage-not-installed' },
-  );
-}
 
 function refusal(command, exit, code, message, details) {
   return {

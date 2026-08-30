@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { loadLedger } from '../src/ledger.js';
 import { numberRepair, numberRepairProposal } from '../src/ledger-repair.js';
+import { provisionNamespace } from '../src/namespace.js';
+import { validateLedger } from '../src/validate.js';
 
 function item(id, number, title) {
   return `---\nschema_version: 2\nid: ${id}\nnumber: ${number}\ntitle: "${title}"\nkind: task\nstatus: triage\ncreated: 2026-08-28\nupdated: 2026-08-28\nprovenance:\n  source: "apply-test"\n  recorded_at: "2026-08-28T00:00:00Z"\ndepends_on: []\nrelated: []\n---\n${title}\n`;
@@ -129,6 +133,31 @@ test('number-repair refuses an incomplete duplicate mapping unchanged', async ()
     assert.deepEqual(result.stdout.error.details.missing_item_ids, [
       'wb_01M14Y4H7Z4H8WQ9G4J6B9R2K2',
     ]);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('number-repair bypasses invalid-ledger mutation gate under the shared fence', async () => {
+  const fixture = await duplicateLedger();
+  try {
+    execFileSync('git', ['init', '--quiet', fixture.root]);
+    await provisionNamespace(fixture.ledger);
+    const proposal = await numberRepairProposal(fixture.ledger);
+    const result = await numberRepair({
+      repair_id: 'nr_20260830_0006',
+      ledger_snapshot_revision: proposal.stdout.result.ledger_snapshot_revision,
+      date: '2026-08-30',
+      changes: proposal.stdout.result.suggested_changes,
+    }, { ledgerDirectory: fixture.ledger });
+    assert.equal(result.exit, 0, JSON.stringify(result.stdout));
+    assert.equal(result.stdout.state, 'committed');
+    const repaired = await loadLedger(fixture.ledger);
+    assert.equal(validateLedger(repaired).valid, true);
+    assert.deepEqual(
+      repaired.items.map((candidate) => candidate.data.number).sort((left, right) => left - right),
+      [7, 8],
+    );
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }

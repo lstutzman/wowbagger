@@ -59,3 +59,5 @@ Task 2: complete (commits d5f36f1..2313dcf, inline review; proposal tests curren
 Task 3: complete (stale snapshot/item witnesses, complete duplicate mapping, and replacement collision refusals; current Node and Node24 focused suites pass; inline review substituted after native review rate-limit failure).
 
 Task 4: complete (journal intent/final pairing and durable no-follow staging with manifest/digest verification; current Node and Node24 focused suites pass; inline review substituted after native review rate-limit failure).
+
+Task 5: complete (shared-fence invalid-ledger bypass, candidate successor validation, atomic publication, reread, and final journal entry; current Node and Node24 focused suites pass; inline review substituted after native review rate-limit failure).
