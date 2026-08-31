@@ -27,7 +27,7 @@ Problem:
 - GitHub Issues provides repository-scoped identity, shared visibility, discussion, and cross-machine access, but search-before-create alone still has a race.
 
 Initial direction:
-- GitHub Issues is canonical for public intake, discussion, issue identity, assignees, labels, and project planning.
+- When enabled by a project, GitHub Issues is canonical for public intake, discussion, issue identity, assignees, labels, and project planning.
 - Only accepted agent-executable work is projected into Wowbagger.
 - Wowbagger remains authoritative for readiness, local ledger validation, CAS-guarded mutations, claims, fencing, publication, and reconciliation.
 - Avoid bidirectional automatic synchronization and duplicate mutable sources of truth.
@@ -45,7 +45,7 @@ Acceptance criteria:
 
 ### Decision
 
-Use a one-way hybrid. GitHub Issues is the canonical work-request registry; Wowbagger is the repository-local execution ledger. Only explicitly accepted agent-executable work is projected into Wowbagger. Do not create bidirectional automatic lifecycle synchronization.
+Make GitHub integration optional and one-way. A project that enables it uses GitHub Issues as its canonical work-request registry and Wowbagger as its repository-local execution ledger. A project without GitHub uses Wowbagger unchanged. Only explicitly accepted agent-executable work is projected into Wowbagger. Do not create bidirectional automatic lifecycle synchronization.
 
 ### Identity and duplicate control
 
@@ -113,3 +113,13 @@ The projection must not overwrite GitHub's human-owned fields or infer that a cl
 - GitHub edit, closure, deletion, API refusal, and projection failure produce explicit findings.
 - A local stale-revision refusal follows the normal Wowbagger recovery path.
 - Permissions, secrets, rate limits, and retries are tested at the integration seam; core fixtures and independent oracles remain unchanged.
+
+
+### Optional integration boundary
+
+- GitHub support is an optional adapter, Action, or App integration; it is not a Wowbagger core dependency and must not be required by the base CLI, ledger format, skill, plugin, or local-only workflow.
+- A project can install and use Wowbagger with no GitHub account, token, network access, or GitHub-specific configuration.
+- GitHub behavior activates only through explicit project configuration and capability detection. With configuration absent, the integration is unavailable rather than silently guessing or contacting GitHub.
+- Keep the base install and documentation useful for projects hosted anywhere, including GitLab, local Git, private networks, and offline repositories.
+- Marketing must describe GitHub intake as an optional concurrency and duplicate-intake path, never as a prerequisite or universal source of truth.
+- Optional integration failures must not corrupt or block unrelated local Wowbagger reads and mutations.
