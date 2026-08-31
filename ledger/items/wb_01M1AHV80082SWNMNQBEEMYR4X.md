@@ -5,7 +5,7 @@ number: 189
 title: "Design GitHub canonical intake integration"
 kind: task
 priority: 1
-status: triage
+status: backlog
 created: 2026-08-31
 updated: 2026-08-31
 provenance:
@@ -13,6 +13,11 @@ provenance:
   recorded_at: "2026-08-31T12:00:00Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-08-31
+    summary: "Accept centralized GitHub intake integration for design and implementation."
+    rationale: "A centralized GitHub issue identity can reduce duplicate intake across agents and machines, but only an idempotent or serialized writer closes the search-before-create race. Wowbagger remains the execution ledger rather than becoming a second intake authority."
 ---
 
 Design and implement a GitHub Issues intake integration that prevents duplicate work requests while preserving Wowbagger's agent-native execution guarantees.
