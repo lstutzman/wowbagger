@@ -5,18 +5,23 @@ number: 206
 title: "Detect version drift from a direct skill path"
 kind: task
 priority: 10
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 24 item 31"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M14Y2VZW2ASKHYE42BGZ1PPK]
+related: [ wb_01M14Y2VZW2ASKHYE42BGZ1PPK ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept direct skill-path drift detection."
+    rationale: "Item #185's direct-path mode must identify the owning distribution for consumer cache and linked-checkout diagnosis."
 ---
 
 ## Problem
