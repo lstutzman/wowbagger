@@ -23,16 +23,16 @@ test('escapes the as-of date the forecast curve prints', async () => {
 test('scales each weekly bar against the tallest week in the series', async () => {
   const { weeklyFlowChart } = await import('../src/report-svg.js');
   const svg = weeklyFlowChart([
-    { weekStart: '2026-08-03', arrivals: 2, completions: 1 },
-    { weekStart: '2026-08-10', arrivals: 0, completions: 4 },
+    { weekStart: '2026-08-03', arrivals: 2, closures: 1, done: 1 },
+    { weekStart: '2026-08-10', arrivals: 0, closures: 4, done: 3 },
   ]);
 
   // Peak 4 over a 152px plot with a 166px baseline: half-height arrivals,
-  // quarter-height completions, then a full-height completion week.
+  // quarter-height closures, then a full-height closure week.
   assert.match(svg, /<rect class="bar-arrival" x="93\.84" y="90" width="108\.16" height="76"><\/rect>/);
-  assert.match(svg, /<rect class="bar-completion" x="204" y="128" width="108\.16" height="38"><\/rect>/);
+  assert.match(svg, /<rect class="bar-closure" x="204" y="128" width="108\.16" height="38"><\/rect>/);
   assert.match(svg, /<rect class="bar-arrival" x="431\.84" y="166" width="108\.16" height="0"><\/rect>/);
-  assert.match(svg, /<rect class="bar-completion" x="542" y="14" width="108\.16" height="152"><\/rect>/);
+  assert.match(svg, /<rect class="bar-closure" x="542" y="14" width="108\.16" height="152"><\/rect>/);
 });
 
 function agingMatrix(overrides = {}) {
@@ -74,42 +74,42 @@ test('draws no heatmap when no open item is left to place', async () => {
   );
 });
 
-test('runs the rolling mean over the completion bars, starting where it exists', async () => {
+test('runs the rolling mean over the closure bars, starting where it exists', async () => {
   const { throughputChart } = await import('../src/report-svg.js');
   const svg = throughputChart([
-    { weekStart: '2026-07-20', arrivals: 0, completions: 0, rolling: null },
-    { weekStart: '2026-07-27', arrivals: 0, completions: 1, rolling: null },
-    { weekStart: '2026-08-03', arrivals: 0, completions: 2, rolling: 1 },
-    { weekStart: '2026-08-10', arrivals: 0, completions: 4, rolling: 3 },
+    { weekStart: '2026-07-20', arrivals: 0, closures: 0, done: 0, rolling: null },
+    { weekStart: '2026-07-27', arrivals: 0, closures: 1, done: 0, rolling: null },
+    { weekStart: '2026-08-03', arrivals: 0, closures: 2, done: 2, rolling: 1 },
+    { weekStart: '2026-08-10', arrivals: 0, closures: 4, done: 3, rolling: 3 },
   ]);
 
   // Peak 4 over a 112px plot with a 126px baseline, four 169px slots.
-  assert.match(svg, /<rect class="bar-completion" x="405\.8" y="70" width="101\.4" height="56"><\/rect>/);
-  assert.match(svg, /<rect class="bar-completion" x="574\.8" y="14" width="101\.4" height="112"><\/rect>/);
+  assert.match(svg, /<rect class="bar-closure" x="405\.8" y="70" width="101\.4" height="56"><\/rect>/);
+  assert.match(svg, /<rect class="bar-closure" x="574\.8" y="14" width="101\.4" height="112"><\/rect>/);
   assert.match(svg, /<polyline class="rolling" points="456\.5,98 625\.5,42"><\/polyline>/);
-  assert.match(svg, /<title>Week of 2026-08-10: 4 completions, 3 a week over the last 4<\/title>/);
-  assert.match(svg, /<title>Week of 2026-07-27: 1 completion, no four-week mean yet<\/title>/);
+  assert.match(svg, /<title>Week of 2026-08-10: 4 closures \(3 done\), 3 a week over the last 4<\/title>/);
+  assert.match(svg, /<title>Week of 2026-07-27: 1 closure \(0 done\), no four-week mean yet<\/title>/);
 });
 
 test('withholds the rolling line until two weeks carry a mean', async () => {
   const { throughputChart } = await import('../src/report-svg.js');
   const svg = throughputChart([
-    { weekStart: '2026-07-20', arrivals: 0, completions: 0, rolling: null },
-    { weekStart: '2026-07-27', arrivals: 0, completions: 1, rolling: null },
-    { weekStart: '2026-08-03', arrivals: 0, completions: 2, rolling: null },
-    { weekStart: '2026-08-10', arrivals: 0, completions: 4, rolling: 1.75 },
+    { weekStart: '2026-07-20', arrivals: 0, closures: 0, done: 0, rolling: null },
+    { weekStart: '2026-07-27', arrivals: 0, closures: 1, done: 0, rolling: null },
+    { weekStart: '2026-08-03', arrivals: 0, closures: 2, done: 2, rolling: null },
+    { weekStart: '2026-08-10', arrivals: 0, closures: 4, done: 3, rolling: 1.75 },
   ]);
 
   assert.match(svg, /data-testid="chart-throughput"/);
   assert.doesNotMatch(svg, /<polyline/);
 });
 
-test('draws no throughput chart when the window recorded no completions', async () => {
+test('draws no throughput chart when the window recorded no closures', async () => {
   const { throughputChart } = await import('../src/report-svg.js');
 
   assert.equal(throughputChart([]), '');
   assert.equal(
-    throughputChart([{ weekStart: '2026-08-10', arrivals: 3, completions: 0, rolling: 0 }]),
+    throughputChart([{ weekStart: '2026-08-10', arrivals: 3, closures: 0, done: 0, rolling: 0 }]),
     '',
   );
 });
@@ -212,7 +212,7 @@ function fanForecast(overrides = {}) {
   };
 }
 
-test('draws the forecast as a completion-probability curve under three marks', async () => {
+test('draws the forecast as a closure-probability curve under three marks', async () => {
   const { forecastChart } = await import('../src/report-svg.js');
   const svg = forecastChart(fanForecast(), '2026-08-14');
 
@@ -231,10 +231,10 @@ test('draws the forecast as a completion-probability curve under three marks', a
 test('always ticks the newest week on the flow axis', async () => {
   const { weeklyFlowChart } = await import('../src/report-svg.js');
   const svg = weeklyFlowChart([
-    { weekStart: '2026-07-27', arrivals: 1, completions: 0 },
-    { weekStart: '2026-08-03', arrivals: 1, completions: 0 },
-    { weekStart: '2026-08-10', arrivals: 1, completions: 0 },
-    { weekStart: '2026-08-17', arrivals: 1, completions: 0 },
+    { weekStart: '2026-07-27', arrivals: 1, closures: 0, done: 0 },
+    { weekStart: '2026-08-03', arrivals: 1, closures: 0, done: 0 },
+    { weekStart: '2026-08-10', arrivals: 1, closures: 0, done: 0 },
+    { weekStart: '2026-08-17', arrivals: 1, closures: 0, done: 0 },
   ]);
 
   assert.deepEqual(svg.match(/>(\d\d-\d\d)</g), ['>08-03<', '>08-17<']);
@@ -242,7 +242,7 @@ test('always ticks the newest week on the flow axis', async () => {
 
 test('plots a single week without NaN or Infinity coordinates', async () => {
   const { weeklyFlowChart } = await import('../src/report-svg.js');
-  const svg = weeklyFlowChart([{ weekStart: '2026-08-10', arrivals: 1, completions: 0 }]);
+  const svg = weeklyFlowChart([{ weekStart: '2026-08-10', arrivals: 1, closures: 0, done: 0 }]);
 
   assert.match(svg, /data-testid="chart-weekly-flow"/);
   assert.doesNotMatch(svg, /NaN|Infinity/);
@@ -257,4 +257,62 @@ test('plots a forecast whose percentiles coincide without NaN coordinates', asyn
 
   assert.match(svg, /data-testid="chart-forecast"/);
   assert.doesNotMatch(svg, /NaN|Infinity/);
+});
+
+test('names closures and done separately in the throughput titles', async () => {
+  const { throughputChart } = await import('../src/report-svg.js');
+  const svg = throughputChart([
+    { weekStart: '2026-08-03', arrivals: 1, closures: 2, done: 1, partial: false, rolling: null },
+    { weekStart: '2026-08-10', arrivals: 0, closures: 1, done: 1, partial: true, rolling: null },
+  ]);
+
+  assert.match(svg, /<title>Week of 2026-08-03: 2 closures \(1 done\), no four-week mean yet<\/title>/);
+  assert.match(svg, /<title>Week of 2026-08-10: 1 closure \(1 done\), partial week, no four-week mean yet<\/title>/);
+  assert.match(svg, /aria-label="Closures per week with a four-week mean\. 3 closures over 2 weeks\."/);
+});
+
+test('replays the same charts in the browser bundle as Node renders', async () => {
+  const vm = await import('node:vm');
+  const svg = await import('../src/report-svg.js');
+  const context = vm.createContext({});
+  vm.runInContext(svg.reportSvgBrowserSource(), context);
+
+  const weeks = [
+    { weekStart: '2026-08-03', arrivals: 2, closures: 1, done: 1, partial: false, rolling: 0.25 },
+    { weekStart: '2026-08-10', arrivals: 0, closures: 3, done: 2, partial: false, rolling: 1 },
+  ];
+  const cycleTime = {
+    sampleCount: 2,
+    medianDays: 10,
+    p85Days: 20,
+    samples: [
+      { number: 8, completedOn: '2026-08-10', days: 10 },
+      { number: 9, completedOn: '2026-08-12', days: 20 },
+    ],
+  };
+  const forecast = fanForecast();
+  const matrix = {
+    statuses: ['backlog'],
+    rows: [{ label: 'under 7d', counts: [2] }],
+  };
+  const cases = {
+    agingHeatmapChart: [matrix, { statuses: [], rows: [] }],
+    throughputChart: [weeks, []],
+    weeklyFlowChart: [weeks, []],
+    cumulativeFlowChart: [
+      [{ date: '2026-08-13', triage: 1, accepted: 1, terminal: 0 }],
+      [],
+    ],
+    cycleTimeChart: [cycleTime, { sampleCount: 0, medianDays: null, p85Days: null, samples: [] }],
+    forecastChart: [[forecast, '2026-08-14'], [null, '2026-08-14']],
+  };
+  for (const [name, inputs] of Object.entries(cases)) {
+    for (const args of inputs) {
+      const argv = name === 'forecastChart' ? args : [args];
+      const expected = svg[name](...argv);
+      vm.runInContext(`globalThis.__args = ${JSON.stringify(argv)};`, context);
+      const actual = vm.runInContext(`(${name})(...globalThis.__args)`, context);
+      assert.equal(actual, expected, name);
+    }
+  }
 });

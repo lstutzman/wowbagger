@@ -71,59 +71,120 @@ function shiftDays(date, days) {
     .slice(0, 10);
 }
 
-// Arrivals against completions, week by week. An arrival is `created`; a
-// completion is the item reaching any terminal status, because every one of the
-// four terminal statuses removes work from the backlog.
-export function buildWeeklyFlow(allItems, asOf) {
-  const lastWeek = weekStart(asOf);
-  const counts = new Map();
+// Arrivals against closures, week by week. An arrival is `created`; a closure
+// is the item reaching any terminal status, because every one of the four
+// terminal statuses removes work from the backlog. `done` counts the closures
+// that delivered: only a `done` departure is finished work, so only `done`
+// may be read as completed work.
+function isValidDateString(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed)
+    && new Date(parsed).toISOString().slice(0, 10) === value;
+}
+
+// The weeks an evidence window covers. The default is the trailing twelve
+// calendar weeks ending in the week of `asOf`. An explicit range uses the
+// inclusive UTC calendar dates `from` through `to` (`to <= asOf`); a week
+// bucket the range cuts short is marked partial, and the rolling mean only
+// covers complete weeks. A range never filters items out: anything created
+// before `from` still contributes to cumulative inventory.
+function resolveWindow(asOf, range) {
+  if (range === null || range === undefined) {
+    const lastWeek = weekStart(asOf);
+    const weekStarts = [];
+    for (let index = WINDOW_WEEKS - 1; index >= 0; index -= 1) {
+      weekStarts.push(shiftDays(lastWeek, -index * 7));
+    }
+    return {
+      weekStarts,
+      start: weekStarts[0],
+      end: asOf,
+      partial: new Set(),
+      windowWeeks: WINDOW_WEEKS,
+      range: null,
+    };
+  }
+  const from = range?.from ?? null;
+  const to = range?.to ?? null;
+  if (!isValidDateString(from) || !isValidDateString(to) || from > to || to > asOf) {
+    throw new Error(`invalid report range ${JSON.stringify(range)}`);
+  }
   const weekStarts = [];
-  for (let index = WINDOW_WEEKS - 1; index >= 0; index -= 1) {
-    const start = shiftDays(lastWeek, -index * 7);
+  for (let start = weekStart(from); start <= weekStart(to); start = shiftDays(start, 7)) {
     weekStarts.push(start);
-    counts.set(start, { weekStart: start, arrivals: 0, completions: 0 });
+  }
+  const partial = new Set(
+    weekStarts.filter((start) => start < from || shiftDays(start, 6) > to),
+  );
+  const windowDays = (daysBetween(from, to) ?? 0) + 1;
+  const windowWeeks = windowDays / 7;
+  return {
+    weekStarts, start: from, end: to, partial, windowWeeks, range: { from, to },
+  };
+}
+
+export function buildWeeklyFlow(allItems, asOf, range = null) {
+  const window = resolveWindow(asOf, range);
+  const counts = new Map();
+  for (const start of window.weekStarts) {
+    counts.set(start, {
+      weekStart: start, arrivals: 0, closures: 0, done: 0, partial: window.partial.has(start),
+    });
   }
 
   for (const item of allItems) {
     const arrivalWeek = counts.get(weekStart(item.created));
-    if (arrivalWeek !== undefined) {
+    if (arrivalWeek !== undefined && item.created >= window.start && item.created <= window.end) {
       arrivalWeek.arrivals += 1;
     }
-    const departureWeek = item.terminalDate === null
-      ? undefined
-      : counts.get(weekStart(item.terminalDate));
-    if (departureWeek !== undefined) {
-      departureWeek.completions += 1;
+    if (item.terminalDate === null) {
+      continue;
+    }
+    const departureWeek = counts.get(weekStart(item.terminalDate));
+    if (departureWeek !== undefined
+      && item.terminalDate >= window.start && item.terminalDate <= window.end) {
+      departureWeek.closures += 1;
+      if (item.status === 'done') {
+        departureWeek.done += 1;
+      }
     }
   }
-  const series = weekStarts.map((start) => counts.get(start));
-  return attachRollingMean(series);
+  return attachRollingMean(counts, window);
 }
 
-// A four-week trailing mean over completions. Weekly throughput is noisy
+// A four-week trailing mean over closures. Weekly throughput is noisy
 // enough that the bar heights alone mislead; the mean is the trend line.
-// The first three weeks stay null because a four-week mean needs four weeks,
-// and averaging over fewer would flatter the start of the window.
+// A trailing window shorter than four complete weeks stays null: averaging
+// over fewer weeks, or over a week the selected range cut short, would
+// flatter or understate the start of the window.
 const ROLLING_WEEKS = 4;
 
-function attachRollingMean(series) {
-  return series.map((week, index) => {
-    if (index < ROLLING_WEEKS - 1) {
+function attachRollingMean(counts, window) {
+  return window.weekStarts.map((start, index) => {
+    const week = counts.get(start);
+    const trailing = window.weekStarts.slice(Math.max(0, index - ROLLING_WEEKS + 1), index + 1);
+    if (trailing.length < ROLLING_WEEKS || trailing.some((member) => window.partial.has(member))) {
       return { ...week, rolling: null };
     }
-    const window = series.slice(index - ROLLING_WEEKS + 1, index + 1);
-    const total = window.reduce((sum, member) => sum + member.completions, 0);
+    const total = trailing.reduce((sum, member) => sum + counts.get(member).closures, 0);
     return { ...week, rolling: Math.round((total / ROLLING_WEEKS) * 100) / 100 };
   });
 }
-
 // Cumulative flow over the same window the weekly series covers. Each item
 // carries three timestamps - `created`, the accept decision, and its terminal
 // date - so every day in the window can be replayed from the current bytes.
 // Only three bands are honest here: `backlog -> in-progress` records no
-// decision, so the ledger cannot say when work actually started.
-export function buildCumulativeFlow(allItems, asOf) {
-  const start = shiftDays(weekStart(asOf), -(WINDOW_WEEKS - 1) * 7);
+// decision, so the ledger cannot say when work actually started. An explicit
+// range moves the window edges but never drops early items: anything created
+// before the range still stands in inventory on every day it spans.
+// A band named Untriaged holds items with no recorded accept decision, which
+// is reconstruction uncertainty - not proof the item sat untriaged. Deleted
+// items and unrecorded transitions cannot be recovered from the snapshot.
+export function buildCumulativeFlow(allItems, asOf, range = null) {
+  const window = resolveWindow(asOf, range);
   const states = allItems.map((item) => ({
     created: item.created,
     accepted: item.decisions.find((decision) => decision.action === 'accept')?.date ?? null,
@@ -131,7 +192,7 @@ export function buildCumulativeFlow(allItems, asOf) {
   }));
 
   const points = [];
-  for (let date = start; date <= asOf; date = shiftDays(date, 1)) {
+  for (let date = window.start; date <= window.end; date = shiftDays(date, 1)) {
     const point = {
       date, triage: 0, accepted: 0, terminal: 0,
     };
@@ -205,11 +266,13 @@ const FORECAST_WEEK_CEILING = 520;
 // the same --as-of, so the sampler may not read the clock or Math.random.
 const FORECAST_SEED = 0x9e3779b9;
 
-// Monte Carlo over observed weekly throughput, per Vacanti: resample the weeks
-// the ledger actually recorded rather than extrapolating an average, and report
-// a band instead of one false-precision date.
+// Monte Carlo over the observed weekly closure rate, per Vacanti: resample the
+// weeks the ledger actually recorded rather than extrapolating an average,
+// and report a band instead of one false-precision date. This is a
+// closure-based estimate of when open work clears, not a feature-delivery
+// commitment: closures include kills, deferrals, and archives alongside done.
 export function buildForecast(weeks, remaining, asOf) {
-  const samples = weeks.map((week) => week.completions);
+  const samples = weeks.map((week) => week.closures);
   if (samples.reduce((total, value) => total + value, 0) === 0) {
     return null;
   }
@@ -283,21 +346,71 @@ function seededRandom(seed) {
   };
 }
 
-export function buildEvidence(openItems, terminalItems, asOf) {
-  const weeks = buildWeeklyFlow([...openItems, ...terminalItems], asOf);
-  const completionTotal = weeks.reduce((total, week) => total + week.completions, 0);
+export function buildEvidence(openItems, terminalItems, asOf, range = null) {
+  const window = resolveWindow(asOf, range);
+  const retained = [...openItems, ...terminalItems];
+  const weeks = buildWeeklyFlow(retained, asOf, range);
+  const closureTotal = weeks.reduce((total, week) => total + week.closures, 0);
+  const doneTotal = weeks.reduce((total, week) => total + week.done, 0);
 
   return {
+    range: window.range,
     agingBuckets: buildAgingBuckets(openItems, asOf),
     agingMatrix: buildAgingMatrix(openItems, asOf),
     weeks,
     throughput: {
-      total: completionTotal,
-      windowWeeks: WINDOW_WEEKS,
-      perWeek: Math.round((completionTotal / WINDOW_WEEKS) * 100) / 100,
+      total: closureTotal,
+      done: doneTotal,
+      windowWeeks: window.windowWeeks,
+      perWeek: window.windowWeeks === 0
+        ? 0
+        : Math.round((closureTotal / window.windowWeeks) * 100) / 100,
     },
-    cumulativeFlow: buildCumulativeFlow([...openItems, ...terminalItems], asOf),
+    cumulativeFlow: buildCumulativeFlow(retained, asOf, range),
+    coverageGaps: {
+      // Retained items past triage with no recorded accept decision. Their
+      // band history reads as untriaged until departure, which is
+      // reconstruction uncertainty, not proof they sat untriaged.
+      missingAcceptance: retained.filter((item) => item.status !== 'triage'
+        && !item.decisions.some((decision) => decision.action === 'accept')).length,
+    },
     cycleTime: buildCycleTime(terminalItems),
     forecast: buildForecast(weeks, openItems.length, asOf),
   };
+}
+
+// The calculators the browser re-runs, serialized from the same functions
+// Node executes above. Tested for runtime parity against the direct functions
+// in a VM: the browser never carries a second formula.
+function browserFunctionSource(fn) {
+  return fn.toString().replace(/^export\s+/, '');
+}
+
+export function reportEvidenceBrowserSource() {
+  return [
+    `const AGE_BUCKETS = ${JSON.stringify(AGE_BUCKETS)};`,
+    `const OPEN_STATUSES = ${JSON.stringify(OPEN_STATUSES)};`,
+    `const WINDOW_WEEKS = ${WINDOW_WEEKS};`,
+    `const MILLISECONDS_PER_DAY = ${MILLISECONDS_PER_DAY};`,
+    `const ROLLING_WEEKS = ${ROLLING_WEEKS};`,
+    `const FORECAST_TRIALS = ${FORECAST_TRIALS};`,
+    `const FORECAST_WEEK_CEILING = ${FORECAST_WEEK_CEILING};`,
+    `const FORECAST_SEED = ${FORECAST_SEED};`,
+    browserFunctionSource(daysBetween),
+    browserFunctionSource(buildAgingBuckets),
+    browserFunctionSource(buildAgingMatrix),
+    browserFunctionSource(weekStart),
+    browserFunctionSource(shiftDays),
+    browserFunctionSource(isValidDateString),
+    browserFunctionSource(resolveWindow),
+    browserFunctionSource(buildWeeklyFlow),
+    browserFunctionSource(attachRollingMean),
+    browserFunctionSource(buildCumulativeFlow),
+    browserFunctionSource(buildCycleTime),
+    browserFunctionSource(percentile),
+    browserFunctionSource(buildForecast),
+    browserFunctionSource(cumulativeShare),
+    browserFunctionSource(seededRandom),
+    browserFunctionSource(buildEvidence),
+  ].join('\n');
 }

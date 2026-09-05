@@ -81,11 +81,12 @@ const THROUGHPUT_HEIGHT = 160;
 const THROUGHPUT_TOP = 14;
 const THROUGHPUT_BOTTOM = 34;
 
-// Completions per week with a four-week mean over them. Weekly throughput is
+// Closures per week with a four-week mean over them. Weekly throughput is
 // noisy enough that the bars alone invite a story about last week; the mean is
-// the line that tells whether the ledger is actually speeding up.
+// the line that tells whether the ledger is actually speeding up. The mean is
+// a closure rate: it counts every departure, not delivered work alone.
 export function throughputChart(weeks) {
-  const total = weeks.reduce((sum, week) => sum + week.completions, 0);
+  const total = weeks.reduce((sum, week) => sum + week.closures, 0);
   if (weeks.length === 0 || total === 0) {
     return '';
   }
@@ -94,7 +95,7 @@ export function throughputChart(weeks) {
   const plotHeight = THROUGHPUT_HEIGHT - THROUGHPUT_TOP - THROUGHPUT_BOTTOM;
   const baseline = THROUGHPUT_TOP + plotHeight;
   // The mean can never exceed the tallest week, so the bars set the scale.
-  const peak = Math.max(...weeks.map((week) => week.completions));
+  const peak = Math.max(...weeks.map((week) => week.closures));
   const slot = plotWidth / weeks.length;
   const barWidth = slot * 0.6;
   const centre = (index) => PLOT_LEFT + slot * (index + 0.5);
@@ -104,11 +105,12 @@ export function throughputChart(weeks) {
     const mean = week.rolling === null
       ? 'no four-week mean yet'
       : `${week.rolling} a week over the last ${ROLLING_WEEKS}`;
+    const scope = week.partial === true ? ', partial week' : '';
     const label = (weeks.length - 1 - index) % 2 === 0
       ? `<text class="chart-tick" x="${coordinate(centre(index))}" y="${baseline + 15}" text-anchor="middle">${escapeText(week.weekStart.slice(5))}</text>`
       : '';
-    return `<g><title>Week of ${escapeText(week.weekStart)}: ${plural(week.completions, 'completion')}, ${mean}</title>`
-      + `<rect class="bar-completion" x="${coordinate(centre(index) - barWidth / 2)}" y="${atCount(week.completions)}" width="${coordinate(barWidth)}" height="${coordinate((week.completions / peak) * plotHeight)}"></rect>`
+    return `<g><title>Week of ${escapeText(week.weekStart)}: ${plural(week.closures, 'closure')} (${week.done ?? 0} done)${scope}, ${mean}</title>`
+      + `<rect class="bar-closure" x="${coordinate(centre(index) - barWidth / 2)}" y="${atCount(week.closures)}" width="${coordinate(barWidth)}" height="${coordinate((week.closures / peak) * plotHeight)}"></rect>`
       + `</g>${label}`;
   }).join('');
 
@@ -123,7 +125,7 @@ export function throughputChart(weeks) {
     ? ''
     : `<polyline class="rolling" points="${meanPoints.join(' ')}"></polyline>`;
 
-  return `<svg class="chart" data-testid="chart-throughput" viewBox="0 0 ${CHART_WIDTH} ${THROUGHPUT_HEIGHT}" role="img" aria-label="Completions per week with a four-week mean. ${plural(total, 'completion')} over ${plural(weeks.length, 'week')}.">`
+  return `<svg class="chart" data-testid="chart-throughput" viewBox="0 0 ${CHART_WIDTH} ${THROUGHPUT_HEIGHT}" role="img" aria-label="Closures per week with a four-week mean. ${plural(total, 'closure')} over ${plural(weeks.length, 'week')}.">`
     + `<line class="chart-grid" x1="${PLOT_LEFT}" y1="${THROUGHPUT_TOP}" x2="${CHART_WIDTH - PLOT_RIGHT}" y2="${THROUGHPUT_TOP}"></line>`
     + `<line class="chart-axis" x1="${PLOT_LEFT}" y1="${baseline}" x2="${CHART_WIDTH - PLOT_RIGHT}" y2="${baseline}"></line>`
     + `<text class="chart-tick" x="${PLOT_LEFT - 6}" y="${THROUGHPUT_TOP + 4}" text-anchor="end">${peak}</text>`
@@ -300,11 +302,11 @@ const FLOW_HEIGHT = 200;
 const FLOW_TOP = 14;
 const FLOW_BOTTOM = 34;
 
-// Arrivals against completions, one grouped pair per week. The gap between the
+// Arrivals against closures, one grouped pair per week. The gap between the
 // pairs is the backlog growing or shrinking, which is the only thing this
 // chart exists to make visible.
 export function weeklyFlowChart(weeks) {
-  const total = weeks.reduce((sum, week) => sum + week.arrivals + week.completions, 0);
+  const total = weeks.reduce((sum, week) => sum + week.arrivals + week.closures, 0);
   if (weeks.length === 0 || total === 0) {
     return '';
   }
@@ -314,29 +316,80 @@ export function weeklyFlowChart(weeks) {
   const baseline = FLOW_TOP + plotHeight;
   // A zero total returned above, so some week is positive and the peak can
   // never be zero. A single week divides just as cleanly as twelve.
-  const peak = Math.max(...weeks.map((week) => Math.max(week.arrivals, week.completions)));
+  const peak = Math.max(...weeks.map((week) => Math.max(week.arrivals, week.closures)));
   const slot = plotWidth / weeks.length;
   const barWidth = slot * 0.32;
 
   const groups = weeks.map((week, index) => {
     const centre = PLOT_LEFT + slot * (index + 0.5);
     const arrivalHeight = (week.arrivals / peak) * plotHeight;
-    const completionHeight = (week.completions / peak) * plotHeight;
+    const closureHeight = (week.closures / peak) * plotHeight;
     // Tick every other week, counted back from the newest: the most recent
     // week is the one a reader looks for first, so it always carries a date.
     const label = (weeks.length - 1 - index) % 2 === 0
       ? `<text class="chart-tick" x="${coordinate(centre)}" y="${baseline + 15}" text-anchor="middle">${escapeText(week.weekStart.slice(5))}</text>`
       : '';
-    return `<g><title>Week of ${escapeText(week.weekStart)}: ${plural(week.arrivals, 'arrival')}, ${plural(week.completions, 'completion')}</title>`
+    const scope = week.partial === true ? ', partial week' : '';
+    return `<g><title>Week of ${escapeText(week.weekStart)}: ${plural(week.arrivals, 'arrival')}, ${plural(week.closures, 'closure')}${scope}</title>`
       + `<rect class="bar-arrival" x="${coordinate(centre - barWidth - 1)}" y="${coordinate(baseline - arrivalHeight)}" width="${coordinate(barWidth)}" height="${coordinate(arrivalHeight)}"></rect>`
-      + `<rect class="bar-completion" x="${coordinate(centre + 1)}" y="${coordinate(baseline - completionHeight)}" width="${coordinate(barWidth)}" height="${coordinate(completionHeight)}"></rect>`
+      + `<rect class="bar-closure" x="${coordinate(centre + 1)}" y="${coordinate(baseline - closureHeight)}" width="${coordinate(barWidth)}" height="${coordinate(closureHeight)}"></rect>`
       + `</g>${label}`;
   }).join('');
 
-  return `<svg class="chart" data-testid="chart-weekly-flow" viewBox="0 0 ${CHART_WIDTH} ${FLOW_HEIGHT}" role="img" aria-label="Arrivals against completions per week. Peak ${peak} items in a week.">`
+  return `<svg class="chart" data-testid="chart-weekly-flow" viewBox="0 0 ${CHART_WIDTH} ${FLOW_HEIGHT}" role="img" aria-label="Arrivals against closures per week. Peak ${peak} items in a week.">`
     + `<line class="chart-grid" x1="${PLOT_LEFT}" y1="${FLOW_TOP}" x2="${CHART_WIDTH - PLOT_RIGHT}" y2="${FLOW_TOP}"></line>`
     + `<line class="chart-axis" x1="${PLOT_LEFT}" y1="${baseline}" x2="${CHART_WIDTH - PLOT_RIGHT}" y2="${baseline}"></line>`
     + `<text class="chart-tick" x="${PLOT_LEFT - 6}" y="${FLOW_TOP + 4}" text-anchor="end">${peak}</text>`
     + `<text class="chart-tick" x="${PLOT_LEFT - 6}" y="${baseline + 4}" text-anchor="end">0</text>`
     + `${groups}</svg>`;
+}
+
+// The charts the browser re-renders, serialized from the same functions Node
+// executes above. Tested for runtime parity against the direct functions in a
+// VM: the browser never carries a second formula.
+function browserChartSource(fn) {
+  return fn.toString().replace(/^export\s+/, '');
+}
+
+export function reportSvgBrowserSource() {
+  return [
+    `const CHART_WIDTH = ${CHART_WIDTH};`,
+    `const ROLLING_WEEKS = ${ROLLING_WEEKS};`,
+    `const PLOT_LEFT = ${PLOT_LEFT};`,
+    `const PLOT_RIGHT = ${PLOT_RIGHT};`,
+    `const HEAT_LABEL_WIDTH = ${HEAT_LABEL_WIDTH};`,
+    `const HEAT_CELL_WIDTH = ${HEAT_CELL_WIDTH};`,
+    `const HEAT_ROW = ${HEAT_ROW};`,
+    `const HEAT_HEADER = ${HEAT_HEADER};`,
+    `const HEAT_FLOOR = ${HEAT_FLOOR};`,
+    `const HEAT_RANGE = ${HEAT_RANGE};`,
+    `const THROUGHPUT_HEIGHT = ${THROUGHPUT_HEIGHT};`,
+    `const THROUGHPUT_TOP = ${THROUGHPUT_TOP};`,
+    `const THROUGHPUT_BOTTOM = ${THROUGHPUT_BOTTOM};`,
+    `const FLOW_AREA_HEIGHT = ${FLOW_AREA_HEIGHT};`,
+    `const FLOW_AREA_TOP = ${FLOW_AREA_TOP};`,
+    `const FLOW_AREA_BOTTOM = ${FLOW_AREA_BOTTOM};`,
+    `const FLOW_BANDS = ${JSON.stringify(FLOW_BANDS)};`,
+    `const SCATTER_HEIGHT = ${SCATTER_HEIGHT};`,
+    `const SCATTER_TOP = ${SCATTER_TOP};`,
+    `const SCATTER_BOTTOM = ${SCATTER_BOTTOM};`,
+    `const MILLISECONDS_PER_DAY = ${MILLISECONDS_PER_DAY};`,
+    `const FORECAST_HEIGHT = ${FORECAST_HEIGHT};`,
+    `const FORECAST_TOP = ${FORECAST_TOP};`,
+    `const FORECAST_BOTTOM = ${FORECAST_BOTTOM};`,
+    `const FORECAST_MARKS = ${JSON.stringify(FORECAST_MARKS)};`,
+    `const FLOW_HEIGHT = ${FLOW_HEIGHT};`,
+    `const FLOW_TOP = ${FLOW_TOP};`,
+    `const FLOW_BOTTOM = ${FLOW_BOTTOM};`,
+    browserChartSource(escapeText),
+    browserChartSource(coordinate),
+    browserChartSource(plural),
+    browserChartSource(agingHeatmapChart),
+    browserChartSource(throughputChart),
+    browserChartSource(cumulativeFlowChart),
+    browserChartSource(dayNumber),
+    browserChartSource(cycleTimeChart),
+    browserChartSource(forecastChart),
+    browserChartSource(weeklyFlowChart),
+  ].join('\n');
 }

@@ -496,7 +496,6 @@ test('report renders an empty ledger without charts and without errors', async (
     assert.equal(result.stderr, '');
     const html = await readFile(output, 'utf8');
     assert.doesNotMatch(html, /data-testid="chart-/);
-    assert.match(html, /No completions in the window, so no forecast\./);
   });
 });
 

@@ -93,7 +93,7 @@ test('crosses open item age with status, naming only the statuses in play', () =
   });
 });
 
-test('reconstructs weekly arrivals and completions from item dates', () => {
+test('reconstructs weekly arrivals and closures from item dates', () => {
   const items = [
     item('wb_new', { number: 1, created: '2026-08-11' }),
     item('wb_cycle', { number: 2, created: '2026-08-03', status: 'done', completed: '2026-08-12' }),
@@ -108,15 +108,15 @@ test('reconstructs weekly arrivals and completions from item dates', () => {
   assert.equal(weeks[0].weekStart, '2026-05-25');
   assert.equal(weeks.at(-1).weekStart, '2026-08-10');
   assert.deepEqual(weeks.at(-1), {
-    weekStart: '2026-08-10', arrivals: 1, completions: 1, rolling: 0.5,
+    weekStart: '2026-08-10', arrivals: 1, closures: 1, done: 1, partial: false, rolling: 0.5,
   });
   assert.deepEqual(weeks.at(-2), {
-    weekStart: '2026-08-03', arrivals: 1, completions: 1, rolling: 0.25,
+    weekStart: '2026-08-03', arrivals: 1, closures: 1, done: 1, partial: false, rolling: 0.25,
   });
-  assert.deepEqual(throughput, { total: 2, windowWeeks: 12, perWeek: 0.17 });
+  assert.deepEqual(throughput, { total: 2, done: 2, windowWeeks: 12, perWeek: 0.17 });
 });
 
-test('carries a four-week rolling mean of completions, blank until four weeks exist', () => {
+test('carries a four-week rolling mean of closures, blank until four weeks exist', () => {
   const done = (id, completed) => item(id, {
     number: Number(id.slice(3)), created: '2026-05-01', status: 'done', completed,
   });
@@ -243,7 +243,7 @@ test('forecasts remaining open work as 50 and 85 percent bands', () => {
   assert.deepEqual(repeat.evidence.forecast, model.evidence.forecast);
 });
 
-test('exposes the trial distribution as a monotone completion-probability curve', () => {
+test('exposes the trial distribution as a monotone closure-probability curve', () => {
   const busyWeeks = ['2026-06-01', '2026-06-15', '2026-06-29', '2026-07-13', '2026-07-27', '2026-08-10'];
   const items = [
     ...busyWeeks.flatMap((date, week) => [0, 1, 2].map((slot) => item(`wb_done_${week}_${slot}`, {
@@ -280,7 +280,7 @@ test('exposes the trial distribution as a monotone completion-probability curve'
   assert.ok(shareAt(forecast.weeks95 - 1) < 0.95);
 });
 
-test('reports no forecast when the window records no completions', () => {
+test('reports no forecast when the window records no closures', () => {
   const items = [item('wb_open', { number: 1 })];
 
   const model = buildReportModel(items, config(), '2026-08-14');
@@ -331,4 +331,155 @@ test('widens the forecast band when weekly throughput is uneven', () => {
     ],
     trials: 5000,
   });
+});
+
+test('counts every terminal departure as a closure but only done as done', () => {
+  const model = buildReportModel([
+    item('wb_done', { status: 'done', completed: '2026-08-13' }),
+    item('wb_killed', { status: 'killed', killed: '2026-08-13' }),
+  ], config(), '2026-08-14');
+  const week = model.evidence.weeks.find((x) => x.weekStart === '2026-08-10');
+  assert.equal(week.closures, 2);
+  assert.equal(week.done, 1);
+});
+
+test('scopes a one-day range to one partial week without dropping early items', async () => {
+  const { buildEvidence } = await import('../src/report-evidence.js');
+  const model = buildReportModel([
+    item('wb_done', { number: 1, created: '2026-08-01', status: 'done', completed: '2026-08-13' }),
+    item('wb_open', { number: 2, created: '2026-08-01' }),
+  ], config(), '2026-08-14');
+  const evidence = buildEvidence(
+    model.items, model.terminalItems, '2026-08-14', { from: '2026-08-13', to: '2026-08-13' },
+  );
+
+  assert.deepEqual(evidence.range, { from: '2026-08-13', to: '2026-08-13' });
+  assert.deepEqual(evidence.weeks, [
+    {
+      weekStart: '2026-08-10', arrivals: 0, closures: 1, done: 1, partial: true, rolling: null,
+    },
+  ]);
+  // The open item predates the range but still stands in inventory that day.
+  assert.deepEqual(evidence.cumulativeFlow, [
+    { date: '2026-08-13', triage: 1, accepted: 0, terminal: 1 },
+  ]);
+});
+
+test('marks range-cut weeks partial and withholds their rolling mean', async () => {
+  const { buildEvidence } = await import('../src/report-evidence.js');
+  const model = buildReportModel(
+    [item('wb_open', { number: 1, created: '2026-08-01' })], config(), '2026-08-14',
+  );
+  const evidence = buildEvidence(
+    model.items, model.terminalItems, '2026-08-14', { from: '2026-08-12', to: '2026-08-14' },
+  );
+
+  assert.equal(evidence.weeks.length, 1);
+  assert.equal(evidence.weeks[0].partial, true);
+  assert.equal(evidence.weeks[0].rolling, null);
+  assert.deepEqual(evidence.cumulativeFlow.map((point) => point.date), [
+    '2026-08-12', '2026-08-13', '2026-08-14',
+  ]);
+});
+
+test('counts retained items without recorded acceptance as a visible gap', () => {
+  const accept = (date) => [{ action: 'accept', date, summary: 's', rationale: 'r' }];
+  const model = buildReportModel([
+    item('wb_done', { number: 1, status: 'done', completed: '2026-08-13' }),
+    item('wb_open', { number: 2 }),
+    item('wb_waiting', { number: 3, decisions: accept('2026-08-02') }),
+    item('wb_untriaged', { number: 4, status: 'triage' }),
+  ], config(), '2026-08-14');
+
+  assert.equal(model.evidence.coverageGaps.missingAcceptance, 2);
+});
+
+test('reports an empty range with zeroes and no forecast', async () => {
+  const { buildEvidence } = await import('../src/report-evidence.js');
+  const model = buildReportModel(
+    [item('wb_open', { number: 1, created: '2026-08-11' })], config(), '2026-08-14',
+  );
+  const evidence = buildEvidence(
+    model.items, model.terminalItems, '2026-08-14', { from: '2026-06-02', to: '2026-06-03' },
+  );
+
+  assert.ok(evidence.weeks.every((week) => week.closures === 0 && week.done === 0));
+  assert.deepEqual(evidence.throughput.total, 0);
+  assert.deepEqual(evidence.throughput.perWeek, 0);
+  assert.equal(evidence.forecast, null);
+  assert.deepEqual(evidence.cumulativeFlow, [
+    { date: '2026-06-02', triage: 0, accepted: 0, terminal: 0 },
+    { date: '2026-06-03', triage: 0, accepted: 0, terminal: 0 },
+  ]);
+});
+
+test('rejects invalid browser ranges before recalculation', async () => {
+  const { buildEvidence } = await import('../src/report-evidence.js');
+  const model = buildReportModel(
+    [item('wb_open', { number: 1 })], config(), '2026-08-14',
+  );
+
+  assert.throws(
+    () => buildEvidence(model.items, model.terminalItems, '2026-08-14', { from: '2026-08-14', to: '2026-08-13' }),
+    /invalid report range/,
+  );
+  assert.throws(
+    () => buildEvidence(model.items, model.terminalItems, '2026-08-14', { from: '2026-08-13', to: '2026-08-15' }),
+    /invalid report range/,
+  );
+  assert.throws(
+    () => buildEvidence(model.items, model.terminalItems, '2026-08-14', { from: '2026-02-30', to: '2026-08-13' }),
+    /invalid report range/,
+  );
+});
+
+test('replays the same evidence in the browser bundle as Node computes', async () => {
+  const vm = await import('node:vm');
+  const { buildEvidence, reportEvidenceBrowserSource } = await import('../src/report-evidence.js');
+  const model = buildReportModel([
+    item('wb_done', { number: 1, created: '2026-08-01', status: 'done', completed: '2026-08-13' }),
+    item('wb_killed', { number: 2, created: '2026-08-02', status: 'killed', killed: '2026-08-12' }),
+    item('wb_open', { number: 3, created: '2026-08-11' }),
+  ], config(), '2026-08-14');
+
+  const context = vm.createContext({});
+  vm.runInContext(reportEvidenceBrowserSource(), context);
+  for (const range of [null, { from: '2026-08-12', to: '2026-08-14' }]) {
+    const expected = JSON.stringify(buildEvidence(model.items, model.terminalItems, '2026-08-14', range));
+    vm.runInContext(`globalThis.__args = ${JSON.stringify({ open: model.items, terminal: model.terminalItems, range })};`, context);
+    const actual = vm.runInContext(
+      "JSON.stringify(buildEvidence(globalThis.__args.open, globalThis.__args.terminal, '2026-08-14', globalThis.__args.range))",
+      context,
+    );
+    assert.equal(actual, expected);
+  }
+  const emptyExpected = JSON.stringify(buildEvidence([], [], '2026-08-14'));
+  const emptyActual = vm.runInContext("JSON.stringify(buildEvidence([], [], '2026-08-14'))", context);
+  assert.equal(emptyActual, emptyExpected);
+});
+
+test('excludes events outside an inclusive range even within its boundary week', async () => {
+  const { buildEvidence } = await import('../src/report-evidence.js');
+  const model = buildReportModel([
+    item('wb_before', { number: 1, created: '2026-08-10', status: 'done', completed: '2026-08-12' }),
+    item('wb_inside', { number: 2, created: '2026-08-13', status: 'done', completed: '2026-08-13' }),
+    item('wb_after', { number: 3, created: '2026-08-14', status: 'killed', killed: '2026-08-14' }),
+  ], config(), '2026-08-14');
+  const evidence = buildEvidence(
+    model.items, model.terminalItems, '2026-08-14', { from: '2026-08-13', to: '2026-08-13' },
+  );
+  assert.deepEqual(evidence.weeks, [{
+    weekStart: '2026-08-10', arrivals: 1, closures: 1, done: 1, partial: true, rolling: null,
+  }]);
+});
+
+test('computes custom-range throughput from elapsed days without rounding the denominator', async () => {
+  const { buildEvidence } = await import('../src/report-evidence.js');
+  const model = buildReportModel([
+    item('wb_done', { number: 1, created: '2026-08-01', status: 'done', completed: '2026-08-13' }),
+  ], config(), '2026-08-14');
+  const evidence = buildEvidence(
+    model.items, model.terminalItems, '2026-08-14', { from: '2026-08-13', to: '2026-08-13' },
+  );
+  assert.equal(evidence.throughput.perWeek, 7);
 });

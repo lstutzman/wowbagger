@@ -169,14 +169,14 @@ function model() {
         ],
       },
       weeks: [
-        { weekStart: '2026-08-03', arrivals: 2, completions: 1, rolling: 0.25 },
-        { weekStart: '2026-08-10', arrivals: 0, completions: 3, rolling: 1 },
+        { weekStart: '2026-08-03', arrivals: 2, closures: 1, done: 1, partial: false, rolling: 0.25 },
+        { weekStart: '2026-08-10', arrivals: 0, closures: 3, done: 2, partial: false, rolling: 1 },
       ],
       cumulativeFlow: [
         { date: '2026-08-13', triage: 1, accepted: 1, terminal: 0 },
         { date: '2026-08-14', triage: 1, accepted: 0, terminal: 1 },
       ],
-      throughput: { total: 4, windowWeeks: 12, perWeek: 0.33 },
+      throughput: { total: 4, done: 3, windowWeeks: 12, perWeek: 0.33 },
       cycleTime: {
         sampleCount: 3,
         medianDays: 10,
@@ -390,12 +390,23 @@ test('renders the evidence layer with throughput, buckets, and forecast bands', 
   assert.match(surface, /85%/);
 });
 
+test('labels closures as closures and states the snapshot limits', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const surface = decisionSurface(renderReportHtml(model(), options()));
+
+  assert.match(surface, /4 closures \(3 done\) over 12 weeks/);
+  assert.match(surface, /3 done items with recorded acceptance, accept to completion/);
+  assert.match(surface, /Closed includes done, killed, deferred, and archived/);
+  assert.match(surface, /closure-based estimate, not a delivery commitment/);
+  assert.doesNotMatch(surface, /completions over/);
+});
+
 test('draws the weekly flow as an inline SVG chart carrying its own numbers', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const surface = decisionSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<svg[^>]*data-testid="chart-weekly-flow"/);
-  assert.match(surface, /<title>Week of 2026-08-10: 0 arrivals, 3 completions<\/title>/);
+  assert.match(surface, /<title>Week of 2026-08-10: 0 arrivals, 3 closures<\/title>/);
 });
 
 test('draws all six evidence charts, each under its own stable test id', async () => {
@@ -429,7 +440,7 @@ test('draws the cycle-time scatter and the cumulative flow from the same model',
 
   assert.match(surface, /<title>#9 completed 2026-08-12 after 20 days<\/title>/);
   assert.match(surface, /<title>Terminal: 1 item on 2026-08-14<\/title>/);
-  assert.match(surface, /<title>Week of 2026-08-10: 3 completions, 1 a week over the last 4<\/title>/);
+  assert.match(surface, /<title>Week of 2026-08-10: 3 closures \(2 done\), 1 a week over the last 4<\/title>/);
 });
 
 test('draws the forecast fan and states all three percentile dates', async () => {
@@ -447,9 +458,9 @@ test('draws no chart for a series with no history and keeps the numeric statemen
   empty.evidence = {
     agingBuckets: [{ label: 'under 7d', count: 0 }, { label: 'over 90d', count: 0 }],
     agingMatrix: { statuses: [], rows: [] },
-    weeks: [{ weekStart: '2026-08-10', arrivals: 0, completions: 0, rolling: null }],
+    weeks: [{ weekStart: '2026-08-10', arrivals: 0, closures: 0, done: 0, partial: false, rolling: null }],
     cumulativeFlow: [{ date: '2026-08-14', triage: 0, accepted: 0, terminal: 0 }],
-    throughput: { total: 0, windowWeeks: 12, perWeek: 0 },
+    throughput: { total: 0, done: 0, windowWeeks: 12, perWeek: 0 },
     cycleTime: {
       sampleCount: 0, medianDays: null, p85Days: null, samples: [],
     },
@@ -458,7 +469,7 @@ test('draws no chart for a series with no history and keeps the numeric statemen
   const surface = decisionSurface(renderReportHtml(empty, options()));
 
   assert.doesNotMatch(surface, /data-testid="chart-/);
-  assert.match(surface, /No completions in the window, so no forecast\./);
+  assert.match(surface, /No closures in the window, so no forecast\./);
   assert.match(surface, /No accept-to-complete history yet\./);
 });
 
