@@ -5,15 +5,20 @@ number: 194
 title: "Share typed report filters and quick-view selection"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:31.794Z"
-depends_on: [wb_01M1RWN4EHW20BP63XB2J8M03J]
+depends_on: [ wb_01M1RWN4EHW20BP63XB2J8M03J ]
 related: []
 parent: wb_01M1RWN4BWJZX6RCCZ9Z6HKYXA
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept the approved report redesign work."
+    rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
 ---
 
 ## Assignment
