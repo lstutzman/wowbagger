@@ -66,6 +66,7 @@ export function buildGraphModel(model) {
     asOf: model.asOf,
     nodes,
     links: buildLinks([...model.items, ...model.terminalItems], new Set(nodes.map((node) => node.id))),
+    impactById: model.impactById ?? {},
   };
 }
 
@@ -174,12 +175,10 @@ export function graphStyleSource() {
     .join('');
   return `${bandRules}
 #graph-stage{position:relative;height:min(66vh,620px);border-radius:11px;background:#080b0f;overflow:hidden}
-.graph-filter{margin-bottom:13px}
-.graph-filter .facet-group{padding:0}
-.graph-filter-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px}
-.graph-filter-buttons{display:flex;gap:8px}
-.graph-filter-actions button{padding:7px 10px}
-.graph-filter-actions .result-count{margin-right:auto}
+#graph-node-count{margin:12px 0 0}
+.graph-actions{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0 0}
+.graph-actions button{padding:6px 10px}
+#graph-card .graph-actions button{border-color:#3b4c5e;background:#22303d;color:#e6edf3}
 #graph-empty{margin:12px 0 0;border-left:3px solid var(--navy);background:#eef1f4;padding:10px 13px}
 #graph-canvas{position:absolute;inset:0}
 #graph-labels{position:absolute;inset:0;pointer-events:none}
@@ -214,9 +213,25 @@ export function graphStyleSource() {
 
 // The roster is not a fallback bolted on for the WebGL-less reader; it is where
 // the graph's decision-relevant content lives. The 3D view adds shape and
-// adjacency to it and holds nothing the roster does not already say.
-function renderRoster(nodes) {
-  return `<details class="graph-fallback"><summary>Every node, without the graph</summary><ol class="graph-roster">${nodes.map((node) => `<li class="graph-band-${escapeHtml(node.band)}" data-node-status="${escapeHtml(node.status)}"><p class="graph-head"><span class="graph-handle">${escapeHtml(node.handle)}</span><span class="graph-title">${escapeHtml(node.title)}</span><span class="graph-meta">${escapeHtml(BAND_LABELS[node.band] ?? node.band)} · ${escapeHtml(node.status)} · age ${escapeHtml(node.ageDays)}d · unblocks ${escapeHtml(node.leverage)}</span></p><p class="graph-why">${node.reasons.map((reason) => `<span class="graph-reason">${escapeHtml(reason.label)}</span>`).join('')}</p></li>`).join('')}</ol></details>`;
+// adjacency to it and holds nothing the roster does not already say. Each row
+// carries the same actions the graph card offers: canonical details through
+// inspectItem, and labelled drilldowns from impactById. Only nonempty impact
+// sets become buttons, so a terminal node offers details alone.
+function renderGraphActions(node, impactById) {
+  const impact = impactById[node.id] ?? {};
+  const downstreamIds = Array.isArray(impact.downstreamIds) ? impact.downstreamIds : [];
+  const readyIds = Array.isArray(impact.readyIfDoneIds) ? impact.readyIfDoneIds : [];
+  let buttons = `<button type="button" data-inspect="${escapeHtml(node.id)}">Details</button>`;
+  if (downstreamIds.length > 0) {
+    buttons += `<button type="button" data-downstream="${escapeHtml(node.id)}">Downstream (${downstreamIds.length})</button>`;
+  }
+  if (readyIds.length > 0) {
+    buttons += `<button type="button" data-ready="${escapeHtml(node.id)}">Ready if done (${readyIds.length})</button>`;
+  }
+  return `<p class="graph-actions">${buttons}</p>`;
+}
+function renderRoster(nodes, impactById = {}) {
+  return `<details class="graph-fallback"><summary>Every node, without the graph</summary><ol class="graph-roster">${nodes.map((node) => `<li class="graph-band-${escapeHtml(node.band)}" data-node-id="${escapeHtml(node.id)}" data-node-status="${escapeHtml(node.status)}"><p class="graph-head"><span class="graph-handle">${escapeHtml(node.handle)}</span><span class="graph-title">${escapeHtml(node.title)}</span><span class="graph-meta">${escapeHtml(BAND_LABELS[node.band] ?? node.band)} · ${escapeHtml(node.status)} · age ${escapeHtml(node.ageDays)}d · unblocks ${escapeHtml(node.leverage)}</span></p><p class="graph-why">${node.reasons.map((reason) => `<span class="graph-reason">${escapeHtml(reason.label)}</span>`).join('')}</p>${renderGraphActions(node, impactById)}</li>`).join('')}</ol></details>`;
 }
 
 function renderLegend() {
@@ -225,20 +240,6 @@ function renderLegend() {
     .join('');
   return `<div id="graph-legend">${bands}<span class="graph-key graph-key-edge graph-band-depends">Unblocks (depends_on)</span><span class="graph-key graph-key-edge graph-key-edge-parent graph-band-parent">Parent to child</span></div>`;
 }
-
-// The filter offers the lifecycle statuses the ledger actually holds, each
-// carrying how many nodes answer to it, and starts with all of them selected:
-// the graph's own default is the whole ledger. Select all and Clear are the two
-// moves a chip strip cannot make on its own.
-function renderStatusFilter(nodes) {
-  const statuses = [...new Set(nodes.map((node) => node.status))].sort();
-  const chips = statuses.map((status) => {
-    const count = nodes.filter((node) => node.status === status).length;
-    return `<label class="chip"><input type="checkbox" class="graph-status" value="${escapeHtml(status)}" checked><span class="chip-text">${escapeHtml(status)}</span> <span class="chip-count">${count}</span></label>`;
-  }).join('');
-  return `<div id="graph-filter" class="graph-filter"><fieldset class="facet-group" data-group="graph-status"><legend>Status</legend><div class="chips">${chips}</div></fieldset><div class="graph-filter-actions"><p id="graph-node-count" class="result-count" role="status" aria-live="polite">Showing ${nodes.length} of ${nodes.length} ${nodes.length === 1 ? 'node' : 'nodes'}</p><span class="graph-filter-buttons"><button type="button" id="graph-status-all">Select all</button><button type="button" id="graph-status-clear">Clear</button></span></div></div>`;
-}
-
 // The empty state has to name what emptied the graph. A reader who cleared
 // every status did that, and selecting one undoes it. A named view that matched
 // nothing was never narrowed by anybody, and there is no status for that reader
@@ -250,36 +251,58 @@ function renderGraphEmptyState(nodes, view) {
 }
 
 export function graphSection(model, manifest, view = null) {
+  const nodes = model.nodes;
   return `<section id="graph" class="panel"><div class="section-heading"><div><p class="eyebrow">Dependencies</p><h2>Ledger graph</h2></div><p class="muted">Every item as a node, sized by how much it unblocks. Edges run from a prerequisite or parent to the item it releases.</p></div>
-${renderStatusFilter(model.nodes)}
+<p id="graph-node-count" class="result-count" role="status" aria-live="polite">Showing ${nodes.length} of ${nodes.length} ${nodes.length === 1 ? 'node' : 'nodes'}</p>
 <div id="graph-stage"><div id="graph-canvas"></div><div id="graph-labels" aria-hidden="true"></div><aside id="graph-card" hidden></aside><p id="graph-hint">Drag to orbit · scroll to zoom · hover or click a node</p></div>
 <p id="graph-nowebgl" hidden>This browser has no WebGL, so the graph cannot draw. Nothing is lost: every node, its status, its age, and the reasons that place it are listed below, and the graph only adds the shape of the dependencies between them.</p>
-${renderGraphEmptyState(model.nodes, view)}
+${renderGraphEmptyState(nodes, view)}
 ${renderLegend()}
-${renderRoster(model.nodes)}
+${renderRoster(nodes, model.impactById ?? {})}
 <p class="muted">Rendered by ${escapeHtml(manifest.package)} ${escapeHtml(manifest.version)}, vendored and checksummed in this repository and inlined here. This report fetches nothing.</p></section>`;
 }
 
 export function graphClientSource(model) {
   return `'use strict';
-var GRAPH_MODEL=${scriptJson(model)};
+var GRAPH_MODEL=${scriptJson({ asOf: model.asOf, nodes: model.nodes, links: model.links })};
 var GRAPH_COLORS=${scriptJson(BAND_COLORS)};
 var graphStage=document.getElementById('graph-stage');
 var graphNotice=document.getElementById('graph-nowebgl');
 var graphEmpty=document.getElementById('graph-empty');
 var graphCount=document.getElementById('graph-node-count');
+var graphEmptyCopy=graphEmpty?graphEmpty.textContent:'';
 var graphFallback=document.querySelector('.graph-fallback');
-var graphStatusInputs=Array.prototype.slice.call(document.querySelectorAll('.graph-status'));
-var graphRosterRows=Array.prototype.slice.call(document.querySelectorAll('[data-node-status]'));
-// The stage hands back the one function that redraws it. Without WebGL there is
-// no stage, and the filter still runs: it is the roster's filter too.
+var graphSection=document.getElementById('section-dependencies');
+var graphNav=document.getElementById('nav-dependencies');
+var graphReducedMotion=false;
+try{graphReducedMotion=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);}catch(error){}
+var graphStarted=false;
+var graphDisposed=false;
+var graphInstance=null;
+var graphUnsubscribe=null;
+var graphLabelRaf=0;
+var graphRosterRows=Array.prototype.slice.call(document.querySelectorAll('[data-node-id]'));
+var graphNodesById=Object.create(null);
+GRAPH_MODEL.nodes.forEach(function(node){graphNodesById[node.id]=node;});
+// The shared report scope owns selection: the controller installed by
+// reportClientSource publishes matching items, and the graph draws the induced
+// subgraph without recomputing readiness from an incomplete picture.
+var graphReport=window.wowbaggerReport||null;
+// The stage hands back the one function that redraws it. A scope that arrives
+// before the stage exists waits here until the first sizing.
 var graphDraw=null;
+var graphPendingVisible=null;
 var graphShownId=null;
+// Probed once: every probe opens a WebGL context, and a retry loop that probes
+// each frame exhausts the browser's context budget and evicts the graph's own.
+var graphWebglProbe=null;
 function graphWebglAvailable(){
+  if(graphWebglProbe!==null)return graphWebglProbe;
   try{
     var probe=document.createElement('canvas');
-    return !!(window.WebGLRenderingContext&&(probe.getContext('webgl2')||probe.getContext('webgl')));
-  }catch(error){return false;}
+    graphWebglProbe=!!(window.WebGLRenderingContext&&(probe.getContext('webgl2')||probe.getContext('webgl')));
+  }catch(error){graphWebglProbe=false;}
+  return graphWebglProbe;
 }
 function graphBandColor(node){return GRAPH_COLORS[node.band]||'#94a3b8';}
 function graphRenderCard(card,node){
@@ -308,52 +331,158 @@ function graphRenderCard(card,node){
     why.append(chip);
   });
   card.append(handle,title,facts,why);
+  var actions=document.createElement('p');
+  actions.className='graph-actions';
+  var details=document.createElement('button');
+  details.type='button';
+  details.textContent='Details';
+  details.addEventListener('click',function(){graphInspect(node.id);});
+  actions.append(details);
+  var impact=graphImpactLists(node.id);
+  if(impact.downstreamIds.length>0){
+    var downstream=document.createElement('button');
+    downstream.type='button';
+    downstream.textContent='Downstream ('+impact.downstreamIds.length+')';
+    downstream.addEventListener('click',function(){graphShowImpact(node.id,'downstream');});
+    actions.append(downstream);
+  }
+  if(impact.readyIfDoneIds.length>0){
+    var unlocks=document.createElement('button');
+    unlocks.type='button';
+    unlocks.textContent='Ready if done ('+impact.readyIfDoneIds.length+')';
+    unlocks.addEventListener('click',function(){graphShowImpact(node.id,'ready');});
+    actions.append(unlocks);
+  }
+  card.append(actions);
   card.hidden=false;
   graphShownId=node.id;
 }
-function graphSelectedStatuses(){
-  var chosen=Object.create(null);
-  graphStatusInputs.forEach(function(input){
-    if(input.checked)chosen[input.value]=true;
-  });
-  return chosen;
-}
-// One selection drives the stage, the roster, and the count together, so the
-// three can never disagree about which part of the ledger is on screen.
-function graphApplyFilter(){
-  var chosen=graphSelectedStatuses();
+// One scope drives the stage, the roster, and the count together, so the three
+// can never disagree about which part of the ledger is on screen. Bands and
+// reasons come from the complete-ledger model, so hiding a prerequisite never
+// recomputes the items it holds back.
+function graphApplyScope(items){
   var visible=Object.create(null);
   var shown=0;
-  GRAPH_MODEL.nodes.forEach(function(node){
-    if(chosen[node.status]!==true)return;
-    visible[node.id]=true;
-    shown+=1;
+  (items||[]).forEach(function(item){
+    if(item&&graphNodesById[item.id]!==undefined&&visible[item.id]!==true){
+      visible[item.id]=true;
+      shown+=1;
+    }
   });
   graphRosterRows.forEach(function(row){
-    row.hidden=chosen[row.getAttribute('data-node-status')]!==true;
+    var id=row.getAttribute('data-node-id');
+    row.hidden=!(id!==null&&visible[id]===true);
   });
   var total=GRAPH_MODEL.nodes.length;
-  graphCount.textContent='Showing '+shown+' of '+total+(total===1?' node':' nodes');
-  graphEmpty.hidden=shown!==0;
+  if(graphCount)graphCount.textContent='Showing '+shown+' of '+total+(total===1?' node':' nodes');
+  if(graphEmpty){
+    if(total===0){graphEmpty.hidden=false;}
+    else if(shown===0){graphEmpty.textContent='No items match the current scope, so the graph has nothing to draw.';graphEmpty.hidden=false;}
+    else{graphEmpty.textContent=graphEmptyCopy;graphEmpty.hidden=true;}
+  }
   if(graphDraw)graphDraw(visible);
+  else graphPendingVisible=visible;
 }
-// The two moves a chip strip cannot make on its own. Clearing every status is a
-// legitimate request, and its honest answer is an empty graph that says so.
-function graphSetEveryStatus(checked){
-  graphStatusInputs.forEach(function(input){input.checked=checked;});
-  graphApplyFilter();
+function graphMount(){return document.getElementById('graph-canvas');}
+// Impact actions read the frozen controller map, never a recomputed graph: the
+// labels carry the same downstream and ready-if-done sets the Items detail
+// shows, with their distinct counts.
+function graphImpactLists(id){
+  var entry=null;
+  try{entry=graphReport&&graphReport.impactById?graphReport.impactById[id]:null;}catch(error){entry=null;}
+  var downstream=entry&&Array.isArray(entry.downstreamIds)?entry.downstreamIds.slice():[];
+  var ready=entry&&Array.isArray(entry.readyIfDoneIds)?entry.readyIfDoneIds.slice():[];
+  return {downstreamIds:downstream,readyIfDoneIds:ready};
 }
-if(!window.ForceGraph3D||!graphWebglAvailable()){
-  graphStage.hidden=true;
-  graphNotice.hidden=false;
-  graphFallback.open=true;
-}else{
+function graphNodeHandle(id){var node=graphNodesById[id];return node?node.handle:id;}
+function graphInspect(id){
+  try{if(graphReport&&typeof graphReport.inspectItem==='function')return graphReport.inspectItem(id);}catch(error){}
+  return false;
+}
+function graphShowImpact(id,kind){
+  if(!graphReport||typeof graphReport.showItems!=='function')return;
+  var lists=graphImpactLists(id);
+  var handle=graphNodeHandle(id);
+  if(kind==='downstream'&&lists.downstreamIds.length>0)graphReport.showItems({label:'Downstream of '+handle+' ('+lists.downstreamIds.length+')',itemIds:lists.downstreamIds});
+  if(kind==='ready'&&lists.readyIfDoneIds.length>0)graphReport.showItems({label:'Ready if '+handle+' is done ('+lists.readyIfDoneIds.length+')',itemIds:lists.readyIfDoneIds});
+}
+function graphWireActions(root){
+  Array.prototype.slice.call(root.querySelectorAll('[data-inspect]')).forEach(function(button){
+    button.addEventListener('click',function(){graphInspect(button.getAttribute('data-inspect'));});
+  });
+  Array.prototype.slice.call(root.querySelectorAll('[data-downstream]')).forEach(function(button){
+    button.addEventListener('click',function(){graphShowImpact(button.getAttribute('data-downstream'),'downstream');});
+  });
+  Array.prototype.slice.call(root.querySelectorAll('[data-ready]')).forEach(function(button){
+    button.addEventListener('click',function(){graphShowImpact(button.getAttribute('data-ready'),'ready');});
+  });
+}
+graphWireActions(document);
+function graphSectionHidden(){return !!(graphSection&&graphSection.hidden===true);}
+function graphMeasurable(){var mount=graphMount();return !!(mount&&mount.clientWidth>0&&mount.clientHeight>0);}
+function graphCanDraw(){return !!(window.ForceGraph3D&&graphWebglAvailable());}
+// The 1,744-item reference built one canvas while Dependencies was still
+// hidden: a hidden container measures zero, so the first sizing waits for a
+// visible section with measurable dimensions. Repeated visits reuse the one
+// canvas instead of starting the layout again.
+function graphEnsureStarted(){
+  if(graphStarted||graphDisposed)return;
+  if(!graphCanDraw()||GRAPH_MODEL.nodes.length===0)return;
+  if(graphSectionHidden())return;
+  if(!graphMeasurable()){
+    if(window.requestAnimationFrame)window.requestAnimationFrame(function(){graphEnsureStarted();});
+    return;
+  }
   graphStart();
+  graphStarted=true;
+  if(graphPendingVisible&&graphDraw)graphDraw(graphPendingVisible);
 }
-graphStatusInputs.forEach(function(input){input.addEventListener('change',graphApplyFilter);});
-document.getElementById('graph-status-all').addEventListener('click',function(){graphSetEveryStatus(true);});
-document.getElementById('graph-status-clear').addEventListener('click',function(){graphSetEveryStatus(false);});
-graphApplyFilter();
+function graphNoteVisibility(){
+  if(!graphStarted||!graphInstance)return;
+  if(graphSectionHidden()){
+    if(graphInstance&&typeof graphInstance.pauseAnimation==='function')graphInstance.pauseAnimation();
+    return;
+  }
+  var mount=graphMount();
+  if(mount&&graphInstance&&typeof graphInstance.width==='function'){
+    try{graphInstance.width(mount.clientWidth).height(mount.clientHeight);}catch(error){}
+  }
+  if(graphInstance&&typeof graphInstance.resumeAnimation==='function')graphInstance.resumeAnimation();
+}
+// Disposal releases the layout, its label loop, and the scope subscription, so
+// leaving the document does not leave the force layout ticking.
+function graphDispose(){
+  if(graphDisposed)return;
+  graphDisposed=true;
+  if(typeof graphUnsubscribe==='function'){try{graphUnsubscribe();}catch(error){}graphUnsubscribe=null;}
+  if(window.cancelAnimationFrame&&graphLabelRaf){try{window.cancelAnimationFrame(graphLabelRaf);}catch(error){}graphLabelRaf=0;}
+  if(graphInstance&&typeof graphInstance._destructor==='function'){try{graphInstance._destructor();}catch(error){}}
+  graphInstance=null;
+  graphDraw=null;
+}
+if(!graphCanDraw()){
+  if(graphStage)graphStage.hidden=true;
+  if(graphNotice)graphNotice.hidden=false;
+  if(graphFallback)graphFallback.open=true;
+}
+if(graphReport&&typeof graphReport.subscribeScope==='function'){
+  graphUnsubscribe=graphReport.subscribeScope(function(items){graphApplyScope(items||[]);graphEnsureStarted();graphNoteVisibility();});
+}else{
+  graphApplyScope(GRAPH_MODEL.nodes.map(function(node){return {id:node.id};}));
+  graphEnsureStarted();
+}
+if(graphNav)graphNav.addEventListener('click',function(){graphEnsureStarted();graphNoteVisibility();});
+if(graphSection&&window.MutationObserver){
+  try{
+    new window.MutationObserver(function(){graphEnsureStarted();graphNoteVisibility();}).observe(graphSection,{attributes:true,attributeFilter:['hidden']});
+  }catch(error){}
+}
+if(window.addEventListener){
+  window.addEventListener('resize',function(){graphEnsureStarted();graphNoteVisibility();});
+  window.addEventListener('pagehide',function(){graphDispose();});
+  window.addEventListener('unload',function(){graphDispose();});
+}
 function graphStart(){
   var mount=document.getElementById('graph-canvas');
   var labelLayer=document.getElementById('graph-labels');
@@ -381,9 +510,10 @@ function graphStart(){
     .linkDirectionalArrowLength(function(link){return link.kind==='parent'?0:8;})
     .linkDirectionalArrowRelPos(1)
     .onNodeHover(function(node){if(node)graphRenderCard(card,node);})
-    .onNodeClick(function(node){if(node)graphRenderCard(card,node);})
+    .onNodeClick(function(node){if(node){graphRenderCard(card,node);graphInspect(node.id);}})
     .onBackgroundClick(function(){card.hidden=true;graphShownId=null;})
-    .cooldownTicks(220);
+    .cooldownTicks(graphReducedMotion?0:220);
+  graphInstance=graph;
   graph.d3Force('charge').strength(-40);
   var labels=nodes.map(function(node){
     var element=document.createElement('span');
@@ -397,11 +527,9 @@ function graphStart(){
   graph.onEngineStop(function(){
     if(framed||drawn===0)return;
     framed=true;
-    graph.zoomToFit(800,20);
+    graph.zoomToFit(graphReducedMotion?0:800,20);
   });
-  window.addEventListener('resize',function(){
-    graph.width(mount.clientWidth).height(mount.clientHeight);
-  });
+  window.addEventListener('resize',function(){graphNoteVisibility();});
   // A hidden node's edges have nowhere to land, and its label would hang over
   // empty space, so the node, its links, and its label leave together. Handing
   // the graph new data reheats the layout, which is what re-forms the remaining
@@ -458,8 +586,8 @@ function graphStart(){
       placement.element.style.transform='translate('+placement.screen.x.toFixed(1)+'px,'+placement.screen.y.toFixed(1)+'px)';
       placement.element.style.opacity=(1-0.55*((placement.depth-nearest)/span)).toFixed(2);
     }
-    window.requestAnimationFrame(graphPlaceLabels);
+    if(!graphDisposed)graphLabelRaf=window.requestAnimationFrame(graphPlaceLabels);
   }
-  window.requestAnimationFrame(graphPlaceLabels);
+  graphLabelRaf=window.requestAnimationFrame(graphPlaceLabels);
 }`;
 }

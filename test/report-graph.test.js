@@ -221,28 +221,29 @@ test('the graph sits below the decision surface, never above it', async () => {
   assert.deepEqual([...order].sort((left, right) => left - right), order);
 });
 
-// The graph draws the whole ledger, and most questions asked of it are about
-// part of it. The status filter is therefore part of the graph, above the
-// stage, in the same chip vocabulary the drill-down filters use: real
-// checkboxes in a named group, so holding two statuses at once is the
-// control's own semantics. Everything is selected until a reader says
-// otherwise, because the graph's default is the whole ledger.
-test('renders the graph status filter as accessible multi-select chips, all selected', async () => {
+// The roster carries the scope-independent actions: canonical details for every
+// node, and labelled impact drilldowns only where the impact map is nonempty.
+// There is no graph-only status filter left to pin.
+test('roster rows carry canonical details and impact actions with counts', async () => {
   const html = await fixtureHtml();
-  const filter = html.slice(html.indexOf('id="graph-filter"'), html.indexOf('id="graph-stage"'));
+  const { report, graph } = await fixtureGraph();
+  const roster = html.match(/<ol class="graph-roster">[\s\S]*?<\/ol>/)?.[0];
 
-  assert.ok(html.indexOf('id="graph-filter"') > -1, 'the graph must carry its own status filter');
-  assert.ok(html.indexOf('id="graph-filter"') < html.indexOf('id="graph-stage"'), 'the filter sits above the stage');
-  assert.match(filter, /<fieldset class="facet-group" data-group="graph-status"><legend>Status<\/legend>/);
-  for (const [status, count] of [['backlog', 4], ['done', 1]]) {
-    assert.match(
-      filter,
-      new RegExp(`<label class="chip"><input type="checkbox" class="graph-status" value="${status}" checked><span class="chip-text">${status}</span> <span class="chip-count">${count}</span></label>`),
-    );
+  assert.ok(roster, 'the graph section must carry its own item roster');
+  assert.doesNotMatch(html, /graph-status/);
+  assert.doesNotMatch(html, /id="graph-filter"/);
+  assert.match(html, /<p id="graph-node-count" class="result-count" role="status" aria-live="polite">Showing 5 of 5 nodes<\/p>/);
+  for (const node of graph.nodes) {
+    assert.match(roster, new RegExp(`data-node-id="${node.id}"`));
+    assert.match(roster, new RegExp(`<button type="button" data-inspect="${node.id}">Details</button>`));
   }
-  assert.match(filter, /<button type="button" id="graph-status-all">Select all<\/button>/);
-  assert.match(filter, /<button type="button" id="graph-status-clear">Clear<\/button>/);
-  assert.match(filter, /<p id="graph-node-count" class="result-count" role="status" aria-live="polite">Showing 5 of 5 nodes<\/p>/);
+  const impact = report.impactById[readyId];
+  assert.match(roster, new RegExp(`<button type="button" data-downstream="${readyId}">Downstream \\(${impact.downstreamIds.length}\\)</button>`));
+  assert.match(roster, new RegExp(`<button type="button" data-ready="${readyId}">Ready if done \\(${impact.readyIfDoneIds.length}\\)</button>`));
+  const doneRow = roster.match(new RegExp(`<li[^>]*data-node-id="${doneId}"[^>]*>[\\s\\S]*?</li>`))?.[0];
+  assert.ok(doneRow, 'the terminal row must render');
+  assert.doesNotMatch(doneRow, /data-downstream/);
+  assert.doesNotMatch(doneRow, /data-ready/);
 });
 
 test('every node is readable without WebGL, with its status, age, and reasons', async () => {
@@ -278,107 +279,339 @@ test('escapes hostile item text in both the markup and the inline graph model', 
   assert.ok(html.includes('\\u003c/script>'), 'the graph model must not be able to close its element');
 });
 
-// One node whose prerequisite is terminal: enough for a status the reader hides
-// to take a link with it.
-async function clientGraph() {
+// One node whose prerequisite is terminal: enough for a scope the reader
+// narrows to drop a link with it.
+async function scopeGraphItems() {
   const items = fixtureItems();
   items[1].data.depends_on = [readyId, doneId];
-  const { graph } = await fixtureGraph(items);
-  return graph;
+  return items;
 }
 
-// A hidden node's edges have nowhere to land. Leaving them drawn would show a
-// dependency between things the reader cannot see, which is worse than showing
-// nothing: the filter drops the node, its links, and its label together.
-test('hides every node outside the selected statuses, with the links that touch them', async () => {
+// A node outside the scope takes its edges with it. Leaving them drawn would
+// show a dependency between things the reader cannot see, which is worse than
+// showing nothing.
+test('draws one node with no links for a single-item scope', async () => {
   const { graphClientSource } = await import('../src/report-graph.js');
-  const graph = await clientGraph();
-  const dom = graphDom(graph);
-  runReportClient(graphClientSource(graph), dom);
+  const { graph } = await fixtureGraph();
+  const scope = scopeHarness(graph, { scopeIds: [childId] });
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
 
-  assert.equal(dom.lastData().nodes.length, 5);
-  assert.equal(dom.lastData().links.length, 3);
-
-  dom.only('backlog');
-
-  const data = dom.lastData();
-  assert.deepEqual(data.nodes.map((node) => node.id).sort(), [readyId, blockedId, childId, epicId].sort());
-  assert.equal(data.links.length, 2);
-  assert.ok(
-    data.links.every((link) => link.source !== doneId && link.target !== doneId),
-    'a link to a hidden node is a dependency the reader cannot see',
-  );
-  assert.deepEqual(dom.rosterStatuses(), ['backlog', 'backlog', 'backlog', 'backlog']);
-  assert.equal(dom.nodeCount(), 'Showing 4 of 5 nodes');
-
-  dom.only('done');
-
-  assert.deepEqual(dom.lastData().nodes.map((node) => node.id), [doneId]);
-  assert.equal(dom.lastData().links.length, 0);
-  assert.deepEqual(dom.rosterStatuses(), ['done']);
+  assert.deepEqual(scope.drawnIds(), [childId]);
+  assert.deepEqual(scope.dom.lastData().links, []);
+  assert.deepEqual(scope.rosterIds(), [childId]);
+  assert.equal(scope.dom.nodeCount(), 'Showing 1 of 5 nodes');
 });
 
-test('takes a hidden node off the graph card and out of the label layer', async () => {
+test('takes a node off the graph card and out of the label layer when it leaves the scope', async () => {
   const { graphClientSource } = await import('../src/report-graph.js');
-  const graph = await clientGraph();
-  const dom = graphDom(graph);
-  runReportClient(graphClientSource(graph), dom);
-  const done = dom.lastData().nodes.find((node) => node.id === doneId);
+  const { graph } = await fixtureGraph(await scopeGraphItems());
+  const scope = scopeHarness(graph, {});
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
+  const done = scope.dom.lastData().nodes.find((node) => node.id === doneId);
 
-  dom.hover(done);
+  scope.dom.hover(done);
 
-  assert.equal(dom.card.hidden, false);
+  assert.equal(scope.dom.card.hidden, false);
 
-  dom.only('backlog');
+  scope.setScope([readyId, blockedId, childId, epicId]);
 
-  assert.equal(dom.card.hidden, true, 'the card must not keep describing a node the graph no longer draws');
-  const label = dom.labels().find((node) => node.textContent === '#4');
+  assert.equal(scope.dom.card.hidden, true, 'the card must not keep describing a node the graph no longer draws');
+  const label = scope.dom.labels().find((node) => node.textContent === '#4');
   assert.equal(label.hidden, true);
   assert.equal(label.style.opacity, '0');
 });
 
-// Clearing every status is a legitimate thing to ask for, and the honest answer
-// is an empty graph that says it is empty — not the whole ledger back, and not
-// a stage that silently keeps the last drawing.
-test('empties the graph on Clear, says so, and gives it all back on Select all', async () => {
+// An empty scope is a legitimate thing to ask for, and the honest answer is an
+// empty graph that says it is empty — not the whole ledger back, and not a
+// stage that silently keeps the last drawing.
+test('answers a zero-node scope with the scope empty copy and restores on return', async () => {
   const { graphClientSource } = await import('../src/report-graph.js');
-  const graph = await clientGraph();
-  const dom = graphDom(graph);
-  runReportClient(graphClientSource(graph), dom);
+  const { graph } = await fixtureGraph(await scopeGraphItems());
+  const scope = scopeHarness(graph, {});
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
 
-  assert.equal(dom.emptyState.hidden, true);
+  assert.equal(scope.dom.emptyState.hidden, true);
 
-  dom.clear.dispatch('click');
+  scope.setScope([]);
 
-  assert.equal(dom.statusChip('backlog').checked, false);
-  assert.equal(dom.statusChip('done').checked, false);
-  assert.deepEqual(dom.lastData(), { nodes: [], links: [] });
-  assert.deepEqual(dom.rosterStatuses(), []);
-  assert.equal(dom.nodeCount(), 'Showing 0 of 5 nodes');
-  assert.equal(dom.emptyState.hidden, false);
+  assert.deepEqual(scope.dom.lastData(), { nodes: [], links: [] });
+  assert.deepEqual(scope.rosterIds(), []);
+  assert.equal(scope.dom.nodeCount(), 'Showing 0 of 5 nodes');
+  assert.equal(scope.dom.emptyState.hidden, false);
+  assert.match(scope.dom.emptyState.textContent, /current scope/);
 
-  dom.selectAll.dispatch('click');
+  scope.setScope([readyId]);
 
-  assert.equal(dom.statusChip('backlog').checked, true);
-  assert.equal(dom.statusChip('done').checked, true);
-  assert.equal(dom.lastData().nodes.length, 5);
-  assert.equal(dom.lastData().links.length, 3);
-  assert.equal(dom.nodeCount(), 'Showing 5 of 5 nodes');
-  assert.equal(dom.emptyState.hidden, true);
+  assert.equal(scope.dom.emptyState.hidden, true);
+  assert.deepEqual(scope.drawnIds(), [readyId]);
+  assert.equal(scope.dom.nodeCount(), 'Showing 1 of 5 nodes');
 });
 
-// Without WebGL the roster is the graph, so the same chips have to filter it.
-test('filters the roster and the count where the graph cannot draw at all', async () => {
+// Without WebGL the roster is the graph, so the shared scope still filters it.
+test('filters the roster and the count from scope where the graph cannot draw at all', async () => {
   const { graphClientSource } = await import('../src/report-graph.js');
-  const graph = await clientGraph();
-  const dom = graphDom(graph, { webgl: false });
-  runReportClient(graphClientSource(graph), dom);
+  const { graph } = await fixtureGraph(await scopeGraphItems());
+  const scope = scopeHarness(graph, { webgl: false });
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.setScope([doneId]);
+  scope.reveal();
 
-  assert.equal(dom.stage.hidden, true);
-  assert.equal(dom.notice.hidden, false);
+  assert.equal(scope.dom.stage.hidden, true);
+  assert.equal(scope.dom.notice.hidden, false);
+  assert.deepEqual(scope.rosterIds(), [doneId]);
+  assert.equal(scope.dom.nodeCount(), 'Showing 1 of 5 nodes');
+});
+// T7 drives the graph from the shared report scope instead of its own status
+// chips. The harness stubs window.wowbaggerReport the way reportClientSource
+// installs it and wraps the shared fixture with the hidden Dependencies
+// section and nav node the real artifact carries.
+function scopeHarness(graph, { scopeIds = null, impactById = {}, webgl = true, reducedMotion = false } = {}) {
+  const dom = graphDom(graph, { webgl });
+  let current = (scopeIds ?? graph.nodes.map((node) => node.id)).slice();
+  const listeners = new Set();
+  const calls = { inspect: [], show: [], unsubscribed: 0 };
+  const itemObjects = () => current.map((id) => ({ id }));
+  dom.window.wowbaggerReport = {
+    getScopeItems: itemObjects,
+    subscribeScope: (listener) => {
+      listener(itemObjects());
+      listeners.add(listener);
+      return () => { listeners.delete(listener); calls.unsubscribed += 1; };
+    },
+    inspectItem: (id) => { calls.inspect.push(id); return true; },
+    showItems: (selection) => { calls.show.push(selection); },
+    impactById,
+  };
+  const windowEvents = {};
+  const baseAddEventListener = dom.window.addEventListener;
+  dom.window.addEventListener = (type, listener) => {
+    (windowEvents[type] ??= []).push(listener);
+  };
+  if (reducedMotion) {
+    const baseMatchMedia = dom.window.matchMedia;
+    dom.window.matchMedia = (query) => (
+      query === '(prefers-reduced-motion: reduce)' ? { matches: true } : baseMatchMedia(query)
+    );
+  }
+  const rows = dom.document.querySelectorAll('[data-node-status]');
+  rows.forEach((row, index) => { row.dataset.nodeId = graph.nodes[index].id; });
+  const section = dom.document.createElement('section');
+  section.id = 'section-dependencies';
+  section.hidden = true;
+  const nav = dom.document.createElement('button');
+  nav.id = 'nav-dependencies';
+  dom.document.body.append(section, nav);
+  for (const row of rows) {
+    const id = row.dataset.nodeId;
+    const details = dom.document.createElement('button');
+    details.dataset.inspect = id;
+    details.textContent = 'Details';
+    row.append(details);
+    const entry = impactById[id] ?? {};
+    for (const [key, text] of [
+      ['downstream', `Downstream (${(entry.downstreamIds ?? []).length})`],
+      ['ready', `Ready if done (${(entry.readyIfDoneIds ?? []).length})`],
+    ]) {
+      const ids = key === 'downstream' ? entry.downstreamIds : entry.readyIfDoneIds;
+      if (Array.isArray(ids) && ids.length > 0) {
+        const action = dom.document.createElement('button');
+        action.dataset[key] = id;
+        action.textContent = text;
+        row.append(action);
+      }
+    }
+  }
+  const observers = [];
+  dom.window.MutationObserver = function (callback) {
+    const observer = { callback, observe() {}, disconnect() {} };
+    observers.push(observer);
+    return observer;
+  };
+  function fireObservers() {
+    for (const observer of observers) observer.callback();
+  }
+  return {
+    dom,
+    calls,
+    rows,
+    section,
+    windowEvents,
+    setScope(ids) {
+      current = ids.slice();
+      for (const listener of listeners) listener(itemObjects());
+    },
+    hide() {
+      section.hidden = true;
+      fireObservers();
+    },
+    reveal() {
+      section.hidden = false;
+      fireObservers();
+      nav.dispatch('click');
+    },
+    drawnIds() {
+      return dom.lastData().nodes.map((node) => node.id).sort();
+    },
+    rosterIds() {
+      return rows.filter((row) => !row.hidden).map((row) => row.dataset.nodeId).sort();
+    },
+  };
+}
+test('a scope selection leaves the same scoped ids in graph nodes and roster', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const { graph } = await fixtureGraph();
+  const scope = scopeHarness(graph, {});
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.setScope([blockedId, childId]);
+  scope.reveal();
 
-  dom.only('done');
+  assert.deepEqual(scope.drawnIds(), [blockedId, childId].sort());
+  assert.deepEqual(scope.rosterIds(), [blockedId, childId].sort());
+  const blocked = scope.dom.lastData().nodes.find((node) => node.id === blockedId);
+  assert.equal(blocked.band, 'blocked');
+  assert.ok(
+    blocked.reasons.some((reason) => reason.label.includes('#1')),
+    'the hidden prerequisite stays named instead of turning the item ready',
+  );
+  assert.deepEqual(scope.dom.lastData().links, [], 'a link cannot land on a node outside the scope');
+});
+test('creates no canvas while Dependencies stays hidden, and pauses while hidden', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const { graph } = await fixtureGraph();
+  const scope = scopeHarness(graph, {});
+  let canvases = 0;
+  const realForce = scope.dom.window.ForceGraph3D;
+  scope.dom.window.ForceGraph3D = function (...args) {
+    canvases += 1;
+    return realForce.apply(this, args);
+  };
+  runReportClient(graphClientSource(graph), scope.dom);
 
-  assert.deepEqual(dom.rosterStatuses(), ['done']);
-  assert.equal(dom.nodeCount(), 'Showing 1 of 5 nodes');
+  assert.equal(canvases, 0, 'no canvas while the section is still hidden');
+
+  scope.reveal();
+
+  assert.equal(canvases, 1);
+  assert.deepEqual(scope.drawnIds(), graph.nodes.map((node) => node.id).sort());
+
+  scope.hide();
+  scope.reveal();
+  scope.reveal();
+
+  assert.equal(canvases, 1, 'repeated visits reuse the one canvas');
+  const calls = scope.dom.renderer().calls.map(([name]) => name);
+  assert.ok(calls.includes('pauseAnimation'), 'hiding the section pauses the layout');
+  assert.ok(calls.includes('resumeAnimation'), 'returning to the section resumes it');
+});
+test('graph and roster selections open canonical details while impact actions drill down', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const { report, graph } = await fixtureGraph();
+  const impact = report.impactById[readyId];
+  assert.ok(impact.downstreamIds.length > 0 && impact.readyIfDoneIds.length > 0);
+  const scope = scopeHarness(graph, { impactById: report.impactById });
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
+
+  const ready = scope.dom.lastData().nodes.find((node) => node.id === readyId);
+  scope.dom.renderer().handlers.onNodeClick(ready);
+
+  assert.deepEqual(scope.calls.inspect, [readyId]);
+  assert.deepEqual(
+    scope.drawnIds(),
+    graph.nodes.map((node) => node.id).sort(),
+    'inspecting an item never narrows the scope',
+  );
+
+  const row = scope.rows.find((candidate) => candidate.dataset.nodeId === readyId);
+  row.children.find((child) => child.dataset.inspect !== undefined).dispatch('click');
+
+  assert.deepEqual(scope.calls.inspect, [readyId, readyId]);
+
+  row.children.find((child) => child.dataset.downstream !== undefined).dispatch('click');
+  row.children.find((child) => child.dataset.ready !== undefined).dispatch('click');
+
+  assert.equal(scope.calls.show.length, 2);
+  assert.deepEqual(scope.calls.show[0].itemIds.slice().sort(), impact.downstreamIds.slice().sort());
+  assert.deepEqual(scope.calls.show[1].itemIds.slice().sort(), impact.readyIfDoneIds.slice().sort());
+  assert.match(scope.calls.show[0].label, /Downstream/);
+  assert.match(scope.calls.show[1].label, /Ready if/);
+  assert.notEqual(scope.calls.show[0].label, scope.calls.show[1].label);
+  assert.match(scope.calls.show[0].label, new RegExp(String(impact.downstreamIds.length)));
+  assert.match(scope.calls.show[1].label, new RegExp(String(impact.readyIfDoneIds.length)));
+});
+test('keeps a terminal prerequisite drawable in scope without changing readiness', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const { graph } = await fixtureGraph(await scopeGraphItems());
+  const scope = scopeHarness(graph, { scopeIds: [blockedId, doneId] });
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
+
+  assert.deepEqual(scope.drawnIds(), [blockedId, doneId].sort());
+  assert.deepEqual(scope.dom.lastData().links, [{ source: doneId, target: blockedId, kind: 'depends-on' }]);
+  const blocked = scope.dom.lastData().nodes.find((node) => node.id === blockedId);
+  assert.equal(blocked.band, 'blocked');
+
+  scope.setScope([blockedId]);
+
+  assert.deepEqual(scope.drawnIds(), [blockedId]);
+  assert.deepEqual(scope.dom.lastData().links, [], 'the cross-scope edge leaves with its hidden end');
+  assert.ok(
+    scope.dom.lastData().nodes.find((node) => node.id === blockedId).reasons.some((reason) => reason.label.includes('#1')),
+    'the omitted reference stays named without becoming a node',
+  );
+});
+
+test('waits for measurable dimensions before the first sizing', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const { graph } = await fixtureGraph();
+  const scope = scopeHarness(graph, {});
+  let canvases = 0;
+  const realForce = scope.dom.window.ForceGraph3D;
+  scope.dom.window.ForceGraph3D = function (...args) {
+    canvases += 1;
+    return realForce.apply(this, args);
+  };
+  const mount = scope.dom.document.getElementById('graph-canvas');
+  mount.clientWidth = 0;
+  mount.clientHeight = 0;
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
+
+  assert.equal(canvases, 0, 'a hidden-sized container cannot be sized yet');
+
+  mount.clientWidth = 800;
+  mount.clientHeight = 600;
+  scope.reveal();
+
+  assert.equal(canvases, 1);
+  assert.deepEqual(scope.drawnIds(), graph.nodes.map((node) => node.id).sort());
+});
+
+test('releases the layout and the scope subscription when the document is disposed', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const { graph } = await fixtureGraph();
+  const scope = scopeHarness(graph, {});
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
+
+  assert.ok((scope.windowEvents.pagehide ?? []).length > 0, 'the runtime must listen for disposal');
+  for (const listener of scope.windowEvents.pagehide) listener();
+
+  assert.equal(scope.calls.unsubscribed, 1);
+  const calls = scope.dom.renderer().calls.map(([name]) => name);
+  assert.ok(calls.includes('_destructor'), 'the force layout is released');
+});
+
+test('settles the layout without animation when motion is not wanted', async () => {
+  const { graphClientSource } = await import('../src/report-graph.js');
+  const { graph } = await fixtureGraph();
+  const scope = scopeHarness(graph, { reducedMotion: true });
+  runReportClient(graphClientSource(graph), scope.dom);
+  scope.reveal();
+
+  const cooldowns = scope.dom.renderer().calls.filter(([name]) => name === 'cooldownTicks');
+  assert.deepEqual(cooldowns, [['cooldownTicks', 0]]);
 });
