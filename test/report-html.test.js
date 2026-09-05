@@ -1245,15 +1245,25 @@ test('offers facet groups through a collapsed expandable control', async () => {
   assert.match(facets, /<fieldset class="facet-group" data-group="readiness">/);
 });
 
-test('uses a desktop split at 1100px with inline mobile details and scoped print', async () => {
+test('offers section anchors to a reader without scripting', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
 
-  assert.match(html, /@media\(min-width:1100px\)/);
-  assert.match(html, /#workspace-split/);
-  assert.match(html, /@media print/);
-  assert.match(html, /<noscript>.*href="#section-items"/s);
-  assert.doesNotMatch(html, /\.controls\{position:static/);
+  assert.match(html, /<noscript>.*href="#section-items".*href="#section-flow".*href="#section-dependencies"/s);
+});
+
+// Narrow screens keep search and quick views in the sticky strip and fold the
+// display controls behind a toggle; wide screens show them outright.
+test('folds display controls behind a toggle on narrow screens only', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const narrow = revealDom();
+  runReportClient(reportClientSource(), narrow);
+  const wide = revealDom();
+  wide.wideScreen();
+  runReportClient(reportClientSource(), wide);
+
+  assert.equal(narrow.document.getElementById('display-expand').open, false);
+  assert.equal(wide.document.getElementById('display-expand').open, true);
 });
 
 test('collapses only visible details and leaves hidden bodies alone', async () => {

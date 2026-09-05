@@ -244,6 +244,7 @@ export function reportDom({ items, fieldName = 'area' }) {
     showHistory,
     element('button', { id: 'expand-all' }),
     element('button', { id: 'collapse-all' }),
+    element('details', { id: 'display-expand' }),
   );
   // Five quick views filter the same scoped population without changing scope.
   // Work next preserves rank order and reasons; the others filter honestly.
@@ -349,7 +350,7 @@ export function reportDom({ items, fieldName = 'area' }) {
   const reduced = new Set();
   const window = {
     renderMarkdown: (markdown) => `<p>${markdown}</p>`,
-    matchMedia: (query) => ({ matches: reduced.has(query) }),
+    matchMedia: (query) => ({ matches: reduced.has(query), addEventListener: () => undefined }),
     getComputedStyle: (node) => node.computed,
   };
 
@@ -358,6 +359,9 @@ export function reportDom({ items, fieldName = 'area' }) {
     window,
     prefersReducedMotion() {
       reduced.add('(prefers-reduced-motion: reduce)');
+    },
+    wideScreen() {
+      reduced.add('(min-width: 1100px)');
     },
     card: (id) => document.getElementById(id),
     link: (id) => body.querySelector(`[data-reveal="${id}"]`),
