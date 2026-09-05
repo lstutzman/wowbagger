@@ -5,18 +5,23 @@ number: 209
 title: "Reject prospective adoption revision cycles"
 kind: task
 priority: 10
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 25 item 1476 cycle guard"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M0N3KM316P7MBJTA1A5X29J4, wb_01M0MY9NE61SATX6EHFZS99WH0]
+related: [ wb_01M0N3KM316P7MBJTA1A5X29J4, wb_01M0MY9NE61SATX6EHFZS99WH0 ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept prospective adoption cycle prevention."
+    rationale: "Directional adoption history must reject new cycles without rewriting the accepted #1476 history."
 ---
 
 ## Problem
