@@ -5,9 +5,10 @@ number: 198
 title: "Connect Dependencies graph and roster to shared report scope"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:50.405Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Drove the dependency graph and roster from the shared report scope and controller."
+    rationale: "Commit 5a3eff4. Graph suite 26/26 plus graph CLI, vendor, model, and ready-contract suites pass. Real Chrome on the 40-item artifact: zero canvases until Dependencies opened, one canvas after, still one after three section switches; roster inspect returned to Items with the detail open and scope intact; 40 nodes and labels drawn. Main fixed an unclosed Items section that had nested Dependencies inside it and cached the WebGL probe."
 ---
 
 ## Assignment
