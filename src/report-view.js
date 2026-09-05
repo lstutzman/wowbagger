@@ -64,6 +64,18 @@ export function normalizeReportViews(value, fieldMappings) {
 // configured `"1"` are different selections. An item missing the mapped field
 // matches no selected value for that field. Values inside one group are
 // alternatives; every present group must match.
+
+// One accessor for every consumer of a projected field value: absent values
+// carry no candidates, the tags array carries each member, and a scalar
+// carries itself. Named matching below and later selection code share it so
+// one item with two tags answers either tag filter.
+export function reportFieldValues(value) {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  return Array.isArray(value) ? value : [value];
+}
+
 export function matchesReportView(item, filters) {
   if (filters.readiness !== undefined && !filters.readiness.includes(item.readiness.state)) {
     return false;
@@ -76,8 +88,9 @@ export function matchesReportView(item, filters) {
   }
   if (filters.fields !== undefined) {
     for (const [name, values] of Object.entries(filters.fields)) {
+      const carried = reportFieldValues(item.fields[name]);
       if (!Object.prototype.hasOwnProperty.call(item.fields, name)
-        || !values.some((candidate) => isSameScalar(candidate, item.fields[name]))) {
+        || !values.some((candidate) => carried.some((entry) => isSameScalar(candidate, entry)))) {
         return false;
       }
     }

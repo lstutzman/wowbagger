@@ -38,6 +38,7 @@ const FIELD_KEYS = new Set([
   'severity',
   'confidence',
   'security',
+  'tags',
   'priority_base',
   'priority_component',
   'priority_impact',
@@ -108,11 +109,13 @@ export function resolvePointer(value, pointer) {
 export function buildReportModel(items, config, asOf) {
   const view = config.view ?? null;
   const readinessById = projectReadiness(items, asOf);
-  const allProjected = items.map((item) => projectItem(item, config.fields, readinessById.get(item.data.id)));
+  const projections = items.map((item) => projectItem(item, config.fields, readinessById.get(item.data.id)));
+  const allProjected = projections.map((projection) => projection.item);
   const projected = view === null
     ? allProjected
     : allProjected.filter((item) => matchesReportView(item, view.filters));
   const retainedIds = new Set(projected.map((item) => item.id));
+  const fieldCoverage = buildFieldCoverage(projections, config.fields, retainedIds);
   const reportItems = projected
     .filter((item) => item.terminalDate === null)
     .sort(compareProjectedItems);
@@ -148,6 +151,7 @@ export function buildReportModel(items, config, asOf) {
     unknownClasses: collectUnknownClasses(reportItems),
     evidence,
     attention: buildAttention(reportItems, terminalItems, evidence.cycleTime, asOf),
+    fieldCoverage,
     stats: {
       total: projected.length,
       open: reportItems.length,
@@ -181,32 +185,103 @@ export function buildReportModel(items, config, asOf) {
 function projectItem(item, fieldMappings, readiness) {
   const { data } = item;
   const fields = {};
+  const invalidFields = [];
   for (const [slot, pointer] of Object.entries(fieldMappings)) {
-    const value = resolvePointer(data, pointer);
-    if (value !== null && ['string', 'number', 'boolean'].includes(typeof value)) {
-      fields[slot] = value;
+    const outcome = projectFieldValue(slot, resolvePointer(data, pointer));
+    if (outcome.state === 'present') {
+      fields[slot] = outcome.value;
+    } else if (outcome.state === 'invalid') {
+      invalidFields.push(slot);
     }
   }
 
-
   return {
-    id: data.id,
-    number: data.number ?? null,
-    title: data.title,
-    kind: data.kind,
-    status: data.status,
-    created: data.created,
-    updated: data.updated,
-    terminalDate: terminalDate(data),
-    priority: data.priority ?? null,
-    parent: data.parent ?? null,
-    dependsOn: data.depends_on ?? [],
-    related: data.related ?? [],
-    decisions: data.decisions ?? [],
-    body: item.body,
-    readiness,
-    fields,
+    item: {
+      id: data.id,
+      number: data.number ?? null,
+      title: data.title,
+      kind: data.kind,
+      status: data.status,
+      created: data.created,
+      updated: data.updated,
+      terminalDate: terminalDate(data),
+      priority: data.priority ?? null,
+      parent: data.parent ?? null,
+      dependsOn: data.depends_on ?? [],
+      related: data.related ?? [],
+      decisions: data.decisions ?? [],
+      body: item.body,
+      readiness,
+      fields,
+    },
+    invalidFields,
   };
+}
+
+// A resolved mapping is present, missing, or invalid, never guessed: absent
+// pointers and nulls are missing, a rejected value is invalid and stays out
+// of `fields` so it can never become a valid classification.
+function projectFieldValue(slot, value) {
+  if (value === undefined || value === null) {
+    return { state: 'missing', value: undefined };
+  }
+  if (slot === 'tags') {
+    const normalized = normalizeTags(value);
+    if (normalized === null) {
+      return { state: 'invalid', value: undefined };
+    }
+    return normalized.length === 0
+      ? { state: 'missing', value: undefined }
+      : { state: 'present', value: normalized };
+  }
+  return ['string', 'number', 'boolean'].includes(typeof value)
+    ? { state: 'present', value }
+    : { state: 'invalid', value: undefined };
+}
+
+// Tags are the one multi-value slot. A scalar source reads as a one-tag set;
+// an array must hold only nonempty strings and is taken whole, never
+// partially. Exact duplicates collapse and values sort deterministically. No
+// comma splitting, lowercasing, or object coercion.
+function normalizeTags(value) {
+  const source = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(source)) {
+    return null;
+  }
+  if (source.length === 0) {
+    return [];
+  }
+  if (!source.every((entry) => typeof entry === 'string' && entry.trim().length > 0)) {
+    return null;
+  }
+  return [...new Set(source)].sort();
+}
+
+// Coverage counts the retained named-report population, open and terminal, in
+// field-name order. Every configured field appears with `mapped: true`; area
+// and tags appear with `mapped: false` when not configured, with every
+// retained item missing. Counts never print rejected raw values.
+function buildFieldCoverage(projections, fieldMappings, retainedIds) {
+  const names = [...new Set([...Object.keys(fieldMappings), 'area', 'tags'])].sort();
+  return names.map((name) => {
+    const mapped = Object.prototype.hasOwnProperty.call(fieldMappings, name);
+    let present = 0;
+    let missing = 0;
+    let invalid = 0;
+    for (const projection of projections) {
+      if (!retainedIds.has(projection.item.id)) {
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(projection.item.fields, name)) {
+        present += 1;
+      } else if (projection.invalidFields.includes(name)) {
+        invalid += 1;
+      } else {
+        missing += 1;
+      }
+    }
+    return { name, mapped, present, missing, invalid };
+  });
 }
 export function buildSwarmBatches(items, eligibleComplexities) {
   const pool = items.filter((item) => item.readiness.state === 'ready'

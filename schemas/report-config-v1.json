@@ -45,6 +45,10 @@
           "type": "string",
           "pattern": "^(/([^/~]|~[01])*)*$"
         },
+        "tags": {
+          "type": "string",
+          "pattern": "^(/([^/~]|~[01])*)*$"
+        },
         "class": {
           "type": "string",
           "pattern": "^(/([^/~]|~[01])*)*$"

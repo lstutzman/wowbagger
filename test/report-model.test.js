@@ -393,3 +393,77 @@ test('view readiness stays a fact about the complete ledger', async () => {
   assert.equal(model.itemNumbers[satisfied], 20);
   assert.equal(model.itemNumbers[unsatisfied], 21);
 });
+
+// Tags are the one multi-value mapped field: a scalar source reads as a
+// one-tag set, exact duplicates collapse, and values sort deterministically.
+// A mixed-type array is rejected whole, never partially accepted, and counts
+// as invalid coverage instead of silently becoming a valid classification.
+test('normalizes mapped tags and counts invalid tag metadata as invalid', async () => {
+  const report = await import('../src/report.js');
+  const model = report.buildReportModel([
+    item('wb_a', { data: { area: 'Payments', tags: ['regression', 'customer-visible', 'regression'] } }),
+    item('wb_b', { data: { area: 'Accounts', tags: ['regression', 4] } }),
+  ], {
+    reportVersion: 1, repository: { name: 'Example', logo: null },
+    title: 'Example', outputPath: '/tmp/example.html',
+    fields: { area: '/data/area', tags: '/data/tags' }, swarm: null,
+  }, '2026-09-05');
+  assert.deepEqual(model.items.find(x => x.id === 'wb_a').fields.tags,
+    ['customer-visible', 'regression']);
+  assert.equal(model.fieldCoverage.find(x => x.name === 'tags').invalid, 1);
+});
+
+// A named tag filter uses any-member matching: an item carrying two tags
+// answers either tag, while an item carrying neither stays out.
+test('a named tag filter matches either member of a tag array', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+  const ledger = [
+    item('wb_multi', { number: 30, tags: ['regression', 'customer-visible'] }),
+    item('wb_other', { number: 31, tags: ['docs'] }),
+  ];
+  const configFor = (tags) => viewConfig(
+    { fields: { tags } },
+    { fields: { tags: '/tags' } },
+  );
+
+  const first = buildReportModel(ledger, configFor(['customer-visible']), '2026-08-14');
+  const second = buildReportModel(ledger, configFor(['regression']), '2026-08-14');
+  const neither = buildReportModel(ledger, configFor(['security']), '2026-08-14');
+
+  assert.deepEqual(first.items.map(({ id }) => id), ['wb_multi']);
+  assert.deepEqual(second.items.map(({ id }) => id), ['wb_multi']);
+  assert.deepEqual(neither.items, []);
+});
+
+// Missing metadata is never a literal value: a tag filter for `Unclassified`
+// matches only an item really carrying that tag, never an item with no tags.
+test('a literal Unclassified tag matches while missing tags match nothing', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+  const ledger = [
+    item('wb_literal', { number: 40, tags: ['Unclassified'] }),
+    item('wb_missing', { number: 41 }),
+  ];
+  const fields = { tags: '/tags' };
+  const base = { reportVersion: 1, repository: { name: 'Example', logo: null } };
+
+  const named = buildReportModel(
+    ledger,
+    viewConfig({ fields: { tags: ['Unclassified'] } }, { fields }),
+    '2026-08-14',
+  );
+  const unfiltered = buildReportModel(
+    ledger,
+    { ...base, title: 'Example', outputPath: '/tmp/example.html', fields, swarm: null },
+    '2026-08-14',
+  );
+
+  assert.deepEqual(named.items.map(({ id }) => id), ['wb_literal']);
+  // Coverage counts the retained population: the view kept only the literal
+  // carrier, while the unfiltered report counts the missing item as missing.
+  assert.deepEqual(named.fieldCoverage.find((entry) => entry.name === 'tags'), {
+    name: 'tags', mapped: true, present: 1, missing: 0, invalid: 0,
+  });
+  assert.deepEqual(unfiltered.fieldCoverage.find((entry) => entry.name === 'tags'), {
+    name: 'tags', mapped: true, present: 1, missing: 1, invalid: 0,
+  });
+});

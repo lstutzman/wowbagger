@@ -301,6 +301,29 @@ test('accepts class-of-service and due-date field mappings', async () => {
   });
 });
 
+test('accepts a tags field mapping with a version 2 tag filter', async () => {
+  await withTemporaryLedger(async (ledger) => {
+    await writeConfig(ledger, validConfig({
+      report_version: 2,
+      output: '../../ledger-report.html',
+      fields: { area: '/area', tags: '/tags' },
+      views: {
+        regression: {
+          title: 'Regression work',
+          output: '../../regression.html',
+          filters: { fields: { tags: ['regression'] } },
+        },
+      },
+    }));
+    const { loadReportConfig } = await import('../src/report.js');
+
+    const config = await loadReportConfig(ledger, undefined, 'regression');
+
+    assert.deepEqual(config.fields, { area: '/area', tags: '/tags' });
+    assert.deepEqual(config.view.filters, { fields: { tags: ['regression'] } });
+  });
+});
+
 test('normalizes a selected version 2 report view', async () => {
   await withTemporaryLedger(async (ledger) => {
     await writeConfig(ledger, {

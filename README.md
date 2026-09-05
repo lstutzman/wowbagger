@@ -920,15 +920,29 @@ relative `--out` overrides resolve from the caller's working directory.
     "complexity": "/complexity",
     "rank": "/priority_rank",
     "class": "/class",
-    "due": "/due"
+    "due": "/due",
+    "tags": "/tags"
   },
   "swarm": { "eligible_complexities": ["small", "medium"] }
 }
 ```
-
 `repository.logo`, `fields`, and `swarm` are optional. Field values resolve
 from parsed frontmatter with RFC 6901 JSON Pointers. A swarm requires mapped
 `area` and `complexity` fields. The report fetches nothing at view time.
+
+`tags` is the one multi-value mapped field. It accepts a nonempty string or an
+array holding only nonempty strings: a scalar reads as a one-tag set, exact
+duplicates collapse, and values sort deterministically. The mapping never
+splits commas, lowercases values, coerces objects, or partially accepts a
+mixed-type array. An empty array counts as missing; any other rejected value
+is omitted from the item and counted as invalid metadata. `area` stays scalar.
+The model carries `fieldCoverage`, one entry per configured field plus `area`
+and `tags` when unmapped, ordered by field name with `present`, `missing`, and
+`invalid` counts over the retained report population. An unmapped field counts
+every retained item as missing, and a visible missing-mapping notice tells an
+unconfigured mapping apart from missing item values. Missing metadata never
+matches a filter value: there is no `Unclassified` bucket, so a filter for a
+literal `Unclassified` tag matches only items really carrying that tag.
 
 The report is a **sequencing dashboard**, not a state snapshot. It opens with
 **Work next**: the ready set in a recommended order, each entry carrying the
@@ -1085,9 +1099,10 @@ A `fields` key must also be a configured report field. Each field filter is a
 non-empty array of unique JSON strings, finite numbers, or booleans, and matching
 preserves JSON scalar type and value: stringification is not equality, so a
 mapped `2` does not answer a filter for `"2"`. An item carrying no mapped value
-for a field matches no value selected for that field. No title-text inference,
-regular expression, arbitrary JSON pointer, or body search belongs in a view
-filter.
+for a field matches no value selected for that field. A `tags` filter uses
+any-member matching, so one item carrying two tags answers either tag. No
+title-text inference, regular expression, arbitrary JSON pointer, or body
+search belongs in a view filter.
 
 Wowbagger validates the complete ledger and computes readiness against the
 complete ledger before it filters, so excluding a blocker never makes blocked
