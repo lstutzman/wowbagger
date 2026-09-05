@@ -5,9 +5,10 @@ number: 199
 title: "Verify report redesign with reproducible offline browser artifacts"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:53.634Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Verify the decision-focused report redesign with reproducible synthetic browser evidence."
+    rationale: "Synthetic artifacts /private/tmp/wowbagger-report-execution-0txwpwi6/workspace.html, workspace-large.html, and determinism.html exercise the real offline report pipeline; workspace.html and determinism.html share SHA-256 prefix c251deaef267c245. Browser evidence is captured at workspace-390.png, workspace-1440.png, workspace-390-display.png, and workspace-deps-2.png. Three isolated Chromium runs over 1,744 items reached usable view in 409-654 ms and measured 117-133 ms filter p95 across 20 fixed queries, within the 3-second and 150-ms budgets. Weekly, aging, and cumulative-accepted drill-downs returned exact contributing items; graph initialization remained single-instance; roster inspection returned to Items with shared scope and details intact; no browser errors occurred. Focused documentation tests passed 44/44; the normal suite passed 1,972/1,972; the pending/throw deprecation suite passed 1,972/1,972; adapter implementation reported pass for claude-code; ledger validation returned valid true with no errors."
 ---
 
 ## Assignment
