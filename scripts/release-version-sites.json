@@ -318,7 +318,7 @@
       "kind": "anchored-text",
       "anchor": "{version}",
       "classification": "retained",
-      "occurrences": 6,
+      "occurrences": 7,
       "applies_to_version": "0.5.0-beta.0"
     },
     {
