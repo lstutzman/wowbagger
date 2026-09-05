@@ -5,15 +5,20 @@ number: 195
 title: "Replace duplicated report lists with one item workspace"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:34.854Z"
-depends_on: [wb_01M1RWN4P3CVAAEHP6T7B2WRE7, wb_01M1RWN4GWEWBEPTPM9HF2EV77]
+depends_on: [ wb_01M1RWN4P3CVAAEHP6T7B2WRE7, wb_01M1RWN4GWEWBEPTPM9HF2EV77 ]
 related: []
 parent: wb_01M1RWN4BWJZX6RCCZ9Z6HKYXA
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept the approved report redesign work."
+    rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
 ---
 
 ## Assignment
