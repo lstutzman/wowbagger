@@ -365,6 +365,17 @@ export function cutRelease({
 
   const updates = new Map(plan.updates);
   updates.set(CHANGELOG_PATH, rewritten.text);
+  const readme = updates.get('README.md');
+  if (readme !== undefined) {
+    const channel = publicationTag(version);
+    updates.set(
+      'README.md',
+      readme.replace(
+        /npm install -g wowbagger@(?:latest|next)([ \t]+# public npm registry)/g,
+        `npm install -g wowbagger@${channel}$1`,
+      ),
+    );
+  }
 
   const planned = new Map(files);
   for (const [file, text] of updates) planned.set(file, text);
