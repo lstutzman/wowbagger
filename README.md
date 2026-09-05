@@ -50,11 +50,12 @@ agent to use those guarantees instead of hand-editing your Markdown.
 > verification, and publication finalization coordinate cooperating writers
 > without pretending to be an exclusive dispatch lock.
 >
-> `report` is a self-contained sequencing dashboard: **Work next**, **Attention**,
-> facet filters, inline evidence, terminal history, area-diverse batches, and a
-> 3D dependency graph. Version 2 report configurations add named custom views
-> whose statistics, readiness, attention, evidence, graph, and drill-down all
-> describe one filtered subset. Reports remain derived output, not mirrored
+> `report` is a self-contained decision workspace: one scoped item browser with
+> **Work next** and other quick views, an area/status matrix, scoped attention
+> actions, dependency impact, interactive Flow charts, and a 3D dependency
+> graph that all share one scope. Version 2 report configurations add named
+> custom views whose statistics, readiness, attention, flow, graph, and impact
+> all describe one filtered subset. Reports remain derived output, not mirrored
 > ledger state.
 >
 > The core ships Claude Code, Codex, and OpenCode adapter packages on one shared
@@ -944,52 +945,84 @@ unconfigured mapping apart from missing item values. Missing metadata never
 matches a filter value: there is no `Unclassified` bucket, so a filter for a
 literal `Unclassified` tag matches only items really carrying that tag.
 
-The report is a **sequencing dashboard**, not a state snapshot. It opens with
-**Work next**: the ready set in a recommended order, each entry carrying the
-factors that placed it. Below it sit **Attention** (blocked work naming its
-blockers, the oldest open work, and started work past this ledger's own
-85th-percentile cycle time), then the **evidence layer**, then the **ledger
-graph**. State counts, item cards, filters, grouping, detail levels, terminal
-history, and area-diverse ready batches all remain, demoted below that decision
-surface.
+The report is a **decision-focused workspace**, not a state snapshot. It has
+three sections behind accessible view navigation: **Items** (the default),
+**Flow**, and **Dependencies**. Only the selected section is visible when
+scripting runs; without scripting, every section stays readable through its
+anchor and native `details` elements, and the artifact states its fixed scope.
 
-The drill-down filters are **facet groups**: Readiness, Status, Kind, and one
-group for every configured mapped field, each a fieldset of checkbox chips.
-Values inside a group are alternatives and groups narrow each other, so
-`ready` or `blocked` in Readiness plus `bug` in Class means ready-or-blocked
-bugs; the search box is one more condition on the same answer. Every chip
-carries the count it would leave, measured against the search and the other
-groups but never against its own, so two selections in one group cannot make
-their siblings read zero. The result count states how much of the open set is
-showing, and **Clear filters** gives every selection back. A Work next or
-Attention row still reaches its card: opening one clears the facets and the
-search first, because a row that names an item promises the item can be seen.
+Items opens with the state counts, then a sticky control strip: search, five
+quick views (**Work next**, **In progress**, **Blocked**, **Needs triage**, and
+**All open**), and the display controls (grouping, sorting, Basic/Standard/
+Detailed, Show history, Expand all, Collapse all). Below 1100px the display
+controls fold behind a **Display** toggle so search and quick views stay in
+reach. Search and the facet groups form the **scope**; the scope narrows the
+summaries, Flow, and Dependencies alike. Quick views and Show history change
+only the list. Work next keeps its recommended order and prints the reasons
+beside each row; any other sort presents itself as that sort.
 
-The evidence layer is inline SVG, drawn at generation time and embedded in the
-file: an aging heatmap, weekly arrivals against completions, throughput with a
-four-week mean, a cumulative flow area, accept-to-complete cycle time, and a
-Monte Carlo forecast as 50, 85, and 95 percent bands. Each chart carries
-`role="img"` and an aria-label that states its finding in words, so the evidence
-survives a screen reader and a printout.
+There is one list and one canonical detail per retained item. Desktop widths
+use a list/detail split; narrower widths show the selected detail inline.
+Opening a detail never clears the search, the facets, or the list position, and
+a detail opened from Flow or Dependencies returns to Items with the scope
+intact. Expand all acts on visible rows only.
+
+The **filters** are facet groups: Readiness, Status, Kind, Priority, and one
+group for every configured mapped field, each a fieldset of checkbox chips
+behind a collapsed **Filters** control. Values inside a group are alternatives
+and groups narrow each other; the search box is one more condition on the same
+answer. Every chip carries the count it would leave, measured against the
+search and the other groups but never against its own. Missing metadata is its
+own **Missing** chip, distinct from a literal `Unclassified` value. The result
+count states how much of the retained set is showing, and **Clear filters**
+gives every selection back.
+
+Above the list sit scoped summaries that open exact contributing items through
+a labelled drilldown pill: attention actions (in progress, blocked, needs
+triage, oldest, and started work past this ledger's own 85th-percentile cycle
+time), an **area/status matrix** with count and blocked count per cell, and
+**Scoped members of existing batches**, which intersects the area-diverse
+batches with the scoped ready set and omits empty batches. Each item detail
+states its **downstream reach** (transitive dependents in the report) and,
+separately, the items that become **ready if done**; neither alters core
+readiness or the recommended order.
+
+### Flow
+
+Flow recomputes from the scoped open and terminal population in the browser:
+cumulative flow, weekly arrivals against closures with done counted
+separately, throughput with a four-week mean, current aging by status,
+acceptance-to-completion samples, and the closure forecast. Inclusive **From**
+and **To** controls default to the twelve-week window; a start after the end,
+or an end after the report date, is refused with a visible error while the last
+valid charts stay. Weekly buckets, aging cells, completion samples, and
+cumulative date/band selections each drill into the exact contributing items,
+and the accessible tables offer the same actions. The forecast is computed only
+when Flow first opens and cached by cohort and range. Missing acceptance history
+is stated as reconstruction uncertainty; an item killed straight from triage is
+complete history, not a gap. The fixed server-rendered charts remain for
+readers without scripting, each with `role="img"` and an aria-label that states
+its finding in words.
 
 ### The ledger graph
 
-Below the evidence layer the report draws the whole ledger as a force-directed
-3D graph. Every item is a node, labelled `#N`, coloured by readiness for open
-items and by terminal status for closed ones, and sized by the same transitive
-unblocking leverage the recommended order uses. Edges run from a prerequisite
-or a parent to the item it releases: a `depends_on` edge is straight and
-arrowed, a `parent` edge is curved and unarrowed. Hovering or clicking a node
-opens a card with its number, title, status, age, leverage, and the same
-reasons line the ranked list prints for it.
+Dependencies draws the scoped items as a force-directed 3D graph. Every item is
+a node, labelled `#N`, coloured by readiness for open items and by terminal
+status for closed ones, and sized by the same transitive unblocking leverage the
+recommended order uses. Edges run from a prerequisite or a parent to the item
+it releases: a `depends_on` edge is straight and arrowed, a `parent` edge is
+curved and unarrowed. Hovering a node opens a card with its number, title,
+status, age, leverage, and reasons; clicking it, or a roster row, opens the
+canonical detail in Items. Downstream and ready-if-done actions on the roster
+drill into the same sets the detail names.
 
-Above the stage sits one chip group of the lifecycle statuses the ledger holds,
-all selected, with **Select all** and **Clear**. Deselecting a status drops its
-nodes, every link that touched one of them, and their labels together, then
-reheats the layout in place: nothing is reloaded and the ledger is never
-touched. The roster and the node count follow the same selection, and clearing
-every status draws an empty graph that says it is empty rather than quietly
-showing the last one.
+The graph has no filter of its own: it follows the shared scope, so a scope
+change drops nodes, every link that touched one of them, and their labels
+together, then reheats the layout in place. A hidden blocker never turns a
+retained item ready, because readiness is projected over the complete ledger
+before any view narrows it. The graph starts only when Dependencies first
+opens, pauses while another section is shown, and an empty scope draws an
+empty graph that says so.
 
 The renderer is [`3d-force-graph`](https://github.com/vasturiano/3d-force-graph)
 over Three.js, vendored into `vendor/3d-force-graph/` at a pinned version
@@ -1032,9 +1065,10 @@ weight and is shown as written.
 ### Named custom report views
 
 A named custom view is a second self-contained report generated from the same
-complete ledger. Every section of it — statistics, **Work next**, **Attention**,
-the evidence layer, the graph, the open-item drill-down, terminal history, and
-the swarm batches — describes one configured subset, so the file is honest to
+complete ledger. Every section of it — statistics, **Work next** and the other
+quick views, the **Attention** summaries and area/status matrix, dependency
+impact, Flow, the graph, the drill-down pill, terminal history, and the
+swarm batches — describes one configured subset, so the file is honest to
 share as a scoped report. Excluded items are absent from the bytes rather than
 hidden by a stylesheet. The base report stays available and unchanged.
 

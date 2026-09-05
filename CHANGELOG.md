@@ -7,6 +7,56 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+- **The report is one decision-focused workspace.** Items, Flow, and
+  Dependencies sit behind accessible view navigation; only the selected section
+  shows, and a reader without scripting keeps every section through anchors and
+  native `details`. The duplicated Work next and Attention lists are gone: one
+  canonical list carries five quick views (Work next, In progress, Blocked,
+  Needs triage, All open), one canonical detail per retained item, a desktop
+  list/detail split, and inline details below 1100px. Search plus facet groups
+  are the shared scope for the summaries, Flow, and the graph; quick views and
+  Show history change only the list. Opening a detail no longer clears the
+  search or facets, and a detail opened from Flow or Dependencies returns to
+  Items with the scope intact. Missing metadata is its own `Missing` chip,
+  distinct from a literal `Unclassified` value, and `tags` is projected as a
+  multi-value mapped field with per-field coverage counts.
+- **Concentrations and blockers lead to exact items.** Scoped attention
+  actions, an area/status matrix with count and blocked count per cell, and
+  scoped members of the existing area-diverse batches each open a labelled
+  drilldown of their contributing items. Item details state downstream reach
+  and, separately, the items that become ready if done, derived once at
+  generation from the complete ledger and exposed to the browser as an
+  immutable `impactById`; excluded named-view items never enter it. Core
+  readiness and the recommended order are unchanged.
+- **Flow is scoped and interactive.** Flow recomputes in the browser from the
+  scoped open and terminal population with inclusive From/To range controls
+  that refuse an invalid range visibly while keeping the last valid charts.
+  Weekly buckets, aging cells, completion samples, and cumulative date/band
+  selections drill into exact contributing items, including now-closed items
+  accepted on the selected date. Closures and done are named separately, the
+  forecast is computed only when Flow first opens, and an item killed straight
+  from triage no longer counts as missing acceptance history.
+- **The graph follows the shared scope.** The graph-only status filter is
+  removed; nodes, induced links, labels, and the roster follow the report
+  scope, node and roster selections open the canonical detail, and downstream
+  and ready-if-done actions drill into the same sets the detail names. The
+  graph starts only when Dependencies first opens, pauses while hidden, and
+  probes WebGL once. The legend, the WebGL-less roster, reduced motion, the
+  vendored bundle pin, and the no-fetch content security policy are unchanged.
+- `scripts/report-design-demo.js` publishes a deterministic, explicitly
+  synthetic report through the real pipeline for browser verification.
+
+The alpha.14 hard cutover remains the baseline: `claim-store-unavailable`
+answers **The durable claim store is unavailable.** with
+`claim-store-unreadable`; upgrade every writer before the first alpha.14 create.
+There is no automatic migration or mixed-version grace period. There is no
+batch mutation. The create-then-commit loop, implemented most briefly as serial
+`create --auto-commit`, remains the supported bulk path. Ledger item #186 records the
+permanent no-batch decision, and item #182 owns existing duplicate numbers.
+The fence adds no new Git roster or history
+traversal and costs two extra fsync'd journal appends within the 65,536-entry
+limit.
+
 ## 0.5.0-beta.0 - 2026-08-30
 
 - Promote Wowbagger from alpha to beta while keeping `next` as the documented
