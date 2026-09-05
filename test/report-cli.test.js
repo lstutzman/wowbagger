@@ -495,7 +495,8 @@ test('report renders an empty ledger without charts and without errors', async (
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
     const html = await readFile(output, 'utf8');
-    assert.doesNotMatch(html, /data-testid="chart-/);
+    // The chart runtime is inlined as script source; only rendered markup counts.
+    assert.doesNotMatch(html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''), /data-testid="chart-/);
   });
 });
 

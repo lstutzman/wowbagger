@@ -330,3 +330,52 @@ test('replays the same charts in the browser bundle as Node renders', async () =
     }
   }
 });
+
+test('carries data targets where the live Flow needs chart clicks', async () => {
+  const svg = await import('../src/report-svg.js');
+
+  const weekly = svg.weeklyFlowChart([
+    { weekStart: '2026-08-10', arrivals: 2, closures: 1, done: 1, partial: false, rolling: null },
+  ]);
+  assert.match(weekly, /data-chart="weekly"/);
+  assert.match(weekly, /data-week="2026-08-10"/);
+  assert.match(weekly, /data-kind="arrivals"/);
+  assert.match(weekly, /data-kind="closures"/);
+
+  const aging = svg.agingHeatmapChart({
+    statuses: ['backlog'],
+    rows: [{ label: 'under 7d', counts: [2] }],
+  });
+  assert.match(aging, /data-chart="aging"/);
+  assert.match(aging, /data-bucket="under 7d"/);
+  assert.match(aging, /data-status="backlog"/);
+
+  const cycle = svg.cycleTimeChart({
+    sampleCount: 1,
+    medianDays: 9,
+    p85Days: 9,
+    samples: [{ number: 8, completedOn: '2026-08-10', days: 9 }],
+  });
+  assert.match(cycle, /data-chart="cycle"/);
+  assert.match(cycle, /data-number="8"/);
+  assert.match(cycle, /data-completed="2026-08-10"/);
+
+  const cumulative = svg.cumulativeFlowChart([
+    { date: '2026-08-12', triage: 1, accepted: 0, terminal: 0 },
+    { date: '2026-08-13', triage: 1, accepted: 1, terminal: 0 },
+  ]);
+  assert.doesNotMatch(cumulative, /data-chart=/);
+
+  const forecast = svg.forecastChart({
+    remaining: 5,
+    weeks50: 2,
+    weeks85: 3,
+    weeks95: 4,
+    date50: '2026-08-28',
+    date85: '2026-09-04',
+    date95: '2026-09-11',
+    distribution: [{ weeks: 0, share: 0 }, { weeks: 4, share: 0.96 }],
+    trials: 5000,
+  }, '2026-08-14');
+  assert.doesNotMatch(forecast, /data-chart=/);
+});

@@ -64,7 +64,7 @@ export function agingHeatmapChart(matrix) {
     const top = HEAT_HEADER + rowIndex * HEAT_ROW;
     const cells = row.counts.map((count, columnIndex) => {
       const opacity = count === 0 ? 0 : coordinate(HEAT_FLOOR + HEAT_RANGE * (count / peak));
-      return `<g><title>${escapeText(matrix.statuses[columnIndex])}, ${escapeText(row.label)}: ${plural(count, 'open item')}</title>`
+      return `<g data-chart="aging" data-bucket="${escapeText(row.label)}" data-status="${escapeText(matrix.statuses[columnIndex])}"><title>${escapeText(matrix.statuses[columnIndex])}, ${escapeText(row.label)}: ${plural(count, 'open item')}</title>`
         + `<rect class="heat" x="${HEAT_LABEL_WIDTH + columnIndex * HEAT_CELL_WIDTH + 2}" y="${top + 2}" width="${HEAT_CELL_WIDTH - 4}" height="${HEAT_ROW - 4}" fill-opacity="${opacity}"></rect>`
         + `<text class="chart-value" x="${columnCentre(columnIndex)}" y="${top + 18}" text-anchor="middle">${count}</text>`
         + '</g>';
@@ -218,7 +218,7 @@ export function cycleTimeChart(cycleTime) {
 
   const dots = cycleTime.samples.map((sample, index) => {
     const handle = sample.number === null ? 'An item' : `#${sample.number}`;
-    return `<g><title>${escapeText(handle)} completed ${escapeText(sample.completedOn)} after ${plural(sample.days, 'day')}</title>`
+    return `<g data-chart="cycle" data-number="${sample.number === null ? '' : sample.number}" data-completed="${escapeText(sample.completedOn)}" data-days="${sample.days}"><title>${escapeText(handle)} completed ${escapeText(sample.completedOn)} after ${plural(sample.days, 'day')}</title>`
       + `<circle class="sample" cx="${atDay(days[index])}" cy="${atDuration(sample.days)}" r="3.5"></circle></g>`;
   }).join('');
 
@@ -330,8 +330,9 @@ export function weeklyFlowChart(weeks) {
       ? `<text class="chart-tick" x="${coordinate(centre)}" y="${baseline + 15}" text-anchor="middle">${escapeText(week.weekStart.slice(5))}</text>`
       : '';
     const scope = week.partial === true ? ', partial week' : '';
-    return `<g><title>Week of ${escapeText(week.weekStart)}: ${plural(week.arrivals, 'arrival')}, ${plural(week.closures, 'closure')}${scope}</title>`
+    return `<g data-chart="weekly" data-week="${escapeText(week.weekStart)}" data-kind="arrivals"><title>Week of ${escapeText(week.weekStart)}: ${plural(week.arrivals, 'arrival')}, ${plural(week.closures, 'closure')}${scope}</title>`
       + `<rect class="bar-arrival" x="${coordinate(centre - barWidth - 1)}" y="${coordinate(baseline - arrivalHeight)}" width="${coordinate(barWidth)}" height="${coordinate(arrivalHeight)}"></rect>`
+      + `</g><g data-chart="weekly" data-week="${escapeText(week.weekStart)}" data-kind="closures"><title>Week of ${escapeText(week.weekStart)}: ${plural(week.arrivals, 'arrival')}, ${plural(week.closures, 'closure')}${scope}</title>`
       + `<rect class="bar-closure" x="${coordinate(centre + 1)}" y="${coordinate(baseline - closureHeight)}" width="${coordinate(barWidth)}" height="${coordinate(closureHeight)}"></rect>`
       + `</g>${label}`;
   }).join('');

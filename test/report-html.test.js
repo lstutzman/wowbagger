@@ -1231,9 +1231,36 @@ test('hides Flow and Dependencies on initial Items view with one canonical items
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
 
-  assert.match(html, /<section id="section-flow" data-section="flow" hidden>/);
+  assert.match(html, /<section id="section-flow" data-section="flow" data-asof="2026-08-14" hidden>/);
   assert.match(html, /<section id="section-dependencies" data-section="dependencies" hidden>/);
+  assert.match(html, /<input id="flow-from" type="date" value="2026-08-03" max="2026-08-14">/);
+  assert.match(html, /<input id="flow-to" type="date" value="2026-08-14" max="2026-08-14">/);
+  assert.match(html, /<p id="flow-error" role="alert" hidden><\/p>/);
+  assert.match(html, /<div id="flow-live" aria-live="polite">/);
   assert.equal((html.match(/id="items"/g) ?? []).length, 1);
+});
+
+// Hiding Items must not hide Flow or Dependencies: the three sections are
+// siblings, so every section element opened inside Items closes before Flow.
+test('renders Items, Flow, and Dependencies as sibling sections', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+  const items = html.slice(html.indexOf('<section id="section-items"'), html.indexOf('<section id="section-flow"'));
+
+  assert.equal((items.match(/<section[\s>]/g) ?? []).length, (items.match(/<\/section>/g) ?? []).length);
+});
+
+test('inspecting from another section returns to Items with the detail open', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+  dom.document.getElementById('nav-dependencies').dispatch('click');
+  assert.equal(dom.document.getElementById('section-items').hidden, true);
+
+  assert.equal(dom.window.wowbaggerReport.inspectItem('item-12'), true);
+  assert.equal(dom.document.getElementById('section-items').hidden, false);
+  assert.equal(dom.document.getElementById('section-dependencies').hidden, true);
+  assert.equal(dom.card('item-12').open, true);
 });
 
 test('offers facet groups through a collapsed expandable control', async () => {
@@ -1364,4 +1391,522 @@ test('shows scoped members of existing batches with exact drilldowns', async () 
   assert.match(items, /id="batches"/);
   assert.match(items, /Scoped members of existing batches/);
   assert.match(items, /data-show-items="wb_hostile"/);
+});
+
+// Flow reads the scoped open and terminal population, never the Work next list
+// or Show history: two Payments arrivals and one Accounts arrival share the
+// week of 10 August 2026, so an unscoped flow keeps counting three.
+function flowDom() {
+  return reportDom({
+    asOf: '2026-09-05',
+    items: [
+      {
+        id: 'wb_pay1',
+        number: 1,
+        order: 0,
+        state: 'ready',
+        status: 'backlog',
+        priority: 1,
+        created: '2026-08-12',
+        title: 'Payments one',
+        fields: { area: 'Payments' },
+        search: '#1 payments one',
+        body: '# P1',
+        decisions: [],
+      },
+      {
+        id: 'wb_pay2',
+        number: 2,
+        order: 1,
+        state: 'ready',
+        status: 'backlog',
+        priority: 2,
+        created: '2026-08-13',
+        title: 'Payments two',
+        fields: { area: 'Payments' },
+        search: '#2 payments two',
+        body: '# P2',
+        decisions: [],
+      },
+      {
+        id: 'wb_acc1',
+        number: 3,
+        order: 2,
+        state: 'ready',
+        status: 'backlog',
+        priority: 3,
+        created: '2026-08-12',
+        title: 'Accounts one',
+        fields: { area: 'Accounts' },
+        search: '#3 accounts one',
+        body: '# A1',
+        decisions: [],
+      },
+    ],
+  });
+}
+
+function arrivalsButton(dom) {
+  return dom.flowButton('[data-flow-chart="weekly"][data-flow-week="2026-08-10"][data-flow-kind="arrivals"]');
+}
+
+test('recomputes weekly arrivals from the scoped population with an exact drilldown', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = flowDom();
+  runReportClient(reportClientSource(), dom);
+
+  assert.ok(arrivalsButton(dom), 'the weekly arrivals bucket offers a selection');
+  assert.match(arrivalsButton(dom).textContent, /\(3\)/);
+
+  dom.select('field:area', 'Payments');
+
+  assert.match(arrivalsButton(dom).textContent, /\(2\)/);
+  assert.doesNotMatch(arrivalsButton(dom).textContent, /\(3\)/);
+
+  arrivalsButton(dom).dispatch('click');
+
+  assert.deepEqual(dom.visible(), ['wb_pay1', 'wb_pay2']);
+  assert.match(dom.document.getElementById('drilldown-label').textContent, /arrivals/i);
+});
+
+test('rejects an invalid flow range with an accessible error while keeping the last valid charts', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = flowDom();
+  runReportClient(reportClientSource(), dom);
+
+  assert.equal(dom.flowError().hidden, true);
+
+  dom.flowFrom().value = '2026-08-13';
+  dom.flowFrom().dispatch('change');
+
+  assert.equal(dom.flowError().hidden, true);
+  assert.match(arrivalsButton(dom).textContent, /\(1\)/);
+
+  dom.flowFrom().value = '2026-09-01';
+  dom.flowTo().value = '2026-08-01';
+  dom.flowFrom().dispatch('change');
+
+  assert.equal(dom.flowError().hidden, false);
+  assert.match(dom.flowError().textContent, /after/);
+  assert.match(arrivalsButton(dom).textContent, /\(1\)/);
+
+  dom.flowFrom().value = '2026-08-10';
+  dom.flowTo().value = '2026-09-30';
+  dom.flowTo().dispatch('change');
+
+  assert.equal(dom.flowError().hidden, false);
+  assert.match(dom.flowError().textContent, /report date/);
+  assert.match(arrivalsButton(dom).textContent, /\(1\)/);
+
+  dom.flowTo().value = '2026-09-05';
+  dom.flowTo().dispatch('change');
+
+  assert.equal(dom.flowError().hidden, true);
+  assert.match(arrivalsButton(dom).textContent, /\(3\)/);
+});
+
+function agingDom() {
+  return reportDom({
+    asOf: '2026-09-05',
+    items: [
+      {
+        id: 'wb_young',
+        number: 1,
+        order: 0,
+        state: 'ready',
+        status: 'backlog',
+        priority: 1,
+        created: '2026-09-01',
+        title: 'Young item',
+        fields: { area: 'Payments' },
+        search: '#1 young item',
+        body: '# Y',
+        decisions: [],
+      },
+      {
+        id: 'wb_mid_backlog',
+        number: 2,
+        order: 1,
+        state: 'ready',
+        status: 'backlog',
+        priority: 2,
+        created: '2026-08-12',
+        title: 'Mid backlog',
+        fields: { area: 'Payments' },
+        search: '#2 mid backlog',
+        body: '# M1',
+        decisions: [],
+      },
+      {
+        id: 'wb_mid_prog',
+        number: 3,
+        order: 2,
+        state: 'ready',
+        status: 'in-progress',
+        priority: 3,
+        created: '2026-08-12',
+        title: 'Mid progress',
+        fields: { area: 'Payments' },
+        search: '#3 mid progress',
+        body: '# M2',
+        decisions: [],
+      },
+      {
+        id: 'wb_old',
+        number: 4,
+        order: 3,
+        state: 'ready',
+        status: 'backlog',
+        priority: 4,
+        created: '2026-05-01',
+        title: 'Old item',
+        fields: { area: 'Payments' },
+        search: '#4 old item',
+        body: '# O',
+        decisions: [],
+      },
+    ],
+  });
+}
+
+function agingCell(dom, bucket, status) {
+  return dom.flowButton(`[data-flow-chart="aging"][data-flow-bucket="${bucket}"][data-flow-status="${status}"]`);
+}
+
+test('makes aging cells selectable with exact contributing IDs', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = agingDom();
+  runReportClient(reportClientSource(), dom);
+
+  const young = agingCell(dom, 'under 7d', 'backlog');
+  assert.ok(young, 'the under-7d backlog cell offers a selection');
+  assert.match(young.textContent, /\(1\)/);
+  young.dispatch('click');
+  assert.deepEqual(dom.visible(), ['wb_young']);
+
+  const mid = agingCell(dom, '7-30d', 'in-progress');
+  assert.ok(mid, 'the 7-30d in-progress cell offers a selection');
+  assert.match(mid.textContent, /\(1\)/);
+  mid.dispatch('click');
+  assert.deepEqual(dom.visible(), ['wb_mid_prog']);
+});
+
+function cycleDom() {
+  return reportDom({
+    asOf: '2026-09-05',
+    items: [
+      {
+        id: 'wb_done1',
+        number: 1,
+        order: 0,
+        state: 'ineligible',
+        status: 'done',
+        priority: null,
+        created: '2026-07-01',
+        terminalDate: '2026-08-10',
+        title: 'Done one',
+        fields: { area: 'Payments' },
+        search: '#1 done one',
+        body: '# D1',
+        decisions: [{ action: 'accept', date: '2026-08-01' }],
+      },
+      {
+        id: 'wb_done2',
+        number: 2,
+        order: 1,
+        state: 'ineligible',
+        status: 'done',
+        priority: null,
+        created: '2026-07-02',
+        terminalDate: '2026-08-12',
+        title: 'Done two',
+        fields: { area: 'Payments' },
+        search: '#2 done two',
+        body: '# D2',
+        decisions: [{ action: 'accept', date: '2026-08-02' }],
+      },
+      {
+        id: 'wb_open1',
+        number: 3,
+        order: 2,
+        state: 'ready',
+        status: 'backlog',
+        priority: 1,
+        created: '2026-08-01',
+        title: 'Open one',
+        fields: { area: 'Payments' },
+        search: '#3 open one',
+        body: '# O1',
+        decisions: [],
+      },
+    ],
+  });
+}
+
+function cycleSample(dom, date) {
+  return dom.flowButton(`[data-flow-chart="cycle"][data-flow-completed="${date}"]`);
+}
+
+test('makes accept-to-complete samples selectable by item', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = cycleDom();
+  runReportClient(reportClientSource(), dom);
+
+  const first = cycleSample(dom, '2026-08-10');
+  assert.ok(first, 'the 2026-08-10 completion sample offers a selection');
+  assert.match(first.textContent, /\(1\)/);
+  first.dispatch('click');
+  assert.deepEqual(dom.visible(), ['wb_done1']);
+
+  const second = cycleSample(dom, '2026-08-12');
+  assert.ok(second, 'the 2026-08-12 completion sample offers a selection');
+  second.dispatch('click');
+  assert.deepEqual(dom.visible(), ['wb_done2']);
+});
+
+function cumulativeDom() {
+  return reportDom({
+    asOf: '2026-09-05',
+    items: [
+      {
+        id: 'wb_triage',
+        number: 1,
+        order: 0,
+        state: 'ready',
+        status: 'backlog',
+        priority: 1,
+        created: '2026-08-10',
+        title: 'Triage item',
+        fields: { area: 'Payments' },
+        search: '#1 triage item',
+        body: '# T',
+        decisions: [],
+      },
+      {
+        id: 'wb_acc',
+        number: 2,
+        order: 1,
+        state: 'ready',
+        status: 'backlog',
+        priority: 2,
+        created: '2026-08-10',
+        title: 'Accepted item',
+        fields: { area: 'Payments' },
+        search: '#2 accepted item',
+        body: '# A',
+        decisions: [{ action: 'accept', date: '2026-08-12' }],
+      },
+      {
+        id: 'wb_closed',
+        number: 3,
+        order: 2,
+        state: 'ineligible',
+        status: 'done',
+        priority: null,
+        created: '2026-08-10',
+        terminalDate: '2026-08-14',
+        title: 'Closed item',
+        fields: { area: 'Payments' },
+        search: '#3 closed item',
+        body: '# C',
+        decisions: [{ action: 'accept', date: '2026-08-12' }, { action: 'complete', date: '2026-08-14' }],
+      },
+    ],
+  });
+}
+
+function cumulativeCell(dom, date, band) {
+  return dom.flowButton(`[data-flow-chart="cumulative"][data-flow-date="${date}"][data-flow-band="${band}"]`);
+}
+
+test('reconstructs cumulative date and band contributors including now-closed accepted items', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = cumulativeDom();
+  runReportClient(reportClientSource(), dom);
+
+  const cell = cumulativeCell(dom, '2026-08-12', 'accepted');
+  assert.ok(cell, 'the 2026-08-12 accepted band offers a selection');
+  assert.match(cell.textContent, /\(2\)/);
+  cell.dispatch('click');
+  assert.deepEqual(dom.visible(), ['wb_acc', 'wb_closed']);
+
+  dom.document.getElementById('flow-cumulative-date').value = '2026-08-12';
+  dom.document.getElementById('flow-cumulative-band').value = 'accepted';
+  dom.document.getElementById('flow-cumulative-show').dispatch('click');
+  assert.deepEqual(dom.visible(), ['wb_acc', 'wb_closed']);
+});
+
+function forecastDom() {
+  return reportDom({
+    asOf: '2026-09-05',
+    items: [
+      {
+        id: 'wb_open1',
+        number: 1,
+        order: 0,
+        state: 'ready',
+        status: 'backlog',
+        priority: 1,
+        created: '2026-08-01',
+        title: 'Open one',
+        fields: { area: 'Payments' },
+        search: '#1 open one',
+        body: '# O1',
+        decisions: [],
+      },
+      {
+        id: 'wb_open2',
+        number: 2,
+        order: 1,
+        state: 'ready',
+        status: 'backlog',
+        priority: 2,
+        created: '2026-08-01',
+        title: 'Open two',
+        fields: { area: 'Payments' },
+        search: '#2 open two',
+        body: '# O2',
+        decisions: [],
+      },
+      {
+        id: 'wb_done1',
+        number: 3,
+        order: 2,
+        state: 'ineligible',
+        status: 'done',
+        priority: null,
+        created: '2026-07-01',
+        terminalDate: '2026-08-12',
+        title: 'Done one',
+        fields: { area: 'Payments' },
+        search: '#3 done one',
+        body: '# D1',
+        decisions: [{ action: 'accept', date: '2026-08-01' }],
+      },
+      {
+        id: 'wb_done2',
+        number: 4,
+        order: 3,
+        state: 'ineligible',
+        status: 'done',
+        priority: null,
+        created: '2026-07-02',
+        terminalDate: '2026-08-13',
+        title: 'Done two',
+        fields: { area: 'Payments' },
+        search: '#4 done two',
+        body: '# D2',
+        decisions: [{ action: 'accept', date: '2026-08-02' }],
+      },
+    ],
+  });
+}
+
+test('defers the forecast until Flow opens and caches it by cohort and range', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = forecastDom();
+  runReportClient(reportClientSource(), dom);
+
+  assert.ok(arrivalsButton(dom), 'weekly charts render while Flow stays hidden');
+  const pending = dom.document.getElementById('flow-forecast-text');
+  assert.ok(pending, 'the forecast slot exists before Flow opens');
+  assert.doesNotMatch(pending.textContent, /50% by/);
+  assert.match(pending.textContent, /loads when Flow opens/);
+
+  dom.nav('flow').dispatch('click');
+  const opened = dom.document.getElementById('flow-forecast');
+  const openedText = dom.document.getElementById('flow-forecast-text');
+  assert.ok(opened, 'opening Flow computes the forecast');
+  assert.ok(openedText, 'the computed forecast carries its honest labels');
+  assert.match(openedText.textContent, /50% by/);
+  assert.match(openedText.textContent, /closure-based estimate/);
+
+  dom.quick('in-progress').dispatch('click');
+  const cached = dom.document.getElementById('flow-forecast');
+  const cachedText = dom.document.getElementById('flow-forecast-text');
+  assert.equal(cached, opened, 'a scope notification with the same cohort and range reuses the forecast');
+  assert.match(cachedText.textContent, /50% by/);
+});
+
+test('keeps scope and range across quick view, detail return, and drilldown clear', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = flowDom();
+  runReportClient(reportClientSource(), dom);
+
+  dom.select('field:area', 'Payments');
+  dom.flowFrom().value = '2026-08-10';
+  dom.flowFrom().dispatch('change');
+  const rangeBefore = dom.flowFrom().value;
+  assert.equal(rangeBefore, '2026-08-10');
+
+  const cell = dom.flowButton('[data-flow-chart="weekly"][data-flow-week="2026-08-10"][data-flow-kind="arrivals"]');
+  assert.ok(cell, 'weekly arrivals bucket offers a selection');
+  cell.dispatch('click');
+  const drilled = dom.visible();
+  assert.ok(drilled.length > 0, 'drilldown narrows the list');
+  const pillBefore = dom.document.getElementById('drilldown-label').textContent;
+
+  dom.quick('in-progress').dispatch('click');
+  assert.equal(dom.flowFrom().value, rangeBefore, 'quick view keeps the selected range');
+  assert.equal(dom.chip('field:area', 'Payments').checked, true, 'quick view keeps the scope facet');
+  assert.equal(dom.document.getElementById('drilldown-pill').hidden, false, 'quick view keeps the active drilldown');
+  assert.deepEqual(dom.visible(), drilled, 'quick view does not disturb the drilled list');
+  assert.equal(dom.document.getElementById('drilldown-label').textContent, pillBefore, 'drilldown label survives quick view');
+
+  const firstId = drilled[0];
+  dom.link(firstId).dispatch('click');
+  assert.equal(dom.flowFrom().value, rangeBefore, 'returning from detail keeps the range');
+  assert.equal(dom.chip('field:area', 'Payments').checked, true, 'returning from detail keeps scope');
+
+  dom.document.getElementById('clear-drilldown').dispatch('click');
+  assert.equal(dom.flowFrom().value, rangeBefore, 'clearing the drilldown keeps the range');
+  assert.equal(dom.chip('field:area', 'Payments').checked, true, 'clearing the drilldown keeps scope');
+  assert.equal(dom.document.getElementById('drilldown-pill').hidden, true, 'clear hides the pill');
+});
+
+function honestDom() {
+  return reportDom({
+    asOf: '2026-09-05',
+    items: [
+      {
+        id: 'wb_solo',
+        number: 1,
+        order: 0,
+        state: 'ready',
+        status: 'backlog',
+        priority: 1,
+        created: '2026-08-12',
+        title: 'Solo open',
+        fields: { area: 'Payments' },
+        search: '#1 solo open',
+        body: '# S',
+        decisions: [],
+      },
+    ],
+  });
+}
+
+test('keeps honest numbers for throughput, missing history, and no forecast', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = honestDom();
+  runReportClient(reportClientSource(), dom);
+  dom.nav('flow').dispatch('click');
+
+  const throughput = dom.document.getElementById('flow-throughput');
+  const throughputText = dom.document.getElementById('flow-throughput-text');
+  assert.ok(throughput, 'the live Flow names its throughput');
+  assert.ok(throughputText, 'throughput carries its honest count');
+  assert.match(throughputText.textContent, /0 closures/);
+  assert.match(throughputText.textContent, /4-week mean/);
+
+  const gaps = dom.document.getElementById('flow-gaps');
+  const gapsText = dom.document.getElementById('flow-gaps-text');
+  assert.ok(gaps, 'the live Flow discloses reconstruction gaps');
+  assert.ok(gapsText, 'gaps carry their honest count');
+  assert.match(gapsText.textContent, /1.*no recorded acceptance/);
+  assert.match(gapsText.textContent, /reconstruction uncertainty/);
+
+  const forecast = dom.document.getElementById('flow-forecast-text');
+  assert.ok(forecast, 'the live Flow keeps a forecast slot');
+  assert.match(forecast.textContent, /No closures in the window, so no forecast\./);
 });

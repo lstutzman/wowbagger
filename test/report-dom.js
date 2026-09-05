@@ -212,10 +212,58 @@ function card(item) {
   return details;
 }
 
+// Shared scoped-flow population: two Payments arrivals and one Accounts arrival
+// in the same week, so an unscoped flow implementation cannot pass.
+export function flowFixtureItems() {
+  return [
+    {
+      id: 'wb_pay1',
+      number: 1,
+      order: 0,
+      state: 'ready',
+      status: 'backlog',
+      priority: 1,
+      created: '2026-08-12',
+      title: 'Payments one',
+      fields: { area: 'Payments' },
+      search: '#1 payments one',
+      body: '# P1',
+      decisions: [],
+    },
+    {
+      id: 'wb_pay2',
+      number: 2,
+      order: 1,
+      state: 'ready',
+      status: 'backlog',
+      priority: 2,
+      created: '2026-08-13',
+      title: 'Payments two',
+      fields: { area: 'Payments' },
+      search: '#2 payments two',
+      body: '# P2',
+      decisions: [],
+    },
+    {
+      id: 'wb_acc1',
+      number: 3,
+      order: 2,
+      state: 'ready',
+      status: 'backlog',
+      priority: 3,
+      created: '2026-08-12',
+      title: 'Accounts one',
+      fields: { area: 'Accounts' },
+      search: '#3 accounts one',
+      body: '# A1',
+      decisions: [],
+    },
+  ];
+}
+
 // The fixture mirrors the ids, classes, and data attributes `renderReportHtml`
 // emits: one control strip, the ranked rows above the drill-down, and the
-// canonical cards inside it.
-export function reportDom({ items, fieldName = 'area' }) {
+export function reportDom({ items, fieldName = 'area', asOf = '2026-09-05' }) {
   const body = element('body');
   body.root = true;
   const document = {
@@ -309,12 +357,14 @@ export function reportDom({ items, fieldName = 'area' }) {
   // module instead of reparsing card markup on every keystroke.
   const selectionItems = items.map((item) => ({
     id: item.id,
-    number: null,
+    number: item.number ?? null,
     title: item.title,
     status: item.status,
     kind: item.kind ?? 'task',
     priority: item.priority ?? null,
     created: item.created,
+    terminalDate: item.terminalDate ?? null,
+    decisions: item.decisions ?? [],
     readiness: { state: item.state },
     fields: item.fields,
   }));
@@ -329,6 +379,24 @@ export function reportDom({ items, fieldName = 'area' }) {
   // chip vocabulary further down the page, and the drill-down runtime has to
   // leave them alone.
   const graphChip = element('label', { classes: ['chip'] });
+  // Scoped Flow mirrors the rendered section: scope caption, inclusive range
+  // controls defaulting to the twelve-week window, an accessible error, and
+  // the live region the runtime renders scoped charts into.
+  const flowSection = element('section', { id: 'section-flow', dataset: { section: 'flow', asof: asOf } });
+  flowSection.hidden = true;
+  const flowScope = element('p', { id: 'flow-scope' });
+  const flowFrom = control('input', 'flow-from', '2026-06-15');
+  const flowTo = control('input', 'flow-to', asOf);
+  const flowError = element('p', { id: 'flow-error', attributes: { role: 'alert' } });
+  flowError.hidden = true;
+  const flowLive = element('div', { id: 'flow-live' });
+  flowSection.append(flowScope, flowFrom, flowTo, flowError, flowLive);
+  const itemsSection = element('section', { id: 'section-items', dataset: { section: 'items' } });
+  const dependenciesSection = element('section', { id: 'section-dependencies', dataset: { section: 'dependencies' } });
+  dependenciesSection.hidden = true;
+  const nav = element('nav', { classes: ['view-nav'] });
+  const navButtons = ['items', 'flow', 'dependencies'].map((name) => element('button', { id: `nav-${name}`, dataset: { section: name } }));
+  nav.append(...navButtons);
   graphChip.append(element('input', { classes: ['graph-status'] }), element('span', { classes: ['chip-count'] }));
 
   body.append(
@@ -345,6 +413,10 @@ export function reportDom({ items, fieldName = 'area' }) {
     element('p', { id: 'empty' }),
     element('section', { id: 'history' }),
     graphChip,
+    nav,
+    itemsSection,
+    flowSection,
+    dependenciesSection,
   );
 
   const reduced = new Set();
@@ -385,6 +457,14 @@ export function reportDom({ items, fieldName = 'area' }) {
     historyExplain: () => document.getElementById('history-explain'),
     showHistoryAction: () => document.getElementById('show-history-action'),
     visible: () => itemRoot.querySelectorAll('[data-item]').map((node) => node.id),
+    flow: () => document.getElementById('flow-live'),
+    flowFrom: () => document.getElementById('flow-from'),
+    flowTo: () => document.getElementById('flow-to'),
+    flowError: () => document.getElementById('flow-error'),
+    flowScope: () => document.getElementById('flow-scope').textContent,
+    flowSection: () => document.getElementById('section-flow'),
+    nav: (view) => document.getElementById(`nav-${view}`),
+    flowButton: (selector) => document.getElementById('flow-live').querySelector(selector),
   };
 }
 
