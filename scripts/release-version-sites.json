@@ -314,6 +314,14 @@
       "applies_to_version": "0.1.0-alpha.10"
     },
     {
+      "file": "ledger/items/wb_01M1S2ZRQGQ4P8WAT6NB8HBMX9.md",
+      "kind": "anchored-text",
+      "anchor": "{version}",
+      "classification": "retained",
+      "occurrences": 6,
+      "applies_to_version": "0.5.0-beta.0"
+    },
+    {
       "file": "docs/handoffs/2026-08-30-project.md",
       "kind": "anchored-text",
       "anchor": "npm dist-tags: `latest` and `next` both point to `{version}`",
