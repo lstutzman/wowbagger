@@ -5,7 +5,7 @@ number: 198
 title: "Connect Dependencies graph and roster to shared report scope"
 kind: task
 priority: 20
-status: backlog
+status: in-progress
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
