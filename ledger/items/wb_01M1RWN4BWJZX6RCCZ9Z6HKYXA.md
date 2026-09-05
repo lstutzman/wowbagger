@@ -5,14 +5,19 @@ number: 190
 title: "Deliver a decision-focused report workspace"
 kind: epic
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:39:01.432Z"
 depends_on: []
-related: [wb_01M056Z54S740925V6AFVXWV22]
+related: [ wb_01M056Z54S740925V6AFVXWV22 ]
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept the approved report redesign work."
+    rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
 ---
 
 ## Outcome
