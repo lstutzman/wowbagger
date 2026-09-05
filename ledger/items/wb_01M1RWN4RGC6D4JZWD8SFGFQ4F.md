@@ -5,9 +5,10 @@ number: 195
 title: "Replace duplicated report lists with one item workspace"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:34.854Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Replaced duplicated lists with one item workspace behind section navigation."
+    rationale: "Commits 5206d07 and e7915a7. HTML suite 63/63 and 207 report tests pass (validation-101 and later). Real Chrome at 1440x900, 1024x768, and 390x844: sticky controls before content, facets collapsed, Flow and Dependencies hidden until selected, inspect keeps search and rows, no page errors. Filter p95 on the 1,744-item artifact measured 215 ms; the 150 ms budget is owned by #199."
 ---
 
 ## Assignment
