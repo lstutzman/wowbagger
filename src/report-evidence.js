@@ -370,9 +370,13 @@ export function buildEvidence(openItems, terminalItems, asOf, range = null) {
     coverageGaps: {
       // Retained items past triage with no recorded accept decision. Their
       // band history reads as untriaged until departure, which is
-      // reconstruction uncertainty, not proof they sat untriaged.
+      // reconstruction uncertainty, not proof they sat untriaged. An item
+      // killed straight from triage records a kill instead of an accept;
+      // its history is complete, so it is not a gap.
       missingAcceptance: retained.filter((item) => item.status !== 'triage'
-        && !item.decisions.some((decision) => decision.action === 'accept')).length,
+        && !item.decisions.some((decision) => decision.action === 'accept')
+        && !(item.status === 'killed'
+          && item.decisions.some((decision) => decision.action === 'kill'))).length,
     },
     cycleTime: buildCycleTime(terminalItems),
     forecast: buildForecast(weeks, openItems.length, asOf),

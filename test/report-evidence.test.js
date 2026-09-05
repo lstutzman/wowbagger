@@ -394,6 +394,16 @@ test('counts retained items without recorded acceptance as a visible gap', () =>
   assert.equal(model.evidence.coverageGaps.missingAcceptance, 2);
 });
 
+test('does not count an item killed at triage as missing acceptance', () => {
+  const kill = (date) => [{ action: 'kill', date, summary: 's', rationale: 'r' }];
+  const model = buildReportModel([
+    item('wb_killed', { number: 1, status: 'killed', killed: '2026-08-13', decisions: kill('2026-08-13') }),
+    item('wb_lost', { number: 2, status: 'killed', killed: '2026-08-13' }),
+  ], config(), '2026-08-14');
+
+  assert.equal(model.evidence.coverageGaps.missingAcceptance, 1);
+});
+
 test('reports an empty range with zeroes and no forecast', async () => {
   const { buildEvidence } = await import('../src/report-evidence.js');
   const model = buildReportModel(

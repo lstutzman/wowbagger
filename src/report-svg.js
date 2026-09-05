@@ -10,7 +10,7 @@
 const CHART_WIDTH = 720;
 // The mean the evidence layer computes; named here only so the tooltip can say
 // how long a window it covers.
-const ROLLING_WEEKS = 4;
+const CHART_ROLLING_WEEKS = 4;
 const PLOT_LEFT = 34;
 const PLOT_RIGHT = 10;
 
@@ -104,7 +104,7 @@ export function throughputChart(weeks) {
   const bars = weeks.map((week, index) => {
     const mean = week.rolling === null
       ? 'no four-week mean yet'
-      : `${week.rolling} a week over the last ${ROLLING_WEEKS}`;
+      : `${week.rolling} a week over the last ${CHART_ROLLING_WEEKS}`;
     const scope = week.partial === true ? ', partial week' : '';
     const label = (weeks.length - 1 - index) % 2 === 0
       ? `<text class="chart-tick" x="${coordinate(centre(index))}" y="${baseline + 15}" text-anchor="middle">${escapeText(week.weekStart.slice(5))}</text>`
@@ -188,10 +188,10 @@ export function cumulativeFlowChart(points) {
 const SCATTER_HEIGHT = 180;
 const SCATTER_TOP = 12;
 const SCATTER_BOTTOM = 34;
-const MILLISECONDS_PER_DAY = 86400000;
+const CHART_MILLISECONDS_PER_DAY = 86400000;
 
 function dayNumber(date) {
-  return Date.parse(`${date}T00:00:00Z`) / MILLISECONDS_PER_DAY;
+  return Date.parse(`${date}T00:00:00Z`) / CHART_MILLISECONDS_PER_DAY;
 }
 
 // Every finished item as one dot: how long it took against when it finished.
@@ -354,7 +354,7 @@ function browserChartSource(fn) {
 export function reportSvgBrowserSource() {
   return [
     `const CHART_WIDTH = ${CHART_WIDTH};`,
-    `const ROLLING_WEEKS = ${ROLLING_WEEKS};`,
+    `const CHART_ROLLING_WEEKS = ${CHART_ROLLING_WEEKS};`,
     `const PLOT_LEFT = ${PLOT_LEFT};`,
     `const PLOT_RIGHT = ${PLOT_RIGHT};`,
     `const HEAT_LABEL_WIDTH = ${HEAT_LABEL_WIDTH};`,
@@ -373,7 +373,7 @@ export function reportSvgBrowserSource() {
     `const SCATTER_HEIGHT = ${SCATTER_HEIGHT};`,
     `const SCATTER_TOP = ${SCATTER_TOP};`,
     `const SCATTER_BOTTOM = ${SCATTER_BOTTOM};`,
-    `const MILLISECONDS_PER_DAY = ${MILLISECONDS_PER_DAY};`,
+    `const CHART_MILLISECONDS_PER_DAY = ${CHART_MILLISECONDS_PER_DAY};`,
     `const FORECAST_HEIGHT = ${FORECAST_HEIGHT};`,
     `const FORECAST_TOP = ${FORECAST_TOP};`,
     `const FORECAST_BOTTOM = ${FORECAST_BOTTOM};`,

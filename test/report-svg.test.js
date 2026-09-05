@@ -271,6 +271,20 @@ test('names closures and done separately in the throughput titles', async () => 
   assert.match(svg, /aria-label="Closures per week with a four-week mean\. 3 closures over 2 weeks\."/);
 });
 
+// The report inlines the evidence and chart sources into one script scope, so
+// the two serializers must not declare the same top-level names.
+test('composes with the evidence browser source in one script scope', async () => {
+  const vm = await import('node:vm');
+  const svg = await import('../src/report-svg.js');
+  const evidence = await import('../src/report-evidence.js');
+  const context = vm.createContext({});
+
+  vm.runInContext(`${evidence.reportEvidenceBrowserSource()}\n${svg.reportSvgBrowserSource()}`, context);
+
+  assert.equal(vm.runInContext('typeof throughputChart', context), 'function');
+  assert.equal(vm.runInContext('typeof buildEvidence', context), 'function');
+});
+
 test('replays the same charts in the browser bundle as Node renders', async () => {
   const vm = await import('node:vm');
   const svg = await import('../src/report-svg.js');
