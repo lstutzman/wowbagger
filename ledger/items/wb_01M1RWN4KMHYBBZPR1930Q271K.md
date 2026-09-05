@@ -5,7 +5,7 @@ number: 193
 title: "Derive report dependency impact independently of the UI"
 kind: task
 priority: 20
-status: backlog
+status: in-progress
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
