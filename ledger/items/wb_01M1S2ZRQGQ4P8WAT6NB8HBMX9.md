@@ -4,9 +4,10 @@ id: wb_01M1S2ZRQGQ4P8WAT6NB8HBMX9
 number: 200
 title: "Triage complete Property Compass consumer defect digest from September 5"
 kind: task
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "Property Compass agent handoff via Herdr; Lee-authorized 2026-09-05"
   recorded_at: "2026-09-05T00:00:00.000Z"
@@ -17,6 +18,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the complete consumer defect digest triage."
     rationale: "All 32 source headings and bundled subitems now have released, queued, intended, or accepted-as-is dispositions with exact Wowbagger references."
+  - action: complete
+    date: 2026-09-05
+    summary: "Complete all 32 consumer digest dispositions."
+    rationale: "Every heading and bundled ask is linked to a released fix, an accepted backlog item, an intentional contract decision, or the accepted-as-is #1476 ruling. Ten independent defects were filed as #201-#210, and the Property Compass leebatch agent received the complete matrix and merged it through PR #2431."
 ---
 
 ## Intake scope
