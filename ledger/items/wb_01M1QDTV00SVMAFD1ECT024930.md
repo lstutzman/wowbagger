@@ -5,7 +5,7 @@ number: 205
 title: "Handle closed stdout pipes without a stack trace"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
@@ -18,6 +18,11 @@ tags:
   - "propertycompass2"
   - "defect-digest-200"
   - "cli"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept closed stdout handling."
+    rationale: "An early-closing pipe is ordinary CLI composition and must not produce an uncaught Node.js stack trace."
 ---
 
 ## Problem
