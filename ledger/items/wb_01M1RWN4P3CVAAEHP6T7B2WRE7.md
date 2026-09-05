@@ -5,9 +5,10 @@ number: 194
 title: "Share typed report filters and quick-view selection"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:31.794Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Implemented typed shared scope, disjunctive facet counts, quick views/history, scoped drilldowns, and browser-source parity."
+    rationale: "Commit e39ab0c. Nine behavior tests passed through separate RED/GREEN cycles; selection and config suites pass (validation-053.txt). Node 24 smoke exercised 1,744 projected items and 20 fixed queries: selection plus four facet counts p95 2.79ms; not a browser-rendering measurement."
 ---
 
 ## Assignment
