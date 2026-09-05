@@ -5,9 +5,10 @@ number: 197
 title: "Connect scoped Flow charts to their contributing report items"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:46.751Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Connected scoped Flow charts, range controls, and exact contributing-item drilldowns."
+    rationale: "Commit a7b9891. Eight RED/GREEN cycles across two workers; HTML 73, SVG 21, selection, evidence suites pass (252 report tests, validation post-section-fix). Real Chrome: weekly arrivals, aging cell, and cumulative band drilldowns each listed exactly the displayed count under an Area: Payments scope; invalid range From 2026-09-04/To 2026-08-01 showed the role=alert message and kept the last range; clearing the drilldown kept the facet and range; forecast text stayed a placeholder until Flow opened."
 ---
 
 ## Assignment
