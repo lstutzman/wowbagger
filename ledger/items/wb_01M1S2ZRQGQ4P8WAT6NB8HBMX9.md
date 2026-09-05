@@ -4,7 +4,7 @@ id: wb_01M1S2ZRQGQ4P8WAT6NB8HBMX9
 number: 200
 title: "Triage complete Property Compass consumer defect digest from September 5"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
