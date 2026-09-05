@@ -98,7 +98,7 @@ export function computeEpicEnablement(allItems) {
   return epicById;
 }
 
-// Transitive unblocking leverage over the depends_on DAG. For each open item,
+// Transitive downstream reach over the depends_on DAG. For each open item,
 // the set of other open items whose dependency chain passes through it. The
 // ledger is cycle-checked before a report renders, so the reverse graph is a
 // DAG; the on-stack guard only keeps a hand-built model from looping.
@@ -170,7 +170,7 @@ export function collectUnknownClasses(openItems) {
 // The recommended order. Every factor is a separate, visible comparison step,
 // never a single opaque score: an entry's position is always explained by the
 // first step on which it beat the entry below it. Dominance runs expedite
-// class, fixed-date proximity, unblocking leverage, epic enablement, priority,
+// class, fixed-date proximity, downstream reach, epic enablement, priority,
 // age, then size, with the immutable ID as the determinism backstop.
 export function rankWorkNext(readyItems) {
   return [...readyItems]
@@ -239,7 +239,7 @@ function describeReasons(item) {
     reasons.push({ code: 'due', label: `due ${sequencing.due.date} (${duePhrase(sequencing.due.daysUntil)})` });
   }
   if (sequencing.leverage.count > 0) {
-    reasons.push({ code: 'leverage', label: `unblocks ${plural(sequencing.leverage.count, 'item')}${namedNumbers(sequencing.leverage.numbers)}` });
+    reasons.push({ code: 'leverage', label: `downstream reach: ${plural(sequencing.leverage.count, 'item')}${namedNumbers(sequencing.leverage.numbers)}` });
   }
   if (sequencing.epic !== null) {
     reasons.push({ code: 'epic', label: `advances ${epicPhrase(sequencing.epic)}` });
@@ -264,7 +264,7 @@ function plural(count, noun) {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-// Name at most four unblocked items so the reason stays one readable line.
+// Name at most four downstream items so the reason stays one readable line.
 function namedNumbers(numbers) {
   if (numbers.length === 0) {
     return '';

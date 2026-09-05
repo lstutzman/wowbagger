@@ -467,3 +467,18 @@ test('a literal Unclassified tag matches while missing tags match nothing', asyn
     name: 'tags', mapped: true, present: 1, missing: 1, invalid: 0,
   });
 });
+
+test('named-report impact respects excluded blockers without exposing excluded IDs', async () => {
+  const { buildReportModel } = await import('../src/report.js');
+  const ledger = [
+    item('candidate', { number: 1, area: 'Core' }),
+    item('dependent', { number: 2, area: 'Core', depends_on: ['candidate', 'excluded'] }),
+    item('excluded', { number: 3, area: 'Other' }, 'Excluded body'),
+  ];
+  const model = buildReportModel(ledger, viewConfig({ fields: { area: ['Core'] } }), '2026-08-14');
+  assert.deepEqual(Object.keys(model.impactById).sort(), ['candidate', 'dependent']);
+  assert.deepEqual(model.impactById.candidate.downstreamIds, ['dependent']);
+  assert.deepEqual(model.impactById.candidate.readyIfDoneIds, []);
+  assert.equal(model.items.find((entry) => entry.id === 'dependent').readiness.state, 'blocked');
+  assert.deepEqual(model.workNext.map((entry) => entry.id), ['candidate']);
+});

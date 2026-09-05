@@ -3,6 +3,7 @@ import path from 'node:path';
 import { projectReadiness } from './ready.js';
 import { buildAttention } from './report-attention.js';
 import { buildEvidence } from './report-evidence.js';
+import { buildReportImpact } from './report-impact.js';
 import {
   classifyItem,
   collectUnknownClasses,
@@ -148,6 +149,7 @@ export function buildReportModel(items, config, asOf) {
     items: reportItems,
     terminalItems,
     workNext,
+    impactById: buildReportImpact(items, new Set(reportItems.map((item) => item.id)), asOf),
     unknownClasses: collectUnknownClasses(reportItems),
     evidence,
     attention: buildAttention(reportItems, terminalItems, evidence.cycleTime, asOf),

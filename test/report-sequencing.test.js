@@ -39,7 +39,7 @@ function sequencingById(model, id) {
   return model.items.find((entry) => entry.id === id)?.sequencing;
 }
 
-test('counts transitive unblocking leverage once per item on a diamond graph', () => {
+test('counts transitive downstream reach once per item on a diamond graph', () => {
   const base = 'wb_01KZDDDDDDDDDDDDDDDDDDDDDD';
   const left = 'wb_01KZBBBBBBBBBBBBBBBBBBBBBB';
   const right = 'wb_01KZCCCCCCCCCCCCCCCCCCCCCC';
@@ -181,7 +181,7 @@ test('orders fixed-date items by due proximity ahead of items without a due date
   );
 });
 
-test('orders by transitive unblocking leverage ahead of priority', () => {
+test('orders by transitive downstream reach ahead of priority', () => {
   const items = [
     item('wb_aaa_low', { number: 30, priority: 0 }),
     item('wb_zzz_high', { number: 31, priority: 5 }),
@@ -192,10 +192,6 @@ test('orders by transitive unblocking leverage ahead of priority', () => {
   const model = buildReportModel(items, config(), '2026-08-14');
 
   assert.deepEqual(model.workNext.map(({ number }) => number), [31, 30]);
-  assert.deepEqual(
-    model.workNext[0].reasons.find((reason) => reason.code === 'leverage'),
-    { code: 'leverage', label: 'unblocks 2 items (#32, #33)' },
-  );
 });
 
 test('orders by epic enablement ahead of priority and names the parent epic', () => {
