@@ -5,9 +5,10 @@ number: 190
 title: "Deliver a decision-focused report workspace"
 kind: epic
 priority: 20
-status: backlog
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:39:01.432Z"
@@ -18,6 +19,29 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Complete the decision-focused Wowbagger report redesign."
+    rationale: "All nine direct children, items #191-#199, are done. The shipped report now provides one shared selection scope, one canonical item workspace, decision evidence and concentration views, interactive Flow drill-downs, a shared dependency graph, responsive controls, and deterministic offline output. Synthetic browser verification over 1,744 items met the usable-view and filter latency budgets; the complete Node 24 test and deprecation suites, adapter implementation proof, and ledger validation passed."
+    rollup:
+      - id: wb_01M1RWN4EHW20BP63XB2J8M03J
+        status: done
+      - id: wb_01M1RWN4GWEWBEPTPM9HF2EV77
+        status: done
+      - id: wb_01M1RWN4KMHYBBZPR1930Q271K
+        status: done
+      - id: wb_01M1RWN4P3CVAAEHP6T7B2WRE7
+        status: done
+      - id: wb_01M1RWN4RGC6D4JZWD8SFGFQ4F
+        status: done
+      - id: wb_01M1RWN4TXN0MAE4C6EFHEGKN0
+        status: done
+      - id: wb_01M1RWN4XSQ4YWBD5GRZDDQKWF
+        status: done
+      - id: wb_01M1RWN50G4QW1ZKV1R08KBEWK
+        status: done
+      - id: wb_01M1RWN53S9QGNE8S0W2S4PZK9
+        status: done
 ---
 
 ## Outcome
