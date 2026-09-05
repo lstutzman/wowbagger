@@ -6,8 +6,8 @@
 // proves every version site is accounted for, plans the new bytes in memory,
 // runs the full release gate over them, then leaves exactly one `Cut <version>`
 // commit and one annotated `v<version>` tag. It stops there. Push and
-// `npm publish --tag next` remain separate, named, human steps, because a green
-// local command cannot roll back a pushed tag or a publication.
+// publication remain separate, named, human steps because a green local
+// command cannot roll back a pushed tag or an npm release.
 //
 // The command must run on the tip of the release branch. Cuts used to happen in
 // a session worktree and merge afterwards, which is why the two most recent
@@ -69,6 +69,10 @@ export function compareVersions(left, right) {
     return a < b ? -1 : 1;
   }
   return 0;
+}
+
+export function publicationTag(version) {
+  return parseVersion(version).prerelease.length === 0 ? 'latest' : 'next';
 }
 
 // -------------------------------------------------------------------- gate --
@@ -636,7 +640,7 @@ function main(argumentsList) {
     process.stdout.write(`${result.diff}\n`);
     process.stdout.write('dry run only: the repository is unchanged\n');
   } else {
-    process.stdout.write('push the commit and tag, then `npm publish --tag next`, then'
+    process.stdout.write(`push the commit and tag, then \`npm publish --tag ${publicationTag(options.version)}\`, then`
       + ' `npm run release:channels -- check <version>`\n');
   }
   return 0;

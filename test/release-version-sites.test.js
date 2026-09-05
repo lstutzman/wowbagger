@@ -362,6 +362,18 @@ test('exact-set verification refuses a survivor of the outgoing version', () => 
   assert.deepEqual(short.problems.map(({ code }) => code), ['mutable-set-mismatch']);
 });
 
+test('exact-set verification does not count prerelease history as the stable version', () => {
+  const result = verifyExactSets({
+    files: new Map([['history.md', 'Current 9.9.0; retained 9.9.0-beta.0.\n']]),
+    oldVersion: '9.9.0-beta.0',
+    newVersion: '9.9.0',
+    expectedOld: 1,
+    expectedNew: 1,
+  });
+
+  assert.deepEqual(result.problems, []);
+});
+
 test('a malformed manifest refuses before any file is read', () => {
   const plan = planVersionSites({
     manifest: manifest([{

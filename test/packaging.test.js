@@ -7,7 +7,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runCli } from './support.js';
 import { readTrackedTextFiles } from '../scripts/cut-release.js';
-import { planVersionSites, verifyExactSets } from '../scripts/lib/release-sites.js';
+import { countOccurrences, planVersionSites, verifyExactSets } from '../scripts/lib/release-sites.js';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
@@ -378,7 +378,7 @@ test('the checked-in manifest classifies every occurrence of the current version
     { cwd: projectRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   ));
   let occurrences = 0;
-  for (const text of files.values()) occurrences += text.split(manifest.version).length - 1;
+  for (const text of files.values()) occurrences += countOccurrences(text, manifest.version);
   assert.ok(occurrences > 0, 'the tree must name its own version somewhere');
 
   // Assembled, not written literally: this file is one of the files scanned.

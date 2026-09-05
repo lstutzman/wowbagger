@@ -30,16 +30,17 @@ agent to use those guarantees instead of hand-editing your Markdown.
 
 **Start here:** [install the core and set up a ledger](#start-here).
 
-> **Status: beta, published, and self-hosted.** `0.5.0-beta.0` is on npm under
-> the `next` tag and on this repository's `v0.5.0-beta.0` tag. It is the
-> version this repository runs its own backlog on. The API remains pre-stable
-> and can change before the first stable release.
+> **Status: published and self-hosted.** `0.5.0-beta.0` is published on npm and has
+> a matching repository tag. It is the version this repository runs its own
+> backlog on. The API is stable at core contract version 5.
 >
-> **Install with `@next`.** Every published release is a prerelease. The
-> registry requires a `latest` dist-tag, so `latest` mirrors `next` — a bare
-> `npm install wowbagger` resolves to the current prerelease rather than an
-> older build — but `@next` is the documented install and the explicit
-> statement that you accept a prerelease.
+> **Channels.** A stable release sets both `latest` and `next` to the stable
+> version and publishes with `npm publish --tag latest`. A later prerelease
+> moves only `next` and publishes with `npm publish --tag next`, so `latest`
+> stays on the stable release. While every published release is a prerelease,
+> `latest` mirrors `next`: install the prerelease explicitly with
+> `wowbagger@next`. After the first stable release, a bare install resolves
+> to the stable release.
 >
 > **What is proved.** Contract version **5** validates the complete Markdown
 > ledger, selects a deterministic ready queue, exposes bounded `list` and
@@ -105,6 +106,7 @@ Install the core CLI, then verify it. The supported runtime is Node.js 24; Node
 26 remains excluded because of the separate Vitest incompatibility:
 
 ```sh
+npm install -g wowbagger@latest   # stable release
 npm install -g wowbagger@0.5.0-beta.0   # exact plugin-matched release
 # or, from this release's Git tag:
 # npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0
@@ -335,7 +337,7 @@ Four separate things, deliberately:
 
 The core and the plugin install independently and must carry matching
 distribution versions. The core contract version and the adapter contract
-version are separate domains: the core is at **3**, the adapter is at **2**, and
+version are separate domains: the core is at **5**, the adapter is at **2**, and
 the legacy work-claim, ledger-publication, and ledger-mutation envelopes stay at
 **1**.
 
@@ -346,10 +348,12 @@ the legacy work-claim, ledger-publication, and ledger-mutation envelopes stay at
 Wowbagger ships as an npm package with a single `wowbagger` binary. There are
 two supported install routes:
 
-- **npm registry** — `npm install -g wowbagger@next` installs the current
-  prerelease. `@next` is the documented spelling; `latest` mirrors it (the
-  registry requires a `latest` tag), so a bare install resolves to the same
-  bytes.
+- **npm registry** — `npm install -g wowbagger` installs the stable release
+  once it exists; `npm install -g wowbagger@next` installs the newest
+  prerelease. While every published release is a prerelease, `latest` mirrors
+  `next`, so a bare install resolves to the same bytes. After the first
+  stable release, `latest` stays on stable and only `next` follows later
+  prereleases.
 - **git tag** —
   `npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0` installs this
   release. Installing at a ref installs the core and every adapter that ref
@@ -374,8 +378,9 @@ sending the request and reading the refusal — an `unknown-member` issue at
 `/set/body_append` means the core predates the append — or pin the distribution
 version.
 
-- **Node.js:** 20 and later. The adapter conformance vectors run against Node
-  20 and the current runtime before each release.
+- **Node.js:** 24 and later. The release gate runs the full suite on Node
+  24.20.0 with the strict deprecation gate; Node 26 stays excluded because of
+  the separate Vitest incompatibility.
 - **Platforms:** the core runs wherever Node.js runs. The Claude Code adapter
   declares Darwin, Linux, and Windows `supported` from native common-vector
   evidence. Every other shipped adapter target remains `unverified`.
@@ -446,7 +451,7 @@ distribution versions equal.
 
 The shipped adapter selects only adapter contract version 2 and requires core
 contract version 5. The adapter contract and the core contract are separate
-version domains: the adapter stays at 2 while the core moves to 4. A v1-only
+version domains: the adapter stays at 2 while the core is at 5. A v1-only
 consumer receives `unsupported-adapter-contract-version`; it does not receive v2
 behavior. The schema-2 transport is available. Ledger migration remains a
 separate quiesced maintenance operation. The
@@ -1200,6 +1205,16 @@ current UTC date:
 npm run report -- --as-of YYYY-MM-DD
 ```
 
+If you verify the report in a browser from a checkout, generate a deterministic
+synthetic report through the real pipeline:
+
+```sh
+node scripts/report-design-demo.js --out /private/tmp/wowbagger-report-demo.html --items 40
+```
+
+That output is synthetic and checkout-only: it describes fixed demo data,
+never this repository's ledger.
+
 ## Where the contracts live
 
 The README is the map. These are the territory, and they are normative where
@@ -1379,7 +1394,7 @@ It is the durable work ledger beneath those systems.
   **Shipped: the policy-input contract and the report's mapped fields keep
   consumer vocabulary out of the schema.**
 - Stabilize the machine-readable command contract and compatibility evidence.
-  **In progress at core contract version 5; the version is not frozen.**
+  **Shipped: core contract version 5 is the stable contract.**
 - Ship Claude Code and Codex adapters. **Claude Code, Codex, and OpenCode
   packages share the version 2 engine; the Claude Code manifest declares Darwin
   `supported` after passing all 212 native assertions. Other adapter targets and

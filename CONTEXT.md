@@ -33,7 +33,7 @@ One line per term. This is a glossary, not documentation.
 - **cut** — the one-command act that turns a clean release-branch tip into a `Cut <version>` commit and an annotated `v<version>` tag; push and publish are separate named steps that follow it.
 - **release site** — one literal occurrence of the current distribution version in a tracked text file, classified `mutable` (moves with the cut) or `retained` (history that keeps naming it).
 - **version-site manifest** — the hand-maintained `scripts/release-version-sites.json` that classifies every release site; the cut proves exact-set equality against it and never edits it.
-- **channel policy** — while every release is a prerelease, `latest` mirrors `next` at the newest published version because npm refuses to remove `latest`; `@next` remains the documented explicit prerelease install.
+- **channel policy** — a stable release sets both `latest` and `next` to the stable version; a later prerelease moves only `next` while `latest` stays stable; while every release is a prerelease, `latest` mirrors `next`; stable publishes with `--tag latest`, prerelease with `--tag next`.
 - **auto-commit** — the opt-in `--auto-commit` flag on `create`, `transition`, `parent-migrate`, `snooze`, `patch`, and `publish-claimed` that performs the commit-per-mutation loop inside one invocation on a provisioned ledger.
 - **commit set** — the exact ledger-relative paths one auto-commit invocation may stage: the changed item, plus the one reconciliation log for every command except `create`.
 - **recovery token** — the bounded opaque witness in a `git-commit-failed` envelope; it binds the command, item, published revision, pre-commit `HEAD`, commit set, message, and terminal entry, and never selects a path.

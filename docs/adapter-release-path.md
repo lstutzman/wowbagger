@@ -1,9 +1,9 @@
 # The shared adapter packaging and release path
 
-Version 2. One packaging and release path ships core mutation contract 2 and
+Version 2. One packaging and release path ships core contract 5 and
 adapter contract 2 to every harness adapter, so the adapters cannot drift
-apart. Contract version 1 of each remains frozen and defined, but the shipped
-manifests advertise only adapter `[2]` and require core `2`.
+apart. Earlier contract versions remain frozen and defined, but the shipped
+manifests advertise only adapter `[2]` and require core `5`.
 
 ## One repository, one version
 
@@ -30,7 +30,7 @@ How a released core version is identified:
 
 `adapter_contract_versions` and `required_core_contract_version` in its
 manifest, validated before the adapter advertises anything (section 3.1). The
-version 2 manifests use `[2]` and `2`, respectively. The adapter and the core it
+version 2 manifests use `[2]` and `5`, respectively. The adapter and the core it
 finds at runtime may be installed separately, which is exactly the skew the
 next rule exists for.
 
@@ -42,9 +42,9 @@ refuses a mismatch with `core-contract-version-mismatch` — machinery that is
 mutation-verified in the tree. Refusal, never a guess.
 
 A v1-only consumer receives `unsupported-adapter-contract-version` from a v2
-adapter and no dynamic capability result. A v1, v2, or v3 adapter probing the v4
-core sees `contract_version: 5` and refuses before the requested command.
-Neither pairing silently selects the other version's behavior.
+adapter and no dynamic capability result. An adapter whose manifest requires a
+core contract other than 5 sees `contract_version: 5` and refuses before the
+requested command. Neither pairing silently selects the other version's behavior.
 
 ## How a candidate release is checked
 
@@ -140,25 +140,35 @@ because no local command can undo any of them:
 
 1. `git push` the commit, then `git push` the tag. Confirm the remote tag
    resolves to the pushed HEAD.
-2. `npm publish --tag next`, in an interactive terminal — the account
-   authenticates with a WebAuthn passkey. **The `--tag next` is not optional:** a
-   plain `npm publish` recreates `latest`, and `prepublishOnly` cannot see the
-   operator's publish flag.
+2. Publish in an interactive terminal — the account authenticates with a
+   WebAuthn passkey. For a stable version run `npm publish --tag latest`;
+   for a prerelease run `npm publish --tag next`. **The explicit `--tag` is
+   not optional:** a plain `npm publish` moves `latest` whatever the version,
+   and `prepublishOnly` cannot see the operator's publish flag.
 3. `npm run release:channels -- check <version>` as post-publish verification.
 
 Never report a release as shipped after only the local cut.
 
-## The prerelease channel policy
+## The channel policy
 
-While releases remain prereleases, the target state is **`latest` mirroring
-`next`**: both dist-tags name the newest published prerelease.
+The target state depends on what you publish:
+
+- **Stable:** both `latest` and `next` name the stable version. Publish with
+  `npm publish --tag latest`.
+- **Prerelease after a stable:** only `next` moves to the prerelease;
+  `latest` stays on the stable release. Publish with
+  `npm publish --tag next`.
+- **Prerelease-only history:** while every published release is a prerelease,
+  `latest` mirrors `next` at the newest published prerelease.
+
 `0.1.0-alpha.1` remains deprecated (deprecated, never unpublished — an existing
 installation keeps working and warns on the next install). The first-choice
 policy was no `latest` tag at all, so a bare install fails loudly; the registry
 refused it — `npm dist-tag rm wowbagger latest` returns E400 (verified live
 2026-08-17), because npm mandates every package carry `latest`. Given that
 forced tag, the current prerelease is strictly better than the dead first alpha
-it used to serve. `wowbagger@next` stays the documented install.
+it used to serve. `wowbagger@next` stays the documented prerelease install; a
+bare install resolves to `latest`, which is the stable release once one exists.
 
 `scripts/release-channels.js` encodes that policy:
 
@@ -168,7 +178,9 @@ npm run release:channels -- repair <version> --dry-run # print the writes
 npm run release:channels -- repair <version>           # authenticated writes
 ```
 
-`check` reads the registry and never writes. `repair` is idempotent: it moves
-`next` and `latest` only when either is wrong and applies the deprecation only
-when the approved message is missing. Whether `next` is retained for the
-prerelease line after the first stable release is decided then, not now.
+`check` reads the registry and never writes. `repair` is idempotent: for a
+publish whose target state puts both tags on the published version — every
+prerelease-only cut and the stable cut itself — it moves `next` and `latest`
+only when either is wrong and applies the deprecation only when the approved
+message is missing. A later prerelease moves only `next`; verify that case by
+reading the tags against the target state above.

@@ -146,8 +146,10 @@ the absolute `result.output`. On failure, require `ok: false` and inspect
 publication preserves the prior report. Do not parse the generated HTML and do
 not parse human output: the JSON result is the only machine surface.
 
-The report ends its decision surface with a 3D dependency graph of the items the
-artifact covers. Its renderer is a pinned, checksummed `3d-force-graph` build
+The report is one shared Items, Flow, and Dependencies workspace. The
+Dependencies section holds the 3D dependency graph of the items the artifact
+covers, under the same scope as Items and Flow. Its renderer is a pinned,
+checksummed `3d-force-graph` build
 vendored at `vendor/3d-force-graph/` and inlined at generation time, so the
 report is still one self-contained file that fetches nothing — it is roughly
 1.3 MB larger for it. A browser without WebGL shows the graph section's plain

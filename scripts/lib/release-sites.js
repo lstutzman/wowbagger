@@ -96,8 +96,25 @@ export function occurrenceOffsets(text, needle) {
   }
 }
 
+function isVersionIdentifierCharacter(character) {
+  return character === '-' || character === '_'
+    || (character >= '0' && character <= '9')
+    || (character >= 'A' && character <= 'Z')
+    || (character >= 'a' && character <= 'z');
+}
+
+function continuesVersion(text, offset) {
+  const character = text[offset];
+  return character === '+' || isVersionIdentifierCharacter(character)
+    || (character === '.' && isVersionIdentifierCharacter(text[offset + 1]));
+}
+
 export function countOccurrences(text, needle) {
-  return occurrenceOffsets(text, needle).length;
+  let total = 0;
+  for (const at of occurrenceOffsets(text, needle)) {
+    if (!continuesVersion(text, at + needle.length)) total += 1;
+  }
+  return total;
 }
 
 function resolvePointer(root, pointer) {

@@ -45,6 +45,13 @@ consolidation. The first tagged release inherits this file.
   vendored bundle pin, and the no-fetch content security policy are unchanged.
 - `scripts/report-design-demo.js` publishes a deterministic, explicitly
   synthetic report through the real pipeline for browser verification.
+- **Stable and prerelease channels are defined.** A stable release sets both
+  `latest` and `next` to the stable version; a later prerelease moves only
+  `next` while `latest` stays on stable. Publish stable releases with
+  `npm publish --tag latest` and prereleases with `npm publish --tag next`.
+- **Release tooling is version-aware.** The cut still proves exact version-site
+  equality and never edits the manifest; publication and channel verification
+  follow the stable-or-prerelease target state above.
 
 The alpha.14 hard cutover remains the baseline: `claim-store-unavailable`
 answers **The durable claim store is unavailable.** with

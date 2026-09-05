@@ -54,14 +54,7 @@
     {
       "file": "README.md",
       "kind": "anchored-text",
-      "anchor": "**Status: beta, published, and self-hosted.** `{version}` is on npm under",
-      "classification": "mutable",
-      "occurrences": 1
-    },
-    {
-      "file": "README.md",
-      "kind": "anchored-text",
-      "anchor": "this repository's `v{version}` tag",
+      "anchor": "**Status: published and self-hosted.** `{version}` is published on npm and has",
       "classification": "mutable",
       "occurrences": 1
     },

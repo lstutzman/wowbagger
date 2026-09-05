@@ -2,23 +2,21 @@
 //
 // `npm run release:channels -- check|repair <version> [--dry-run]`
 //
-// While every release is a `0.1.0-alpha.*` prerelease the registry still
-// requires a `latest` dist-tag — npm rejects deleting it with E400, verified
-// live on 2026-08-17 — so the fallback policy is that `latest` mirrors `next`:
-// a bare `npm install wowbagger` resolves to the current prerelease instead of
-// dead first-alpha bytes, and `wowbagger@next` stays the documented install.
-// The policy is exactly `{ latest: <published version>, next: <published
-// version> }` with `0.1.0-alpha.1` deprecated.
+// A stable release sets both `latest` and `next` to that version, so existing
+// `@next` users converge on stable. A later prerelease moves only `next` and
+// preserves the stable `latest`. Before the first stable release, `latest`
+// mirrors `next` because npm refuses to remove `latest`. In every case,
+// `0.1.0-alpha.1` stays published with a deprecation message.
 //
 // `check` is read-only and is the post-publish verification step. `repair` is
-// idempotent and performs authenticated registry writes; run it in an
-// interactive terminal, because the account authenticates with a WebAuthn
+// idempotent and performs authenticated registry writes. Run it in an
+// interactive terminal because the account authenticates with a WebAuthn
 // passkey. It never unpublishes anything.
 //
-// Every prerelease publication must use `npm publish --tag next`, then
-// `repair` (or `npm dist-tag add`) moves `latest` alongside it. A plain
-// `npm publish` would move `latest` without `next`; `prepublishOnly` cannot
-// see that flag, which is why the post-publish check exists.
+// Publish a stable version with `npm publish --tag latest`. Publish a
+// prerelease with `npm publish --tag next`. Then run `repair` and `check`.
+// `prepublishOnly` cannot see the selected tag, so the post-publish check
+// remains required.
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -28,9 +26,15 @@ import { fileURLToPath } from 'node:url';
 export const ALPHA_1 = '0.1.0-alpha.1';
 
 export const DEPRECATION_MESSAGE = 'Unsupported: this build predates the current core contract.'
-  + ' Install the current prerelease with `npm install -g wowbagger@next`.'
+  + ' Install the current stable release with `npm install -g wowbagger@latest`.'
   + ' The bundled skill pins one exact core distribution version and refuses any other,'
   + ' so upgrade the skill and the core together.';
+
+function latestNeedsUpdate(version, latest) {
+  if (latest === version) return false;
+  if (!version.includes('-')) return true;
+  return typeof latest !== 'string' || latest.includes('-');
+}
 
 /**
  * @param {{packageName: string, version: string, distTags: object, deprecated: string|null}} state
@@ -44,11 +48,10 @@ export function checkChannels({ packageName, version, distTags, deprecated }) {
       detail: `${packageName} has no latest dist-tag; the registry always keeps one,`
         + ' so an absent read means the lookup failed',
     });
-  } else if (distTags.latest !== version) {
+  } else if (latestNeedsUpdate(version, distTags.latest)) {
     problems.push({
       code: 'latest-stale',
-      detail: `latest names ${distTags.latest}, not the published ${version};`
-        + ' the registry refuses to delete latest, so it must mirror next',
+      detail: `latest names ${distTags.latest}, not the published ${version}`,
     });
   }
   if (!Object.hasOwn(distTags, 'next')) {
@@ -80,7 +83,7 @@ export function planRepair({ packageName, version, distTags, deprecated }) {
       args: ['dist-tag', 'add', `${packageName}@${version}`, 'next'],
     });
   }
-  if (distTags.latest !== version) {
+  if (latestNeedsUpdate(version, distTags.latest)) {
     commands.push({
       reason: `point latest at ${version}; the registry refuses to delete the latest tag`,
       args: ['dist-tag', 'add', `${packageName}@${version}`, 'latest'],
@@ -145,7 +148,7 @@ export function runChannels({
   if (mode === 'check') {
     const result = checkChannels(state);
     if (result.ok) {
-      write(`ok: ${state.packageName} carries latest and next at ${version} and ${ALPHA_1} is deprecated`);
+      write(`ok: ${state.packageName} matches the channel policy for ${version} and ${ALPHA_1} is deprecated`);
       return 0;
     }
     for (const { code, detail } of result.problems) write(`${code}: ${detail}`);
@@ -154,7 +157,7 @@ export function runChannels({
 
   const commands = planRepair(state);
   if (commands.length === 0) {
-    write(`ok: nothing to repair; ${state.packageName} already matches the prerelease channel policy`);
+    write(`ok: nothing to repair; ${state.packageName} already matches the channel policy`);
     return 0;
   }
   for (const { reason, args } of commands) {
