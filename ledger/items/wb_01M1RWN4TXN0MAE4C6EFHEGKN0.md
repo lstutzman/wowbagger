@@ -5,9 +5,10 @@ number: 196
 title: "Connect report area concentrations and blocker drilldowns"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:37.592Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Connected area/status concentrations, scoped attention actions, dependency impact, and scoped batch membership to exact contributing items."
+    rationale: "Commit 5206d07 with #195. model.impactById embedded and exposed frozen as window.wowbaggerReport.impactById; downstream reach and ready-if-done shown separately; matrix cells, attention actions, and batches drill through showItems intersecting scope. Real Chrome check: search Accounts then Blocked attention drilldown listed #2, #6, #5 and matrix cell Accounts/backlog listed 8 exact IDs while search text stayed. HTML, model, attention, sequencing, ready-contract, and impact suites pass."
 ---
 
 ## Assignment
