@@ -66,6 +66,11 @@ function model() {
     title: 'Report & status',
     asOf: '2026-08-14',
     stats: { total: 2, open: 1, terminal: 1, ready: 1, blocked: 0, ineligible: 0 },
+    fieldCoverage: [
+      { name: 'area', mapped: true, present: 1, missing: 1, invalid: 0 },
+      { name: 'complexity', mapped: true, present: 1, missing: 1, invalid: 0 },
+      { name: 'tags', mapped: false, present: 0, missing: 2, invalid: 0 },
+    ],
     swarm: null,
     swarmBatches: [],
     // The complete-ledger label lookup the report keeps: every item the ledger
@@ -208,7 +213,13 @@ function model() {
 }
 
 function decisionSurface(html) {
-  return html.slice(0, html.indexOf('id="drilldown"'));
+  return html.slice(0, html.indexOf('id="items"'));
+}
+
+function flowSurface(html) {
+  const start = html.indexOf('id="section-flow"');
+  const end = html.indexOf('id="section-dependencies"');
+  return html.slice(start, end);
 }
 
 // What a screen reader would read out of the element an aria reference names:
@@ -251,7 +262,7 @@ test('renders deterministic self-contained HTML without executable ledger conten
   assert.match(first, /Unsafe &lt;\/script&gt;&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(first, /type="text\/markdown"/);
   assert.match(first, /\\u003c\/script>/);
-  assert.match(first, /<table[^>]*>.*Completed item.*<\/table>/s);
+  assert.match(first, /History.*Completed item/s);
   assert.match(first, /id="sort-by"/);
   assert.match(first, /<fieldset class="facet-group" data-group="field:area">/);
   assert.match(first, /class="body-excerpt standard-only"/);
@@ -267,7 +278,6 @@ test('renders a checked control for hiding terminal history', async () => {
     html,
     /<label class="history-toggle"><input id="show-history" type="checkbox" checked>Show history<\/label>/,
   );
-  assert.match(html, /<section id="history" class="panel">/);
 });
 
 // The dropdown only moves the body's richness attribute, so a mode is visible
@@ -290,75 +300,72 @@ test('gates extra collapsed-card summary content behind the standard and detaile
 test('opens with the ranked work-next list and its reasons', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
-  const surface = decisionSurface(html);
+  const items = html.slice(html.indexOf('id="section-items"'), html.indexOf('id="section-flow"'));
 
-  assert.ok(surface.indexOf('id="work-next"') < surface.indexOf('id="attention"'));
-  assert.ok(surface.indexOf('id="attention"') < surface.indexOf('id="evidence"'));
-  assert.match(surface, /id="work-next"/);
-  assert.match(surface, /<span class="handle">#7<\/span>/);
-  assert.match(surface, /priority 1/);
-  assert.match(surface, /age 13d/);
+  assert.match(items, /data-quick="work-next"[^>]*aria-pressed="true"/);
+  assert.match(items, /<span class="handle">#7<\/span>/);
+  assert.match(items, /priority 1/);
+  assert.match(items, /age 13d/);
+  assert.match(items, /Unrecognised class values, ranked as standard/);
+  assert.match(items, /urgent &amp; loud/);
 });
 
 // A decision surface that names an item has to be able to show it. The row is
 // the whole link so the pointer target matches the reading target, and the
 // href alone reaches the card when scripting is off.
-test('links a work-next row as a whole row to the canonical drill-down card', async () => {
+test('links a work-next row as a whole row to the canonical detail card', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
-  const surface = decisionSurface(html);
-  const detail = html.slice(html.indexOf('id="drilldown"'));
-  const row = surface.slice(surface.indexOf('<ol class="ranked">'), surface.indexOf('</ol>'));
+  const items = html.slice(html.indexOf('id="section-items"'), html.indexOf('id="section-flow"'));
+  const row = items.slice(items.indexOf('<ol id="item-list"'), items.indexOf('</ol>'));
 
-  assert.match(detail, /<details class="card" id="item-7"/);
+  assert.match(html, /<details class="card" id="item-7"/);
   assert.match(row, /<li><a class="row-link" href="#item-7" data-reveal="item-7"/);
   assert.match(row, /aria-labelledby="row-work-next-item-7-name" aria-describedby="row-work-next-item-7-detail"/);
   assert.ok(row.indexOf('age 13d') < row.indexOf('</a>'));
 });
 
-test('renders the attention layer with blocker numbers and ages', async () => {
+test('renders the attention summary with blocker numbers and ages', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const items = htmlSlice(renderReportHtml(model(), options()));
 
-  assert.match(surface, /#12/);
-  assert.match(surface, /blocked by #5/);
-  assert.match(surface, /225d/);
-  assert.match(surface, /44d/);
-  assert.match(surface, /p85 20d/);
+  assert.match(items, /#12/);
+  assert.match(items, /#5/);
+  assert.match(items, /225d/);
+  assert.match(items, /44d/);
+  assert.match(items, /p85 20d/);
+  assert.match(items, /Showing 1 of 3\./);
 });
 
-// Attention is three lists of items to act on, so every row in all three is a
-// way into the item, not only the blocked ones.
-test('links every attention row to the canonical drill-down card', async () => {
-  const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
-  const attention = surface.slice(surface.indexOf('id="attention"'), surface.indexOf('id="evidence"'));
-  const lists = attention.split('<h3>').slice(1).map((section) => section.slice(0, section.indexOf('</section>')));
+function htmlSlice(html) {
+  return html.slice(html.indexOf('id="section-items"'), html.indexOf('id="section-flow"'));
+}
 
-  assert.equal(lists.length, 3);
-  assert.match(lists[0], /<li><a class="row-link" href="#item-12" data-reveal="item-12"[^>]*>.*age 10d.*<\/a><\/li>/s);
-  assert.match(lists[1], /<li><a class="row-link" href="#item-3" data-reveal="item-3"[^>]*>.*age 225d.*<\/a><\/li>/s);
-  assert.match(lists[2], /<li><a class="row-link" href="#item-10" data-reveal="item-10"[^>]*>.*p85 20d.*<\/a><\/li>/s);
+test('summarises attention without duplicating full item lists', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const items = htmlSlice(renderReportHtml(model(), options()));
+
+  assert.match(items, /id="attention-summary"/);
+  assert.doesNotMatch(items, /<section id="attention"/);
+  assert.doesNotMatch(items, /<section id="work-next"/);
 });
 
 // aria-label replaces every node nested inside the anchor, so a free-text label
 // on a whole-row link costs the reader exactly what the row is for: the ranking
-// reasons on Work next, and the blocked-by, age, and p85 facts on Attention. The
-// row's own printed nodes have to be the name and the description.
-test('names every row link by its handle and title and describes it with the row facts', async () => {
+// reasons on Work next and the history facts below it. The row's own printed
+// nodes have to be the name and the description.
+test('names every list row by its handle and title and describes it with row facts', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
-  const surface = decisionSurface(html);
-  const rows = [...surface.matchAll(/<a class="row-link"[^>]*>.*?<\/a>/gs)].map((match) => match[0]);
+  const items = htmlSlice(html);
+  const rows = [...items.matchAll(/<a class="row-link"[^>]*>.*?<\/a>/gs)].map((match) => match[0]);
   const expected = new Map([
     ['item-7', { name: ['#7', 'Unsafe'], detail: ['priority 1', 'age 13d'] }],
-    ['item-12', { name: ['#12', 'Blocked item'], detail: ['blocked by #5', 'age 10d'] }],
-    ['item-3', { name: ['#3', 'Old item'], detail: ['age 225d', 'backlog', 'ready'] }],
-    ['item-10', { name: ['#10', 'Stuck item'], detail: ['44d since accept', 'p85 20d'] }],
+    ['item-8', { name: ['#8', 'Completed item'], detail: ['done', 'terminal'] }],
   ]);
 
   assert.equal(rows.length, expected.size);
-  assert.doesNotMatch(surface, /class="row-link"[^>]*aria-label=/);
+  assert.doesNotMatch(items, /class="row-link"[^>]*aria-label=/);
 
   for (const row of rows) {
     const anchor = /data-reveal="([^"]+)"/.exec(row)[1];
@@ -380,7 +387,7 @@ test('names every row link by its handle and title and describes it with the row
 
 test('renders the evidence layer with throughput, buckets, and forecast bands', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const surface = flowSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /0\.33/);
   assert.match(surface, /over 90d/);
@@ -392,7 +399,7 @@ test('renders the evidence layer with throughput, buckets, and forecast bands', 
 
 test('labels closures as closures and states the snapshot limits', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const surface = flowSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /4 closures \(3 done\) over 12 weeks/);
   assert.match(surface, /3 done items with recorded acceptance, accept to completion/);
@@ -403,7 +410,7 @@ test('labels closures as closures and states the snapshot limits', async () => {
 
 test('draws the weekly flow as an inline SVG chart carrying its own numbers', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const surface = flowSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<svg[^>]*data-testid="chart-weekly-flow"/);
   assert.match(surface, /<title>Week of 2026-08-10: 0 arrivals, 3 closures<\/title>/);
@@ -411,7 +418,7 @@ test('draws the weekly flow as an inline SVG chart carrying its own numbers', as
 
 test('draws all six evidence charts, each under its own stable test id', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const surface = flowSurface(renderReportHtml(model(), options()));
 
   for (const id of [
     'chart-aging-heatmap',
@@ -427,7 +434,7 @@ test('draws all six evidence charts, each under its own stable test id', async (
 
 test('draws the aging heatmap as age crossed with status', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const surface = flowSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<title>backlog, 7-30d: 1 open item<\/title>/);
   assert.match(surface, /<title>in-progress, 30-90d: 0 open items<\/title>/);
@@ -436,7 +443,7 @@ test('draws the aging heatmap as age crossed with status', async () => {
 
 test('draws the cycle-time scatter and the cumulative flow from the same model', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const surface = flowSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<title>#9 completed 2026-08-12 after 20 days<\/title>/);
   assert.match(surface, /<title>Terminal: 1 item on 2026-08-14<\/title>/);
@@ -445,7 +452,7 @@ test('draws the cycle-time scatter and the cumulative flow from the same model',
 
 test('draws the forecast fan and states all three percentile dates', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
-  const surface = decisionSurface(renderReportHtml(model(), options()));
+  const surface = flowSurface(renderReportHtml(model(), options()));
 
   assert.match(surface, /<title>50% of trials finish 4 items by 2026-10-09, 8 weeks from 2026-08-14<\/title>/);
   assert.match(surface, /<title>95% of trials finish 4 items by 2026-11-13, 13 weeks from 2026-08-14<\/title>/);
@@ -466,7 +473,7 @@ test('draws no chart for a series with no history and keeps the numeric statemen
     },
     forecast: null,
   };
-  const surface = decisionSurface(renderReportHtml(empty, options()));
+  const surface = flowSurface(renderReportHtml(empty, options()));
 
   assert.doesNotMatch(surface, /data-testid="chart-/);
   assert.match(surface, /No closures in the window, so no forecast\./);
@@ -487,7 +494,7 @@ test('draws the forecast band without dividing by zero when nothing remains', as
     distribution: [{ weeks: 0, share: 1 }],
     trials: 5000,
   };
-  const surface = decisionSurface(renderReportHtml(settled, options()));
+  const surface = flowSurface(renderReportHtml(settled, options()));
 
   assert.doesNotMatch(surface, /data-testid="chart-forecast"/);
   assert.match(surface, /<strong>0<\/strong> open items remaining\./);
@@ -521,11 +528,11 @@ test('refers to items by number above the drill-down', async () => {
 test('names related items by number inside the drill-down detail', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
-  const detail = html.slice(html.indexOf('id="drilldown"'));
+  const detail = html.slice(html.indexOf('id="items"'));
 
-  assert.match(detail, /<dt>Parent<\/dt><dd>#8<\/dd>/);
-  assert.match(detail, /<dt>Depends on<\/dt><dd>#8<\/dd>/);
-  assert.match(detail, /<dt>Related<\/dt><dd>wb_missing<\/dd>/);
+  assert.match(detail, /<dt>Parent<\/dt><dd><a href="#item-8" data-reveal="item-8" data-inspect="wb_done">#8<\/a><\/dd>/);
+  assert.match(detail, /<dt>Depends on<\/dt><dd><a href="#item-8" data-reveal="item-8" data-inspect="wb_done">#8<\/a><\/dd>/);
+  assert.match(detail, /<dt>Related<\/dt><dd>wb_missing \(not included in this report\)<\/dd>/);
   assert.match(detail, /<li>Dependency is not done: #8<\/li>/);
 });
 
@@ -561,9 +568,9 @@ function viewModel() {
 test('labels an excluded reference with its complete-ledger number', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(viewModel(), options());
-  const detail = html.slice(html.indexOf('id="drilldown"'));
+  const detail = html.slice(html.indexOf('id="items"'));
 
-  assert.match(detail, /<dt>Depends on<\/dt><dd>#8, #40<\/dd>/);
+  assert.match(detail, /<dt>Depends on<\/dt><dd><a href="#item-8"[^>]*>#8<\/a>, #40 \(not included in this report\)<\/dd>/);
   assert.match(detail, /<li>Dependency is not done: #40<\/li>/);
   assert.doesNotMatch(html, new RegExp(excludedId));
 });
@@ -584,7 +591,8 @@ test('identifies a named view and its fixed criteria', async () => {
     { key: 'field:security_tier', values: [2, true] },
   ];
   const html = renderReportHtml(named, options());
-  const context = html.slice(html.indexOf('<section class="view-context"'), html.indexOf('id="work-next"'));
+  const contextStart = html.indexOf('<section class="view-context"');
+  const context = html.slice(contextStart, html.indexOf('<nav class="view-nav"', contextStart));
 
   assert.match(html, /<section class="view-context" aria-label="Custom report view">/);
   assert.match(context, /<p class="eyebrow">Custom view<\/p>/);
@@ -680,6 +688,37 @@ test('says how much of a truncated attention list is not shown', async () => {
 // states at once instead of choosing one and losing the other. A group is a
 // fieldset with a legend, and a chip is a real checkbox inside its own label,
 // so the grouping and the multi-select are announced rather than implied.
+// The workspace replaces duplicated Work next and Attention lists with one
+// canonical list driven by five quick views. Work next keeps its rank and
+// reasons; the other views filter the same scoped population honestly.
+test('opens Items with the work-next quick view selected and its reasons', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.match(html, /<button[^>]*data-quick="work-next"[^>]*aria-pressed="true"[^>]*>Work next<\/button>/);
+  assert.match(html, /<ol id="item-list"[^>]*>.*priority 1.*age 13d.*<\/ol>/s);
+  assert.doesNotMatch(html, /<section id="work-next"/);
+  assert.doesNotMatch(html, /<section id="attention"/);
+});
+
+test('exposes metadata gaps through coverage instead of guessing', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.match(html, /id="coverage"/);
+  assert.match(html, /Tags.*not configured|not configured.*Tags/is);
+});
+
+test('navigates Items, Flow, and Dependencies without losing scope', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.match(html, /<button[^>]*id="nav-items"[^>]*aria-pressed="true"/);
+  assert.match(html, /<section id="section-items"[^>]*>/);
+  assert.match(html, /<section id="section-flow"[^>]*>.*id="evidence"/s);
+  assert.match(html, /<section id="section-dependencies"[^>]*>.*id="graph"/s);
+});
+
 test('renders the drill-down filters as grouped accessible multi-select chips', async () => {
   const { renderReportHtml } = await import('../src/report-html.js');
   const html = renderReportHtml(model(), options());
@@ -690,12 +729,13 @@ test('renders the drill-down filters as grouped accessible multi-select chips', 
   for (const [value, label] of [['ready', 'Ready'], ['blocked', 'Blocked'], ['ineligible', 'Ineligible']]) {
     assert.match(
       facets,
-      new RegExp(`<label class="chip"><input type="checkbox" class="facet" data-group="readiness" value="${value}"><span class="chip-text">${label}</span>`),
+      new RegExp(`<label class="chip"><input type="checkbox" class="facet" data-group="readiness" data-kind="value" data-value="&quot;${value}&quot;" value="${value}"><span class="chip-text">${label}</span>`),
     );
   }
-  assert.match(facets, /<fieldset class="facet-group" data-group="status"><legend>Status<\/legend>.*value="backlog"/);
+  assert.match(facets, /<fieldset class="facet-group" data-group="priority"><legend>Priority<\/legend>/);
+  assert.match(facets, /<p id="result-count" class="result-count" role="status" aria-live="polite">Showing 2 of 2 items<\/p>/);
   assert.match(facets, /<fieldset class="facet-group" data-group="kind"><legend>Kind<\/legend>.*value="task".*value="epic"/);
-  assert.match(facets, /<p id="result-count" class="result-count" role="status" aria-live="polite">Showing 1 of 1 item<\/p>/);
+  assert.match(facets, /<fieldset class="facet-group" data-group="priority"><legend>Priority<\/legend>/);
   assert.match(facets, /<button type="button" id="clear-facets">Clear filters<\/button>/);
 });
 
@@ -887,7 +927,7 @@ test('gives every configured mapped field its own facet group of its own values'
   assert.match(facets, /<fieldset class="facet-group" data-group="field:area"><legend>Area<\/legend>/);
   assert.match(
     facets,
-    /<fieldset class="facet-group" data-group="field:class"><legend>Class<\/legend><div class="chips"><label class="chip"><input type="checkbox" class="facet" data-group="field:class" value="bug"><span class="chip-text">bug<\/span> <span class="chip-count">1<\/span><\/label>/,
+    /<fieldset class="facet-group" data-group="field:class"><legend>Class<\/legend><div class="chips"><label class="chip"><input type="checkbox" class="facet" data-group="field:class" data-kind="value" data-value="&quot;bug&quot;" value="bug"><span class="chip-text">bug<\/span> <span class="chip-count">1<\/span><\/label>/,
   );
   assert.doesNotMatch(facets, /data-group="field:complexity"/);
 });
@@ -918,10 +958,32 @@ test('filters by mapped field values and leaves out cards that carry none', asyn
   assert.equal(dom.chipCount('field:area', 'docs'), '0');
 });
 
-// A row above the drill-down is a promise that the item can be seen. The
-// drill-down's own filters can have detached that card, so the runtime clears
-// what hides it, re-applies the list, and then opens what it promised.
-test('clears the facets and the search that detach a targeted card and opens it', async () => {
+// Inspecting an item must not clear the reader's scope: opening a detail
+// outside the current search leaves the search text and the visible list
+// exactly where they were, while still opening the targeted detail.
+test('opens an out-of-filter detail without resetting the search or visible list', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+  dom.search().value = 'ready';
+  dom.search().dispatch('input');
+  const visibleBefore = dom.visible();
+  assert.deepEqual(visibleBefore, ['item-7']);
+  const event = dom.link('item-12').dispatch('click');
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(dom.search().value, 'ready');
+  assert.deepEqual(dom.visible(), visibleBefore);
+  const target = dom.card('item-12');
+  assert.equal(target.open, true);
+  assert.equal(target.querySelector('.rendered-markdown').dataset.rendered, '1');
+  assert.equal(target.isConnected, true);
+});
+
+// A row above the drill-down is a promise that the item can be seen, without
+// resetting what the reader already chose. The runtime opens the detached
+// canonical card in the detail pane and leaves the search, facets, and visible
+// list exactly where they were.
+test('opens a detached card without clearing the search or facets', async () => {
   const { reportClientSource } = await import('../src/report-html.js');
   const dom = revealDom();
   runReportClient(reportClientSource(), dom);
@@ -932,15 +994,17 @@ test('clears the facets and the search that detach a targeted card and opens it'
   dom.select('field:area', 'core');
 
   assert.equal(target.isConnected, false);
+  assert.deepEqual(dom.visible(), ['item-7']);
 
   const event = dom.link('item-12').dispatch('click');
 
   assert.equal(event.defaultPrevented, true);
-  assert.equal(dom.search().value, '');
-  assert.equal(dom.chip('readiness', 'ready').checked, false);
-  assert.equal(dom.chip('field:area', 'core').checked, false);
-  assert.equal(dom.chipState('readiness', 'ready').classList.contains('selected'), false);
-  assert.equal(dom.resultCount(), 'Showing 2 of 2 items');
+  assert.equal(dom.search().value, 'ready');
+  assert.equal(dom.chip('readiness', 'ready').checked, true);
+  assert.equal(dom.chip('field:area', 'core').checked, true);
+  assert.equal(dom.chipState('readiness', 'ready').classList.contains('selected'), true);
+  assert.deepEqual(dom.visible(), ['item-7']);
+  assert.equal(dom.resultCount(), 'Showing 1 of 2 items');
   assert.equal(target.isConnected, true);
   assert.equal(target.open, true);
   assert.equal(target.querySelector('.rendered-markdown').dataset.rendered, '1');
@@ -948,6 +1012,67 @@ test('clears the facets and the search that detach a targeted card and opens it'
   assert.equal(dom.document.activeElement, target.querySelector('summary'));
   assert.deepEqual(target.scrolls, [{ behavior: 'smooth', block: 'start' }]);
 });
+// The browser controller is the integration seam T5B/T7 build on: scope
+// observation plus detail and drilldown actions, installed before the graph
+// runtime runs. These cases execute the shipped runtime, not its text.
+test('installs the report controller with the scoped inspection contract', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+
+  const controller = dom.window.wowbaggerReport;
+  assert.equal(typeof controller?.getScopeItems, 'function');
+  assert.equal(typeof controller?.subscribeScope, 'function');
+  assert.equal(typeof controller?.inspectItem, 'function');
+  assert.equal(typeof controller?.showItems, 'function');
+  assert.deepEqual(controller.getScopeItems().map((entry) => entry.id).sort(), ['item-12', 'item-7']);
+});
+
+test('notifies scope subscribers immediately and on later scope changes', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+  const seen = [];
+  const unsubscribe = dom.window.wowbaggerReport.subscribeScope((items) => {
+    seen.push(items.map((entry) => entry.id).sort().join(','));
+  });
+  dom.search().value = 'ready';
+  dom.search().dispatch('input');
+  unsubscribe();
+  dom.search().value = '';
+  dom.search().dispatch('input');
+
+  assert.deepEqual(seen, ['item-12,item-7', 'item-7']);
+});
+
+test('inspects an item through the controller without changing scope', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+  dom.search().value = 'ready';
+  dom.search().dispatch('input');
+  const visibleBefore = dom.visible();
+
+  assert.equal(dom.window.wowbaggerReport.inspectItem('item-12'), true);
+  assert.equal(dom.search().value, 'ready');
+  assert.deepEqual(dom.visible(), visibleBefore);
+  assert.equal(dom.card('item-12').open, true);
+  assert.equal(dom.window.wowbaggerReport.inspectItem('missing-id'), false);
+});
+
+test('shows a labelled drilldown through the controller and clears it', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  runReportClient(reportClientSource(), dom);
+
+  dom.window.wowbaggerReport.showItems({ label: 'Test bucket', itemIds: ['item-12'] });
+  assert.deepEqual(dom.visible(), ['item-12']);
+  assert.match(dom.document.getElementById('drilldown-label').textContent, /Test bucket/);
+
+  dom.document.getElementById('clear-drilldown').dispatch('click');
+  assert.deepEqual(dom.visible().sort(), ['item-12', 'item-7']);
+});
+
 
 test('jumps to a revealed card without animation when motion is not wanted', async () => {
   const { reportClientSource } = await import('../src/report-html.js');
@@ -1100,4 +1225,133 @@ test('keeps the filter and status copy for a base report the reader can narrow',
     /<p id="graph-empty" hidden>No status is selected, so the graph is empty\. Select a status above to draw that part of the ledger\.<\/p>/,
   );
   assert.doesNotMatch(html, /matches this view's criteria/);
+});
+
+test('hides Flow and Dependencies on initial Items view with one canonical items container', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.match(html, /<section id="section-flow" data-section="flow" hidden>/);
+  assert.match(html, /<section id="section-dependencies" data-section="dependencies" hidden>/);
+  assert.equal((html.match(/id="items"/g) ?? []).length, 1);
+});
+
+test('offers facet groups through a collapsed expandable control', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+  const facets = html.slice(html.indexOf('id="facets"'), html.indexOf('id="items"'));
+
+  assert.match(facets, /<details class="facet-expand" id="facets-expand"><summary>Filters<\/summary>/);
+  assert.match(facets, /<fieldset class="facet-group" data-group="readiness">/);
+});
+
+test('uses a desktop split at 1100px with inline mobile details and scoped print', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const html = renderReportHtml(model(), options());
+
+  assert.match(html, /@media\(min-width:1100px\)/);
+  assert.match(html, /#workspace-split/);
+  assert.match(html, /@media print/);
+  assert.match(html, /<noscript>.*href="#section-items"/s);
+  assert.doesNotMatch(html, /\.controls\{position:static/);
+});
+
+test('collapses only visible details and leaves hidden bodies alone', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = facetDom();
+  runReportClient(reportClientSource(), dom);
+  const hidden = dom.card('item-2');
+  hidden.open = true;
+  dom.select('readiness', 'ready');
+  assert.deepEqual(dom.visible(), ['item-1', 'item-3']);
+  dom.document.getElementById('expand-all').dispatch('click');
+  assert.equal(dom.card('item-1').open, true);
+  assert.equal(hidden.open, true);
+  dom.document.getElementById('collapse-all').dispatch('click');
+  assert.equal(dom.card('item-1').open, false);
+  assert.equal(hidden.open, true);
+});
+
+test('embeds the immutable impact map in report data', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const shaped = model();
+  shaped.impactById = {
+    wb_hostile: { downstreamIds: ['wb_done'], readyIfDoneIds: [] },
+  };
+  const html = renderReportHtml(shaped, options());
+  const json = html.slice(html.indexOf('<script id="report-data"'), html.indexOf('</script>', html.indexOf('<script id="report-data"')));
+
+  assert.match(json, /"impactById"/);
+  assert.match(json, /wb_hostile/);
+});
+
+test('exposes an immutable impact map on the report controller', async () => {
+  const { reportClientSource } = await import('../src/report-html.js');
+  const dom = revealDom();
+  const data = JSON.parse(dom.document.getElementById('report-data').textContent);
+  data.impactById = {
+    'item-7': { downstreamIds: ['item-12'], readyIfDoneIds: [] },
+    'item-12': { downstreamIds: [], readyIfDoneIds: [] },
+  };
+  dom.document.getElementById('report-data').textContent = JSON.stringify(data);
+  runReportClient(reportClientSource(), dom);
+
+  assert.deepEqual(dom.window.wowbaggerReport.impactById, data.impactById);
+  assert.equal(Object.isFrozen(dom.window.wowbaggerReport.impactById), true);
+});
+
+test('distinguishes downstream reach from ready-if-done with exact drilldowns', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const shaped = model();
+  shaped.impactById = {
+    wb_hostile: { downstreamIds: ['wb_done'], readyIfDoneIds: [] },
+    wb_done: { downstreamIds: [], readyIfDoneIds: [] },
+  };
+  const html = renderReportHtml(shaped, options());
+  const detail = html.slice(html.indexOf('id="items"'));
+
+  assert.match(detail, /Downstream reach/);
+  assert.match(detail, /Ready if done/);
+  assert.match(detail, /data-show-items="wb_done"/);
+});
+
+test('renders a scoped area/status matrix with exact contributor drilldowns', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const shaped = model();
+  shaped.impactById = {};
+  const html = renderReportHtml(shaped, options());
+  const items = html.slice(html.indexOf('id="section-items"'), html.indexOf('id="section-flow"'));
+
+  assert.match(items, /id="area-matrix"/);
+  assert.match(items, /Core &amp; CLI/);
+  assert.match(items, /1 \(blocked 1\)/);
+  assert.match(items, /data-matrix-status="backlog"/);
+  assert.match(items, /data-matrix-area="Core &amp; CLI"/);
+});
+
+test('offers scoped attention actions that open exact item sets', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const shaped = model();
+  shaped.impactById = {};
+  const html = renderReportHtml(shaped, options());
+  const items = html.slice(html.indexOf('id="section-items"'), html.indexOf('id="section-flow"'));
+
+  assert.match(items, /id="attention-summary"/);
+  assert.match(items, /data-show-numbers="12"/);
+  assert.match(items, /data-show-numbers="3"/);
+  assert.match(items, /data-show-numbers="10"/);
+});
+
+test('shows scoped members of existing batches with exact drilldowns', async () => {
+  const { renderReportHtml } = await import('../src/report-html.js');
+  const shaped = model();
+  shaped.swarm = { eligibleComplexities: ['small'] };
+  shaped.swarmBatches = [[{ id: 'wb_hostile', number: 7, title: 'Unsafe item' }]];
+  shaped.impactById = {};
+  const html = renderReportHtml(shaped, options());
+  const items = html.slice(html.indexOf('id="section-items"'), html.indexOf('id="section-flow"'));
+
+  assert.match(items, /id="batches"/);
+  assert.match(items, /Scoped members of existing batches/);
+  assert.match(items, /data-show-items="wb_hostile"/);
 });

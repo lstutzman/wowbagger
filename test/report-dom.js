@@ -225,6 +225,7 @@ export function reportDom({ items, fieldName = 'area' }) {
     getElementById: (id) => body.descendants().find((node) => node.id === id) ?? null,
     querySelectorAll: (selector) => body.querySelectorAll(selector),
     querySelector: (selector) => body.querySelector(selector),
+    addEventListener: () => {},
   };
   body.owner = document;
 
@@ -244,6 +245,17 @@ export function reportDom({ items, fieldName = 'area' }) {
     element('button', { id: 'expand-all' }),
     element('button', { id: 'collapse-all' }),
   );
+  // Five quick views filter the same scoped population without changing scope.
+  // Work next preserves rank order and reasons; the others filter honestly.
+  const quickButtons = ['work-next', 'in-progress', 'blocked', 'triage', 'all-open'].map((view, index) => {
+    const button = element('button', { dataset: { quick: view }, attributes: { 'aria-pressed': index === 0 ? 'true' : 'false' } });
+    return button;
+  });
+  const activeScope = element('div', { id: 'active-scope' });
+  const historyExplain = element('p', { id: 'history-explain' });
+  historyExplain.hidden = true;
+  const showHistoryAction = element('button', { id: 'show-history-action' });
+  historyExplain.append(showHistoryAction);
 
   // One chip per value the fixture's own cards carry, grouped exactly as
   // `renderFacets` groups them: readiness, status, kind, then the mapped field.
@@ -251,6 +263,13 @@ export function reportDom({ items, fieldName = 'area' }) {
   const resultCount = element('p', { id: 'result-count' });
   const clearFacets = element('button', { id: 'clear-facets' });
   const facets = element('section', { id: 'facets', classes: ['facets'] });
+  // Visible drilldown state: showItems sets the label and narrows the list to
+  // the named IDs intersected with scope; clearing restores the previous view.
+  const drilldownPill = element('div', { id: 'drilldown-pill' });
+  drilldownPill.hidden = true;
+  const drilldownLabel = element('span', { id: 'drilldown-label' });
+  const clearDrilldown = element('button', { id: 'clear-drilldown' });
+  drilldownPill.append(drilldownLabel, clearDrilldown);
   facets.append(resultCount, clearFacets);
   const groupValues = [
     ['readiness', items.map((item) => item.state)],
@@ -262,7 +281,7 @@ export function reportDom({ items, fieldName = 'area' }) {
     const fieldset = element('fieldset', { classes: ['facet-group'], dataset: { group } });
     for (const value of [...new Set(values)].sort()) {
       const chip = element('label', { classes: ['chip'] });
-      const input = element('input', { classes: ['facet'], dataset: { group } });
+      const input = element('input', { classes: ['facet'], dataset: { group, kind: 'value', value: JSON.stringify(value) } });
       input.value = value;
       const count = element('span', { classes: ['chip-count'] });
       chip.append(input, element('span', { classes: ['chip-text'], textContent: value }), count);
@@ -281,6 +300,29 @@ export function reportDom({ items, fieldName = 'area' }) {
 
   const itemRoot = element('div', { id: 'items' });
   itemRoot.append(...items.map(card));
+  // Inspecting an item outside the current scope must not reset that scope:
+  // a detached canonical card moves here so it is visible while the filtered
+  // list in #items stays exactly where it was. One canonical node, reused.
+  const detailPane = element('div', { id: 'detail-pane' });
+  // Typed selection population the runtime filters with the shared selection
+  // module instead of reparsing card markup on every keystroke.
+  const selectionItems = items.map((item) => ({
+    id: item.id,
+    number: null,
+    title: item.title,
+    status: item.status,
+    kind: item.kind ?? 'task',
+    priority: item.priority ?? null,
+    created: item.created,
+    readiness: { state: item.state },
+    fields: item.fields,
+  }));
+  const reportData = element('script', { id: 'report-data', attributes: { type: 'application/json' } });
+  reportData.textContent = JSON.stringify({
+    items: selectionItems,
+    workNextIds: items.map((item) => item.id),
+    workNextById: Object.fromEntries(items.map((item) => [item.id, { reasons: [], number: null, title: item.title }])),
+  });
 
   // The report is one document: the ledger graph's own status chips share the
   // chip vocabulary further down the page, and the drill-down runtime has to
@@ -290,9 +332,15 @@ export function reportDom({ items, fieldName = 'area' }) {
 
   body.append(
     controls,
+    ...quickButtons,
+    activeScope,
+    historyExplain,
     facets,
+    drilldownPill,
     rows,
     itemRoot,
+    detailPane,
+    reportData,
     element('p', { id: 'empty' }),
     element('section', { id: 'history' }),
     graphChip,
@@ -328,6 +376,10 @@ export function reportDom({ items, fieldName = 'area' }) {
       input.checked = true;
       input.dispatch('change');
     },
+    quick: (view) => body.querySelector(`[data-quick="${view}"]`),
+    activeScope: () => document.getElementById('active-scope').textContent,
+    historyExplain: () => document.getElementById('history-explain'),
+    showHistoryAction: () => document.getElementById('show-history-action'),
     visible: () => itemRoot.querySelectorAll('[data-item]').map((node) => node.id),
   };
 }

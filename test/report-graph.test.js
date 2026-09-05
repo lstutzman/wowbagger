@@ -214,7 +214,7 @@ test('the report content security policy forbids every remote load', async () =>
 
 test('the graph sits below the decision surface, never above it', async () => {
   const html = await fixtureHtml();
-  const order = ['id="work-next"', 'id="attention"', 'id="evidence"', 'id="graph"', 'id="drilldown"']
+  const order = ['id="section-items"', 'id="attention-summary"', 'id="item-list"', 'id="section-flow"', 'id="section-dependencies"', 'id="graph"']
     .map((marker) => html.indexOf(marker));
 
   assert.ok(order.every((position) => position > -1), `a report section is missing: ${order}`);

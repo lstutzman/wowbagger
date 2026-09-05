@@ -75,7 +75,8 @@ test('the report ranks the same ledger differently from ready', async () => {
 
     assert.equal(result.status, 0, result.stderr);
     const html = await readFile(output, 'utf8');
-    const ranked = [...html.slice(html.indexOf('class="ranked"'), html.indexOf('id="attention"'))
+    const listStart = html.indexOf('<ol id="item-list" class="ranked">');
+    const ranked = [...html.slice(listStart, html.indexOf('</ol>', listStart))
       .matchAll(/<span class="handle">#(\d+)<\/span>/g)]
       .map(([, number]) => Number(number));
 
