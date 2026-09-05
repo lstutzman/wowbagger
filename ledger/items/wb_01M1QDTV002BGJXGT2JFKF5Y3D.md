@@ -5,18 +5,23 @@ number: 201
 title: "Diagnose incompatible claim-journal writer versions"
 kind: task
 priority: 10
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 3 item 27"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M14Y2VZW2ASKHYE42BGZ1PPK]
+related: [ wb_01M14Y2VZW2ASKHYE42BGZ1PPK ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept incompatible journal diagnosis."
+    rationale: "The consumer reproduction shows a generic unreadable-store refusal where version-specific remediation is actionable and separate from local skill drift."
 ---
 
 ## Problem
