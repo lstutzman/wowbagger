@@ -4,7 +4,7 @@ id: wb_01M1S2ZRQGQ4P8WAT6NB8HBMX9
 number: 200
 title: "Triage complete Property Compass consumer defect digest from September 5"
 kind: task
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-09-05T00:00:00.000Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept the complete consumer defect digest triage."
+    rationale: "All 32 source headings and bundled subitems now have released, queued, intended, or accepted-as-is dispositions with exact Wowbagger references."
 ---
 
 ## Intake scope
