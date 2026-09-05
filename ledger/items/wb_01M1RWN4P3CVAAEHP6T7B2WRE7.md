@@ -5,7 +5,7 @@ number: 194
 title: "Share typed report filters and quick-view selection"
 kind: task
 priority: 20
-status: backlog
+status: in-progress
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
