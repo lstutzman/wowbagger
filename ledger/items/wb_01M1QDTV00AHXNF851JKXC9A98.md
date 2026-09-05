@@ -5,19 +5,24 @@ number: 210
 title: "Separate byte verification from adoption-history sync"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 25 item 1476 contract clarification"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M0N3KM316P7MBJTA1A5X29J4, wb_01M0Z48K7N8F12SY8AE2GW3XHE]
+related: [ wb_01M0N3KM316P7MBJTA1A5X29J4, wb_01M0Z48K7N8F12SY8AE2GW3XHE ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
   - "documentation"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept verification and sync clarification."
+    rationale: "Current-byte verification and adoption-history synchronization are distinct gates and consumer guidance must state that explicitly."
 ---
 
 ## Problem
