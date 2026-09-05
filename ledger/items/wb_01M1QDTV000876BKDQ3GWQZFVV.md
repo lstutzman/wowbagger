@@ -5,19 +5,24 @@ number: 207
 title: "Define who records adopted-by identity"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 24 item 32"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M07J8W5TS6PVKFZ1T4RTN184]
+related: [ wb_01M07J8W5TS6PVKFZ1T4RTN184 ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
   - "documentation"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept adopted-by actor convention."
+    rationale: "Shared adoption history needs one durable actor meaning rather than incomparable agent and human values."
 ---
 
 ## Problem
