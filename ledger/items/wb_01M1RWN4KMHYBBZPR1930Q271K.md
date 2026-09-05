@@ -5,9 +5,10 @@ number: 193
 title: "Derive report dependency impact independently of the UI"
 kind: task
 priority: 20
-status: in-progress
+status: done
 created: 2026-09-05
 updated: 2026-09-05
+completed: 2026-09-05
 provenance:
   source: "maintainer-dogfood"
   recorded_at: "2026-09-05T13:41:18.424Z"
@@ -19,6 +20,10 @@ decisions:
     date: 2026-09-05
     summary: "Accept the approved report redesign work."
     rationale: "Lee approved the report design and requested independently specified, dependency-linked ledger work on 2026-09-05. Scope, ownership, interfaces, acceptance criteria, and verification are recorded in this item; start only when ready and assigned."
+  - action: complete
+    date: 2026-09-05
+    summary: "Derived report-only downstream reach and full-ledger immediate readiness counterfactuals independently of UI."
+    rationale: "Implementation commit 9d68839; independent code review complete; all report regression tests pass in validation-033.txt. Evidence range boundary and rate defects reproduced before fixes. Final epic UI acceptance remains assigned to downstream items."
 ---
 
 ## Assignment
