@@ -5,18 +5,23 @@ number: 203
 title: "Resolve external item identifiers without a canonical ID"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 16 item 14"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M03F6VBR77G64N0JQNPQ9K32]
+related: [ wb_01M03F6VBR77G64N0JQNPQ9K32 ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept external identifier resolution."
+    rationale: "A bounded declared-binding lookup closes the migration gap without weakening canonical ID or number identity."
 ---
 
 ## Problem
