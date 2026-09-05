@@ -7,6 +7,8 @@ consolidation. The first tagged release inherits this file.
 
 ## Unreleased
 
+## 0.5.0 - 2026-09-05
+
 - **The report is one decision-focused workspace.** Items, Flow, and
   Dependencies sit behind accessible view navigation; only the selected section
   shows, and a reader without scripting keeps every section through anchors and

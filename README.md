@@ -30,7 +30,7 @@ agent to use those guarantees instead of hand-editing your Markdown.
 
 **Start here:** [install the core and set up a ledger](#start-here).
 
-> **Status: published and self-hosted.** `0.5.0-beta.0` is published on npm and has
+> **Status: published and self-hosted.** `0.5.0` is published on npm and has
 > a matching repository tag. It is the version this repository runs its own
 > backlog on. The API is stable at core contract version 5.
 >
@@ -79,7 +79,7 @@ Wowbagger is the core authority for a Git-native work ledger. Use it instead
 of editing ledger Markdown by hand.
 
 ```sh
-wowbagger --version                 # require 0.5.0-beta.0
+wowbagger --version                 # require 0.5.0
 wowbagger capabilities --json       # require contract_version: 5
 wowbagger validate --ledger ledger --json
 wowbagger ready --ledger ledger --as-of YYYY-MM-DD --json
@@ -107,10 +107,10 @@ Install the core CLI, then verify it. The supported runtime is Node.js 24; Node
 
 ```sh
 npm install -g wowbagger@latest   # stable release
-npm install -g wowbagger@0.5.0-beta.0   # exact plugin-matched release
+npm install -g wowbagger@0.5.0   # exact plugin-matched release
 # or, from this release's Git tag:
-# npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0
-wowbagger --version         # 0.5.0-beta.0
+# npm install -g github:lstutzman/wowbagger#v0.5.0
+wowbagger --version         # 0.5.0
 wowbagger capabilities --json              # must report contract_version: 5
 ```
 
@@ -355,7 +355,7 @@ two supported install routes:
   stable release, `latest` stays on stable and only `next` follows later
   prereleases.
 - **git tag** —
-  `npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0` installs this
+  `npm install -g github:lstutzman/wowbagger#v0.5.0` installs this
   release. Installing at a ref installs the core and every adapter that ref
   carries.
 
@@ -427,8 +427,8 @@ wowbagger core, this is how you move forward safely.
 Upgrade the pieces you installed:
 
 ```sh
-npm install -g wowbagger@next                  # public npm registry
-npm install -g github:lstutzman/wowbagger#v0.5.0-beta.0  # immutable Git release
+npm install -g wowbagger@latest                  # public npm registry
+npm install -g github:lstutzman/wowbagger#v0.5.0  # immutable Git release
 git pull && npm ci                            # or: a direct checkout
 ```
 
