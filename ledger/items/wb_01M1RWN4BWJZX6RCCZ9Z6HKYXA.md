@@ -106,3 +106,22 @@ The supplied PropertyCompass2 report had no mapped fields. Wowbagger can expose 
 ## Source
 
 `docs/superpowers/plans/2026-09-05-decision-focused-report.md` (committed in `7dd4d90`). The original eight task areas are now nine standalone children, with unchanged feature scope.
+
+
+## Numbered dispatch map
+
+| Item | Deliverable | Required predecessors |
+| --- | --- | --- |
+| #191 | Preserve report tags and expose metadata coverage | None |
+| #192 | Scope report flow evidence and distinguish closures from completions | None |
+| #193 | Derive report dependency impact independently of the UI | None |
+| #194 | Share typed report filters and quick-view selection | #191 |
+| #195 | Replace duplicated report lists with one item workspace | #194, #192 |
+| #196 | Connect report area concentrations and blocker drilldowns | #195, #193 |
+| #197 | Connect scoped Flow charts to their contributing report items | #196 |
+| #198 | Connect Dependencies graph and roster to shared report scope | #196 |
+| #199 | Verify report redesign with reproducible offline browser artifacts | #197, #198 |
+
+Initial parallel work: #191 metadata, #192 evidence, and #193 impact. #194 needs only #191. #195 needs #194 and #192; #196 needs #195 and #193. Then #197 Flow and #198 Dependencies can run concurrently. #199 performs final acceptance after both are done.
+
+All nine children are accepted backlog items. No worker claim, production edit, release, push, or cross-repository mutation was performed while filing. The declared write sets were checked pairwise across every dependency-incomparable item pair; none overlap.
