@@ -5,18 +5,23 @@ number: 204
 title: "Name claim-lock contention and recovery details"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 19"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M127VNWZZ0Q58YW387RXHDWD]
+related: [ wb_01M127VNWZZ0Q58YW387RXHDWD ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept claim-lock diagnostic details."
+    rationale: "Dead owners are reclaimed, but live or malformed contention still lacks the evidence and recovery boundary operators need."
 ---
 
 ## Problem
