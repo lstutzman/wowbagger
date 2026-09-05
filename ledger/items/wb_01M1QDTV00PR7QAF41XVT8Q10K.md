@@ -5,19 +5,24 @@ number: 202
 title: "Document lossless parsing of inspect source bytes"
 kind: task
 priority: 20
-status: triage
+status: backlog
 created: 2026-09-05
 updated: 2026-09-05
 provenance:
   source: "PropertyCompass2 defect digest #200 heading 9"
   recorded_at: "2026-09-05T16:59:00Z"
 depends_on: []
-related: [wb_01M07V3M3AHKRPAYYNBV8V7DTF]
+related: [ wb_01M07V3M3AHKRPAYYNBV8V7DTF ]
 tags:
   - "consumer-feedback"
   - "propertycompass2"
   - "defect-digest-200"
   - "documentation"
+decisions:
+  - action: accept
+    date: 2026-09-05
+    summary: "Accept lossless source parsing guidance."
+    rationale: "Consumers need one canonical way to recover extension frontmatter without inventing incompatible YAML and byte handling."
 ---
 
 ## Problem
