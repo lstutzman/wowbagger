@@ -2,7 +2,7 @@
 schema_version: 2
 id: wb_01M1TZ8E5WHFGA76VNMFFK35J3
 number: 211
-title: "Deliver a shared SQLite ledger with direct and service access"
+title: "Deliver a shared SQLite ledger behind a required service"
 kind: epic
 status: triage
 created: 2026-09-06
@@ -16,26 +16,26 @@ related: []
 
 ## Goal
 
-Give concurrent agents one shared live ledger independent of their code branches, with direct local SQLite access and local or remote service access through the same core.
+Give concurrent agents one shared live ledger independent of their code branches, through a required local or remote service. CLI and dashboard clients use its API; SQLite is service-owned storage.
 
 ## Design discussion
 
-[Shared SQLite ledger with direct and service access](../../docs/superpowers/specs/2026-09-06-shared-sqlite-ledger-design.md) captures the complete discussion, evidence, alternatives, acceptance criteria, and unresolved decisions. It distinguishes Lee's requirements from proposed mechanisms. Filing this epic authorizes tracking, not implementation or a live migration.
+[Shared SQLite ledger behind a required service](../../docs/superpowers/specs/2026-09-06-shared-sqlite-ledger-design.md) captures the complete discussion, evidence, alternatives, acceptance criteria, and unresolved decisions. It distinguishes Lee's requirements from proposed mechanisms. Filing this epic authorizes tracking, not implementation or a live migration.
 
 ## Scope
 
 - Authoritative SQLite state shared across worktrees and separate clones; remote clients use a service rather than network-mounted database files.
-- Common domain rules for both modes: unique handles, ULID identity, revisions, claims, idempotent operations, and compatible schema upgrades.
-- Explicit ledger binding, persistent storage, installation, diagnostics, and optional supervised local or remote service.
+- Service-owned domain rules for all clients: unique handles, ULID identity, revisions, claims, idempotent operations, and compatible schema upgrades.
+- Explicit ledger binding, persistent storage, installation, diagnostics, and a required local or remote service on macOS, Windows, and Linux. Managed background startup is optional; the service is not.
 - GitHub publication on a designated ledger branch with readable items, owned attachments, recovery metadata, durable history, and visible publication lag.
 - Migration rehearsal, conflict resolution, controlled cutover, database backup, and recovery from a specific published Git commit.
-- Live and historical reporting without live dependence on item Markdown files.
+- An HTML dashboard as the primary human reporting surface, with selectable ledger views; retain programmatic projections and historical reporting without live dependence on item Markdown files.
 - Lossless rich Markdown bodies and portable ledger-owned research and implementation-plan attachments; external references remain distinguishable.
 - Branch integration evidence and explicit dependency-completion policy, without assuming new lifecycle statuses.
 
 ## Acceptance criteria
 
-- Direct and service clients exercise equivalent domain behavior; concurrent creates produce unique handles without code-branch integration.
+- Local and remote service deployments expose the same domain behavior; concurrent API clients produce unique handles without code-branch integration. No client opens SQLite directly.
 - Stale revisions and superseded claims refuse; replay after response loss produces one mutation. No supported writer bypasses the fence.
 - Wrong identity, missing authority, and incompatible clients refuse rather than creating a writable fallback.
 - Consistent exports survive publication failures and acknowledgment loss; competing publishers cannot regress GitHub history; saved and published state remain distinguishable.
@@ -51,4 +51,10 @@ Set publication acknowledgment and recovery-point guarantees; export/history ret
 
 ## Non-goals
 
-Offline task writes or reconciliation, independently writable SQLite replicas, automatic code-branch merging, an obligatory hosted database, automatic import of GitHub edits, and high availability claims based only on backups. No child implementation items are created by this filing.
+Direct SQLite client access, offline task writes or reconciliation, independently writable SQLite replicas, automatic code-branch merging, an obligatory hosted database, automatic import of GitHub edits, and high availability claims based only on backups. No child implementation items are created by this filing.
+
+## Architecture decision: required service, 2026-09-06
+
+Lee removed direct SQLite client access from scope, superseding the earlier two-path requirement. A service is mandatory even on a single local machine. Clients resolve an expected ledger identity and local or remote API endpoint, not a database path. The service owns storage, authorization, domain rules, migrations, and publication. Service unavailability must not trigger direct-database fallback.
+
+Multiple projects remain ledger-scoped. The dashboard selects authorized ledgers and named views; all clients use the same API authority. Connection profiles reference credentials without embedding secrets. Database-per-ledger storage and exact connection schemas remain proposals in the linked design.
