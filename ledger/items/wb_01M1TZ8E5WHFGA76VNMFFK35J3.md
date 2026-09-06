@@ -58,3 +58,13 @@ Direct SQLite client access, offline task writes or reconciliation, independentl
 Lee removed direct SQLite client access from scope, superseding the earlier two-path requirement. A service is mandatory even on a single local machine. Clients resolve an expected ledger identity and local or remote API endpoint, not a database path. The service owns storage, authorization, domain rules, migrations, and publication. Service unavailability must not trigger direct-database fallback.
 
 Multiple projects remain ledger-scoped. The dashboard selects authorized ledgers and named views; all clients use the same API authority. Connection profiles reference credentials without embedding secrets. Database-per-ledger storage and exact connection schemas remain proposals in the linked design.
+
+## Approved API requirements and implementation plan, 2026-09-06
+
+Lee approved the REST resource families and common API rules in the research document and requested a documentation-inclusive implementation plan. All ledger clients, including administrative clients, use the API. Only private service storage code opens databases or issues SQL; installation and initial identity bootstrap are not database access paths.
+
+A fresh service with zero ledgers is healthy and supports explicit creation and staged legacy import. A missing registered database remains a visible recovery error. Import acceptance binds to the inspected source revision. Portable export and GitHub publication are separate operations. OpenAPI, authorization, guarded revisions, scoped idempotency, durable operation status, structured errors, and complete noninteractive CLI coverage apply to every supported operation.
+
+[Service-owned SQLite ledger implementation plan](../../docs/superpowers/plans/2026-09-06-service-owned-sqlite-ledger.md) defines 18 dependency-ordered delivery packages and maps all 19 research acceptance criteria. Each behavioral change includes documentation, verification, and independent review. A healthy Fable- or GPT-6-class orchestrator owns contracts, assignments, integration, and acceptance; cheaper implementers own bounded changes, with stronger specialists for high-risk work. Parallel work uses accepted contracts and separate ownership and resources.
+
+Implementation has not started. The first package resolves remaining technical and business decisions, including publication acknowledgment guarantees, authentication bootstrap, storage binding, and recovery fencing. This planning update does not authorize production implementation, package publication, credential changes, destructive actions, deployment, or live migration. The epic remains in triage; no implementation children are created by this update.

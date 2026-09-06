@@ -46,3 +46,6 @@ One line per term. This is a glossary, not documentation.
 - **clock horizon** — the seeded future clock floor a claim-fence vector pins so `observed_at` is deterministic; both runners fail loudly and name its expiry date once wall time reaches it.
 - **derived_from pin** — a fixture-local copy's declared source path and SHA-256 in the repository; drift on either side stops the vector and demands a reviewed golden change instead of a regeneration.
 - **conformance host approval provider** — the code-level approval source `spec/adapter-conformance-entrypoint-main.js` wires in `decline` or `grant` mode; evidence it produces is the production engine under a conformance host, never a live consumer approval mechanism.
+- **orchestrator-implementer pattern** — the epic #211 delivery model in which a Fable- or GPT-6-class orchestrator owns contracts, assignments, integration, and acceptance while cheaper implementers deliver bounded changes.
+- **implementer** — an agent assigned one independently verifiable change and its tests and documentation, without authority over shared integration or product decisions.
+- **independent reviewer** — an agent separate from the change's author that checks its contract, correctness, evidence, and risks before orchestrator acceptance.

@@ -2,9 +2,11 @@
 
 Date: 2026-09-06
 
-Status: Discussion capture and proposed architecture. Lee requested an epic and this document, not implementation. Confirmed requirements below are distinct from proposed mechanisms and unresolved decisions. This proposal changes the current Markdown-authoritative storage contract; it does not describe shipped behavior.
+Status: Approved architecture direction and research record, with implementation details identified below. On 2026-09-06 Lee approved the REST resource families and API rules and requested an implementation plan with documentation, parallel implementers, strong orchestration, and independent review. This document changes the current Markdown-authoritative storage contract; it does not describe shipped behavior or authorize implementation, deployment, or live migration.
 
 Tracking epic: [Epic #211](../../../ledger/items/wb_01M1TZ8E5WHFGA76VNMFFK35J3.md).
+
+Implementation plan: [Service-owned SQLite ledger implementation plan](../plans/2026-09-06-service-owned-sqlite-ledger.md).
 
 ## Purpose and confirmed requirements
 
@@ -23,10 +25,18 @@ Lee established these requirements during the discussion:
 - Run the service on macOS, Windows, and Linux.
 - Expose an API as the service's programmatic input, with Wowbagger domain logic in front of the database.
 - Make an HTML dashboard the primary human reporting surface. Users select a view in the dashboard instead of generating a report as their normal workflow.
+- Allow a healthy service to start with no ledger databases and accept explicit ledger creation or import.
+- Provide a RESTful API, including legacy ledger import and portable export suitable for GitHub publication.
+- Make all supported API operations automatable through the CLI, including administrative operations subject to authorization.
+- Route every ledger operation through the API, including validation, import, export, backup, recovery, and historical reporting. Only the service's private storage implementation issues SQL.
+- Include all approved REST resource families, staged import, separate export and publication, OpenAPI, guarded revisions, idempotency, durable operations, structured errors, and per-ledger authorization.
+- Deliver independently reviewable changes with their documentation and verification. Use a Fable- or GPT-6-class orchestrator, cheaper bounded implementers, and independent reviewers under the configured provider health policy.
 
 The recommendation is one authoritative SQLite store per shared ledger, with a recoverable Git publication. Exact publication policy, recovery guarantees, and attachment limits remain design decisions.
 
 Decision update, 2026-09-06: Lee removed direct SQLite client access from the target architecture. This supersedes the earlier two-access-path requirement. SQLite remains service-owned storage, not a client interface. The service may run locally or remotely; these are deployment choices for one API, not separate access modes.
+
+Decision update, 2026-09-06: Lee approved the endpoint recommendations and explicitly rejected all direct SQL access. The earlier reference to controlled maintenance tooling is superseded: maintenance clients also use the API, and SQL stays inside the service. Service installation and initial identity bootstrap remain host operations, not alternate ledger access. Approved resource families are requirements; the example URL spellings and complete schemas still require contract review.
 
 ## Why the current architecture causes friction
 
@@ -50,7 +60,7 @@ A shared number allocator alone is a narrower alternative. It preserves branch-l
 
 Code branches isolate code. They do not partition the live backlog. Branch checkout does not rewind task state, and abandoning a code branch does not erase its findings.
 
-The service's core owns lifecycle validation, number allocation, claims, revision checks, idempotency, and report projections. CLI clients, programmatic clients, and the dashboard all use its API. Only service-side storage and controlled maintenance tooling open the database.
+The service's core owns lifecycle validation, number allocation, claims, revision checks, idempotency, and report projections. CLI clients, programmatic clients, dashboard clients, and maintenance clients all use its API. Only the service's private storage implementation opens ledger databases or issues SQL.
 
 Local and remote deployments expose the same domain operations. The CLI does not embed an alternate database write path or fall back to direct access when the service is unavailable.
 
@@ -58,7 +68,7 @@ The database belongs in persistent service-host storage outside every code check
 
 Each checkout binds to an expected ledger identity and a service connection. Worktree discovery through Git's common directory may be convenient, but cannot define identity across separate clones. Connections verify the expected ledger identity. Missing storage or an unreachable service must never create a fresh writable fallback.
 
-Database filesystem permissions must restrict access to the service and authorized maintenance operators. Requiring an API does not prevent an administrator from bypassing it using filesystem access.
+Database filesystem permissions must restrict access to the service. The product provides no direct SQL client, maintenance bypass, or arbitrary SQL endpoint. A host administrator can physically access files, but that does not make filesystem edits a supported ledger operation.
 
 Remote clients never open a SQLite file on a network filesystem. Multiple independently writable SQLite replicas and offline merge protocols are out of scope.
 
@@ -86,15 +96,72 @@ The service exposes domain operations, not SQL execution or unrestricted table u
 
 Operation families include list, inspect, report projections, create, patch, transition, claim acquisition and renewal, claimed publication, attachment access, and publication status or synchronization. Each mutation uses the shared core's lifecycle, relation, revision, claim, and operation-identity checks.
 
-A versioned HTTP API with JSON is the recommended starting point, not a selected wire contract. The service adds authentication, per-ledger authorization, request limits, protocol negotiation, and encrypted remote transport. Local loopback access also needs protection against unauthorized callers.
+REST, OpenAPI, guarded revisions, scoped idempotency, durable operation resources, structured errors, and CLI parity are approved requirements. Use a versioned HTTP API with JSON metadata and documented upload and download representations. Exact routes and wire schemas remain subject to contract review. The service enforces authentication, per-ledger authorization, request limits, protocol negotiation, and encrypted remote transport. Local loopback access also needs protection against unauthorized callers.
 
-The CLI is an API client in both local and remote deployments. Domain logic runs in the service. Backup, import, and recovery tooling may need controlled service-side database access; those administrative procedures do not establish a supported direct client mode.
+The CLI is an API client in both local and remote deployments. Domain logic runs in the service. Backup, import, validation, recovery, and historical reporting use API resources backed by private service storage logic. There is no supported direct database maintenance mode.
 
-Recommend serving dashboard assets and the API from the same service deployment. The browser owns presentation, not a duplicate implementation of readiness or lifecycle rules.
+Serve dashboard assets and the API from the same service deployment. The browser owns presentation, not a duplicate implementation of readiness or lifecycle rules.
+
+### Empty service and ledger onboarding
+
+A fresh service can be healthy with zero ledger databases. Its API and dashboard remain available for authorized creation and import. This does not mean that the service has no persistent configuration: identities, access policy, and the ledger registry may exist before any ledger.
+
+Distinguish an empty registry from a registered ledger whose database is missing or corrupt. The first is valid initial state. The second is a recovery problem: report the ledger as unavailable, preserve its registration, and refuse its mutations or publication. Do not silently replace or forget the missing ledger.
+
+New-ledger creation and staged import are separate operations. Creation explicitly initializes an empty ledger. Import accepts uploaded legacy ledger content, validates an immutable staged source, reports conflicts and nonportable links, and requires explicit acceptance before making a new ledger available. Default import never overwrites a registered ledger.
+
+The CLI packages a local legacy ledger and uploads it; a remote service cannot read the client's filesystem path. Reject unsafe archive paths, escaping symlinks, excessive expanded sizes, and arbitrary server-path requests. Reading from a Git remote requires a separate constrained source contract; upload is the initial recommendation.
+
+Import inspection does not itself mutate the live ledger. Acceptance binds to the inspected source and conflict-resolution revision so the committed result cannot differ silently from the preview. Existing-ledger reconciliation and recovery are distinct workflows, not an overwrite flag on ordinary import.
+
+### Approved REST resource families
+
+Lee approved every resource family below. Routes are design examples under `/api/v1`, not implemented or frozen wire contracts. `{ledger}` denotes a stable authorized ledger ID; item routes use immutable item IDs, with human number lookup supported by collection filters.
+
+| Resource | Proposed methods and paths | Purpose |
+|---|---|---|
+| Service discovery | `GET /health`, `GET /readiness`, `GET /capabilities` | Distinguish process health, onboarding availability, and supported API versions, formats, and limits. An empty registry is not a readiness failure. |
+| Caller identity | `GET /me` | Show the authenticated principal and effective permissions without exposing credentials. Bootstrap must work before any ledger exists. |
+| Ledgers | `GET /ledgers`, `POST /ledgers`, `GET /ledgers/{ledger}` | List authorized ledgers, explicitly create an empty ledger, and inspect identity, availability, and publication state. |
+| Import sessions | `POST /imports`, `GET /imports/{import}`, `POST /imports/{import}/commits` | Upload and validate legacy content, inspect findings and proposed resolutions, then explicitly accept the inspected revision into a new ledger. |
+| Items | `GET /ledgers/{ledger}/items`, `POST /ledgers/{ledger}/items`, `GET /ledgers/{ledger}/items/{item}`, `PATCH /ledgers/{ledger}/items/{item}` | Filter, search, paginate, create, inspect, and revise permitted non-lifecycle content. Return whole bodies on detail requests. |
+| Lifecycle and relations | `POST /ledgers/{ledger}/items/{item}/transitions`, `GET /ledgers/{ledger}/items/{item}/history` | Apply validated lifecycle transitions with reasons and inspect history. Relation edits use revision-checked item mutations; parent and snooze operations need explicit documented contracts. |
+| Readiness | `GET /ledgers/{ledger}/ready` | Return deterministic actionable work and reasons for blockers, with the effective date and snapshot witness. |
+| Claims | `POST /ledgers/{ledger}/items/{item}/claims`, `GET /ledgers/{ledger}/claims/{claim}`, `PATCH /ledgers/{ledger}/claims/{claim}`, `POST /ledgers/{ledger}/claims/{claim}/releases` | Acquire, inspect, renew, and release ownership through guarded operations. Do not expose arbitrary owner or epoch updates. |
+| Claimed publication | `POST /ledgers/{ledger}/items/{item}/claimed-publications` | Apply a mutation under the claim fence and expected item revision. This is distinct from GitHub export publication. |
+| Attachments | `GET` and `POST /ledgers/{ledger}/items/{item}/attachments`, `GET` and `PUT /ledgers/{ledger}/items/{item}/attachments/{attachment}` | List, upload, retrieve, and revision-check replacement of owned content and metadata. Stream file content rather than force all bytes into JSON. |
+| View definitions and projections | `GET` and `POST /ledgers/{ledger}/views`, `GET` and `PATCH /ledgers/{ledger}/views/{view}`, `GET /ledgers/{ledger}/views/{view}/results` | Manage authorized shared view definitions and fetch dashboard or agent projections without generating an HTML file. |
+| Change history | `GET /ledgers/{ledger}/events` | Read authorized, cursor-paginated audit and change history. Initial dashboard refresh can poll; live streaming remains optional. |
+| Configuration | `GET` and `PATCH /ledgers/{ledger}/configuration` | Inspect and revise permitted ledger definitions and publication settings. Redact secrets and validate changes; never expose unrestricted database or filesystem configuration. |
+| Exports | `POST /ledgers/{ledger}/exports`, `GET /ledgers/{ledger}/exports/{export}`, `GET /ledgers/{ledger}/exports/{export}/content` | Create a consistent portable package, inspect its snapshot and manifest, and download it without a GitHub side effect. |
+| GitHub publication | `POST /ledgers/{ledger}/publications`, `GET /ledgers/{ledger}/publications/{publication}` | Request export publication to the configured remote and inspect the confirmed commit or pending failure. |
+| Long-running operations | `GET /operations/{operation}` | Inspect durable queued, running, successful, or failed work and retrieve its result after disconnect or service restart. Every operation is authorization-scoped. |
+| Maintenance | `POST /ledgers/{ledger}/validations`, `POST /ledgers/{ledger}/backups`, `POST /recoveries`, `GET /recoveries/{recovery}`, `POST /recoveries/{recovery}/activations` | Validate, create a database-aware backup, stage a recovery, inspect it, and activate a new authority under explicit administrative controls. |
+
+Exact recovery upload routes, parent migration, snooze, attachment metadata operations, and allowed configuration fields must be specified before implementation. This inventory names required resource families rather than claiming complete request schemas. Include every supported operation in OpenAPI and CLI coverage; do not infer missing schemas by probing refusals.
+
+### Export, publication, and recovery boundaries
+
+Export creates a versioned portable artifact containing items, definitions, owned attachments, and the manifest and history promised by the recovery contract. GitHub publication pushes that artifact's representation to a configured branch. Separate resources let a caller inspect or download an export without granting permission to push.
+
+A legacy import and a recovery-package import have different contracts. Legacy import reports compatibility and conflict choices. Recovery verifies package identity, hashes, version, and history and establishes a new authority generation before activation. Neither exposes arbitrary SQL or permits silent replacement of a live ledger.
+
+### Common API behavior and CLI parity
+
+- Require per-ledger authorization for every item, view, artifact, operation, and history request. Ledger creation and imports also require explicit service-level permissions.
+- Use entity tags and `If-Match` or an equivalent documented revision field for guarded updates. Stale revisions refuse; reads return a usable concurrency witness.
+- Require scoped idempotency keys for retryable state-changing requests. Bind keys to ledger or service scope, caller, the request's observed authority generation, operation, and request digest. Reuse with different content refuses. Check the supplied generation before replay lookup or execution, so restoration cannot turn an old request into a new mutation even when operation history was not retained.
+- Return stable machine-readable errors, useful conflict details, and correlation IDs without secrets. Distinguish validation, authorization, revision conflict, and unavailable authority.
+- Return `201 Created` with a resource location for synchronous creation and `202 Accepted` with a durable operation location for asynchronous work. Acceptance is not completion.
+- Make pagination, filtering, limits, snapshot witnesses, and effective dates explicit. No unbounded collection reads or hidden truncation of item details.
+- Preserve operation status across restarts. Do not advertise cancellation until each operation defines a safe cancellation boundary.
+- Provide CLI commands for every supported API operation, including upload, download, wait, and inspection. Preserve structured JSON output, stable exit semantics, and noninteractive use. Local service installation and initial credential bootstrap remain host-level prerequisites; they cannot require an already-running authenticated API and do not open ledger databases.
+
+Do not add raw SQL, generic server-file access, hard deletion, unaudited force-unlock, or service shutdown endpoints merely to make the API appear complete. Authentication provider choice and first-administrator bootstrap remain explicit open decisions.
 
 ## Transactions, claims, and branch integration
 
-Each short mutation transaction checks the request, expected revision, and any claim fence; validates current domain state; allocates a number when needed; and writes the mutation, audit event, and operation result atomically. No transaction remains open while an agent reasons, edits code, runs tests, or waits for review.
+Every supported writer uses one private service storage admission boundary. Only that boundary opens ledger databases, and opening a registered ledger must not create a missing file. Each short mutation transaction checks target identity, expected authority generation, operation identity, and the operation-specific revision and claim predicates; validates current domain state; allocates a number when needed; and writes the mutation, audit event, and operation result atomically. Creation, import acceptance, recovery activation, and internal bookkeeping have explicit admission predicates too. No transaction remains open while an agent reasons, edits code, runs tests, or waits for review.
 
 Preserve ULIDs and unique ledger-scoped handles. A stale update refuses rather than overwriting newer content. Persist operation identity and a request digest with the result so an identical retry returns the same outcome and conflicting reuse refuses.
 
@@ -194,7 +261,7 @@ Proposed view model: shared view definitions belong to ledger configuration, whi
 
 Agents retain CLI and API access to readiness, summaries, and filtered projections. Dashboard-first does not mean browser-only. Local users run a service regardless of whether they open the dashboard. CLI and browser clients connect to the same ledger through that service; opening the dashboard does not import another copy or change authority.
 
-Historical reporting uses a recovery package at a specific Git commit and the same domain/reporting engine. It identifies the source commit, included change position, and effective reporting date. Historical leases are not current ownership, and unpublished work is not implied. Optional static HTML export was discussed as a secondary snapshot feature; retaining that command is not yet a requirement.
+Historical reporting uses a recovery package at a specific Git commit, uploaded or selected through an authorized service API resource and projected by the service's domain engine. It works without the original live database, but not without a service. It identifies the source commit, included change position, and effective reporting date. Historical leases are not current ownership, and unpublished work is not implied. Optional static HTML export was discussed as a secondary snapshot feature; retaining that command is not yet a requirement.
 
 Live and historical surfaces render full bodies and available attachments. External links remain visibly external. Render stored Markdown safely and prevent attachment paths from escaping their intended storage or materialization roots. Named views and readiness must continue to use complete-ledger dependency context before filtering presentation. Reports remain derived output, not authority for mutation or dispatch.
 
@@ -211,19 +278,22 @@ The epic is complete only when the following observable contracts are demonstrat
 7. A crash or response loss between export, push, and acknowledgment has a deterministic recovery path. Publication lag and failures are visible.
 8. Migration rehearsal identifies branch-only content, conflicting revisions, duplicate handles, and nonportable references. Cutover preserves selected content and domain behavior.
 9. Restoring a published package reconstructs its promised state, invalidates old authority, and states unpublished loss honestly. Restore drills also cover database backups.
-10. Live reports work without Markdown files; published reports work without the live database. Both identify their snapshot and preserve deterministic semantics.
+10. Live reports work without Markdown files; historical reports served from a recovery package work without the original live database. Both use the service API, identify their snapshot, and preserve deterministic semantics.
 11. Rich bodies and owned attachments survive migration, mutation, publication, and recovery without lost content or broken internal links.
 12. Installation and diagnostics cover local and remote service deployments on macOS, Windows, and Linux, including persistent storage, permissions, compatibility, backup, and publication health.
 13. Product documentation and skills describe the new authority model and remove obsolete commit-per-mutation and branch-reconciliation instructions only when the replacement ships.
 14. Multiple ledgers remain isolated within one service: item operations, claims, reports, attachments, and publication respect ledger-scoped authorization. Connection configuration cannot silently select the wrong authority or expose credentials.
 15. The dashboard lets a user select an authorized ledger and named view, inspect the corresponding current report, and refresh it without generating an HTML file. Agents retain equivalent programmatic projections.
 16. CLI and dashboard clients use the same service authority. An unavailable local service produces an explicit connection failure, not a direct SQLite fallback.
+17. A fresh service with no ledger databases exposes its API and dashboard and can create or import its first ledger. A missing registered database remains a visible recovery error and cannot cause an empty overwrite.
+18. Legacy import preview and acceptance bind to the same source revision, preserve content and identity, and reject unsafe uploads. Export produces a validated GitHub-ready package without implicitly pushing it.
+19. The REST contract and CLI cover all supported operations with authorization, concurrency controls, durable asynchronous results, and honest retry semantics. Dashboard-only capabilities are not acceptable.
 
 A bounded investigation tested SQLite 3.53.4 mechanics: eight separate writer processes committed 200 items with 200 unique numbers; two same-revision updates produced one success and one rejection; rollback, reopen, and integrity checks passed. This was not a Wowbagger backend test, a throughput benchmark, or a crash-durability proof. The source review inspected existing regression tests but did not run them because this worktree lacked its local YAML dependency at that time.
 
 ## Proposed work packages and unresolved decisions
 
-Decompose the epic after design review into contracts and schema; transactional core; multi-project binding and compatibility; service API and cross-platform installation; export and publication; migration and recovery; attachments; dashboard and reporting; and cutover documentation. These are proposed work packages, not created child items or an implementation sequence.
+The linked implementation plan decomposes this epic into dependency-ordered, independently verifiable changes. Each behavioral slice includes API and CLI coverage, relevant documentation, and independent review. The orchestrator owns contracts, assignment, integration, and acceptance; implementers own bounded changes. Parallel work starts only after shared contracts are accepted, with separate file ownership and no shared database or publisher branch.
 
 Resolve before implementation:
 
@@ -236,8 +306,9 @@ Resolve before implementation:
 - Multi-project storage layout, connection schemas and precedence, binding trust, and credential providers.
 - API wire contract, service authentication, exposure model, packaging and background installation on the three required platforms, and service schema-upgrade coordination.
 - Dashboard refresh transport, view-selection URLs, and whether to retain static HTML export as a secondary feature.
+- REST resource schemas, import resolution and acceptance, asynchronous operation retention, and first-administrator bootstrap before any ledger exists.
 
-Non-goals are direct SQLite client access, offline writes, writable replicated SQLite stores, automatic Git merges of agent code, hosted-database requirements, automatic out-of-band imports, and claiming high availability from backups alone.
+Non-goals are direct SQLite client access, direct SQL maintenance tools, offline writes, writable replicated SQLite stores, automatic Git merges of agent code, hosted-database requirements, automatic out-of-band imports, and claiming high availability from backups alone.
 
 ## Beads comparison
 
