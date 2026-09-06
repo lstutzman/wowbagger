@@ -4,7 +4,7 @@ id: wb_01M1V5158BCTWHK60NG1P9XMET
 number: 212
 title: "P00: Resolve service ledger implementation-critical decisions"
 kind: task
-status: triage
+status: backlog
 created: 2026-09-06
 updated: 2026-09-06
 provenance:
@@ -13,6 +13,11 @@ provenance:
 depends_on: []
 related: []
 parent: wb_01M1TZ8E5WHFGA76VNMFFK35J3
+decisions:
+  - action: accept
+    date: 2026-09-06
+    summary: "Accept P00 as the first implementation-plan package."
+    rationale: "The reviewed plan requires runtime probes, concrete technical contracts, Lee's durability decision, and independent architecture/security acceptance before P01/P02. Lee authorized starting this implementation plan; no production code or deployment belongs in P00."
 ---
 
 ## Scope
