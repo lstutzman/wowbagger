@@ -68,3 +68,14 @@ A fresh service with zero ledgers is healthy and supports explicit creation and 
 [Service-owned SQLite ledger implementation plan](../../docs/superpowers/plans/2026-09-06-service-owned-sqlite-ledger.md) defines 18 dependency-ordered delivery packages and maps all 19 research acceptance criteria. Each behavioral change includes documentation, verification, and independent review. A healthy Fable- or GPT-6-class orchestrator owns contracts, assignments, integration, and acceptance; cheaper implementers own bounded changes, with stronger specialists for high-risk work. Parallel work uses accepted contracts and separate ownership and resources.
 
 Implementation has not started. The first package resolves remaining technical and business decisions, including publication acknowledgment guarantees, authentication bootstrap, storage binding, and recovery fencing. This planning update does not authorize production implementation, package publication, credential changes, destructive actions, deployment, or live migration. The epic remains in triage; no implementation children are created by this update.
+
+
+## Implementation authorization and durability decision — 2026-09-06
+
+Lee authorized execution of the implementation plan. Main is the orchestrator at Herdr w77:p1 and writes no code; native subagents own all source, test, probe, and integration code. Lower-capability coding models such as GPT-5.6-Sol and GPT-5.6-Terra are required. A native Sol implementer reported its actual runtime model before receiving coding authorization.
+
+P00 has started with a bounded SQLite ownership probe and read-only security, recovery, reuse, and platform research. No production service is implemented yet.
+
+Lee selected saved locally with publication tracked: a committed SQLite transaction may report success before GitHub publication. The API distinguishes saved from published and supports waiting for publication. After total service-storage loss, recovery guarantees only the latest confirmed publication or retained backup; acknowledged but unpublished work may be lost.
+
+Implementation authorization is not approval for release, deployment, live migration, destructive operations, credential changes, or work in other repositories.
