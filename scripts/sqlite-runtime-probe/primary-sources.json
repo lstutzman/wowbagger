@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-09-06",
+  "runtime": {
+    "nodeVersion": "24.20.0",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "sources": [
+      {
+        "claim": "node:sqlite is stability 1.2 (release candidate), DatabaseSync is synchronous, and DatabaseSync supports a busy timeout.",
+        "url": "https://nodejs.org/docs/v24.20.0/api/sqlite.html"
+      },
+      {
+        "claim": "node:http is stability 2 (stable), and server.close() stops acceptance and closes idle connections.",
+        "url": "https://nodejs.org/docs/v24.20.0/api/http.html"
+      },
+      {
+        "claim": "Worker threads are stability 2 (stable), worker messages use postMessage(), and messages are emitted before exit.",
+        "url": "https://nodejs.org/docs/v24.20.0/api/worker_threads.html"
+      },
+      {
+        "claim": "Node 24.20.0 publishes official binaries for Linux x64 and arm64, Windows x64 and arm64, and macOS x64 and arm64.",
+        "url": "https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md#official-binary-platforms-and-toolchains"
+      }
+    ]
+  },
+  "warningGate": {
+    "flags": [
+      "--pending-deprecation",
+      "--throw-deprecation"
+    ],
+    "explicitCaptureRequired": true,
+    "sources": [
+      {
+        "claim": "--pending-deprecation emits pending deprecation warnings.",
+        "url": "https://nodejs.org/docs/v24.20.0/api/cli.html#--pending-deprecation"
+      },
+      {
+        "claim": "--throw-deprecation affects DeprecationWarning; it does not replace explicit capture of other warning names such as ExperimentalWarning.",
+        "url": "https://nodejs.org/docs/v24.20.0/api/cli.html#--throw-deprecation"
+      },
+      {
+        "claim": "The process warning event exposes the warning name, message, code, and stack.",
+        "url": "https://nodejs.org/docs/v24.20.0/api/process.html#event-warning"
+      }
+    ]
+  },
+  "sqliteRequirements": {
+    "journalMode": "wal",
+    "minimumWalResetSafeVersion": "3.51.3",
+    "acceptedBackports": [
+      "3.44.6",
+      "3.50.7"
+    ],
+    "sources": [
+      {
+        "claim": "WAL allows readers and one writer concurrently, still permits only one writer, and defaults to automatic checkpoints near 1,000 pages and when the last connection closes.",
+        "url": "https://www.sqlite.org/wal.html"
+      },
+      {
+        "claim": "The WAL-reset corruption bug affects 3.7.0 through 3.51.2 and is fixed in 3.51.3 and later, with backports in 3.44.6 and 3.50.7.",
+        "url": "https://www.sqlite.org/wal.html#the_wal_reset_bug"
+      },
+      {
+        "claim": "SQLite 3.53.0 includes the WAL-reset bug fix, and 3.53.4 is the current patch release captured for this experiment.",
+        "url": "https://www.sqlite.org/changes.html#version_3_53_0"
+      },
+      {
+        "claim": "SQLite permits multiple readers but only one simultaneous writer; BEGIN IMMEDIATE starts a write transaction and may return SQLITE_BUSY.",
+        "url": "https://www.sqlite.org/lang_transaction.html"
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "name": "node:sqlite",
+      "versionSource": "process.versions.sqlite plus SELECT sqlite_version()",
+      "packaging": "Built into the exact Node runtime; no npm native artifact is installed.",
+      "probeStatus": "candidate",
+      "sources": [
+        "https://nodejs.org/docs/v24.20.0/api/sqlite.html",
+        "https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md#official-binary-platforms-and-toolchains"
+      ]
+    },
+    {
+      "name": "better-sqlite3",
+      "packageVersion": "13.0.3",
+      "embeddedSqliteDocumented": "3.53.4",
+      "packaging": "The package manifest exports explicit prebuilt entry points for Linux glibc and musl, macOS, and Windows on x64 and arm64. The probe loads the exact current-platform entry point rather than allowing a source-build fallback.",
+      "probeStatus": "candidate",
+      "sources": [
+        "https://registry.npmjs.org/better-sqlite3/13.0.3",
+        "https://github.com/WiseLibs/better-sqlite3/blob/v13.0.3/package.json",
+        "https://github.com/WiseLibs/better-sqlite3/blob/v13.0.3/lib/binding.js",
+        "https://github.com/WiseLibs/better-sqlite3/blob/v13.0.3/docs/compilation.md",
+        "https://github.com/WiseLibs/better-sqlite3/blob/v13.0.3/README.md"
+      ]
+    },
+    {
+      "name": "sqlite3",
+      "packageVersion": "6.0.1",
+      "probeStatus": "excluded",
+      "reason": "The tagged 6.0.1 README explicitly marks the project deprecated and currently unmaintained, so it is not a maintained binding candidate.",
+      "sources": [
+        "https://registry.npmjs.org/sqlite3/6.0.1",
+        "https://github.com/TryGhost/node-sqlite3/blob/v6.0.1/README.md"
+      ]
+    }
+  ],
+  "evidenceBoundary": "Each result is native evidence only for the exact runtime, operating system, architecture, and installed package artifact recorded in that result. A macOS result does not prove Linux or Windows behavior."
+}

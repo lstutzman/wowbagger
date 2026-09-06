@@ -1,0 +1,61 @@
+name: SQLite runtime probe
+
+on:
+  push:
+    branches:
+      - worktree-260906-092139
+    paths:
+      - scripts/sqlite-runtime-probe/**
+      - .github/workflows/sqlite-runtime-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  probe:
+    name: ${{ matrix.platform }} (${{ matrix.os }}, node 24.20.0)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+          - platform: win32
+            os: windows-latest
+          - platform: darwin
+            os: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+
+      - name: Pin the temporary root
+        run: |
+          if [ "$RUNNER_OS" = 'Windows' ]; then
+            echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+            echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          else
+            echo 'TMPDIR=/tmp' >> "$GITHUB_ENV"
+          fi
+
+      - name: Run native SQLite probe
+        run: node --pending-deprecation --throw-deprecation scripts/sqlite-runtime-probe/probe.mjs
+
+      - name: Upload native probe result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-runtime-probe-${{ matrix.platform }}-${{ runner.arch }}-node-24.20.0
+          path: scripts/sqlite-runtime-probe/runs/**/result.json
+          if-no-files-found: error
+          retention-days: 14

@@ -3,3 +3,4 @@ node_modules/
 .pi-subagents/
 wowbagger-report.html
 .serena/
+scripts/sqlite-runtime-probe/runs/
