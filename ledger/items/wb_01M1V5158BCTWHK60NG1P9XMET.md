@@ -4,7 +4,7 @@ id: wb_01M1V5158BCTWHK60NG1P9XMET
 number: 212
 title: "P00: Resolve service ledger implementation-critical decisions"
 kind: task
-status: backlog
+status: in-progress
 created: 2026-09-06
 updated: 2026-09-06
 provenance:
