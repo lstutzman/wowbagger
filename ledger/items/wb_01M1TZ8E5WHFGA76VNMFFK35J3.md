@@ -4,7 +4,7 @@ id: wb_01M1TZ8E5WHFGA76VNMFFK35J3
 number: 211
 title: "Deliver a shared SQLite ledger behind a required service"
 kind: epic
-status: triage
+status: backlog
 created: 2026-09-06
 updated: 2026-09-06
 provenance:
@@ -12,6 +12,11 @@ provenance:
   recorded_at: "2026-09-06T09:06:06.368Z"
 depends_on: []
 related: []
+decisions:
+  - action: accept
+    date: 2026-09-06
+    summary: "Accept the approved service-owned SQLite implementation plan."
+    rationale: "Lee explicitly authorized implementation, assigned Main as orchestrator, and required lower-capability native subagents to write code. P00 resolves technical gates before production implementation. Release and live cutover remain separately gated."
 ---
 
 ## Goal
