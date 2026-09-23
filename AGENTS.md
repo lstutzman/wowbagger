@@ -1,15 +1,16 @@
-# Codex repository instructions
+# AGENTS.md — wowbagger
 
-This repository was first configured for Claude Code. Codex must use the same
-current instructions and skills. Do not copy Claude instructions into this file.
+This is the single instruction file for every agent in this repository (Claude Code,
+Codex, and compatible tools). There is no CLAUDE.md.
 
 ## Required instruction loading
 
 Before substantive work:
 
-1. Read `~/.claude/CLAUDE.md` completely.
-2. Read the repository-root `CLAUDE.md` completely when it exists. Also read each
-   more-specific `CLAUDE.md` between the repository root and the working directory.
+1. Load the global rules in `~/AGENTS.md`. Claude Code loads it automatically; Codex
+   loads the generated `~/.codex/AGENTS.md`.
+2. Read each more-specific `AGENTS.md` between the repository root and the working
+   directory.
 3. Read `CONTEXT.md` and use its ubiquitous language.
 4. Read `HANDOFF.md`, then read the active handoff that it names.
 5. Inspect `.claude/rules/*.md`. Read rules without `paths:` frontmatter. Read each
@@ -22,7 +23,7 @@ Before substantive work:
    apply it for the whole session. If no skill named `caveman` is discoverable,
    say so plainly at session start instead of guessing at its content.
 
-## Claude-to-Codex adaptation
+## Codex adaptation
 
 - `.claude/` is the source of truth for shared Claude and Codex instructions.
 - `skills/` contains this repository's shipped plugin skills. Codex must treat these
@@ -33,9 +34,8 @@ Before substantive work:
   Claude-only tool, hook, subagent type, or slash command with the closest Codex
   capability. State plainly when Codex has no equivalent.
 - Native Codex system and developer instructions, then explicit user instructions,
-  take precedence. Otherwise use this order: nearest project `CLAUDE.md` and matching
-  `.claude/rules/` files, repository-root `CLAUDE.md`, global
-  `~/.claude/CLAUDE.md`, then this file.
+  take precedence. Otherwise use this order: the nearest `AGENTS.md` and matching
+  `.claude/rules/` files, then this file, then the global `~/AGENTS.md`.
 - Do not bypass a stricter Claude safety or verification rule because Codex does not
   load or enforce it automatically.
 
